@@ -143,7 +143,7 @@ export function Flow({ tool, onMenu }: { tool: 'select' | 'hand'; onMenu(at: { x
         onNodeDragStart={() => useGraph.getState().snapshot()}
         onPaneClick={() => { useGraph.getState().select([]); setCtx(null); }}
         onDoubleClick={(e) => { if ((e.target as HTMLElement).classList.contains('react-flow__pane')) onMenu({ x: e.clientX, y: e.clientY, flow: rf.screenToFlowPosition({ x: e.clientX, y: e.clientY }) }); }}
-        panOnDrag={tool === 'hand' ? true : [1, 2]} selectionOnDrag={tool === 'select'} selectionMode={SelectionMode.Partial}
+        panOnDrag={[0, 1, 2]} selectionOnDrag={false} selectionKeyCode={['Control', 'Meta']} multiSelectionKeyCode={['Shift', 'Control', 'Meta']} selectionMode={SelectionMode.Partial}
         zoomOnDoubleClick={false} minZoom={0.1} maxZoom={2.5} fitView={false} deleteKeyCode={['Backspace', 'Delete']}
         proOptions={{ hideAttribution: true }} colorMode="dark" snapToGrid snapGrid={[10, 10]}
       >
@@ -155,7 +155,7 @@ export function Flow({ tool, onMenu }: { tool: 'select' | 'hand'; onMenu(at: { x
       {nodes.length === 0 && (
         <div className="hint">
           <h2>AI ONE Studio Canvers</h2>
-          <p>더블클릭 또는 <kbd>Tab</kbd> 으로 노드를 추가하세요 · 파일을 끌어다 놓으면 가져오기 노드가 생깁니다.</p>
+          <p>더블클릭 또는 <kbd>Tab</kbd> 으로 노드를 추가하세요 · 왼쪽 드래그 = 캔버스 이동 · <kbd>Ctrl</kbd>+드래그 = 영역 선택 · 파일을 끌어다 놓으면 가져오기 노드가 생깁니다.</p>
         </div>
       )}
     </div>

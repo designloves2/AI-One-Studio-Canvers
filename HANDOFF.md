@@ -22,6 +22,8 @@
 - 연결선: 우클릭 '연결 끊기', 클릭 선택+Delete, 선 끝을 빈 곳에 놓으면 삭제, 카드 우클릭 '카드 색상'.
 - 심플 모드: 영상 생성(H3 / H3 레퍼런스 / LTX 2.5) 추가, H3 터보·7+1 옵션 포함.
 
+- 캔버스 조작: 왼쪽 드래그 = 이동, Ctrl(⌘)+왼쪽 드래그 = 영역 선택.
+
 ## 미검증
 - 신규 카드는 mock 으로만 검증. 실제 GPU 품질/노드 입력명은 실기 확인 필요(Face Refine, Character Sheet, FlashVSR/RTX 2-pass, TJ_H3Reference, /h3_facerefine/scan).
 - 옛 e2e2~e2e13 회귀: 재실행 완료, 모두 통과(e2e5 는 'Import'→'이미지 불러오기' 이름 변경에 맞춰 테스트 locator 수정). 신규 e2e14(카드/덱/후처리/Asset/FaceRefine/CharSheet) 통과.
