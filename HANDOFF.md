@@ -24,7 +24,7 @@
 ## 남은 작업 (우선순위)
 1. e2e2~e2e13 회귀 재실행/수정.
 2. (완료) H3 Image Generator 카드 `h3-image` — src/backend/h3Image.ts, mock 통과. 실기 미검증.
-3. LTX Director 카드(타임라인).
+3. (완료·간이) LTX Director 카드 `ltx-director`: 구간별 프롬프트(beats: `0-3: 문장`) + 이미지 시간 고정. 오디오/모션 트랙은 미구현. (원본 director UI 는 GPL, 열람·복사 금지 — W1 규칙)
 4. Music/이미지 모드 카드 세분화 점검.
 5. Asset Library `@` 자동완성, 등록/프로젝트 편집.
 6. Postprocess 미리보기, fps 자동 인식.

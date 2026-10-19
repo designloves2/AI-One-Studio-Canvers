@@ -6,6 +6,8 @@ import { assetFromFile, ensureInput, runPrompt } from '../backend/comfy';
 import { DEFAULT_OPT, copyToInput, type H3Options } from '../backend/h3';
 import { buildPostGraph, type PostStep, type RtxSize } from '../backend/post';
 import { buildH3ImageGraph } from '../backend/h3Image';
+import { buildLtxGraph, ltxSize } from '../backend/ltx';
+import { loadBitmap } from '../editing/ops';
 import { buildRefineGraph } from '../backend/ltxRefine';
 import { stitchClips } from '../backend/h3';
 import { addVideoLoad, addVideoSave } from '../backend/post';
@@ -137,6 +139,31 @@ export const EXTRA_RUNNERS: Record<string, Runner> = {
     });
     const res = await runPrompt(g.graph, { onProgress: c.progress, signal: c.signal });
     return [assetFromFile(outFile(res.raw, g.save), 'image', 'image')];
+  },
+
+  // ---------------- LTX Director (timeline)
+  'ltx-director': async (c) => {
+    const p = c.p; const s = useSettings.getState();
+    const imgs = c.inputs('image');
+    const times = str(p.image_times, '0').split(/[,\s]+/).filter(Boolean).map(Number);
+    const files: string[] = []; for (const a of imgs) files.push(await ensureInput(a));
+    const beats = str(p.beats).split('\n').map((l) => l.trim()).filter(Boolean).map((l, i) => {
+      const m = /^\s*([\d.]+)\s*[-–~]\s*([\d.]+)\s*[:：]\s*(.+)$/.exec(l);
+      if (!m) throw new Error(`Beat ${i + 1}: write it as  start-end: prompt  (for example  0-4: a man walks in)`);
+      return { startSec: Number(m[1]), endSec: Number(m[2]), prompt: m[3].trim() };
+    });
+    let size: { width: number; height: number } | undefined;
+    if (imgs[0] && str(p.aspect) === 'auto') { const bm = await loadBitmap(imgs[0]); size = ltxSize(`${bm.width}:${bm.height}`, num(p.megapixels, 1)); }
+    const seconds = num(p.seconds, 8);
+    const graph = await buildLtxGraph({
+      prompt: c.text('prompt'), seconds, aspect: str(p.aspect, '16:9'), megapixels: num(p.megapixels, 1), seed: withLegacySeed(c),
+      steps: num(p.steps, 12), cfg: num(p.cfg, 1), sampler: str(p.sampler, 'euler_ancestral'), scheduler: str(p.scheduler, 'linear_quadratic'), stage2Sigmas: str(p.stage2, '0.85, 0.7250, 0.4219, 0.0'),
+      loras: cardLoras(c), models: s.video, saveSubfolder: s.saveSubfolder, size,
+      timeline: { texts: beats, images: files.map((file, i) => ({ file, startSec: i === files.length - 1 && p.last_at_end ? seconds : (times[i] ?? 0), end: i === files.length - 1 && !!p.last_at_end })) },
+    });
+    const res = await runPrompt(graph, { onProgress: c.progress, signal: c.signal });
+    const f = res.videos[0] ?? res.images[0]; if (!f) throw new Error('ComfyUI returned no video');
+    return [assetFromFile(f, 'video', 'video')];
   },
 
   // ---------------- Video edit (LTX 2.5 refine) and stitch

@@ -304,6 +304,13 @@ export const REGISTRY: NodeDef[] = [
     ];
   })(),
 
+  { id: 'ltx-director', title: 'LTX Director (timeline)', category: 'Video', kind: 'generate',
+    inputs: [P.textIn('prompt', 'Overall prompt', false), P.imgIn('image', 'Images (in time order)', true, true), P.loraIn(), P.seedIn()], outputs: [{ id: 'video', label: 'Video', type: 'video' }],
+    params: [
+      text('beats', 'Beats — one per line:  start-end: prompt  (seconds)', '', true), text('image_times', 'Image times (s), in the order connected', '0'), toggle('last_at_end', 'Pin the last image to the end', false),
+      sel('aspect', 'Aspect ratio', [...ASPECTS, 'auto'], '16:9'), megapixels(1), slider('seconds', 'Length (s)', 2, 20, 1, 8),
+      slider('steps', 'Steps', 1, 40, 1, 12, { advanced: true }), slider('cfg', 'Guidance', 0, 10, 0.1, 1, { advanced: true }), dyn('sampler', 'Sampler', 'samplers', 'euler_ancestral', { advanced: true }), dyn('scheduler', 'Scheduler', 'schedulers', 'linear_quadratic', { advanced: true }), text('stage2', 'Stage-2 sigmas', '0.85, 0.7250, 0.4219, 0.0', false, { advanced: true }), seed,
+    ], description: 'LTX 2.5 with a timeline: a different prompt for each moment, and images pinned at chosen times.' },
   { id: 'video-refine', title: 'Video Edit (LTX 2.5 refine)', category: 'Video', kind: 'generate',
     inputs: [{ id: 'video', label: 'Video', type: 'video' }, P.textIn('prompt', 'Prompt', true), P.loraIn(), P.seedIn()], outputs: [{ id: 'video', label: 'Video', type: 'video' }],
     params: [slider('steps', 'Steps', 1, 20, 1, 4), slider('denoise', 'Change amount', 0.05, 1, 0.05, 0.15), text('negative', 'Negative prompt', 'bad anatomy, inconsistent look, low resolution,', true, { advanced: true }), dyn('sampler', 'Sampler', 'samplers', 'euler_ancestral', { advanced: true }), dyn('scheduler', 'Scheduler', 'schedulers', 'simple', { advanced: true }), seed],
