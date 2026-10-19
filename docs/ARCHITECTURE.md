@@ -62,7 +62,10 @@ ComfyUI :8188  ── 표준 API: /prompt /ws /upload/image /view /history /obje
 2. `backend/imageGen.ts` 에 그래프 빌더 추가
 3. `registry/index.ts` 의 해당 노드 `engines` 에 항목 추가
 
-## Studio Host (v2.0)
-`src/host/` : LiteGraph 호환 shim(HostNode/HostGraph), `/scripts/app.js`·`api.js` shim, `window.app/api/comfyAPI/LiteGraph`.
-`loadStudio()`가 ComfyUI `/extensions/*STUDIO_ONE*` 전체를 동적 import → `/object_info`로 노드 클래스 생성 → DOM 위젯을 React 카드에 마운트.
-상태는 `serialize()` → `GraphNode.params.__host` 로 프로젝트에 저장. 실행은 `exec.ts`(/prompt).
+## Card architecture (v2.1)
+- Every function is a **card** (`src/registry/index.ts` NodeDef). Ports are typed (`text image video audio mask number pipe lora any`); `compatible()` decides which wires are allowed.
+- Small **option cards** (LoRA, H3 Turbo·7+1, H3 Speed, H3 Audio Lock, Asset Library) output JSON text assets (`kind: lora|turbo|speed|lock|assetlib`) that generator cards read via `cardLoras()` / `h3Cards()` (`src/engine/more.ts`).
+- Runners live in `src/engine/run.ts` + `src/engine/more.ts` (EXTRA_RUNNERS); they build ComfyUI API graphs in `src/backend/*` and call STUDIO_ONE / TJ_NODE routes (`/minimax_h3_one/*`, `/ltx25_one/*`, `/tj_node/reflib/*`, `/h3_facerefine/scan`).
+- Postprocess = one card per step (`src/backend/post.ts`), Face Refine (`faceRefine.ts`), Character Sheet (`charSheet.ts`), LTX refine (`ltxRefine.ts`), H3 still image (`h3Image.ts`).
+- Canvas UX: wire-drop menu, auto-connect on add, right-click menu, Decks (`src/decks.ts`).
+- The v2.0 "Studio Host" (`src/host/*`, original panels loaded at runtime) is kept only as an optional legacy mode (Settings).

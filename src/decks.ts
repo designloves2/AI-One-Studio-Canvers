@@ -5,7 +5,7 @@ import type { Primitive } from './types';
 export interface DeckNode { k: string; def: string; x: number; y: number; engine?: string; params?: Record<string, Primitive> }
 export interface Deck { id: string; name: string; note: string; nodes: DeckNode[]; edges: [string, string, string, string][]; user?: boolean }
 
-const C = 380, R = 330;
+const C = 400, R = 340;
 const n = (k: string, def: string, col: number, row: number, extra: Partial<DeckNode> = {}): DeckNode => ({ k, def, x: col * C, y: row * R, ...extra });
 
 export const BUILTIN_DECKS: Deck[] = [
@@ -73,4 +73,23 @@ export function insertDeck(deck: Deck) {
   for (const [a, ah, b, bh] of deck.edges) { const s = ids.get(a), t = ids.get(b); if (s && t) useGraph.getState().connect({ source: s, sourceHandle: ah, target: t, targetHandle: bh }); }
   useGraph.getState().select([...ids.values()]);
   useGraph.getState().requestFit();
+  // once the cards are drawn, stack the ones that share a column so tall cards never overlap
+  setTimeout(() => {
+    const st = useGraph.getState();
+    const mine = [...ids.values()].map((id) => st.nodes.find((x) => x.id === id)!).filter(Boolean);
+    const cols = new Map<number, typeof mine>();
+    for (const nd of mine) cols.set(nd.x, [...(cols.get(nd.x) ?? []), nd]);
+    const moves: { id: string; x: number; y: number }[] = [];
+    for (const col of cols.values()) {
+      col.sort((a, b) => a.y - b.y);
+      let y = col[0].y;
+      for (const nd of col) {
+        const h = document.querySelector(`.react-flow__node[data-id="${nd.id}"]`)?.getBoundingClientRect().height ?? 260;
+        const z = Number(document.querySelector('.react-flow__viewport')?.getAttribute('style')?.match(/scale\(([\d.]+)\)/)?.[1] ?? 1);
+        const yy = Math.max(nd.y, y); if (yy !== nd.y) moves.push({ id: nd.id, x: nd.x, y: yy });
+        y = yy + h / z + 40;
+      }
+    }
+    if (moves.length) { st.moveMany(moves); st.requestFit(); }
+  }, 250);
 }
