@@ -22,6 +22,7 @@ export const KO_CARDS: Record<string, string> = {
   Disconnect: '연결 끊기', 'Card colour': '카드 색상',
   'Describe your video…': '만들고 싶은 영상을 설명하세요…', 'Turbo (faster)': '터보 (빠르게)', '7+1 hi-res finish': '7+1 하이레즈 마무리',
   'Source frame rate (fps)': '원본 프레임레이트 (fps)',
+  'Transition Bridge': '전환 브릿지', 'Clip A (before)': '클립 A (앞)', 'Clip B (after)': '클립 B (뒤)', 'Bridge clip': '브릿지 클립', Transition: '전환 방식', 'Length (frames)': '길이 (프레임)',
   // ports
   'LoRA cards': 'LoRA 카드', 'H3 option cards': 'H3 옵션 카드', 'Option cards': '옵션 카드', Video: '영상', Videos: '영상들', 'Videos (in order)': '영상 (연결 순서)',
   'Face references': '얼굴 레퍼런스', 'Character reference': '캐릭터 레퍼런스', 'Prompt (optional)': '프롬프트 (선택)', 'Overall prompt': '전체 프롬프트', 'Images (in time order)': '이미지 (시간순)',

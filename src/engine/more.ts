@@ -8,7 +8,7 @@ import { buildPostGraph, type PostStep, type RtxSize } from '../backend/post';
 import { buildH3ImageGraph } from '../backend/h3Image';
 import { buildLtxGraph, ltxSize } from '../backend/ltx';
 import { loadBitmap } from '../editing/ops';
-import { beatDetect, itdaUpload, sceneDetect } from '../backend/itda';
+import { beatDetect, bridgeClip, itdaFileUrl, itdaUpload, sceneDetect } from '../backend/itda';
 import { buildRefineGraph } from '../backend/ltxRefine';
 import { stitchClips } from '../backend/h3';
 import { addVideoLoad, addVideoSave } from '../backend/post';
@@ -221,6 +221,15 @@ export const EXTRA_RUNNERS: Record<string, Runner> = {
     if (!r.ok) throw new Error(r.error ?? 'beat detection failed');
     const secs = (r.frames ?? []).map((f) => +(f / 24).toFixed(2));
     return [textAsset(`BPM ${r.bpm ?? '?'}\nbeats at (s): ${secs.join(', ')}`)];
+  },
+
+  'video-bridge': async (c) => {
+    const a = need(c.inputs('a')[0], 'Clip A (before)'); const b = need(c.inputs('b')[0], 'Clip B (after)');
+    c.progress(10, 'uploading…'); const pa = await itdaUpload(a); const pb = await itdaUpload(b);
+    c.progress(50, 'building the transition…');
+    const r = await bridgeClip(pa, pb, str(c.p.mode, 'interpolate') as 'interpolate', num(c.p.frames, 8));
+    if (!r.ok || !r.path) throw new Error(r.error ?? 'could not build the transition');
+    return [{ id: uid(), type: 'video', url: itdaFileUrl(r.path), port: 'video' }];
   },
 
   // ---------------- Face Refine
