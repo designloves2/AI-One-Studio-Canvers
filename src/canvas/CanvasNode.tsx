@@ -103,11 +103,11 @@ function EnhanceButton({ id }: { id: string }) {
     const g = useGraph.getState();
     const cur = String(g.nodes.find((n) => n.id === id)?.params.text ?? '');
     if (!cur.trim()) { setErr(T('Write a prompt first.')); return; }
-    setBusy(true); setErr('');
+    setBusy(true); setErr(''); g.setRuntime(id, { status: 'running', pct: 0, label: 'enhancing…' });
     try {
       const out = await runLlm({ system: enhanceInstruction('Image', '', true), prompt: cur });
       if (out) { setPrev(cur); useGraph.getState().setParam(id, 'text', out); }
-    } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
+    } catch (e) { setErr((e as Error).message); } finally { setBusy(false); useGraph.getState().setRuntime(id, { status: 'idle', pct: 100 }); }
   };
   return (
     <div className="enhance-row">
@@ -260,6 +260,7 @@ const PlainNode = memo(function PlainNode({ id, selected }: NodeProps) {
 
   return (
     <div className={`cnode ${selected ? 'sel' : ''} ${running ? 'running' : ''} ${rt?.status === 'error' ? 'err' : ''}`} style={{ width: node.w ?? 300, ['--k' as string]: color }}>
+      {running && <div className="run-overlay"><span className="spin" /><b>RUNNING…</b>{rt?.label && <em>{rt.label}</em>}</div>}
       <div className="cnode-head">
         <i className="dot" />
         {editing

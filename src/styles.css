@@ -172,3 +172,9 @@ kbd { background: var(--bg3); border: 1px solid var(--line2); border-radius: 4px
 .ctx-menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 2px; } .ctx-menu button { display: flex; justify-content: space-between; width: 100%; background: none; border: 0; text-align: left; padding: 7px 10px; border-radius: 6px; } .ctx-menu button:hover:not(:disabled) { background: var(--bg3); } .ctx-menu button:disabled { opacity: .4; } .ctx-menu .danger { color: var(--bad); } .ctx-menu kbd { color: var(--muted); font-size: 10px; }
 
 .mentions { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 10px 6px; } .mentions .chip { cursor: pointer; background: var(--bg3); border: 1px solid var(--line); } .mentions .chip:hover { border-color: var(--acc); }
+
+.cnode { position: relative; }
+.run-overlay { position: absolute; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; background: rgba(10,12,18,.62); backdrop-filter: blur(1.5px); border-radius: inherit; pointer-events: none; color: #fff; }
+.run-overlay b { letter-spacing: .14em; font-size: 13px; animation: runpulse 1.2s ease-in-out infinite; } .run-overlay em { font-style: normal; font-size: 11px; color: var(--muted); max-width: 90%; text-align: center; }
+.run-overlay .spin { width: 22px; height: 22px; border: 3px solid rgba(255,255,255,.25); border-top-color: var(--acc); border-radius: 50%; animation: runspin .8s linear infinite; }
+@keyframes runspin { to { transform: rotate(360deg); } } @keyframes runpulse { 50% { opacity: .45; } }

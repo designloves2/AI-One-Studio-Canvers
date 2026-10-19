@@ -17,6 +17,8 @@
 - 캔버스: 선을 빈 곳에 놓으면 호환 카드 메뉴, 선택 후 추가 시 자동 연결, 우클릭 메뉴, Decks 패널(스타터 9종+내 덱).
 - 파일: src/backend/{post,faceRefine,charSheet,ltxRefine,assetlib}.ts, src/engine/{more,util}.ts, src/decks.ts, src/panels/DecksPanel.tsx, src/canvas/{Pickers,ContextMenu}.tsx.
 
+- 실행 중 카드에 반투명 오버레이 + RUNNING… 표시(프롬프트 강화 포함).
+
 ## 미검증
 - 신규 카드는 mock 으로만 검증. 실제 GPU 품질/노드 입력명은 실기 확인 필요(Face Refine, Character Sheet, FlashVSR/RTX 2-pass, TJ_H3Reference, /h3_facerefine/scan).
 - 옛 e2e2~e2e13 회귀: 재실행 완료, 모두 통과(e2e5 는 'Import'→'이미지 불러오기' 이름 변경에 맞춰 테스트 locator 수정). 신규 e2e14(카드/덱/후처리/Asset/FaceRefine/CharSheet) 통과.
