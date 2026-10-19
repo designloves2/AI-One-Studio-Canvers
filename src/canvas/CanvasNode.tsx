@@ -7,7 +7,8 @@ import { Field, AutoText } from '../ui/Controls';
 import { AssetView } from './AssetView';
 import { activeAsset, portAssets, useUpstream } from './helpers';
 import { runNode, stopNode, addImports, download } from '../engine/actions';
-import { importFile } from '../engine/run';
+import { importFile, enhanceInstruction } from '../engine/run';
+import { runLlm } from '../backend/llm';
 import { useSettings } from '../store/settings';
 import { t, useT } from '../i18n';
 
@@ -78,6 +79,30 @@ async function replaceImport(id: string, f: File) {
   g.setRuntime(id, { status: 'running', pct: 30, label: 'uploading…' });
   try { g.setResults(id, [await importFile(f)]); g.setRuntime(id, { status: 'idle', pct: 100 }); }
   catch (e) { g.setRuntime(id, { status: 'error', error: (e as Error).message }); }
+}
+
+function EnhanceButton({ id }: { id: string }) {
+  const T = useT();
+  const [busy, setBusy] = useState(false);
+  const [prev, setPrev] = useState<string | null>(null);
+  const [err, setErr] = useState('');
+  const go = async () => {
+    const g = useGraph.getState();
+    const cur = String(g.nodes.find((n) => n.id === id)?.params.text ?? '');
+    if (!cur.trim()) { setErr(T('Write a prompt first.')); return; }
+    setBusy(true); setErr('');
+    try {
+      const out = await runLlm({ system: enhanceInstruction('Image', '', true), prompt: cur });
+      if (out) { setPrev(cur); useGraph.getState().setParam(id, 'text', out); }
+    } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
+  };
+  return (
+    <div className="enhance-row">
+      <button className="btn nodrag" disabled={busy} onClick={() => void go()}>{busy ? '…' : '✨ ' + T('Enhance')}</button>
+      {prev !== null && <button className="btn nodrag" onClick={() => { useGraph.getState().setParam(id, 'text', prev); setPrev(null); }}>{T('Restore')}</button>}
+      {err && <span className="error-inline">{err}</span>}
+    </div>
+  );
 }
 
 function DisplayBody({ id, defId }: { id: string; defId: string }) {
@@ -173,6 +198,7 @@ export const CanvasNode = memo(function CanvasNode({ id, selected }: NodeProps) 
           {shown.map((p) => <Field key={p.id} def={p} value={node.params[p.id] ?? p.default} onChange={(v) => setParam(id, p.id, v)} />)}
         </div>
       )}
+      {def.id === 'prompt' && <EnhanceButton id={id} />}
       {hasAdv && <button className="adv-toggle nodrag" onClick={() => setAdv((v) => !v)}>{adv ? '▾' : '▸'} {T('Advanced')}</button>}
 
       {def.id === 'painter' && <button className="btn nodrag open-painter" onClick={() => openPainter(id)}>{T('Open painter')}</button>}

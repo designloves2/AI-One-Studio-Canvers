@@ -180,17 +180,19 @@ function imageRunner(mode: (c: Ctx) => ImageMode): Runner {
 
 const textOnlySystem = (c: Ctx) => str(c.p.system);
 
-function enhanceSystem(c: Ctx): string {
-  const forVideo = c.p.purpose === 'Video';
+export function enhanceInstruction(purpose: string, style: string, english = true): string {
+  const forVideo = purpose === 'Video';
   return [
     `You rewrite a short idea into a richer text-to-${forVideo ? 'video' : 'image'} prompt.`,
     '- Output ONLY the rewritten prompt: no preamble, no quotes, no markdown.',
     '- Keep the user\'s subject and intent; add concrete detail (composition, light, materials, mood, lens, style).',
     forVideo ? '- Describe motion and camera movement across time.' : '',
-    c.p.english ? '- Always write the result in English, even if the input is another language.' : '',
-    str(c.p.style) ? `- Guidelines: ${str(c.p.style)}` : '',
+    english ? '- Always write the result in English, even if the input is another language.' : '',
+    style ? `- Guidelines: ${style}` : '',
   ].filter(Boolean).join('\n');
 }
+
+const enhanceSystem = (c: Ctx) => enhanceInstruction(str(c.p.purpose), str(c.p.style), !!c.p.english);
 
 const TASKS: Record<string, string> = {
   'Plain description': 'Describe the image plainly and accurately in a few sentences.',
