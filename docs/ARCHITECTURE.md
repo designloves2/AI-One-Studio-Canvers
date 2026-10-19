@@ -14,7 +14,7 @@ ComfyUI :8188  ── 표준 API: /prompt /ws /upload/image /view /history /obje
 | 용도 | 라우트 |
 |---|---|
 | 워크플로우 템플릿 (Klein) | `GET /flux_klein/workflow_{t2i,i2i,edit,inpaint,faceswap,remove_bg}` |
-| 모델 목록 / 저장된 선택 | `GET /{flux_klein,z_image_turbo,krea2_one,sdxl_one}/{models,config}` |
+| 모델 목록 / 저장된 선택 | `GET /{flux_klein,z_image_turbo,krea2_one,sdxl_one,anima_one,qwen2511_one}/{models,config}` |
 | 갤러리 / 삭제 / 입력 복사 | `GET …/gallery`, `POST …/delete`, `POST …/copy_to_input` |
 | LLM 카탈로그 | `GET /tj_studio_one/llm/models` |
 | LLM 텍스트 (4방식 공통) | `POST /tj_studio_one/llm/enhance` (`backend`: local · comfy · openrouter · custom) |
@@ -47,6 +47,7 @@ ComfyUI :8188  ── 표준 API: /prompt /ws /upload/image /view /history /obje
 | Image Generate/Edit/Inpaint/Upscale/Remove BG | ✅ STUDIO_ONE 백엔드 (모델 4계열) |
 | 편집 노드(crop…pixelate), Painter, Blend, Matte | ✅ |
 | Import/Export/Preview/Router/Compare/Note/Number/Text/Toggle/Seed, 그룹 | ✅ |
+| ComfyUI Workflow 노드 (임의 API 워크플로우 → 비디오 포함) | ✅ |
 | Video Generate / Foley / Image→3D / Alpha Matte / Mask by Text | 🔜 (비디오는 H3·LTX 라우트로 연결 예정) |
 | 모델 다운로드 관리자, MCP 서버 | 🔜 |
 

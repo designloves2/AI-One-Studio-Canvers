@@ -46,6 +46,7 @@ const KO: Record<string, string> = {
   'Describe your image…': '만들고 싶은 이미지를 설명하세요…', 'Describe what you want below and press Generate.': '아래에 원하는 것을 적고 생성을 누르세요.',
   'Leave empty to use the built-in proxy (recommended).': '비워두면 내장 프록시를 사용합니다 (권장).',
   'Write a prompt first.': '먼저 프롬프트를 입력하세요.', Restore: '되돌리기',
+  'Load workflow (API JSON)…': '워크플로우 불러오기 (API JSON)…', 'Replace workflow…': '워크플로우 바꾸기…', 'ComfyUI Workflow': 'ComfyUI 워크플로우', Workflow: '워크플로우', 'Prompt field': '프롬프트 칸', 'Image 1 field': '이미지 1 칸', 'Image 2 field': '이미지 2 칸', 'Video field': '비디오 칸', 'Seed field': '시드 칸',
   // messages
   'Nothing here yet.': '아직 아무것도 없습니다.', 'Connect an input first.': '먼저 입력을 연결하세요.',
 };

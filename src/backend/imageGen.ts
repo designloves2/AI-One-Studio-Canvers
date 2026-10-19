@@ -243,11 +243,12 @@ function buildZImage(job: ImageJob, m: { model: string; textEncoder: string; vae
 }
 
 // ------------------------------------------------------------------------- Krea 2
-function buildKrea2(job: ImageJob, m: { model: string; textEncoder: string; vae: string }): Built {
-  if (job.mode !== 't2i' && job.mode !== 'i2i' && job.mode !== 'edit') throw new Error(`Krea 2 has no "${job.mode}" mode`);
+function buildKrea2(job: ImageJob, m: { model: string; textEncoder: string; vae: string }, anima = false): Built {
+  const label = anima ? 'Anima' : 'Krea 2';
+  if (job.mode !== 't2i' && job.mode !== 'i2i' && job.mode !== 'edit') throw new Error(`${label} has no "${job.mode}" mode`);
   const g: G = {};
-  g['K:unet'] = isGguf(m.model) ? { class_type: 'TJ_NODE_Krea2UnetLoaderGGUF', inputs: { unet_name: m.model } } : unet(m.model);
-  g['K:clip'] = isGguf(m.textEncoder) ? { class_type: 'TJ_NODE_Krea2ClipLoaderGGUF', inputs: { clip_name: m.textEncoder } } : clip(m.textEncoder, 'krea2');
+  g['K:unet'] = isGguf(m.model) && !anima ? { class_type: 'TJ_NODE_Krea2UnetLoaderGGUF', inputs: { unet_name: m.model } } : unet(m.model);
+  g['K:clip'] = isGguf(m.textEncoder) && !anima ? { class_type: 'TJ_NODE_Krea2ClipLoaderGGUF', inputs: { clip_name: m.textEncoder } } : clip(m.textEncoder, anima ? 'stable_diffusion' : 'krea2');
   g['K:vae'] = { class_type: 'VAELoader', inputs: { vae_name: m.vae } };
   const model = loraChain(g, ['K:unet', 0], job.loras, 'K:');
   g['K:pos'] = { class_type: 'CLIPTextEncode', inputs: { clip: ['K:clip', 0], text: job.prompt } };
@@ -272,8 +273,57 @@ function buildKrea2(job: ImageJob, m: { model: string; textEncoder: string; vae:
     inputs: { model, positive: ['K:pos', 0], negative: ['K:neg', 0], latent_image: latent, seed: job.seed, steps: job.steps, cfg: job.cfg, sampler_name: job.sampler, scheduler: job.scheduler, denoise },
   };
   g['K:decode'] = { class_type: 'VAEDecode', inputs: { samples: ['K:sampler', 0], vae: ['K:vae', 0] } };
-  g['K:save'] = saveNode(job, ['K:decode', 0], 'K2');
-  return { graph: g, hint: `Krea 2 ${job.mode.toUpperCase()}` };
+  g['K:save'] = saveNode(job, ['K:decode', 0], anima ? 'Anima' : 'K2');
+  return { graph: g, hint: `${label} ${job.mode.toUpperCase()}` };
+}
+
+// ------------------------------------------------------------------------- Qwen Image Edit 2511
+function buildQwen(job: ImageJob, m: { model: string; textEncoder: string; vae: string }): Built {
+  const g: G = {};
+  g['QE:unet'] = unet(m.model);
+  g['QE:clip'] = { class_type: 'CLIPLoader', inputs: { clip_name: m.textEncoder, type: 'qwen_image', device: 'default' } };
+  g['QE:vae'] = { class_type: 'VAELoader', inputs: { vae_name: m.vae } };
+  const model = loraChain(g, ['QE:unet', 0], job.loras, 'QE:');
+  g['QE:samp'] = { class_type: 'ModelSamplingAuraFlow', inputs: { model, shift: 3.1 } };
+  g['QE:cfgnorm'] = { class_type: 'CFGNorm', inputs: { model: ['QE:samp', 0], strength: 1.0 } };
+  const vae: [string, number] = ['QE:vae', 0];
+
+  const refs = job.mode === 't2i' ? [] : job.images.slice(0, 3);
+  if (job.mode !== 't2i' && !refs.length) throw new Error('Source image is required');
+  refs.forEach((img, i) => {
+    g[`QE:load${i}`] = { class_type: 'LoadImage', inputs: { image: img } };
+    g[`QE:scale${i}`] = { class_type: 'FluxKontextImageScale', inputs: { image: [`QE:load${i}`, 0] } };
+  });
+  if (refs.length) g['QE:enc'] = { class_type: 'VAEEncode', inputs: { pixels: ['QE:scale0', 0], vae } };
+  const cond = (id: string, text: string, n: number) => {
+    const inputs: G = { clip: ['QE:clip', 0], vae, prompt: text };
+    for (let k = 0; k < n; k++) inputs[`image${k + 1}`] = [`QE:scale${k}`, 0];
+    g[id] = { class_type: 'TextEncodeQwenImageEditPlus', inputs };
+  };
+  cond('QE:pos', job.prompt, refs.length); cond('QE:neg', job.negative, Math.min(1, refs.length));
+  let pos: [string, number] = ['QE:pos', 0], neg: [string, number] = ['QE:neg', 0];
+  if (refs.length) {
+    g['QE:rpos'] = { class_type: 'FluxKontextMultiReferenceLatentMethod', inputs: { conditioning: pos, reference_latents_method: 'index_timestep_zero' } };
+    g['QE:rneg'] = { class_type: 'FluxKontextMultiReferenceLatentMethod', inputs: { conditioning: neg, reference_latents_method: 'index_timestep_zero' } };
+    pos = ['QE:rpos', 0]; neg = ['QE:rneg', 0];
+  }
+  let latent: [string, number], denoise = 1;
+  if (job.mode === 't2i') {
+    g['QE:latent'] = { class_type: 'EmptyLatentImage', inputs: { width: job.width, height: job.height, batch_size: job.batch } };
+    latent = ['QE:latent', 0];
+  } else if (job.mode === 'inpaint') {
+    if (!job.mask) throw new Error('A mask is required');
+    g['QE:maskImg'] = { class_type: 'LoadImage', inputs: { image: job.mask } };
+    g['QE:mask'] = { class_type: 'ImageToMask', inputs: { image: ['QE:maskImg', 0], channel: 'red' } };
+    g['QE:nm'] = { class_type: 'SetLatentNoiseMask', inputs: { samples: ['QE:enc', 0], mask: ['QE:mask', 0] } };
+    latent = ['QE:nm', 0]; denoise = job.denoise;
+  } else {
+    latent = ['QE:enc', 0]; denoise = job.mode === 'i2i' ? job.denoise : 1;
+  }
+  g['QE:sampler'] = { class_type: 'KSampler', inputs: { model: ['QE:cfgnorm', 0], positive: pos, negative: neg, latent_image: latent, seed: job.seed, steps: job.steps, cfg: job.cfg, sampler_name: job.sampler, scheduler: job.scheduler, denoise } };
+  g['QE:decode'] = { class_type: 'VAEDecode', inputs: { samples: ['QE:sampler', 0], vae } };
+  g['QE:save'] = saveNode(job, ['QE:decode', 0], 'QE');
+  return { graph: g, hint: `Qwen Edit ${job.mode.toUpperCase()}` };
 }
 
 // ------------------------------------------------------------------------- SDXL (checkpoint)
@@ -349,6 +399,8 @@ export async function buildImageGraph(job: ImageJob): Promise<Built> {
   const withDefaults = { ...job, negative: job.negative || picked.negative };
   if (job.family === 'klein') return buildKlein(withDefaults, m);
   if (job.family === 'krea2') return buildKrea2(withDefaults, m);
+  if (job.family === 'qwen') return buildQwen(withDefaults, m);
+  if (job.family === 'anima') return buildKrea2(withDefaults, m, true);
   if (job.family === 'sdxl') return buildSdxl(withDefaults, m);
   return buildZImage(withDefaults, m);
 }

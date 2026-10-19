@@ -43,12 +43,15 @@ LLM 4가지 방식은 [ComfyUI-TJ_NODE](https://github.com/designloves2/ComfyUI-
 
 | 구분 | 상태 |
 |---|---|
-| 이미지 생성/편집/인페인트/아웃페인트: Z-Image Turbo, Flux.2 Klein, Krea 2, SDXL | ✅ |
+| 이미지 생성/편집/인페인트/아웃페인트: Z-Image Turbo, Flux.2 Klein, Krea 2, SDXL, Anima, Qwen Image Edit 2511 | ✅ |
+| **ComfyUI Workflow 노드** — API 형식 JSON을 불러와 프롬프트/이미지/시드를 연결 (비디오 H3·LTX·Wan 등 어떤 워크플로우든 실행) | ✅ |
 | 얼굴 교체(Klein), 배경 제거, 업스케일(ESRGAN 계열) | ✅ |
 | 브라우저 편집 노드 20종 (자르기·블러·레벨·블렌드·마스크 등), 페인터(마스크 그리기) | ✅ |
 | LLM 노드 3종 + 4가지 백엔드 | ✅ |
 | 그룹, 잠금, 실행취소/다시실행, 비교, 메모, 갤러리 | ✅ |
-| 비디오(MiniMax H3 · LTX 2.5), Qwen 2511/2.1 · Anima, 음악(MusicMaker), MCP 서버 | 🔜 다음 단계 |
+| 비디오 전용 노드(MiniMax H3 · LTX 2.5 옵션 UI), Qwen 2.1, 음악(MusicMaker), MCP 서버 | 🔜 다음 단계 |
+
+**비디오 쓰는 법:** ComfyUI에서 H3/LTX 워크플로우를 `Save (API Format)`으로 저장 → `ComfyUI Workflow` 노드에서 불러오기 → 프롬프트·이미지·시드 칸을 고르면 끝. 결과 영상은 노드에 재생됩니다.
 
 자세한 구조·백엔드 API 목록은 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 

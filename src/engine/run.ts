@@ -7,6 +7,7 @@ import { buildImageGraph, type ImageJob, type ImageMode } from '../backend/image
 import { FAMILIES, pickModels, type Family } from '../backend/studio';
 import { runLlm } from '../backend/llm';
 import { loadOptions } from '../backend/options';
+import { parseWorkflow, setField, VIDEO_EXT } from '../backend/workflow';
 import { useSettings } from '../store/settings';
 import { applyOp, blendOp, canvasToAsset, channelOp, invertMask, loadBitmap, maskGrow, palette, videoFrame } from '../editing/ops';
 
@@ -133,8 +134,10 @@ function sizeFrom(aspect: string, mp: number): { w: number; h: number } {
 
 async function runGraph(c: Ctx, graph: Record<string, unknown>): Promise<Asset[]> {
   const res = await runPrompt(graph, { onProgress: c.progress, signal: c.signal });
-  if (!res.images.length && !res.videos.length) throw new Error('ComfyUI finished but returned no image');
-  return [...res.images.map((f) => assetFromFile(f, 'image')), ...res.videos.map((f) => assetFromFile(f, 'video'))];
+  const files = [...res.images, ...res.videos];
+  if (!files.length) throw new Error('ComfyUI finished but returned no image or video');
+  // SaveVideo reports mp4 files under `images`; sort by extension
+  return files.map((f) => (VIDEO_EXT.test(f.filename) ? assetFromFile(f, 'video', 'video') : assetFromFile(f, 'image', 'image')));
 }
 
 function imageRunner(mode: (c: Ctx) => ImageMode): Runner {
@@ -151,7 +154,7 @@ function imageRunner(mode: (c: Ctx) => ImageMode): Runner {
     const imgs = c.inputs('image');
     const refs = m === 'faceswap' ? [...imgs, ...c.inputs('face')] : imgs;
     const inputFiles: string[] = [];
-    for (const a of refs.slice(0, 2)) inputFiles.push(await ensureInput(a));
+    for (const a of refs.slice(0, 3)) inputFiles.push(await ensureInput(a));
     const maskA = c.inputs('mask')[0];
     const maskFile = maskA ? await ensureInput(maskA) : undefined;
 
@@ -237,7 +240,7 @@ const RUNNERS: Record<string, Runner> = {
 
   // ---- image generation
   'image-generate': imageRunner(() => 't2i'),
-  'image-edit': imageRunner((c) => (c.engineId === 'klein-edit' || !c.engineId ? 'edit' : 'i2i')),
+  'image-edit': imageRunner((c) => (c.engineId === 'klein-edit' || c.engineId === 'qwen-edit' || !c.engineId ? 'edit' : 'i2i')),
   inpaint: imageRunner(() => 'inpaint'),
   outpaint: imageRunner(() => 'outpaint'),
   'face-swap': imageRunner(() => 'faceswap'),
@@ -258,6 +261,24 @@ const RUNNERS: Record<string, Runner> = {
     const by = num(c.p.scale_by, 1);
     if (by !== 1) { g.u4 = { class_type: 'ImageScaleBy', inputs: { image: last, upscale_method: 'lanczos', scale_by: by } }; last = ['u4', 0]; }
     g.u5 = { class_type: 'SaveImage', inputs: { images: last, filename_prefix: `${sub}/upscale` } };
+    return runGraph(c, g);
+  },
+  'comfy-workflow': async (c) => {
+    const { graph, error } = parseWorkflow(str(c.p.workflow));
+    if (error) throw new Error(error);
+    if (!graph) throw new Error('Load a workflow JSON first (open the node\'s advanced section)');
+    const g = JSON.parse(JSON.stringify(graph));
+    const prompt = c.text('prompt');
+    if (prompt && str(c.p.prompt_target)) setField(g, str(c.p.prompt_target), prompt);
+    const imgs = c.inputs('image');
+    if (imgs[0] && str(c.p.image_target)) setField(g, str(c.p.image_target), await ensureInput(imgs[0]));
+    if (imgs[1] && str(c.p.image2_target)) setField(g, str(c.p.image2_target), await ensureInput(imgs[1]));
+    const vid = c.inputs('video')[0];
+    if (vid && str(c.p.video_target)) setField(g, str(c.p.video_target), await ensureInput(vid));
+    if (str(c.p.seed_target)) {
+      const si = c.inputs('seed_in')[0]; const sv = si ? num(si.text, -1) : num(c.p.seed, -1);
+      setField(g, str(c.p.seed_target), sv < 0 ? Math.floor(Math.random() * 2 ** 40) : sv);
+    }
     return runGraph(c, g);
   },
   'video-generate': async () => { throw new Error('Video engines (MiniMax H3 / LTX 2.5) are planned for the next phase.'); },

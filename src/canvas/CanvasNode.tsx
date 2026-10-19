@@ -1,4 +1,5 @@
-import { memo, useRef, useState } from 'react';
+import { memo, useMemo, useRef, useState } from 'react';
+import { parseWorkflow, candidates } from '../backend/workflow';
 import { Handle, Position, NodeResizer, type NodeProps } from '@xyflow/react';
 import { useGraph } from '../store/graph';
 import { byId, engineFor, paramsFor } from '../registry';
@@ -39,8 +40,9 @@ function Results({ id }: { id: string }) {
   const setActive = useGraph((s) => s.setActive);
   const def = byId.get(node.defId)!;
   const main = portAssets(node, def.outputs[0]?.id);
-  const others = def.outputs.slice(1).map((o) => ({ o, a: activeAsset(node, o.id) })).filter((x) => x.a);
-  const cur = activeAsset(node, def.outputs[0]?.id);
+  let others = def.outputs.slice(1).map((o) => ({ o, a: activeAsset(node, o.id) })).filter((x) => x.a);
+  let cur = activeAsset(node, def.outputs[0]?.id);
+  if (!cur && def.id === 'comfy-workflow' && others.length) { cur = others[0].a; others = []; } // video-only result
   if (!cur && !others.length) return null;
   return (
     <div className="results">
@@ -105,6 +107,44 @@ function EnhanceButton({ id }: { id: string }) {
   );
 }
 
+function WorkflowBody({ id }: { id: string }) {
+  const T = useT();
+  const node = useGraph((s) => s.nodes.find((n) => n.id === id))!;
+  const set = useGraph((s) => s.setParam);
+  const ref = useRef<HTMLInputElement>(null);
+  const src = String(node.params.workflow ?? '');
+  const parsed = useMemo(() => parseWorkflow(src), [src]);
+  const cand = useMemo(() => (parsed.graph ? candidates(parsed.graph) : null), [parsed.graph]);
+  const load = async (f: File) => {
+    const text = await f.text();
+    const p = parseWorkflow(text);
+    set(id, 'workflow', text);
+    if (p.graph) {
+      const c = candidates(p.graph);
+      set(id, 'prompt_target', c.text[0]?.key ?? ''); set(id, 'image_target', c.image[0]?.key ?? ''); set(id, 'image2_target', c.image[1]?.key ?? '');
+      set(id, 'video_target', c.video[0]?.key ?? ''); set(id, 'seed_target', c.seed[0]?.key ?? '');
+    }
+  };
+  const pick = (param: string, label: string, list: { key: string; label: string }[]) => (
+    <label className="field"><span className="field-label">{T(label)}</span>
+      <select className="nodrag" value={String(node.params[param] ?? '')} onChange={(e) => set(id, param, e.target.value)}>
+        <option value="">—</option>{list.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
+      </select></label>
+  );
+  return (
+    <div className="params">
+      <input ref={ref} type="file" accept=".json,application/json" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void load(f); e.target.value = ''; }} />
+      <button className="btn nodrag" onClick={() => ref.current?.click()}>{src ? T('Replace workflow…') : T('Load workflow (API JSON)…')}</button>
+      {parsed.error && <div className="error">{parsed.error}</div>}
+      {cand && <>
+        <small className="muted">{Object.keys(parsed.graph!).length} nodes</small>
+        {pick('prompt_target', 'Prompt field', cand.text)}{pick('image_target', 'Image 1 field', cand.image)}{pick('image2_target', 'Image 2 field', cand.image)}
+        {pick('video_target', 'Video field', cand.video)}{pick('seed_target', 'Seed field', cand.seed)}
+      </>}
+    </div>
+  );
+}
+
 function DisplayBody({ id, defId }: { id: string; defId: string }) {
   const a = useUpstream(id, defId === 'compare' ? 'a' : 'image');
   const b = useUpstream(id, 'b');
@@ -150,7 +190,7 @@ export const CanvasNode = memo(function CanvasNode({ id, selected }: NodeProps) 
 
   const color = KIND_COLOR[def.kind] ?? '#888';
   const params = paramsFor(def, node.engineId);
-  const shown = params.filter((p) => (adv || !p.advanced) && (!p.when || p.when(node.params)));
+  const shown = params.filter((p) => (adv || !p.advanced) && (!p.when || p.when(node.params)) && !(def.id === 'comfy-workflow' && /target$|^workflow$/.test(p.id)));
   const hasAdv = params.some((p) => p.advanced);
   const rows = Math.max(def.inputs.length, def.outputs.length);
   const running = rt?.status === 'running';
@@ -193,6 +233,7 @@ export const CanvasNode = memo(function CanvasNode({ id, selected }: NodeProps) 
       {def.id === 'import' && <ImportBody id={id} />}
       {(def.id === 'export' || def.id === 'preview' || def.id === 'compare') && <DisplayBody id={id} defId={def.id} />}
 
+      {def.id === 'comfy-workflow' && <WorkflowBody id={id} />}
       {shown.length > 0 && (
         <div className="params">
           {shown.map((p) => <Field key={p.id} def={p} value={node.params[p.id] ?? p.default} onChange={(v) => setParam(id, p.id, v)} />)}

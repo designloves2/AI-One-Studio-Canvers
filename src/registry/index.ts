@@ -42,6 +42,14 @@ const krea2 = (id: string, label: string, extra: ParamDef[] = [], size = false):
   id, label, family: 'krea2',
   params: [...sizeParams(size), ...extra, ...sampler(8, 1, 'euler'), negative, ...loras('krea2'), num('batch', 'Batch', 1, { advanced: true }, 1, 4, 1), seed],
 });
+const anima = (id: string, label: string, extra: ParamDef[] = [], size = false): EngineDef => ({
+  id, label, family: 'anima',
+  params: [...sizeParams(size), ...extra, ...sampler(30, 4, 'euler'), negative, ...loras('anima'), num('batch', 'Batch', 1, { advanced: true }, 1, 4, 1), seed],
+});
+const qwen = (id: string, label: string, extra: ParamDef[] = [], size = false): EngineDef => ({
+  id, label, family: 'qwen',
+  params: [...sizeParams(size), ...extra, ...sampler(20, 4, 'euler'), negative, ...loras('qwen'), num('batch', 'Batch', 1, { advanced: true }, 1, 4, 1), seed],
+});
 const sdxl = (id: string, label: string, extra: ParamDef[] = [], size = false): EngineDef => ({
   id, label, family: 'sdxl',
   params: [...sizeParams(size), ...extra, ...sampler(20, 7, 'euler_ancestral', 'karras'), { ...negative, default: 'low quality, blurry, deformed, watermark' }, ...loras('sdxl'), num('batch', 'Batch', 1, { advanced: true }, 1, 4, 1), seed],
@@ -97,14 +105,18 @@ export const REGISTRY: NodeDef[] = [
       klein('klein', 'Flux.2 Klein (local)', [], true),
       krea2('krea2', 'Krea 2 (local)', [], true),
       sdxl('sdxl', 'SDXL (local)', [], true),
+      anima('anima', 'Anima (local)', [], true),
+      qwen('qwen', 'Qwen Image Edit 2511 (local)', [], true),
     ], description: 'Text to image on your own ComfyUI.' },
   { id: 'image-edit', title: 'Image Edit', category: 'Image', kind: 'generate',
     inputs: [P.textIn(), P.imgIn('image', 'Images', false, true), P.seedIn()], outputs: [P.imgOut()], params: [],
     engines: [
       { ...klein('klein-edit', 'Flux.2 Klein — edit with references (local)'), default: true },
+      { ...qwen('qwen-edit', 'Qwen Image Edit 2511 — up to 3 references (local)') },
       klein('klein-i2i', 'Flux.2 Klein — img2img (local)', [slider('denoise', 'Denoise', 0.05, 1, 0.05, 0.75)]),
       zimage('zimage-i2i', 'Z-Image Turbo — img2img (local)', [slider('denoise', 'Denoise', 0.05, 1, 0.05, 0.75)]),
       krea2('krea2-i2i', 'Krea 2 — img2img (local)', [slider('denoise', 'Denoise', 0.05, 1, 0.05, 0.75)]),
+      anima('anima-i2i', 'Anima — img2img (local)', [slider('denoise', 'Denoise', 0.05, 1, 0.05, 0.75)]),
       sdxl('sdxl-i2i', 'SDXL — img2img (local)', [slider('denoise', 'Denoise', 0.05, 1, 0.05, 0.6)]),
     ], description: 'Edit or restyle images. The first image sets the output size.' },
   { id: 'inpaint', title: 'Inpaint', category: 'Image', kind: 'generate',
@@ -113,6 +125,7 @@ export const REGISTRY: NodeDef[] = [
       { ...zimage('zimage', 'Z-Image Turbo (local)', [slider('denoise', 'Denoise', 0.05, 1, 0.05, 0.85)]), default: true },
       klein('klein', 'Flux.2 Klein (local)', [slider('denoise', 'Denoise', 0.05, 1, 0.05, 1)]),
       sdxl('sdxl', 'SDXL (local)', [slider('denoise', 'Denoise', 0.05, 1, 0.05, 0.85)]),
+      qwen('qwen', 'Qwen Image Edit 2511 (local)', [slider('denoise', 'Denoise', 0.05, 1, 0.05, 0.85)]),
     ], description: 'Repaint the white area of a mask.' },
   { id: 'outpaint', title: 'Outpaint', category: 'Image', kind: 'generate',
     inputs: [P.textIn('prompt', 'Prompt', true), P.imgIn(), P.seedIn()], outputs: [P.imgOut()], params: [],
@@ -133,6 +146,11 @@ export const REGISTRY: NodeDef[] = [
     inputs: [P.imgIn()], outputs: [P.imgOut()], params: [],
     engines: [{ id: 'esrgan', label: 'Upscale model (ComfyUI core)', family: 'core', default: true, params: [dyn('upscale_model', 'Model', 'upscalers', 'none'), slider('scale_by', 'Final scale', 0.25, 4, 0.25, 1, { advanced: true })] }],
     description: 'Enlarge with an ESRGAN-type model from ComfyUI/models/upscale_models.' },
+  { id: 'comfy-workflow', title: 'ComfyUI Workflow', category: 'Workflow', kind: 'generate',
+    inputs: [P.textIn('prompt', 'Prompt', true), P.imgIn('image', 'Images', true, true), { id: 'video', label: 'Video', type: 'video', optional: true }, P.seedIn()],
+    outputs: [P.imgOut('image', 'Image'), { id: 'video', label: 'Video', type: 'video' }],
+    params: [text('workflow', 'Workflow JSON', '', true, { advanced: true }), text('prompt_target', 'Prompt field', '', false, { advanced: true }), text('image_target', 'Image 1 field', '', false, { advanced: true }), text('image2_target', 'Image 2 field', '', false, { advanced: true }), text('video_target', 'Video field', '', false, { advanced: true }), text('seed_target', 'Seed field', '', false, { advanced: true }), { id: 'seed', label: 'Seed', control: { kind: 'seed' }, default: -1, advanced: true }],
+    description: 'Run any API-format ComfyUI workflow (video, LTX, H3, Wan…). Load the JSON, pick which fields take the prompt / images / seed.' },
   { id: 'video-generate', title: 'Video Generate', category: 'Video', kind: 'generate', planned: true,
     inputs: [P.textIn('prompt', 'Prompt', true), P.imgIn('image', 'First frame', true), P.imgIn('last', 'Last frame', true)], outputs: [{ id: 'video', label: 'Video', type: 'video' }], params: [],
     engines: [
@@ -180,7 +198,7 @@ export const REGISTRY: NodeDef[] = [
 ];
 
 export const byId = new Map(REGISTRY.map((n) => [n.id, n]));
-export const CATEGORIES = ['Text / LLM', 'Image', 'Video', 'Edit', 'Utility', 'Data'];
+export const CATEGORIES = ['Text / LLM', 'Image', 'Video', 'Workflow', 'Edit', 'Utility', 'Data'];
 
 /** the params a node shows: the engine's own set when it has one, else the node's. */
 export function paramsFor(def: NodeDef, engineId?: string): ParamDef[] {
