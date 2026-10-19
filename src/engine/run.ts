@@ -7,6 +7,7 @@ import { buildImageGraph, type ImageJob, type ImageMode } from '../backend/image
 import { FAMILIES, pickModels, type Family } from '../backend/studio';
 import { runLlm } from '../backend/llm';
 import { loadOptions } from '../backend/options';
+import { getJson } from '../backend/http';
 import { buildMusicGraph } from '../backend/music';
 import { buildLtxGraph, ltxSize } from '../backend/ltx';
 import { buildH3Graph, h3Size, h3Frames, pickChainFrame, copyToInput, stitchClips, ONE_TAKE_OVERLAP_FRAMES } from '../backend/h3';
@@ -304,6 +305,15 @@ const RUNNERS: Record<string, Runner> = {
     const t = need(c.text('text') || undefined, 'Text');
     c.progress(10, 'enhancing…');
     return [textAsset(await runLlm({ system: enhanceSystem(c), prompt: t }))];
+  },
+  'music-writer': async (c) => {
+    const t = need(c.text('text') || undefined, 'Text');
+    const key = ({ 'lyrics from theme': 'lyrics_from_theme', 'lyrics from title': 'lyrics_from_title', 'enhance lyrics': 'lyrics_enhance', 'style caption — Ace-Step': 'caption_acestep', 'style caption — MiniMax Music': 'caption_minimax', 'style caption — YuE2': 'caption_yue2', 'cover prompt': 'cover_prompt', 'song title': 'title' } as Record<string, string>)[str(c.p.task)] ?? 'lyrics_from_theme';
+    c.progress(10, 'loading prompt…');
+    const lib = await getJson<{ prompts: Record<string, string> }>('/music_one/llm/prompts');
+    const system = lib.prompts?.[key]; if (!system) throw new Error(`The MusicMaker prompt "${key}" was not found on the server`);
+    c.progress(30, 'writing…');
+    return [textAsset(await runLlm({ system, prompt: t }))];
   },
   'image-describer': async (c) => {
     const images = need(c.inputs('image'), 'Image');
