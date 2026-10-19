@@ -2288,9 +2288,9 @@ var init_settings = __esm({
     useSettings = create((set2, get) => {
       const saved = load();
       const persist = () => {
-        const { comfyUrl, llm, models, saveSubfolder, music, video } = get();
+        const { comfyUrl, llm, models, saveSubfolder, music, video, hostPanels } = get();
         try {
-          localStorage.setItem(KEY, JSON.stringify({ comfyUrl, llm, models, saveSubfolder, music, video }));
+          localStorage.setItem(KEY, JSON.stringify({ comfyUrl, llm, models, saveSubfolder, music, video, hostPanels }));
         } catch {
         }
       };
@@ -2300,6 +2300,7 @@ var init_settings = __esm({
         keys: { custom: "", openrouter: "" },
         models: saved.models ?? {},
         saveSubfolder: saved.saveSubfolder ?? "ai-one-canvers",
+        hostPanels: saved.hostPanels ?? false,
         music: saved.music ?? {},
         video: saved.video ?? {},
         setVideo: (k, v) => {
@@ -2628,26 +2629,7 @@ var h3Params = (ref) => [
   slider("steps", "Steps (no turbo)", 1, 60, 1, 20, { advanced: true }),
   dyn("sampler", "Sampler", "samplers", "er_sde", { advanced: true }),
   dyn("scheduler", "Scheduler", "schedulers", "simple", { advanced: true }),
-  sel("turbo", "Turbo", ["none", "larryvrh", "pdd", "lightx2v"], "none", { advanced: true }),
-  dyn("turbo_lora", "Turbo LoRA", "loras:h3", "none", { advanced: true, when: (p) => p.turbo !== "none" }),
-  slider("turbo_strength", "Turbo strength", 0, 2, 0.05, 1, { advanced: true, when: (p) => p.turbo !== "none" }),
-  slider("turbo_steps", "Turbo steps", 1, 16, 1, 8, { advanced: true, when: (p) => p.turbo !== "none" }),
-  toggle("hires", "7+1 hi-res finish (Turbo LoRA Basic = pdd)", false, { advanced: true, when: (p) => p.turbo === "pdd" }),
-  slider("hires_start_mp", "Start MP", 0.2, 1, 0.05, 0.5, { advanced: true, when: (p) => p.turbo === "pdd" && !!p.hires }),
-  slider("hires_final_mp", "Final MP", 0.4, 3, 0.05, 0.9, { advanced: true, when: (p) => p.turbo === "pdd" && !!p.hires }),
-  sel("attn_backend", "Attention backend", ["none", "ck", "sage", "solattn_kijai", "sla"], "none", { advanced: true }),
-  sel("attn_forward", "Attention forward patch", ["none", "memeff_sage", "solattn_sag"], "none", { advanced: true }),
-  sel("optimizer", "H3 optimizer", ["none", "memory", "memory_sparse"], "none", { advanced: true }),
-  sel("block_cache", "Block cache", ["none", "fbcache"], "none", { advanced: true }),
-  toggle("spectrum", "Spectrum", false, { advanced: true }),
-  toggle("fused_mod", "Fused modulation", false, { advanced: true }),
-  slider("shift_video", "Shift (video)", 1, 20, 0.5, 12, { advanced: true }),
-  slider("shift_audio", "Shift (audio)", 1, 10, 0.5, 3, { advanced: true }),
-  text("lock_mode", "Audio lock mode", "lock", false, { advanced: true }),
-  slider("lock_strength", "Audio lock strength", 0, 1, 0.05, 0.5, { advanced: true }),
-  text("lock_fit", "Audio lock fit", "pad_silence", false, { advanced: true }),
-  dyn("upscale_model", "Upscale model", "upscalers", "none", { advanced: true }),
-  ...loras("h3"),
+  dyn("upscale_model", "Upscale model (after render)", "upscalers", "none", { advanced: true }),
   seed
 ];
 var klein = (id, label, extra = [], size = false) => ({
@@ -2669,6 +2651,8 @@ var P = {
   imgOut: (id = "image", label = "Image") => ({ id, label, type: "image" }),
   maskIn: (id = "mask", label = "Mask", optional = false) => ({ id, label, type: "mask", optional }),
   maskOut: (id = "mask", label = "Mask") => ({ id, label, type: "mask" }),
+  loraIn: () => ({ id: "loras", label: "LoRA cards", type: "lora", optional: true, multi: true }),
+  cardIn: (label = "Option cards") => ({ id: "cards", label, type: "pipe", optional: true, multi: true }),
   seedIn: () => ({ id: "seed_in", label: "Seed", type: "number", optional: true })
 };
 var edit = (id, title, params, description, inputs = [P.imgIn()], outputs = [P.imgOut()]) => ({ id, title, category: "Edit", kind: "edit", inputs, outputs, params, description });
@@ -2730,7 +2714,7 @@ var REGISTRY = [
     title: "Image Generate",
     category: "Image",
     kind: "generate",
-    inputs: [P.textIn(), P.seedIn()],
+    inputs: [P.textIn(), P.loraIn(), P.seedIn()],
     outputs: [P.imgOut()],
     params: [],
     engines: [
@@ -2749,7 +2733,7 @@ var REGISTRY = [
     title: "Image Edit",
     category: "Image",
     kind: "generate",
-    inputs: [P.textIn(), P.imgIn("image", "Images", false, true), P.seedIn()],
+    inputs: [P.textIn(), P.imgIn("image", "Images", false, true), P.loraIn(), P.seedIn()],
     outputs: [P.imgOut()],
     params: [],
     engines: [
@@ -2769,7 +2753,7 @@ var REGISTRY = [
     title: "Inpaint",
     category: "Image",
     kind: "generate",
-    inputs: [P.textIn(), P.imgIn(), P.maskIn(), P.seedIn()],
+    inputs: [P.textIn(), P.imgIn(), P.maskIn(), P.loraIn(), P.seedIn()],
     outputs: [P.imgOut()],
     params: [],
     engines: [
@@ -2785,7 +2769,7 @@ var REGISTRY = [
     title: "Outpaint",
     category: "Image",
     kind: "generate",
-    inputs: [P.textIn("prompt", "Prompt", true), P.imgIn(), P.seedIn()],
+    inputs: [P.textIn("prompt", "Prompt", true), P.imgIn(), P.loraIn(), P.seedIn()],
     outputs: [P.imgOut()],
     params: [],
     engines: [
@@ -2868,7 +2852,7 @@ var REGISTRY = [
     title: "Video Generate",
     category: "Video",
     kind: "generate",
-    inputs: [P.textIn("prompt", "Prompt", false), P.imgIn("image", "First frame / references", true, true), P.imgIn("last", "Last frame", true), { id: "audio", label: "Lock audio", type: "audio", optional: true }, P.seedIn()],
+    inputs: [P.textIn("prompt", "Prompt", false), P.imgIn("image", "First frame / references", true, true), P.imgIn("last", "Last frame", true), P.cardIn("H3 option cards"), P.loraIn(), { id: "assets", label: "Asset Library", type: "pipe", optional: true }, P.seedIn()],
     outputs: [{ id: "video", label: "Video", type: "video" }],
     params: [],
     engines: [
@@ -2928,12 +2912,247 @@ var REGISTRY = [
     description: "Draw on an image or paint a mask. Double-click the preview to open the editor."
   },
   // ============================================================ Utility
+  // ---------------------------------------------------------------- cards (small settings blocks you wire in)
+  {
+    id: "lora-card",
+    title: "LoRA",
+    category: "Cards",
+    kind: "source",
+    inputs: [{ id: "lora_in", label: "More LoRAs", type: "lora", optional: true, multi: true }],
+    outputs: [{ id: "lora", label: "LoRA", type: "lora" }],
+    params: [dyn("lora", "LoRA", "loras:all", "none"), slider("strength", "Strength", -2, 2, 0.05, 1)],
+    description: "One LoRA. Wire it into any image or video node \u2014 chain several cards to stack LoRAs."
+  },
+  {
+    id: "h3-turbo",
+    title: "H3 Turbo \xB7 7+1",
+    category: "Cards",
+    kind: "source",
+    inputs: [],
+    outputs: [{ id: "card", label: "Turbo", type: "pipe" }],
+    params: [
+      sel("turbo", "Turbo", ["pdd", "larryvrh", "lightx2v", "none"], "pdd"),
+      dyn("turbo_lora", "Turbo LoRA", "loras:h3", "none", { when: (p) => p.turbo !== "none" }),
+      slider("turbo_strength", "Turbo strength", 0, 2, 0.05, 1, { when: (p) => p.turbo !== "none" }),
+      slider("turbo_steps", "Turbo steps", 1, 16, 1, 8, { advanced: true, when: (p) => p.turbo !== "none" }),
+      toggle("hires", "7+1 hi-res finish (7 steps small \u2192 upscale \u2192 1 step big)", true, { when: (p) => p.turbo === "pdd" }),
+      slider("hires_start_mp", "Start size (MP)", 0.2, 1, 0.05, 0.5, { when: (p) => p.turbo === "pdd" && !!p.hires }),
+      slider("hires_final_mp", "Final size (MP)", 0.4, 3, 0.05, 0.9, { when: (p) => p.turbo === "pdd" && !!p.hires })
+    ],
+    description: "H3 speed-up: Turbo LoRA and the 7+1 hi-res finish. Wire into Video Generate \u2192 H3 option cards."
+  },
+  {
+    id: "h3-speed",
+    title: "H3 Speed & Attention",
+    category: "Cards",
+    kind: "source",
+    inputs: [],
+    outputs: [{ id: "card", label: "Speed", type: "pipe" }],
+    params: [
+      sel("attn_backend", "Attention backend", ["none", "ck", "sage", "solattn_kijai", "sla"], "none"),
+      sel("attn_forward", "Attention forward patch", ["none", "memeff_sage", "solattn_sag"], "none"),
+      sel("optimizer", "H3 optimizer", ["none", "memory", "memory_sparse"], "none"),
+      sel("block_cache", "Block cache", ["none", "fbcache"], "none"),
+      toggle("spectrum", "Spectrum", false),
+      toggle("fused_mod", "Fused modulation", false),
+      slider("shift_video", "Shift (video)", 1, 20, 0.5, 12, { advanced: true }),
+      slider("shift_audio", "Shift (audio)", 1, 10, 0.5, 3, { advanced: true })
+    ],
+    description: "H3 attention backends, memory optimiser, block cache, Spectrum and sigma shift."
+  },
+  {
+    id: "h3-audiolock",
+    title: "H3 Audio Lock",
+    category: "Cards",
+    kind: "source",
+    inputs: [{ id: "audio", label: "Audio", type: "audio" }],
+    outputs: [{ id: "card", label: "Audio lock", type: "pipe" }],
+    params: [sel("lock_mode", "Mode", ["lock", "remix"], "lock"), slider("lock_strength", "Strength (remix)", 0, 1, 0.05, 0.5, { when: (p) => p.lock_mode === "remix" }), sel("lock_fit", "If the audio is shorter", ["pad_silence", "loop", "none"], "pad_silence")],
+    description: "Make H3 use your audio (voice / music) instead of generating its own; each clip gets its own slice."
+  },
+  {
+    id: "asset-library",
+    title: "Asset Library",
+    category: "Cards",
+    kind: "source",
+    inputs: [],
+    outputs: [P.imgOut("image", "Images"), P.textOut("mentions", "@names"), { id: "assets", label: "For H3", type: "pipe" }],
+    params: [text("project", "Project id", ""), text("ids", "Asset ids", "")],
+    description: "Pick characters, places and props from your reference library. Write @name in the prompt; H3 Reference resolves it."
+  },
+  // ---------------------------------------------------------------- post-processing (one card per step, video in → video out)
+  ...(() => {
+    const vin = [{ id: "video", label: "Video", type: "video" }], vout = [{ id: "video", label: "Video", type: "video" }];
+    const pp = (id, title, params, description, engines) => ({ id, title, category: "Postprocess", kind: "generate", inputs: vin, outputs: vout, params, engines, description });
+    const rtxP = (pre, whenOk = () => true) => [
+      sel(`${pre}mode`, "Size by", ["scale", "short", "long", "wh"], "scale", { when: whenOk }),
+      slider(`${pre}scale`, "Scale", 1, 4, 0.25, 2, { when: (p) => whenOk(p) && p[`${pre}mode`] === "scale" }),
+      num(`${pre}short`, "Short edge px", 1080, { when: (p) => whenOk(p) && p[`${pre}mode`] === "short" }, 8, 8192, 8),
+      num(`${pre}long`, "Long edge px", 1920, { when: (p) => whenOk(p) && p[`${pre}mode`] === "long" }, 8, 8192, 8),
+      num(`${pre}w`, "Width", 1920, { when: (p) => whenOk(p) && p[`${pre}mode`] === "wh" }, 8, 8192, 8),
+      num(`${pre}h`, "Height", 1080, { when: (p) => whenOk(p) && p[`${pre}mode`] === "wh" }, 8, 8192, 8),
+      sel(`${pre}anchor`, "Crop anchor", ["center", "left", "right", "top", "bottom"], "center", { advanced: true, when: (p) => whenOk(p) && p[`${pre}mode`] === "wh" }),
+      sel(`${pre}quality`, "Quality", ["LOW", "MEDIUM", "HIGH", "ULTRA"], "ULTRA", { when: whenOk })
+    ];
+    return [
+      pp("pp-deblur", "Deblur (RTX)", [sel("strength", "Strength", ["LOW", "MEDIUM", "HIGH", "ULTRA"], "MEDIUM")], "NVIDIA RTX Deblur on every frame."),
+      pp("pp-denoise", "Denoise (RTX)", [sel("strength", "Strength", ["LOW", "MEDIUM", "HIGH", "ULTRA"], "MEDIUM")], "NVIDIA RTX Denoise on every frame."),
+      pp("pp-upscale", "Video Upscale", [], "Enlarge a video: FlashVSR, RTX VSR or an upscale model; optional second RTX pass.", [
+        { id: "flashvsr", label: "FlashVSR", family: "post", default: true, params: [
+          sel("fv_model", "Model", ["FlashVSR-v1.1", "FlashVSR"], "FlashVSR-v1.1"),
+          sel("fv_mode", "Mode", ["tiny", "tiny-long", "full"], "tiny"),
+          slider("fv_scale", "Scale", 2, 4, 1, 2),
+          toggle("fv_color", "Colour fix", true),
+          num("fv_tile", "Tile size", 384, { advanced: true }, 64, 2048, 32),
+          num("fv_overlap", "Tile overlap", 32, { advanced: true }, 0, 512, 8),
+          num("fv_seed", "Seed", 42, { advanced: true }),
+          toggle("two_pass", "2nd pass with RTX VSR", false),
+          ...rtxP("p2_", (p) => !!p.two_pass)
+        ] },
+        { id: "rtx", label: "RTX VSR (TJ)", family: "post", params: rtxP("rtx_") },
+        { id: "model", label: "Upscale model (ESRGAN\u2026)", family: "post", params: [dyn("model_name", "Model", "upscalers", "none"), toggle("two_pass", "2nd pass with RTX VSR", false), ...rtxP("p2_", (p) => !!p.two_pass)] }
+      ]),
+      pp("pp-skin", "Skin Retouch", [slider("evenness", "Evenness", 0, 1, 0.01, 0.3), slider("smoothing", "Smoothing", 0, 1, 0.01, 0.2), slider("redness", "Redness", 0, 1, 0.01, 0), slider("shine", "Shine", 0, 1, 0.01, 0), sel("blemish", "Blemish fix", ["off", "subtle", "strong"], "off"), toggle("preserve", "Keep moles / scars", true, { advanced: true }), slider("microtexture", "Micro-texture", 0, 3, 0.05, 0, { advanced: true })], "Non-generative skin evening, de-shine and blemish fix."),
+      pp("pp-grain", "Film Grain", [slider("amount", "Amount", 0, 1, 0.01, 0.25), slider("size", "Size", 0.3, 3, 0.05, 1), slider("color", "Colour grain", 0, 1, 0.01, 0), slider("lum_bias", "Shadow bias", 0, 1, 0.01, 0), sel("noise", "Noise", ["smooth", "grainy"], "smooth")], "Add film grain (ComfyUI core GLSL shader)."),
+      pp("pp-interpolate", "Frame Interpolation", [slider("target_fps", "Target FPS", 24, 120, 1, 48), slider("scale", "Flow scale", 0.25, 2, 0.25, 1, { advanced: true }), text("model_name", "RIFE model", "flownet.pkl", false, { advanced: true }), num("batch", "Batch size", 8, { advanced: true }, 1, 64, 1), toggle("fp16", "FP16", true, { advanced: true })], "RIFE: smooth motion by adding in-between frames."),
+      pp("pp-resize", "Video Resize", [sel("mode", "Mode", ["Long side", "Short side", "Ratio", "Mega Pixel", "Width x Height"], "Long side"), num("target_px", "Target px", 1920, { when: (p) => p.mode === "Long side" || p.mode === "Short side" }, 8, 16384, 2), num("ratio_w", "Ratio W", 16, { when: (p) => p.mode === "Ratio" }, 1, 64, 1), num("ratio_h", "Ratio H", 9, { when: (p) => p.mode === "Ratio" }, 1, 64, 1), slider("megapixels", "Megapixels", 0.1, 8, 0.1, 1, { when: (p) => p.mode === "Mega Pixel" }), num("width", "Width", 1280, { when: (p) => p.mode === "Width x Height" }, 8, 16384, 2), num("height", "Height", 720, { when: (p) => p.mode === "Width x Height" }, 8, 16384, 2), sel("crop", "Fit", ["crop", "stretch"], "crop", { when: (p) => p.mode === "Width x Height" }), sel("method", "Resampling", ["lanczos", "bilinear", "bicubic", "area", "nearest-exact"], "lanczos", { advanced: true })], "Change the video size or aspect ratio."),
+      {
+        id: "face-refine",
+        title: "Face Refine (H3)",
+        category: "Postprocess",
+        kind: "generate",
+        inputs: [{ id: "video", label: "Video", type: "video" }, P.textIn("prompt", "Prompt", true), P.imgIn("image", "Face references", true, true), P.cardIn("H3 option cards"), P.loraIn(), P.seedIn()],
+        outputs: vout,
+        params: [
+          dyn("detector", "Face detector", "facedetectors", "none"),
+          dyn("fallback", "Fallback detector", "facedetectors", "none", { advanced: true }),
+          sel("select", "Which face", ["largest_face", "smallest_face", "left_most", "right_most", "top_most", "bottom_most", "centre_most", "detector_score", "manual"], "largest_face"),
+          text("picks", "Picked faces (manual)", "", false, { when: (p) => p.select === "manual" }),
+          text("pick_mode", "Pick mode", "shots", false, { advanced: true, when: () => false }),
+          slider("denoise", "Redraw strength", 0.05, 1, 0.05, 0.4),
+          slider("confidence", "Detect confidence", 0.05, 1, 0.05, 0.35, { advanced: true }),
+          slider("crop_factor", "Crop factor", 1, 6, 0.1, 2.5, { advanced: true }),
+          sel("canvas_mode", "Canvas", ["auto_capped_768", "auto_no_downscale", "manual"], "auto_capped_768", { advanced: true }),
+          num("canvas_w", "Canvas W", 768, { advanced: true, when: (p) => p.canvas_mode === "manual" }, 64, 2048, 32),
+          num("canvas_h", "Canvas H", 768, { advanced: true, when: (p) => p.canvas_mode === "manual" }, 64, 2048, 32),
+          num("smooth", "Smooth window", 21, { advanced: true }, 1, 99, 2),
+          toggle("cuts", "Detect scene cuts", false, { advanced: true }),
+          slider("cut_threshold", "Cut threshold", 1, 10, 0.5, 3, { advanced: true, when: (p) => !!p.cuts }),
+          toggle("identity", "Follow the same person", true, { advanced: true }),
+          slider("identity_threshold", "Identity threshold", 0.1, 0.9, 0.01, 0.45, { advanced: true }),
+          sel("identity_model", "Identity model", ["insightface", "clip_vision", "ccip"], "insightface", { advanced: true }),
+          slider("mul_small", "Small face \xD7", 0, 2, 0.05, 1, { advanced: true }),
+          slider("mul_large", "Large face \xD7", 0, 2, 0.05, 0.35, { advanced: true }),
+          slider("px_small", "Small face px", 8, 200, 1, 30, { advanced: true }),
+          slider("px_large", "Large face px", 20, 600, 1, 120, { advanced: true }),
+          slider("steps", "Steps (no turbo)", 1, 30, 1, 8, { advanced: true }),
+          dyn("sampler", "Sampler", "samplers", "euler", { advanced: true }),
+          dyn("scheduler", "Scheduler", "schedulers", "simple", { advanced: true }),
+          sel("paste", "Paste back", ["face_only", "face_ellipse", "full_crop"], "face_only", { advanced: true }),
+          slider("feather", "Feather", 0, 64, 1, 6, { advanced: true }),
+          slider("colour", "Colour match", 0, 1, 0.05, 1, { advanced: true }),
+          slider("blend", "Blend", 0, 1, 0.05, 1, { advanced: true }),
+          sel("undetected", "Frames without a face", ["fade_out", "skip", "composite_anyway"], "fade_out", { advanced: true }),
+          seed
+        ],
+        description: "Redraw small faces in a finished H3 clip: track \u2192 crop \u2192 H3 redraw \u2192 stitch back. Needs ComfyUI-H3-FaceRefine."
+      },
+      {
+        id: "h3-image",
+        title: "Image Generate (H3)",
+        category: "Image",
+        kind: "generate",
+        inputs: [P.textIn(), P.imgIn("image", "Reference images (optional)", true, true), P.cardIn("H3 option cards"), P.loraIn(), P.seedIn()],
+        outputs: [P.imgOut()],
+        params: [
+          sel("aspect", "Aspect ratio", ASPECTS, "1:1"),
+          slider("final_mp", "Final size (MP)", 0.25, 4, 0.25, 1.5),
+          toggle("final", "High quality 2nd pass (latent upscale)", true),
+          slider("preview_mp", "First pass size (MP)", 0.1, 1.5, 0.05, 0.5, { advanced: true }),
+          slider("steps", "Steps (no turbo)", 1, 60, 1, 20, { advanced: true }),
+          slider("pass2", "2nd pass steps", 3, 5, 1, 3, { advanced: true, when: (p) => !!p.final }),
+          toggle("fizgig", "Fizgig single-frame latent", false, { advanced: true }),
+          sel("ref_size", "Reference size", ["max", "match"], "max", { advanced: true }),
+          seed
+        ],
+        description: "A still image from the MiniMax H3 model \u2014 text to image, or add reference images (up to 9)."
+      },
+      {
+        id: "character-sheet",
+        title: "Character Sheet",
+        category: "Image",
+        kind: "generate",
+        inputs: [P.imgIn("image", "Character reference", false, true), P.textIn("prompt", "Prompt (optional)", true), P.loraIn(), P.seedIn()],
+        outputs: [P.imgOut("image", "Sheet"), { id: "video", label: "Turnaround video", type: "video" }],
+        params: [
+          sel("aspect", "Aspect ratio", ["3:4", "9:16", "1:1", "16:9", "4:3"], "3:4"),
+          megapixels(0.9),
+          text("frames", "Frames for the 8 cells", "7, 22, 37, 52, 67, 82, 107, 118"),
+          toggle("save_frames", "Also save each frame", false, { advanced: true }),
+          toggle("latent_up", "Cheap first pass + latent upscale", false, { advanced: true }),
+          slider("first_mp", "First pass size (MP)", 0.2, 1, 0.05, 0.36, { advanced: true, when: (p) => !!p.latent_up }),
+          slider("pass2", "Second pass steps", 3, 5, 1, 3, { advanced: true, when: (p) => !!p.latent_up }),
+          sel("deblur", "RTX Deblur", ["none", "LOW", "MEDIUM", "HIGH", "ULTRA"], "none", { advanced: true }),
+          toggle("rtx", "RTX VSR", false, { advanced: true }),
+          toggle("supersample", "Scale back down (supersample)", false, { advanced: true, when: (p) => !!p.rtx }),
+          sel("ref_size", "Reference size", ["max", "match"], "max", { advanced: true }),
+          num("max_dim", "Sheet max size px", 2048, { advanced: true }, 512, 8192, 64),
+          seed
+        ],
+        description: "H3 reference-to-video turnaround (front / back / profile / \xBE / expressions) assembled into a model sheet."
+      }
+    ];
+  })(),
+  {
+    id: "ltx-director",
+    title: "LTX Director (timeline)",
+    category: "Video",
+    kind: "generate",
+    inputs: [P.textIn("prompt", "Overall prompt", false), P.imgIn("image", "Images (in time order)", true, true), P.loraIn(), P.seedIn()],
+    outputs: [{ id: "video", label: "Video", type: "video" }],
+    params: [
+      text("beats", "Beats \u2014 one per line:  start-end: prompt  (seconds)", "", true),
+      text("image_times", "Image times (s), in the order connected", "0"),
+      toggle("last_at_end", "Pin the last image to the end", false),
+      sel("aspect", "Aspect ratio", [...ASPECTS, "auto"], "16:9"),
+      megapixels(1),
+      slider("seconds", "Length (s)", 2, 20, 1, 8),
+      slider("steps", "Steps", 1, 40, 1, 12, { advanced: true }),
+      slider("cfg", "Guidance", 0, 10, 0.1, 1, { advanced: true }),
+      dyn("sampler", "Sampler", "samplers", "euler_ancestral", { advanced: true }),
+      dyn("scheduler", "Scheduler", "schedulers", "linear_quadratic", { advanced: true }),
+      text("stage2", "Stage-2 sigmas", "0.85, 0.7250, 0.4219, 0.0", false, { advanced: true }),
+      seed
+    ],
+    description: "LTX 2.5 with a timeline: a different prompt for each moment, and images pinned at chosen times."
+  },
+  {
+    id: "video-refine",
+    title: "Video Edit (LTX 2.5 refine)",
+    category: "Video",
+    kind: "generate",
+    inputs: [{ id: "video", label: "Video", type: "video" }, P.textIn("prompt", "Prompt", true), P.loraIn(), P.seedIn()],
+    outputs: [{ id: "video", label: "Video", type: "video" }],
+    params: [slider("steps", "Steps", 1, 20, 1, 4), slider("denoise", "Change amount", 0.05, 1, 0.05, 0.15), text("negative", "Negative prompt", "bad anatomy, inconsistent look, low resolution,", true, { advanced: true }), dyn("sampler", "Sampler", "samplers", "euler_ancestral", { advanced: true }), dyn("scheduler", "Scheduler", "schedulers", "simple", { advanced: true }), seed],
+    description: "Re-render an existing clip with LTX 2.5: 2\xD7 latent upscale + a light, prompt-guided refine (keeps the sound)."
+  },
+  {
+    id: "video-stitch",
+    title: "Video Stitch",
+    category: "Video",
+    kind: "generate",
+    inputs: [{ id: "videos", label: "Videos (in order)", type: "video", multi: true }],
+    outputs: [{ id: "video", label: "Video", type: "video" }],
+    params: [slider("overlap", "Trim overlap (s)", 0, 3, 0.05, 0, { advanced: true })],
+    description: "Join several videos into one, in the order they are connected."
+  },
   { id: "import-audio", title: "Import Audio", category: "Utility", kind: "source", inputs: [], outputs: [{ id: "audio", label: "Audio", type: "audio" }], params: [], description: "Load an audio file (e.g. a recording for YuE2 Cover Music)." },
-  { id: "import", title: "Import", category: "Utility", kind: "source", inputs: [], outputs: [{ id: "image", label: "Media", type: "image" }], params: [], description: "Load an image or video from your computer, or drop one on the canvas." },
-  { id: "export", title: "Export", category: "Utility", kind: "output", inputs: [P.imgIn("image", "Media")], outputs: [], params: [text("name", "File name", "canvers")], description: "Download the connected result." },
-  { id: "preview", title: "Preview", category: "Utility", kind: "output", inputs: [P.imgIn("image", "Media", true)], outputs: [], params: [], description: "Look at any image or text." },
+  { id: "import", title: "Load Image", category: "Utility", kind: "source", inputs: [], outputs: [{ id: "image", label: "Image", type: "image" }], params: [], description: "Load an image from your computer, or drop one on the canvas." },
+  { id: "import-video", title: "Load Video", category: "Utility", kind: "source", inputs: [], outputs: [{ id: "video", label: "Video", type: "video" }], params: [], description: "Load a video from your computer, or drop one on the canvas." },
+  { id: "export", title: "Export", category: "Utility", kind: "output", inputs: [{ id: "image", label: "Media", type: "any" }], outputs: [], params: [text("name", "File name", "canvers")], description: "Download the connected result." },
+  { id: "preview", title: "Result Viewer", category: "Utility", kind: "output", inputs: [{ id: "image", label: "Image / video / audio / text", type: "any", optional: true }], outputs: [{ id: "out", label: "Pass through", type: "any" }], params: [], description: "Look at any image or text." },
   { id: "router", title: "Router", category: "Utility", kind: "edit", inputs: [P.imgIn("image", "In", false)], outputs: [P.imgOut("image", "Out")], params: [], description: "A pass-through to tidy wires." },
-  { id: "compare", title: "Compare", category: "Utility", kind: "output", inputs: [P.imgIn("a", "A"), P.imgIn("b", "B")], outputs: [], params: [], description: "Drag a slider between two images." },
+  { id: "compare", title: "Compare", category: "Utility", kind: "output", inputs: [{ id: "a", label: "A", type: "any" }, { id: "b", label: "B", type: "any" }], outputs: [], params: [], description: "Drag a slider between two images." },
   { id: "note", title: "Sticky Note", category: "Utility", kind: "note", inputs: [], outputs: [], params: [text("text", "Note", "", true)], description: "A memo on the canvas." },
   { id: "number", title: "Number", category: "Data", kind: "source", inputs: [], outputs: [{ id: "value", label: "Value", type: "number" }], params: [num("value", "Value", 0, {}, void 0, void 0, 1)], description: "A number to wire into other nodes." },
   { id: "text-data", title: "Text", category: "Data", kind: "source", inputs: [], outputs: [P.textOut()], params: [text("text", "Text", "", true)], description: "A fixed piece of text." },
@@ -2984,9 +3203,9 @@ async function getWorkflow(f, name) {
 }
 async function pickModels(f, override) {
   const [lists, cfg] = await Promise.all([getModels(f).catch(() => null), getConfig(f).catch(() => ({}))]);
-  const real4 = (a) => (a ?? []).filter((x) => x && x !== "none");
+  const real5 = (a) => (a ?? []).filter((x) => x && x !== "none");
   const pick = (given, saved, list, re) => {
-    const have = real4(list);
+    const have = real5(list);
     const savedOk = saved && (!have.length || have.includes(saved)) ? saved : "";
     return given || savedOk || (re ? have.find((x) => re.test(x)) : void 0) || have[0] || "";
   };
@@ -3062,7 +3281,7 @@ function kleinCommon(g, job, m, ids, kvId) {
 }
 async function buildKlein(job, m) {
   const f = "klein";
-  const need2 = (n2, what) => {
+  const need3 = (n2, what) => {
     if (job.images.length < n2) throw new Error(`${what} is required`);
   };
   if (job.mode === "t2i") {
@@ -3075,7 +3294,7 @@ async function buildKlein(job, m) {
     return { graph: g, hint: "Klein T2I" };
   }
   if (job.mode === "i2i") {
-    need2(1, "Source image");
+    need3(1, "Source image");
     const g = await getWorkflow(f, "i2i");
     kleinCommon(g, job, m, { ...FK }, void 0);
     set(g, "FKI2I:img", "image", job.images[0]);
@@ -3087,7 +3306,7 @@ async function buildKlein(job, m) {
     return { graph: g, hint: "Klein I2I" };
   }
   if (job.mode === "edit" || job.mode === "outpaint") {
-    need2(1, "Image 1");
+    need3(1, "Image 1");
     const g = await getWorkflow(f, "edit");
     kleinCommon(g, job, m, { ...FK }, void 0);
     set(g, "FK:91", "image", job.images[0]);
@@ -3114,7 +3333,7 @@ async function buildKlein(job, m) {
     return { graph: g, hint: "Klein Edit" };
   }
   if (job.mode === "inpaint") {
-    need2(1, "Source image");
+    need3(1, "Source image");
     if (!job.mask) throw new Error("A mask is required");
     const g = await getWorkflow(f, "inpaint");
     const I = { unet: "FKI:194", clip: "FKI:195", vae: "FKI:196", pos: "FKI:6", sampler: "FKI:163", save: "FKI:203" };
@@ -3126,7 +3345,7 @@ async function buildKlein(job, m) {
     return { graph: g, hint: "Klein Inpaint (needs Inpaint-CropAndStitch)" };
   }
   if (job.mode === "faceswap") {
-    need2(2, "Target image and face source");
+    need3(2, "Target image and face source");
     const g = await getWorkflow(f, "faceswap");
     const W = { unet: "FKF:225", clip: "FKF:223", vae: "FKF:235", sampling: "FKF:239", sampler: "FKF:228", pos: "FKF:227", save: "FKF:232" };
     g[W.unet] = { ...g[W.unet], ...unet(m.model) };
@@ -3370,7 +3589,7 @@ function buildSdxl(job, m) {
     class_type: "KSampler",
     inputs: { model, positive: ["SX:pos", 0], negative: ["SX:neg", 0], latent_image: latent2, seed: job.seed, steps: job.steps, cfg: job.cfg, sampler_name: job.sampler, scheduler: job.scheduler, denoise: denoise2 }
   });
-  const need2 = () => {
+  const need3 = () => {
     if (!job.images[0]) throw new Error("Source image is required");
     g["SX:load"] = { class_type: "LoadImage", inputs: { image: job.images[0] } };
   };
@@ -3379,7 +3598,7 @@ function buildSdxl(job, m) {
     g["SX:latent"] = { class_type: "EmptyLatentImage", inputs: { width: job.width, height: job.height, batch_size: job.batch } };
     latent = ["SX:latent", 0];
   } else if (job.mode === "i2i" || job.mode === "edit") {
-    need2();
+    need3();
     let pix = ["SX:load", 0];
     if (job.width > 0 && job.height > 0) {
       g["SX:scale"] = { class_type: "ImageScale", inputs: { image: pix, width: job.width, height: job.height, upscale_method: "lanczos", crop: "disabled" } };
@@ -3389,7 +3608,7 @@ function buildSdxl(job, m) {
     latent = ["SX:enc", 0];
     denoise = job.denoise;
   } else if (job.mode === "inpaint") {
-    need2();
+    need3();
     if (!job.mask) throw new Error("A mask is required");
     g["SX:dd"] = { class_type: "DifferentialDiffusion", inputs: { model: mo } };
     modelOut = ["SX:dd", 0];
@@ -3399,7 +3618,7 @@ function buildSdxl(job, m) {
     latent = ["SX:enc", 0];
     denoise = job.denoise;
   } else if (job.mode === "outpaint") {
-    need2();
+    need3();
     const { left, top, right, bottom } = job.pad;
     if (left + top + right + bottom <= 0) throw new Error("Set at least one expansion above 0 px");
     g["SX:dd"] = { class_type: "DifferentialDiffusion", inputs: { model: mo } };
@@ -3556,6 +3775,14 @@ async function load2(source) {
     const info = await objectInfo("KSampler");
     const req = info?.KSampler?.input?.required;
     return (source === "samplers" ? req?.sampler_name?.[0] : req?.scheduler?.[0]) ?? FALLBACK[source];
+  }
+  if (source === "loras:all") {
+    const lists = await Promise.all([...Object.keys(FAMILIES).map((f) => getModels(f).then((m) => m.loras ?? []).catch(() => [])), getJson("/minimax_h3_one/models").then((l) => l.loras ?? []).catch(() => [])]);
+    return ["none", ...new Set(lists.flat().filter((x) => x && x !== "none"))];
+  }
+  if (source === "facedetectors") {
+    const l = await getJson("/minimax_h3_one/models");
+    return ["none", ...(l.face_detectors ?? []).filter((x) => x && x !== "none")];
   }
   if (source.startsWith("loras:")) {
     const fam = source.slice(6);
@@ -3802,6 +4029,25 @@ async function buildLtxGraph(job) {
   const seg = (file, last, i) => ({ id: `cv-${i}`, start: last ? Math.max(0, frames - ANCHOR) : 0, length: ANCHOR, prompt: "", type: "image", isAnchor: false, imageFile: file, imageB64: "", isEndFrame: last });
   if (job.first) tl.segments.push(seg(job.first, false, 0));
   if (job.last) tl.segments.push(seg(job.last, true, 1));
+  let localPrompts = "", segLens = "", guideStrength = "";
+  if (job.timeline) {
+    const T = job.timeline;
+    const fr = (sec) => Math.max(0, Math.min(frames - 1, Math.round(sec * FPS)));
+    const texts = [...T.texts].sort((a, b) => a.startSec - b.startSec);
+    texts.forEach((t, i) => {
+      const st = i === 0 ? 0 : fr(t.startSec);
+      const en = i === texts.length - 1 ? frames : Math.max(st + 1, fr(t.endSec));
+      tl.segments.push({ id: `cvt-${i}`, start: st, length: en - st, prompt: t.prompt, type: "text" });
+    });
+    const imgs = [...T.images].sort((a, b) => a.startSec - b.startSec);
+    imgs.forEach((im, i) => tl.segments.push({ id: `cvi-${i}`, start: im.end ? Math.max(0, fr(im.startSec) - ANCHOR + 1) : fr(im.startSec), length: ANCHOR, prompt: "", type: "image", isAnchor: false, imageFile: im.file, imageB64: "", isEndFrame: !!im.end }));
+    if (texts.length) {
+      tl.disable_prompt_relay = false;
+      localPrompts = texts.map((t) => t.prompt).join(" | ");
+      segLens = tl.segments.filter((x) => x.type === "text").map((x) => x.length).join(",");
+    }
+    if (imgs.some((i) => i.strength !== void 0)) guideStrength = imgs.map((i) => (i.strength ?? 1).toFixed(2)).join(",");
+  }
   g.dir = { class_type: "LTXDirectorTJ25", inputs: {
     model,
     clip: ["clip", 0],
@@ -3814,10 +4060,10 @@ async function buildLtxGraph(job) {
     end_frame: frames,
     duration_frames: frames,
     timeline_data: JSON.stringify(tl),
-    local_prompts: "",
-    segment_lengths: "",
+    local_prompts: localPrompts,
+    segment_lengths: segLens,
     epsilon: 1e-3,
-    guide_strength: "",
+    guide_strength: guideStrength,
     global_prompt: job.prompt,
     use_custom_audio: false,
     use_custom_motion: false,
@@ -3942,27 +4188,15 @@ function h3Size(aspect2, mp) {
   const snap = (v) => Math.max(32, Math.round(v / 32) * 32);
   return { width: snap(w), height: snap(h) };
 }
-async function buildH3Graph(job) {
-  const o = job.opt;
-  const m = await resolveH3Models(job.models, job.mode);
-  const miss = [["H3 diffusion model", m.unet], ["text encoder", m.clip], ["video VAE", m.vaeVideo], ["audio VAE", m.vaeAudio]].filter(([, v]) => !v).map(([k]) => k);
-  if (miss.length) throw new Error(`Pick the MiniMax H3 ${miss.join(", ")} in Settings \u2192 Video models.`);
-  if (!job.prompt.trim()) throw new Error("Prompt is empty");
-  if (job.mode === "reference" && !job.refs.length) throw new Error("Connect at least one reference image");
-  const avail = await h3Availability();
-  const has = (n2) => !!avail[n2];
-  const needNode = (n2, why) => {
-    if (!has(n2)) throw new Error(`${why} needs the ${n2} node \u2014 install the ComfyUI pack that provides it, or switch the option off.`);
-  };
-  const frames = h3Frames(job.seconds);
-  const turbo = o.turbo === "larryvrh" && (!has("MiniMaxH3TurboLoRA") || !o.turboLora || o.turboLora === "none") ? "none" : o.turbo === "lightx2v" && (!has("H3SLAAttention") || !o.turboLora || o.turboLora === "none") ? "none" : o.turbo === "pdd" && (!o.turboLora || o.turboLora === "none") ? "none" : o.turbo;
-  const hires = o.hires && turbo === "pdd";
-  const final = job.size ?? h3Size(job.aspect, hires ? o.hiresFinalMp : job.megapixels);
-  const start = hires ? h3Size(job.aspect, o.hiresStartMp) : final;
-  const steps = hires ? 8 : turbo === "none" ? Math.max(1, Math.round(job.steps)) : Math.max(1, Math.round(o.turboSteps));
-  const g = {};
-  g.unet = m.unet.toLowerCase().endsWith(".gguf") ? { class_type: "UnetLoaderGGUF", inputs: { unet_name: m.unet } } : { class_type: "UNETLoader", inputs: { unet_name: m.unet, weight_dtype: "default" } };
-  let model = ["unet", 0];
+function effectiveTurbo(o, has) {
+  const lora = !!o.turboLora && o.turboLora !== "none";
+  if (o.turbo === "larryvrh") return has("MiniMaxH3TurboLoRA") && lora ? "larryvrh" : "none";
+  if (o.turbo === "lightx2v") return has("H3SLAAttention") && lora ? "lightx2v" : "none";
+  if (o.turbo === "pdd") return lora ? "pdd" : "none";
+  return o.turbo;
+}
+function h3ModelChain(g, start, o, turbo, loras2, has) {
+  let model = start;
   if (o.attnBackend === "ck" && has("ModelAttentionBackend")) {
     g.ck = { class_type: "ModelAttentionBackend", inputs: { model, attention: "comfy kitchen attention" } };
     model = ["ck", 0];
@@ -3983,7 +4217,7 @@ async function buildH3Graph(job) {
   }
   g.shift = { class_type: "MiniMaxH3SigmaShift", inputs: { model, shift_video: turbo === "pdd" ? 12 : o.shiftVideo, shift_audio: turbo === "pdd" ? 3 : o.shiftAudio } };
   model = ["shift", 0];
-  job.loras.forEach((l, i) => {
+  loras2.forEach((l, i) => {
     if (!l.name || l.name === "none" || !(l.strength > 0)) return;
     g[`lora${i}`] = { class_type: "LoraLoaderModelOnly", inputs: { model, lora_name: l.name, strength_model: l.strength } };
     model = [`lora${i}`, 0];
@@ -4019,11 +4253,50 @@ async function buildH3Graph(job) {
     g.sla = { class_type: "H3SLAAttention", inputs: { model, sparsity_ratio: 0.9, block_size: "64", min_seq_len: 8192, dense_last_steps: 0, protect_audio: true, enabled: true } };
     model = ["sla", 0];
   }
+  return model;
+}
+async function buildH3Graph(job) {
+  const o = job.opt;
+  const m = await resolveH3Models(job.models, job.mode);
+  const miss = [["H3 diffusion model", m.unet], ["text encoder", m.clip], ["video VAE", m.vaeVideo], ["audio VAE", m.vaeAudio]].filter(([, v]) => !v).map(([k]) => k);
+  if (miss.length) throw new Error(`Pick the MiniMax H3 ${miss.join(", ")} in Settings \u2192 Video models.`);
+  if (!job.prompt.trim()) throw new Error("Prompt is empty");
+  if (job.mode === "reference" && !job.refs.length && !job.assetRef) throw new Error("Connect at least one reference image or an Asset Library card");
+  const avail = await h3Availability();
+  const has = (n2) => !!avail[n2];
+  const needNode = (n2, why) => {
+    if (!has(n2)) throw new Error(`${why} needs the ${n2} node \u2014 install the ComfyUI pack that provides it, or switch the option off.`);
+  };
+  const frames = h3Frames(job.seconds);
+  const turbo = effectiveTurbo(o, has);
+  const hires = o.hires && turbo === "pdd";
+  const final = job.size ?? h3Size(job.aspect, hires ? o.hiresFinalMp : job.megapixels);
+  const start = hires ? h3Size(job.aspect, o.hiresStartMp) : final;
+  const steps = hires ? 8 : turbo === "none" ? Math.max(1, Math.round(job.steps)) : Math.max(1, Math.round(o.turboSteps));
+  const g = {};
+  g.unet = m.unet.toLowerCase().endsWith(".gguf") ? { class_type: "UnetLoaderGGUF", inputs: { unet_name: m.unet } } : { class_type: "UNETLoader", inputs: { unet_name: m.unet, weight_dtype: "default" } };
+  let model = ["unet", 0];
+  model = h3ModelChain(g, model, o, turbo, job.loras, has);
   g.clip = { class_type: "CLIPLoader", inputs: { clip_name: m.clip, type: "minimax", device: "default" } };
   g.vaeV = { class_type: "VAELoader", inputs: { vae_name: m.vaeVideo } };
   g.vaeA = { class_type: "VAELoader", inputs: { vae_name: m.vaeAudio } };
   const cond = (key, w, h) => {
-    if (job.mode === "reference") {
+    if (job.mode === "reference" && job.assetRef) {
+      needNode("TJ_H3Reference", "Asset Library references");
+      const lib = { clip: ["clip", 0], vae: ["vaeV", 0], audio_vae: ["vaeA", 0], prompt: job.prompt, width: w, height: h, length: frames, ref_image_size: "match", match_check: "warn" };
+      if (job.assetRef.project) {
+        lib.mode = "project";
+        lib.project = String(job.assetRef.project);
+      } else {
+        const ids = job.assetRef.ids.slice(0, 15);
+        lib.mode = "assets";
+        lib.asset_count = ids.length;
+        ids.forEach((id, i) => {
+          lib[`asset_${i + 1}`] = String(id);
+        });
+      }
+      g[key] = { class_type: "TJ_H3Reference", inputs: lib };
+    } else if (job.mode === "reference") {
       const inputs = { clip: ["clip", 0], vae: ["vaeV", 0], audio_vae: ["vaeA", 0], prompt: job.prompt, width: w, height: h, length: frames, ref_image_size: "match" };
       job.refs.slice(0, 9).forEach((f, i) => {
         g[`ref${i}`] ??= { class_type: "LoadImage", inputs: { image: f } };
@@ -4167,6 +4440,340 @@ var VIDEO_EXT = /\.(mp4|webm|mov|mkv|gif|webp)$/i;
 
 // src/engine/run.ts
 init_settings();
+
+// src/engine/util.ts
+init_comfy();
+var textAsset = (text3, port) => ({ id: uid(), type: "text", url: "", text: text3, port });
+var num2 = (v, d = 0) => typeof v === "number" ? v : parseFloat(String(v)) || d;
+var str = (v, d = "") => v === void 0 ? d : String(v);
+function need(v, what) {
+  if (v === void 0 || Array.isArray(v) && !v.length) throw new Error(`${what} is not connected`);
+  return v;
+}
+
+// src/engine/more.ts
+init_comfy();
+
+// src/backend/post.ts
+init_comfy();
+var nodeCache = /* @__PURE__ */ new Map();
+function hasNode(cls) {
+  if (!nodeCache.has(cls)) nodeCache.set(cls, objectInfo(cls).then((r) => !!r?.[cls]).catch(() => false));
+  return nodeCache.get(cls);
+}
+async function need2(cls, label, pack) {
+  if (!await hasNode(cls)) throw new Error(`${label} (${cls}) is not installed${pack ? ` \u2014 it comes with ${pack}` : ""}.`);
+}
+function rtxTarget(r, srcW, srcH) {
+  const round8 = (v) => Math.max(8, Math.round(v / 8) * 8);
+  if (r.mode === "short" || r.mode === "long") {
+    const short = Math.min(srcW, srcH), long = Math.max(srcW, srcH);
+    const target = Math.max(8, Math.round(r.mode === "short" ? r.short : r.long));
+    const other = r.mode === "short" ? target * (long / short) : target * (short / long);
+    const wSide = srcW <= srcH;
+    const width = r.mode === "short" ? wSide ? target : round8(other) : wSide ? round8(other) : target;
+    const height = r.mode === "short" ? wSide ? round8(other) : target : wSide ? target : round8(other);
+    return { type: "dims", width: round8(width), height: round8(height), crop: null };
+  }
+  if (r.mode === "wh") {
+    const width = round8(r.w), height = round8(r.h);
+    const ta = width / height, sa = srcW / srcH;
+    let cw = srcW, ch = srcH;
+    if (sa > ta) cw = Math.round(srcH * ta);
+    else if (sa < ta) ch = Math.round(srcW / ta);
+    const x = r.anchor === "left" ? 0 : r.anchor === "right" ? srcW - cw : Math.round((srcW - cw) / 2);
+    const y = r.anchor === "top" ? 0 : r.anchor === "bottom" ? srcH - ch : Math.round((srcH - ch) / 2);
+    return { type: "dims", width, height, crop: cw < srcW || ch < srcH ? { x, y, width: cw, height: ch } : null };
+  }
+  return { type: "scale", scale: r.scale, width: 0, height: 0, crop: null };
+}
+var GRAIN_SHADER = `#version 300 es
+precision highp float;
+uniform sampler2D u_image0;
+uniform vec2 u_resolution;
+uniform float u_float0; // amount
+uniform float u_float1; // size
+uniform float u_float2; // colour
+uniform float u_float3; // luminance bias
+uniform int   u_int0;   // 0 smooth, 1 grainy
+in vec2 v_texCoord;
+layout(location = 0) out vec4 fragColor0;
+uint pcg(uint v){uint s=v*747796405u+2891336453u;uint w=((s>>((s>>28u)+4u))^s)*277803737u;return (w>>22u)^w;}
+uint hash2d(uvec2 p){return pcg(p.x+pcg(p.y));}
+float hashf(uvec2 p,uint o){return float(pcg(hash2d(p)+o))/float(0xffffffffu);}
+float gauss(uvec2 p,uint o){return (hashf(p,o)+hashf(p,o+1u)+hashf(p,o+2u)+hashf(p,o+3u)-2.0)*0.7;}
+float smoothNoise(vec2 p,uint o){
+  vec2 i=floor(p);vec2 f=fract(p);f=f*f*f*(f*(f*6.0-15.0)+10.0);uvec2 u=uvec2(i);
+  return mix(mix(gauss(u,o),gauss(u+uvec2(1u,0u),o),f.x),mix(gauss(u+uvec2(0u,1u),o),gauss(u+uvec2(1u,1u),o),f.x),f.y);
+}
+void main(){
+  vec4 c=texture(u_image0,v_texCoord);
+  float luma=dot(c.rgb,vec3(0.2126,0.7152,0.0722));
+  vec2 uv=v_texCoord*u_resolution/max(u_float1,0.01);
+  uvec2 gp=uvec2(uv);
+  float g; vec3 rgb;
+  if(u_int0==1){g=gauss(gp,0u);rgb=vec3(gauss(gp,100u),gauss(gp,200u),gauss(gp,300u));}
+  else{g=smoothNoise(uv,0u);rgb=vec3(smoothNoise(uv,100u),smoothNoise(uv,200u),smoothNoise(uv,300u));}
+  float lw=mix(1.0,1.0-luma,clamp(u_float3,0.0,1.0));
+  vec3 gc=mix(vec3(g),rgb,clamp(u_float2,0.0,1.0));
+  c.rgb+=gc*(u_float0*0.15)*lw;
+  fragColor0=vec4(clamp(c.rgb,0.0,1.0),c.a);
+}
+`;
+async function addVideoSave(g, images, audio, fps, prefix, pfx = "S") {
+  if (await hasNode("VHS_VideoCombine")) {
+    g[`${pfx}:save`] = { class_type: "VHS_VideoCombine", inputs: { images, ...audio ? { audio } : {}, frame_rate: fps, loop_count: 0, filename_prefix: prefix, format: "video/nvenc_h264-mp4", pingpong: false, save_output: true } };
+  } else {
+    g[`${pfx}:video`] = { class_type: "CreateVideo", inputs: { images, fps, ...audio ? { audio } : {} } };
+    g[`${pfx}:save`] = { class_type: "SaveVideo", inputs: { video: [`${pfx}:video`, 0], filename_prefix: prefix, format: "auto", codec: "auto" } };
+  }
+  return `${pfx}:save`;
+}
+async function addVideoLoad(g, file, id = "P:load", skip = 0, cap = 0) {
+  await need2("VHS_LoadVideo", "Video loader", "ComfyUI-VideoHelperSuite");
+  g[id] = { class_type: "VHS_LoadVideo", inputs: { video: file, force_rate: 0, custom_width: 0, custom_height: 0, frame_load_cap: cap, skip_first_frames: skip, select_every_nth: 1, format: "AnimateDiff" } };
+}
+async function buildPostGraph(job) {
+  const g = {};
+  await addVideoLoad(g, job.file, "P:load", job.skip ?? 0, job.cap ?? 0);
+  let images = ["P:load", 0];
+  let fps = FPS;
+  const s = job.step;
+  let label = s.kind;
+  if (s.kind === "deblur") {
+    await need2("TJ_RTXDeblur", "RTX Deblur", "ComfyUI-TJ_NODE_STUDIO_ONE (NVIDIA RTX GPU)");
+    g["P:step"] = { class_type: "TJ_RTXDeblur", inputs: { images, strength: s.strength } };
+    images = ["P:step", 0];
+  } else if (s.kind === "denoise") {
+    await need2("TJ_NODE_RTXDenoise", "RTX Denoise", "ComfyUI-TJ_NODE (NVIDIA RTX GPU)");
+    g["P:step"] = { class_type: "TJ_NODE_RTXDenoise", inputs: { images, strength: s.strength } };
+    images = ["P:step", 0];
+  } else if (s.kind === "upscale") {
+    label = `upscale (${s.method}${s.twoPass && s.method !== "rtx" ? " + RTX" : ""})`;
+    if (s.method === "flashvsr") {
+      await need2("FlashVSRNodeAdv", "FlashVSR", "ComfyUI-FlashVSR_Ultra_Fast");
+      const f = s.flashvsr;
+      g["P:pipe"] = { class_type: "FlashVSRInitPipe", inputs: { model: f.model, mode: f.mode, alt_vae: "none", force_offload: true, precision: "bf16", device: "cuda:0", attention_mode: "sparse_sage_attention" } };
+      g["P:step"] = { class_type: "FlashVSRNodeAdv", inputs: { pipe: ["P:pipe", 0], frames: images, scale: Math.min(4, Math.max(2, Math.round(f.scale))), color_fix: f.colorFix, tiled_vae: true, tiled_dit: true, tile_size: f.tileSize, tile_overlap: f.tileOverlap, unload_dit: false, sparse_ratio: 2, kv_ratio: 3, local_range: 11, seed: f.seed } };
+      images = ["P:step", 0];
+    } else if (s.method === "rtx") {
+      await need2("TJ_NODE_RTXVSR", "RTX VSR", "ComfyUI-TJ_NODE (NVIDIA RTX GPU)");
+      const t = rtxTarget(s.rtx, s.srcW, s.srcH);
+      if (t.crop) {
+        g["P:crop"] = { class_type: "ImageCrop", inputs: { image: images, ...t.crop } };
+        images = ["P:crop", 0];
+      }
+      g["P:step"] = { class_type: "TJ_NODE_RTXVSR", inputs: { images, resize_type: t.type === "scale" ? "scale by multiplier" : "target dimensions", scale: t.type === "scale" ? t.scale : 2, width: t.width || 1920, height: t.height || 1080, quality: s.rtx.quality } };
+      images = ["P:step", 0];
+    } else {
+      if (!s.modelName || s.modelName === "none") throw new Error("Pick an upscale model first");
+      g["P:model"] = { class_type: "UpscaleModelLoader", inputs: { model_name: s.modelName } };
+      g["P:step"] = { class_type: "ImageUpscaleWithModel", inputs: { upscale_model: ["P:model", 0], image: images } };
+      images = ["P:step", 0];
+    }
+    if (s.twoPass && s.method !== "rtx") {
+      await need2("TJ_NODE_RTXVSR", "2-pass upscale (RTX VSR)", "ComfyUI-TJ_NODE (NVIDIA RTX GPU)");
+      const p = s.pass2;
+      const inp = { images, resize_type: "scale by multiplier", scale: Math.max(1, p.scale), width: 1920, height: 1080, quality: p.quality };
+      if (p.mode === "short" || p.mode === "long") {
+        inp.resize_type = p.mode === "short" ? "short edge" : "long edge";
+        inp.edge = Math.max(8, Math.round(p.mode === "short" ? p.short : p.long));
+      } else if (p.mode === "wh") {
+        inp.resize_type = "target dimensions (crop to fit)";
+        inp.width = Math.max(8, Math.round(p.w));
+        inp.height = Math.max(8, Math.round(p.h));
+        inp.crop_anchor = p.anchor;
+      }
+      g["P:rtx2"] = { class_type: "TJ_NODE_RTXVSR", inputs: inp };
+      images = ["P:rtx2", 0];
+    }
+  } else if (s.kind === "skin") {
+    await need2("TJ_SkinRetouch", "Skin Retouch", "ComfyUI-TJ_NODE");
+    g["P:step"] = { class_type: "TJ_SkinRetouch", inputs: { images, evenness: s.evenness, smoothing: s.smoothing, redness: s.redness, shine: s.shine, blemish_mode: s.blemish, preserve_marks: s.preserveMarks, microtexture_strength: s.microtexture } };
+    images = ["P:step", 0];
+  } else if (s.kind === "grain") {
+    await need2("GLSLShader", "Film grain (GLSLShader)", "a newer ComfyUI core");
+    await need2("SplitImageWithAlpha", "SplitImageWithAlpha", "a newer ComfyUI core");
+    g["P:step"] = { class_type: "GLSLShader", inputs: { fragment_shader: GRAIN_SHADER, size_mode: "from_input", "images.image0": images, "floats.u_float0": s.amount, "floats.u_float1": s.size, "floats.u_float2": s.color, "floats.u_float3": s.lumBias, "ints.u_int0": s.noise === "grainy" ? 1 : 0 } };
+    g["P:dealpha"] = { class_type: "SplitImageWithAlpha", inputs: { image: ["P:step", 0] } };
+    images = ["P:dealpha", 0];
+  } else if (s.kind === "interpolate") {
+    await need2("RIFEInterpolation", "RIFE frame interpolation", "ComfyUI-Frame-Interpolation");
+    const dst = Math.max(fps, s.targetFps || fps * 2);
+    g["P:step"] = { class_type: "RIFEInterpolation", inputs: { images, source_fps: fps, target_fps: dst, scale: s.scale, model_name: s.modelName || "flownet.pkl", batch_size: Math.max(1, Math.round(s.batchSize)), use_fp16: s.fp16 } };
+    images = ["P:step", 0];
+    fps = dst;
+  } else if (s.kind === "resize") {
+    await need2("TJ_VideoResize", "Video Resize", "ComfyUI-TJ_NODE");
+    g["P:step"] = { class_type: "TJ_VideoResize", inputs: { images, mode: s.mode, upscale_method: s.method, target_px: Math.max(8, Math.round(s.targetPx)), ratio_w: Math.max(1, Math.round(s.ratioW)), ratio_h: Math.max(1, Math.round(s.ratioH)), megapixels: Math.max(0.01, s.megapixels), target_width: Math.max(8, Math.round(s.width)), target_height: Math.max(8, Math.round(s.height)), crop_mode: s.crop } };
+    images = ["P:step", 0];
+  }
+  const save = await addVideoSave(g, images, ["P:load", 2], fps, `${job.folder}/${job.stem}_${s.kind}`, "P");
+  return { graph: g, save, label };
+}
+
+// src/backend/charSheet.ts
+var CHARSHEET_FRAMES = 124;
+var CHARSHEET_DEFAULT_FRAMES = [7, 22, 37, 52, 67, 82, 107, 118];
+var PASS2_SIGMAS = {
+  3: "0.9035, 0.6316, 0.3158, 0.0000",
+  4: "0.9035, 0.8000, 0.6316, 0.3158, 0.0000",
+  5: "0.9231, 0.8780, 0.8000, 0.6316, 0.3158, 0.0000"
+};
+var CHARSHEET_PROMPT = "subject_definitions:\n@image1 is <Subject 1>, Protagonist.\n\nstyle_definitions:\n@style is <Style 1>, @image1 High quality and detailed 3d anime\n\nretention_analysis:\n<Subject 1>: fully_preserved the exact facial identity, anatomy, clothing, skin color, skin texture, skin shade, skin radiance and proportions of <Subject 1>. Never render @image1 as a shot.\n<Style 1>: fully_preserved the artistic medium, line weight, shading, and texture across all angles.\n\ndetailed_description:\nThe scene is a character model sheet on a seamless neutral white studio backdrop with even lighting. No border. @style is applied throughout. Start directly at Shot 1. \n  \n[Shot 1]: Static full-body shot, front view from head to toe. <Subject 1> maintains a neutral pose and expression, arms relaxed at sides with empty open hands.\n[[Shot 2] At 00:00.625]: Static full-body shot, back view from head to toe. <Subject 1> maintains a neutral pose and expression, arms relaxed at sides with empty open hands.\n[[Shot 3] At 00:01.250]: Static full-body shot of <Subject 1>, showing left and right profile views. <Subject 1> maintains a neutral pose and expression, arms relaxed at sides with empty open hands.\n[[Shot 4] At 00:01.875]: Static front_three_quarter view (framed from mid-thigh to top of head) of <Subject 1>. <Subject 1> maintains a neutral pose and expression, arms relaxed at sides with empty open hands.\n[[Shot 5] At 00:02.500]: Static Back_three_quarter (framed from mid-thigh to top of head) of <Subject 1>. <Subject 1> maintains a neutral pose and expression, arms relaxed at sides with empty open hands.\n[[Shot 6] At 00:03.125]: Static tight close-up shot of <Subject 1>, framed directly on the face from shoulders to top of head, facing front. <Subject 1> has a neutral expression.\n[[Shot 7] At 00:03.750]: Static tight close-up shot of <Subject 1>, framed directly on the face from shoulders to top of head, facing front. <Subject 1> has a happy smile expression.\n[[Shot 8] At 00:04.375]: Static tight close-up shot of <Subject 1>, framed directly on the face from shoulders to top of head, facing front. <Subject 1> has an very angry expression.\n\n\noverall_soundscape: N/A\nnon_diegetic_music: N/A\n";
+async function buildSheetVideoGraph(j) {
+  if (!j.refs.length) throw new Error("Character Sheet needs at least one reference image");
+  const m = await resolveH3Models(j.models, "reference");
+  if (!m.unet || !m.clip || !m.vaeVideo) throw new Error("Pick the MiniMax H3 reference model, text encoder and video VAE in Settings \u2192 Video models.");
+  const avail = await h3Availability();
+  const has = (n2) => !!avail[n2];
+  const { width, height } = h3Size(j.aspect, j.megapixels);
+  const pass = j.latentUpscale ? h3Size(j.aspect, j.firstPassMp) : { width, height };
+  const g = {};
+  g.unet = { class_type: "UNETLoader", inputs: { unet_name: m.unet, weight_dtype: "default" } };
+  let model = ["unet", 0];
+  if (has("PathchSageAttentionKJ")) {
+    g.sage = { class_type: "PathchSageAttentionKJ", inputs: { sage_attention: "auto", allow_compile: false, model } };
+    model = ["sage", 0];
+  }
+  if (has("MiniMaxH3MemoryEfficientSageAttentionPatch")) {
+    g.mem = { class_type: "MiniMaxH3MemoryEfficientSageAttentionPatch", inputs: { model } };
+    model = ["mem", 0];
+  }
+  j.loras.forEach((l, i) => {
+    if (l.name && l.name !== "none" && l.strength > 0) {
+      g[`lora${i}`] = { class_type: "LoraLoaderModelOnly", inputs: { model, lora_name: l.name, strength_model: l.strength } };
+      model = [`lora${i}`, 0];
+    }
+  });
+  g.shift = { class_type: "MiniMaxH3SigmaShift", inputs: { model, shift_video: 12, shift_audio: 3 } };
+  model = ["shift", 0];
+  g.clip = { class_type: "CLIPLoader", inputs: { clip_name: m.clip, type: "minimax", device: "default" } };
+  g.vaeV = { class_type: "VAELoader", inputs: { vae_name: m.vaeVideo } };
+  const cond = { clip: ["clip", 0], vae: ["vaeV", 0], prompt: j.prompt, width: pass.width, height: pass.height, length: CHARSHEET_FRAMES, ref_image_size: j.refImageSize };
+  j.refs.slice(0, 9).forEach((f, i) => {
+    g[`ref${i}`] = { class_type: "LoadImage", inputs: { image: f } };
+    cond[`ref_images.ref_image_${i}`] = [`ref${i}`, 0];
+  });
+  g.cond = { class_type: "MiniMaxH3ReferenceToVideo", inputs: cond };
+  g.noise = { class_type: "RandomNoise", inputs: { noise_seed: j.seed } };
+  g.s1 = { class_type: "KSamplerSelect", inputs: { sampler_name: "euler" } };
+  g.sched = { class_type: "BasicScheduler", inputs: { scheduler: "simple", steps: 8, denoise: 1, model } };
+  g.guider = { class_type: "BasicGuider", inputs: { model, conditioning: ["cond", 0] } };
+  g.samp = { class_type: "SamplerCustomAdvanced", inputs: { noise: ["noise", 0], guider: ["guider", 0], sampler: ["s1", 0], sigmas: ["sched", 0], latent_image: ["cond", 1] } };
+  let samples = ["samp", 0];
+  if (j.latentUpscale) {
+    if (!has("MinimaxH3LatentUpscaler3D")) throw new Error("Latent upscale needs the MinimaxH3LatentUpscaler3D node.");
+    g.sep = { class_type: "LTXVSeparateAVLatent", inputs: { av_latent: ["samp", 1] } };
+    g.up = { class_type: "MinimaxH3LatentUpscaler3D", inputs: { model_name: "minimax_h3_latent_upscaler_3d_bf16.safetensors", mode: "target dimensions", "mode.width": width, "mode.height": height, align: 32, enable_temporal_chunking: true, force_unload: true, device: "cuda", precision: "fp16", latent: ["sep", 0] } };
+    g.cat = { class_type: "LTXVConcatAVLatent", inputs: { video_latent: ["up", 0], audio_latent: ["sep", 1] } };
+    g.s2 = { class_type: "KSamplerSelect", inputs: { sampler_name: "euler" } };
+    g.guider2 = { class_type: "BasicGuider", inputs: { model, conditioning: ["cond", 0] } };
+    g.sig2 = { class_type: "ManualSigmas", inputs: { sigmas: PASS2_SIGMAS[j.secondPassSteps] ?? PASS2_SIGMAS[3] } };
+    g.samp2 = { class_type: "SamplerCustomAdvanced", inputs: { noise: ["noise", 0], guider: ["guider2", 0], sampler: ["s2", 0], sigmas: ["sig2", 0], latent_image: ["cat", 0] } };
+    samples = ["samp2", 0];
+  }
+  g.dec = { class_type: "VAEDecode", inputs: { samples, vae: ["vaeV", 0] } };
+  let images = ["dec", 0];
+  if (j.deblur && j.deblur !== "none") {
+    if (!await hasNode("TJ_RTXDeblur")) throw new Error("RTX Deblur (TJ_RTXDeblur) is not installed.");
+    g.deblur = { class_type: "TJ_RTXDeblur", inputs: { images, strength: j.deblur } };
+    images = ["deblur", 0];
+  }
+  if (j.rtx) {
+    if (!await hasNode("RTXVideoSuperResolution")) throw new Error("RTX Video Super Resolution is not installed.");
+    g.rtx = { class_type: "RTXVideoSuperResolution", inputs: { images, resize_type: "scale by multiplier", "resize_type.scale": 2, quality: "ULTRA" } };
+    images = ["rtx", 0];
+    if (j.rtxSupersample) {
+      g.down = { class_type: "ImageScale", inputs: { image: images, upscale_method: "lanczos", width, height, crop: "center" } };
+      images = ["down", 0];
+    }
+  }
+  const save = await addVideoSave(g, images, void 0, FPS, `${j.saveSubfolder}/${j.stem}_charsheet_video`, "C");
+  return { graph: g, save, width, height };
+}
+async function buildSheetGridGraph(o) {
+  for (const n2 of ["BatchImagesNode", "ImageGrid", "ImageScaleToMaxDimension"]) if (!await hasNode(n2)) throw new Error(`${n2} is not installed (ComfyUI core is out of date).`);
+  const g = {};
+  g.load = { class_type: "VHS_LoadVideo", inputs: { video: o.video, force_rate: 0, custom_width: 0, custom_height: 0, frame_load_cap: 0, skip_first_frames: 0, select_every_nth: 1 } };
+  g.ref = { class_type: "LoadImage", inputs: { image: o.ref } };
+  g.refS = { class_type: "ImageScale", inputs: { image: ["ref", 0], upscale_method: "lanczos", width: o.cellW, height: o.cellH, crop: "center" } };
+  const batch = { "images.image0": ["refS", 0] };
+  const idx = (o.frames.length ? o.frames : CHARSHEET_DEFAULT_FRAMES).slice(0, 8);
+  idx.forEach((n2, i) => {
+    g[`f${i}`] = { class_type: "ImageFromBatch", inputs: { batch_index: n2, length: 1, image: ["load", 0] } };
+    batch[`images.image${i + 1}`] = [`f${i}`, 0];
+    if (o.saveEach) g[`fs${i}`] = { class_type: "SaveImage", inputs: { filename_prefix: `${o.folder}/${o.stem}_charsheet_shot${i + 1}`, images: [`f${i}`, 0] } };
+  });
+  g.batch = { class_type: "BatchImagesNode", inputs: batch };
+  g.grid = { class_type: "ImageGrid", inputs: { columns: 3, cell_width: o.cellW, cell_height: o.cellH, padding: 8, images: ["batch", 0] } };
+  g.max = { class_type: "ImageScaleToMaxDimension", inputs: { upscale_method: "area", largest_size: o.maxDim, image: ["grid", 0] } };
+  g.save = { class_type: "SaveImage", inputs: { filename_prefix: `${o.folder}/${o.stem}_charsheet`, images: ["max", 0] } };
+  return { graph: g, save: "save" };
+}
+
+// src/backend/h3Image.ts
+var LENGTH = 8;
+async function buildH3ImageGraph(j) {
+  const ref = j.refs.length > 0;
+  const m = await resolveH3Models(j.models, ref ? "reference" : "firstlast");
+  if (!m.unet || !m.clip || !m.vaeVideo) throw new Error("Pick the MiniMax H3 model, text encoder and video VAE in Settings \u2192 Video models.");
+  if (!j.prompt.trim()) throw new Error("Prompt is empty");
+  const avail = await h3Availability();
+  const has = (n2) => !!avail[n2];
+  if (j.fizgig && !(await hasNode("FizgigH3StillLatent") && await hasNode("FizgigH3StillDecode"))) throw new Error("Fizgig latent needs ComfyUI-Fizgig-H3-Still \u2014 install it or switch Fizgig off.");
+  const preview = h3Size(j.aspect, j.previewMp), fin = h3Size(j.aspect, j.finalMp);
+  const render = j.fizgig && j.final ? fin : preview;
+  const turbo = effectiveTurbo({ ...DEFAULT_OPT, ...j.opt, hires: false }, has);
+  const g = {};
+  g.unet = { class_type: "UNETLoader", inputs: { unet_name: m.unet, weight_dtype: "default" } };
+  const model = h3ModelChain(g, ["unet", 0], { ...DEFAULT_OPT, ...j.opt, hires: false }, turbo, j.loras, has);
+  g.clip = { class_type: "CLIPLoader", inputs: { clip_name: m.clip, type: "minimax", device: "default" } };
+  g.vaeV = { class_type: "VAELoader", inputs: { vae_name: m.vaeVideo } };
+  const cond = { clip: ["clip", 0], vae: ["vaeV", 0], prompt: j.prompt, width: render.width, height: render.height, length: LENGTH };
+  if (ref) {
+    cond.ref_image_size = j.refImageSize;
+    j.refs.slice(0, 9).forEach((f, i) => {
+      g[`ref${i}`] = { class_type: "LoadImage", inputs: { image: f } };
+      cond[`ref_images.ref_image_${i}`] = [`ref${i}`, 0];
+    });
+    g.cond = { class_type: "MiniMaxH3ReferenceToVideo", inputs: cond };
+  } else g.cond = { class_type: "MiniMaxH3ImageToVideo", inputs: cond };
+  let start = ["cond", 1];
+  if (j.fizgig) {
+    g.fiz = { class_type: "FizgigH3StillLatent", inputs: { width: render.width, height: render.height, batch_size: 1 } };
+    start = ["fiz", 0];
+  }
+  const steps = turbo === "none" ? Math.max(1, Math.round(j.steps)) : Math.max(1, Math.round(j.opt.turboSteps));
+  g.noise = { class_type: "RandomNoise", inputs: { noise_seed: j.seed } };
+  g.s1 = { class_type: "KSamplerSelect", inputs: { sampler_name: "euler" } };
+  g.sched = { class_type: "BasicScheduler", inputs: { scheduler: "simple", steps, denoise: 1, model } };
+  g.guider = { class_type: "BasicGuider", inputs: { model, conditioning: ["cond", 0] } };
+  g.samp = { class_type: "SamplerCustomAdvanced", inputs: { noise: ["noise", 0], guider: ["guider", 0], sampler: ["s1", 0], sigmas: ["sched", 0], latent_image: start } };
+  let samples = ["samp", 0];
+  if (j.final && !j.fizgig) {
+    if (!has("MinimaxH3LatentUpscaler3D")) throw new Error('The 2nd pass needs the MinimaxH3LatentUpscaler3D node \u2014 or turn "High quality 2nd pass" off.');
+    g.sep = { class_type: "LTXVSeparateAVLatent", inputs: { av_latent: ["samp", 1] } };
+    g.up = { class_type: "MinimaxH3LatentUpscaler3D", inputs: { model_name: "minimax_h3_latent_upscaler_3d_bf16.safetensors", mode: "target dimensions", "mode.width": fin.width, "mode.height": fin.height, align: 32, enable_temporal_chunking: true, force_unload: true, device: "cuda", precision: "fp16", latent: ["sep", 0] } };
+    g.cat = { class_type: "LTXVConcatAVLatent", inputs: { video_latent: ["up", 0], audio_latent: ["sep", 1] } };
+    g.s2 = { class_type: "KSamplerSelect", inputs: { sampler_name: "euler" } };
+    g.guider2 = { class_type: "BasicGuider", inputs: { model, conditioning: ["cond", 0] } };
+    g.sig2 = { class_type: "ManualSigmas", inputs: { sigmas: PASS2_SIGMAS[j.secondPassSteps] ?? PASS2_SIGMAS[3] } };
+    g.samp2 = { class_type: "SamplerCustomAdvanced", inputs: { noise: ["noise", 0], guider: ["guider2", 0], sampler: ["s2", 0], sigmas: ["sig2", 0], latent_image: ["cat", 0] } };
+    samples = ["samp2", 0];
+  }
+  let still;
+  if (j.fizgig) {
+    g.dec = { class_type: "FizgigH3StillDecode", inputs: { samples, vae: ["vaeV", 0] } };
+    still = ["dec", 0];
+  } else {
+    g.dec = { class_type: "VAEDecode", inputs: { samples, vae: ["vaeV", 0] } };
+    g.frame = { class_type: "ImageFromBatch", inputs: { batch_index: LENGTH, length: 1, image: ["dec", 0] } };
+    still = ["frame", 0];
+  }
+  g.save = { class_type: "SaveImage", inputs: { filename_prefix: `${j.saveSubfolder}/${j.stem}_h3img`, images: still } };
+  return { graph: g, save: "save" };
+}
 
 // src/editing/ops.ts
 init_comfy();
@@ -4456,8 +5063,478 @@ async function videoFrame(a, positionPct) {
   }
 }
 
+// src/backend/ltxRefine.ts
+async function buildRefineGraph(j) {
+  const r = await resolveLtxModels(j.models);
+  const m = { ltx_unet: r.unet, ltx_clip: r.clip, ltx_vae_video: r.vaeVideo, ltx_vae_audio: r.vaeAudio, ltx_upscaler: r.upscaler };
+  const miss = [["LTX unet", m.ltx_unet], ["text encoder", m.ltx_clip], ["video VAE", m.ltx_vae_video], ["audio VAE", m.ltx_vae_audio], ["latent upscaler", m.ltx_upscaler]].filter(([, v]) => !v || v === "none").map(([k]) => k);
+  if (miss.length) throw new Error(`Pick the LTX 2.5 ${miss.join(", ")} in Settings \u2192 Video models.`);
+  for (const n2 of ["LTXVLatentUpsampler", "LTXVImgToVideoInplace", "LTXVAudioVAEEncode", "LTXVDualCFGGuider"]) if (!await hasNode(n2)) throw new Error(`${n2} is not installed (needs the LTX 2.5 nodes).`);
+  const g = {};
+  await addVideoLoad(g, j.file, "load");
+  const gguf = (s) => s.toLowerCase().endsWith(".gguf");
+  g.unet = gguf(m.ltx_unet) ? { class_type: "UnetLoaderGGUF", inputs: { unet_name: m.ltx_unet } } : { class_type: "UNETLoader", inputs: { unet_name: m.ltx_unet, weight_dtype: "default" } };
+  let model = ["unet", 0];
+  g.clip = gguf(m.ltx_clip) ? { class_type: "TJ_LTX25ClipLoaderGGUF", inputs: { clip_name: m.ltx_clip } } : { class_type: "CLIPLoader", inputs: { clip_name: m.ltx_clip, type: "ltxv", device: "default" } };
+  g.vaeV = { class_type: "VAELoader", inputs: { vae_name: m.ltx_vae_video } };
+  g.vaeA = { class_type: "VAELoader", inputs: { vae_name: m.ltx_vae_audio } };
+  g.upm = { class_type: "LatentUpscaleModelLoader", inputs: { model_name: m.ltx_upscaler } };
+  j.loras.forEach((l, i) => {
+    if (l.name && l.name !== "none" && l.strength > 0) {
+      g[`lora${i}`] = { class_type: "LoraLoaderModelOnly", inputs: { model, lora_name: l.name, strength_model: l.strength } };
+      model = [`lora${i}`, 0];
+    }
+  });
+  if (await hasNode("ModelAttentionBackend")) {
+    g.ck = { class_type: "ModelAttentionBackend", inputs: { model, attention: "comfy kitchen attention" } };
+    model = ["ck", 0];
+  }
+  g.pos = { class_type: "CLIPTextEncode", inputs: { text: j.prompt, clip: ["clip", 0] } };
+  g.neg = { class_type: "CLIPTextEncode", inputs: { text: j.negative, clip: ["clip", 0] } };
+  g.cond = { class_type: "LTXVConditioning", inputs: { frame_rate: FPS, positive: ["pos", 0], negative: ["neg", 0] } };
+  g.guider = { class_type: "LTXVDualCFGGuider", inputs: { video_cfg: 1, audio_cfg: 1, model, positive: ["cond", 0], negative: ["cond", 1] } };
+  g.enc = { class_type: "VAEEncode", inputs: { pixels: ["load", 0], vae: ["vaeV", 0] } };
+  g.ups = { class_type: "LTXVLatentUpsampler", inputs: { samples: ["enc", 0], upscale_model: ["upm", 0], vae: ["vaeV", 0] } };
+  g.first = { class_type: "ImageFromBatch", inputs: { image: ["load", 0], batch_index: 0, length: 1 } };
+  g.i2v = { class_type: "LTXVImgToVideoInplace", inputs: { strength: 1, bypass: false, vae: ["vaeV", 0], image: ["first", 0], latent: ["ups", 0] } };
+  g.aenc = { class_type: "LTXVAudioVAEEncode", inputs: { audio: ["load", 2], audio_vae: ["vaeA", 0] } };
+  g.cat = { class_type: "LTXVConcatAVLatent", inputs: { video_latent: ["i2v", 0], audio_latent: ["aenc", 0] } };
+  g.noise = { class_type: "RandomNoise", inputs: { noise_seed: j.seed } };
+  g.sel = { class_type: "KSamplerSelect", inputs: { sampler_name: j.sampler } };
+  g.sched = { class_type: "BasicScheduler", inputs: { model, scheduler: j.scheduler, steps: j.steps, denoise: j.denoise } };
+  g.samp = { class_type: "SamplerCustomAdvanced", inputs: { noise: ["noise", 0], guider: ["guider", 0], sampler: ["sel", 0], sigmas: ["sched", 0], latent_image: ["cat", 0] } };
+  g.sep = { class_type: "LTXVSeparateAVLatent", inputs: { av_latent: ["samp", 0] } };
+  g.decV = { class_type: "VAEDecodeTiled", inputs: { tile_size: 512, overlap: 64, temporal_size: 4096, temporal_overlap: 32, samples: ["sep", 0], vae: ["vaeV", 0] } };
+  g.decA = { class_type: "LTXVAudioVAEDecode", inputs: { samples: ["sep", 1], audio_vae: ["vaeA", 0] } };
+  const save = await addVideoSave(g, ["decV", 0], ["decA", 0], FPS, `${j.saveSubfolder}/${j.stem}_LTXUP`, "R");
+  return { graph: g, save };
+}
+
+// src/backend/faceRefine.ts
+init_http();
+async function buildFaceRefineGraph(job) {
+  const g = {};
+  for (const [n2, why] of [["H3FaceTrackCrop", "Face tracking"], ["H3InjectVideoLatent", "Face re-generation"], ["H3PerFrameDenoise", "Per-frame denoise"], ["H3FaceStitch", "Face stitch"]])
+    if (!await hasNode(n2)) throw new Error(`${why} needs the ${n2} node \u2014 install ComfyUI-H3-FaceRefine.`);
+  if (!job.detector || job.detector === "none") throw new Error("Pick a face detector on the Face Refine card (models/ultralytics/bbox/*.pt)");
+  const manual = job.select === "manual";
+  if (manual && !job.confirmedPick.trim()) throw new Error('Select = manual: press "Pick faces" on the card first');
+  const avail = await h3Availability();
+  const has = (n2) => !!avail[n2];
+  const m = await resolveH3Models(job.models, "reference");
+  if (!m.unet || !m.clip || !m.vaeVideo || !m.vaeAudio) throw new Error("Pick the MiniMax H3 reference model, text encoder and VAEs in Settings \u2192 Video models.");
+  const cut = job.cutDetection ? "auto (pyscenedetect)" : "none";
+  let images, audio, facePick = null;
+  if (manual && await hasNode("H3FaceSelect")) {
+    g.sel = { class_type: "H3FaceSelect", inputs: { video: job.file, detector: job.detector, confidence: job.confidence, select: "manual", select_index: 0, confirmed_pick: job.confirmedPick, cut_detection: cut, cut_threshold: job.cutThreshold, skip_first_frames: 0, frame_load_cap: 0, select_every_nth: 1 } };
+    images = ["sel", 0];
+    audio = ["sel", 1];
+    facePick = ["sel", 2];
+  } else {
+    await addVideoLoad(g, job.file, "load");
+    images = ["load", 0];
+    audio = ["load", 2];
+  }
+  const track = {
+    images,
+    detector: job.detector,
+    confidence: job.confidence,
+    crop_factor: job.cropFactor,
+    canvas_width: job.canvasW,
+    canvas_height: job.canvasH,
+    canvas_mode: job.canvasMode,
+    smooth_window: job.smooth,
+    size_smooth_window: 51,
+    smooth_method: "gaussian",
+    size_mode: "per_frame",
+    identity_track: job.identityTrack,
+    identity_threshold: job.identityThreshold,
+    fallback_detector: job.fallback || "none",
+    identity_model: job.identityModel
+  };
+  if (facePick) track.face_pick = facePick;
+  else {
+    track.select = manual ? "largest_face" : job.select;
+    track.cut_detection = cut;
+    track.cut_threshold = job.cutThreshold;
+  }
+  g.track = { class_type: "H3FaceTrackCrop", inputs: track };
+  const turbo = effectiveTurbo(job.opt, has);
+  g.unet = m.unet.toLowerCase().endsWith(".gguf") ? { class_type: "UnetLoaderGGUF", inputs: { unet_name: m.unet } } : { class_type: "UNETLoader", inputs: { unet_name: m.unet, weight_dtype: "default" } };
+  const model = h3ModelChain(g, ["unet", 0], { ...job.opt, hires: false }, turbo, job.loras, has);
+  g.clip = { class_type: "CLIPLoader", inputs: { clip_name: m.clip, type: "minimax", device: "default" } };
+  g.vaeV = { class_type: "VAELoader", inputs: { vae_name: m.vaeVideo } };
+  g.vaeA = { class_type: "VAELoader", inputs: { vae_name: m.vaeAudio } };
+  const cond = { clip: ["clip", 0], vae: ["vaeV", 0], audio_vae: ["vaeA", 0], prompt: job.prompt.trim(), width: ["track", 4], height: ["track", 5], length: ["track", 6], ref_image_size: "match" };
+  job.refs.slice(0, 9).forEach((f, i) => {
+    g[`ref${i}`] = { class_type: "LoadImage", inputs: { image: f } };
+    cond[`ref_images.ref_image_${i}`] = [`ref${i}`, 0];
+  });
+  g.cond = { class_type: "MiniMaxH3ReferenceToVideo", inputs: cond };
+  g.inject = { class_type: "H3InjectVideoLatent", inputs: { av_latent: ["cond", 1], images: ["track", 0], vae: ["vaeV", 0] } };
+  if (!has("TJ_H3_AudioLock")) throw new Error("Face Refine keeps the original sound with the TJ_H3_AudioLock node (ComfyUI-TJ_NODE) \u2014 it is not installed.");
+  g.lock = { class_type: "TJ_H3_AudioLock", inputs: { av_latent: ["inject", 0], audio, audio_vae: ["vaeA", 0], mode: "lock", strength: 0.5, fit: "pad_silence", get_name_av_latent: "(none)", get_name_audio: "(none)", get_name_audio_vae: "(none)", auto_set: false } };
+  g.den = { class_type: "H3PerFrameDenoise", inputs: { model, av_latent: ["lock", 0], transform: ["track", 1], denoise_multiplier_small_face: job.mulSmall, denoise_multiplier_large_face: job.mulLarge, scale_mode: "absolute_px", face_px_small: job.pxSmall, face_px_large: job.pxLarge, gamma: 1, smooth_frames: 9 } };
+  const dm = ["den", 2];
+  const steps = turbo === "none" ? Math.max(1, Math.round(job.steps)) : Math.max(1, Math.round(job.opt.turboSteps));
+  g.noise = { class_type: "RandomNoise", inputs: { noise_seed: job.seed } };
+  g.samp0 = turbo === "larryvrh" && has("MiniMaxH3TurboSampler") ? { class_type: "MiniMaxH3TurboSampler", inputs: {} } : { class_type: "KSamplerSelect", inputs: { sampler_name: turbo === "pdd" ? "euler" : job.sampler } };
+  g.sched = { class_type: "BasicScheduler", inputs: { model: dm, scheduler: job.scheduler, steps, denoise: job.denoise } };
+  let condLink = ["cond", 0];
+  if (has("TJ_FreeTextEncoderVRAM")) {
+    g.free = { class_type: "TJ_FreeTextEncoderVRAM", inputs: { clip: ["clip", 0], trigger: condLink } };
+    condLink = ["free", 0];
+  }
+  g.guider = { class_type: "BasicGuider", inputs: { model: dm, conditioning: condLink } };
+  g.samp = { class_type: "SamplerCustomAdvanced", inputs: { noise: ["noise", 0], guider: ["guider", 0], sampler: ["samp0", 0], sigmas: ["sched", 0], latent_image: ["den", 0] } };
+  g.dec = { class_type: "VAEDecode", inputs: { samples: ["samp", 0], vae: ["vaeV", 0] } };
+  g.stitch = { class_type: "H3FaceStitch", inputs: { base_images: images, refined_crops: ["dec", 0], transform: ["track", 1], paste_region: job.paste, mask_dilation: 16, feather: job.feather, colour_match: job.colour, blend: job.blend, undetected_frames: job.undetected } };
+  const save = await addVideoSave(g, ["stitch", 0], ["lock", 1], FPS, `${job.saveSubfolder}/${job.stem}_FACEREFINE`, "F");
+  return { graph: g, save };
+}
+
+// src/backend/assetlib.ts
+init_http();
+var BASE = "/tj_node/reflib";
+var libFile = (id) => url(`${BASE}/file/${id}`);
+async function listAssets(q = {}) {
+  const p = new URLSearchParams();
+  for (const [k, v] of Object.entries(q)) if (v) p.set(k, v);
+  p.set("limit", "500");
+  const r = await getJson(`${BASE}/assets?${p}`);
+  return r.assets ?? [];
+}
+var resolveRefs = (mode, project, assets, prompt = "") => postJson(`${BASE}/resolve`, { mode, project: project ? Number(project) : void 0, assets: assets.map(Number), prompt });
+
+// src/engine/more.ts
+init_settings();
+init_comfy();
+var parse = (a) => {
+  try {
+    return a?.text ? JSON.parse(a.text) : null;
+  } catch {
+    return null;
+  }
+};
+var real4 = (l) => !!l.name && l.name !== "none" && l.strength !== 0;
+function cardLoras(c) {
+  return c.inputs("loras").flatMap((a) => parse(a)?.items ?? []).filter(real4);
+}
+function h3Cards(c) {
+  const out = {};
+  for (const a of c.inputs("cards")) {
+    const j = parse(a);
+    if (j?.kind === "turbo") out.turbo = j;
+    else if (j?.kind === "speed") out.speed = j;
+    else if (j?.kind === "lock") out.lock = j;
+  }
+  return out;
+}
+function optFromCards(cards) {
+  const t = cards.turbo, s = cards.speed;
+  return {
+    ...DEFAULT_OPT,
+    ...s ? { attnBackend: s.attn_backend, attnForward: s.attn_forward, optimizer: s.optimizer, blockCache: s.block_cache, spectrum: !!s.spectrum, fusedModulation: !!s.fused_mod, shiftVideo: s.shift_video, shiftAudio: s.shift_audio } : {},
+    ...t ? { turbo: t.turbo, turboLora: t.turbo_lora, turboStrength: t.turbo_strength, turboSteps: t.turbo_steps, hires: !!t.hires, hiresStartMp: t.hires_start_mp, hiresFinalMp: t.hires_final_mp } : {}
+  };
+}
+async function videoSize(url2) {
+  return new Promise((resolve) => {
+    const v = document.createElement("video");
+    const done = (w = 1280, h = 720) => {
+      v.removeAttribute("src");
+      resolve({ w: w || 1280, h: h || 720 });
+    };
+    v.preload = "metadata";
+    v.muted = true;
+    v.onloadedmetadata = () => done(v.videoWidth, v.videoHeight);
+    v.onerror = () => done();
+    setTimeout(() => done(), 6e3);
+    v.src = url2;
+  });
+}
+var outFile = (raw, node) => {
+  const o = raw[node] ?? {};
+  const f = (o.gifs ?? o.images ?? o.videos ?? [])[0];
+  if (!f) throw new Error("ComfyUI returned no file");
+  return { filename: f.filename, subfolder: f.subfolder ?? "", type: f.type ?? "output" };
+};
+var rtxOf = (p, pre) => ({
+  mode: str(p[`${pre}mode`], "scale"),
+  scale: num2(p[`${pre}scale`], 2),
+  short: num2(p[`${pre}short`], 1080),
+  long: num2(p[`${pre}long`], 1920),
+  w: num2(p[`${pre}w`], 1920),
+  h: num2(p[`${pre}h`], 1080),
+  anchor: str(p[`${pre}anchor`], "center"),
+  quality: str(p[`${pre}quality`], "ULTRA")
+});
+function post(stepOf) {
+  return async (c) => {
+    const v = need(c.inputs("video")[0], "Video");
+    c.progress(2, "uploading video\u2026");
+    const file = await ensureInput(v);
+    const size = await videoSize(v.url);
+    const step = stepOf(c, size);
+    const g = await buildPostGraph({ file, step, folder: useSettings.getState().saveSubfolder, stem: "canvers" });
+    const res = await runPrompt(g.graph, { onProgress: c.progress, signal: c.signal });
+    return [assetFromFile(outFile(res.raw, g.save), "video", "video")];
+  };
+}
+var withLegacySeed = (c) => {
+  const si = c.inputs("seed_in")[0];
+  const sv = si ? num2(si.text, -1) : num2(c.p.seed, -1);
+  return sv < 0 ? Math.floor(Math.random() * 2 ** 40) : sv;
+};
+var EXTRA_RUNNERS = {
+  // ---------------- cards
+  "lora-card": async (c) => {
+    const upstream2 = c.inputs("lora_in").flatMap((a) => parse(a)?.items ?? []);
+    const mine = { name: str(c.p.lora, "none"), strength: num2(c.p.strength, 1) };
+    return [textAsset(JSON.stringify({ kind: "lora", items: [...upstream2, ...real4(mine) ? [mine] : []] }), "lora")];
+  },
+  "h3-turbo": async (c) => [textAsset(JSON.stringify({ kind: "turbo", ...c.p }), "card")],
+  "h3-speed": async (c) => [textAsset(JSON.stringify({ kind: "speed", ...c.p }), "card")],
+  "h3-audiolock": async (c) => {
+    const a = need(c.inputs("audio")[0], "Audio");
+    return [textAsset(JSON.stringify({ kind: "lock", file: await ensureInput(a), mode: str(c.p.lock_mode, "lock"), strength: num2(c.p.lock_strength, 0.5), fit: str(c.p.lock_fit, "pad_silence") }), "card")];
+  },
+  "asset-library": async (c) => {
+    const project = str(c.p.project).trim();
+    const ids = str(c.p.ids).split(/[,\s]+/).filter(Boolean);
+    if (!project && !ids.length) throw new Error("Pick assets or a project on the Asset Library card first");
+    const r = await resolveRefs(project ? "project" : "assets", project || void 0, ids);
+    if (r.errors?.length) throw new Error(r.errors.map((e) => e.message).join("; "));
+    const all = await listAssets().catch(() => []);
+    const byId2 = new Map(all.map((a) => [String(a.id), a]));
+    const attached = r.attached ?? ids.map((id) => ({ id: Number(id), kind: byId2.get(id)?.kind ?? "image", name: byId2.get(id)?.name ?? id, label: "", mention: null }));
+    const images = attached.filter((a) => a.kind === "image" || a.kind === "set").map((a) => ({ id: uid(), type: "image", url: libFile(a.id), port: "image", meta: { assetId: a.id, name: a.name } }));
+    const mentions = attached.map((a) => `@${a.mention || a.alias || a.id}`).join(" ");
+    const sel2 = project ? { project, ids: attached.map((a) => String(a.id)) } : { ids: attached.map((a) => String(a.id)) };
+    return [...images, textAsset(mentions, "mentions"), textAsset(JSON.stringify({ kind: "assetlib", ...sel2 }), "assets")];
+  },
+  // ---------------- postprocess steps
+  "pp-deblur": post((c) => ({ kind: "deblur", strength: str(c.p.strength, "MEDIUM") })),
+  "pp-denoise": post((c) => ({ kind: "denoise", strength: str(c.p.strength, "MEDIUM") })),
+  "pp-upscale": post((c, s) => {
+    const p = c.p;
+    const method = c.engineId ?? "flashvsr";
+    return {
+      kind: "upscale",
+      method,
+      srcW: s.w,
+      srcH: s.h,
+      flashvsr: { model: str(p.fv_model, "FlashVSR-v1.1"), mode: str(p.fv_mode, "tiny"), scale: num2(p.fv_scale, 2), colorFix: p.fv_color !== false, tileSize: num2(p.fv_tile, 384), tileOverlap: num2(p.fv_overlap, 32), seed: num2(p.fv_seed, 42) },
+      rtx: rtxOf(p, "rtx_"),
+      modelName: str(p.model_name, "none"),
+      twoPass: !!p.two_pass,
+      pass2: rtxOf(p, "p2_")
+    };
+  }),
+  "pp-skin": post((c) => ({ kind: "skin", evenness: num2(c.p.evenness), smoothing: num2(c.p.smoothing), redness: num2(c.p.redness), shine: num2(c.p.shine), blemish: str(c.p.blemish, "off"), preserveMarks: c.p.preserve !== false, microtexture: num2(c.p.microtexture) })),
+  "pp-grain": post((c) => ({ kind: "grain", amount: num2(c.p.amount, 0.25), size: num2(c.p.size, 1), color: num2(c.p.color), lumBias: num2(c.p.lum_bias), noise: str(c.p.noise, "smooth") })),
+  "pp-interpolate": post((c) => ({ kind: "interpolate", targetFps: num2(c.p.target_fps, 48), scale: num2(c.p.scale, 1), modelName: str(c.p.model_name, "flownet.pkl"), batchSize: num2(c.p.batch, 8), fp16: c.p.fp16 !== false })),
+  "pp-resize": post((c) => ({ kind: "resize", mode: str(c.p.mode, "Long side"), method: str(c.p.method, "lanczos"), targetPx: num2(c.p.target_px, 1920), ratioW: num2(c.p.ratio_w, 16), ratioH: num2(c.p.ratio_h, 9), megapixels: num2(c.p.megapixels, 1), width: num2(c.p.width, 1280), height: num2(c.p.height, 720), crop: str(c.p.crop, "crop") })),
+  // ---------------- H3 still image
+  "h3-image": async (c) => {
+    const p = c.p;
+    const s = useSettings.getState();
+    const refs = [];
+    for (const a of c.inputs("image").slice(0, 9)) refs.push(await ensureInput(a));
+    const g = await buildH3ImageGraph({
+      refs,
+      prompt: c.text("prompt"),
+      aspect: str(p.aspect, "1:1"),
+      previewMp: num2(p.preview_mp, 0.5),
+      finalMp: num2(p.final_mp, 1.5),
+      final: p.final !== false,
+      steps: num2(p.steps, 20),
+      secondPassSteps: num2(p.pass2, 3),
+      fizgig: !!p.fizgig,
+      refImageSize: str(p.ref_size, "max"),
+      opt: optFromCards(h3Cards(c)),
+      loras: cardLoras(c),
+      seed: withLegacySeed(c),
+      models: s.video,
+      saveSubfolder: s.saveSubfolder,
+      stem: "MMH3"
+    });
+    const res = await runPrompt(g.graph, { onProgress: c.progress, signal: c.signal });
+    return [assetFromFile(outFile(res.raw, g.save), "image", "image")];
+  },
+  // ---------------- LTX Director (timeline)
+  "ltx-director": async (c) => {
+    const p = c.p;
+    const s = useSettings.getState();
+    const imgs = c.inputs("image");
+    const times = str(p.image_times, "0").split(/[,\s]+/).filter(Boolean).map(Number);
+    const files = [];
+    for (const a of imgs) files.push(await ensureInput(a));
+    const beats = str(p.beats).split("\n").map((l) => l.trim()).filter(Boolean).map((l, i) => {
+      const m = /^\s*([\d.]+)\s*[-–~]\s*([\d.]+)\s*[:：]\s*(.+)$/.exec(l);
+      if (!m) throw new Error(`Beat ${i + 1}: write it as  start-end: prompt  (for example  0-4: a man walks in)`);
+      return { startSec: Number(m[1]), endSec: Number(m[2]), prompt: m[3].trim() };
+    });
+    let size;
+    if (imgs[0] && str(p.aspect) === "auto") {
+      const bm = await loadBitmap(imgs[0]);
+      size = ltxSize(`${bm.width}:${bm.height}`, num2(p.megapixels, 1));
+    }
+    const seconds = num2(p.seconds, 8);
+    const graph = await buildLtxGraph({
+      prompt: c.text("prompt"),
+      seconds,
+      aspect: str(p.aspect, "16:9"),
+      megapixels: num2(p.megapixels, 1),
+      seed: withLegacySeed(c),
+      steps: num2(p.steps, 12),
+      cfg: num2(p.cfg, 1),
+      sampler: str(p.sampler, "euler_ancestral"),
+      scheduler: str(p.scheduler, "linear_quadratic"),
+      stage2Sigmas: str(p.stage2, "0.85, 0.7250, 0.4219, 0.0"),
+      loras: cardLoras(c),
+      models: s.video,
+      saveSubfolder: s.saveSubfolder,
+      size,
+      timeline: { texts: beats, images: files.map((file, i) => ({ file, startSec: i === files.length - 1 && p.last_at_end ? seconds : times[i] ?? 0, end: i === files.length - 1 && !!p.last_at_end })) }
+    });
+    const res = await runPrompt(graph, { onProgress: c.progress, signal: c.signal });
+    const f = res.videos[0] ?? res.images[0];
+    if (!f) throw new Error("ComfyUI returned no video");
+    return [assetFromFile(f, "video", "video")];
+  },
+  // ---------------- Video edit (LTX 2.5 refine) and stitch
+  "video-refine": async (c) => {
+    const p = c.p;
+    const s = useSettings.getState();
+    const v = need(c.inputs("video")[0], "Video");
+    c.progress(2, "uploading video\u2026");
+    const g = await buildRefineGraph({ file: await ensureInput(v), prompt: c.text("prompt"), negative: str(p.negative, "bad anatomy, inconsistent look, low resolution,"), steps: num2(p.steps, 4), denoise: num2(p.denoise, 0.15), sampler: str(p.sampler, "euler_ancestral"), scheduler: str(p.scheduler, "simple"), seed: withLegacySeed(c), loras: cardLoras(c), models: s.video, saveSubfolder: s.saveSubfolder, stem: "MMH3" });
+    const res = await runPrompt(g.graph, { onProgress: c.progress, signal: c.signal });
+    return [assetFromFile(outFile(res.raw, g.save), "video", "video")];
+  },
+  "video-stitch": async (c) => {
+    const vids = c.inputs("videos");
+    if (vids.length < 2) throw new Error("Connect at least two videos to stitch");
+    const s = useSettings.getState();
+    const clips = [];
+    for (let i = 0; i < vids.length; i++) {
+      const a = vids[i];
+      if (a.file?.type === "output") {
+        clips.push({ filename: a.file.filename, subfolder: a.file.subfolder });
+        continue;
+      }
+      c.progress(Math.round(i / vids.length * 40), `preparing clip ${i + 1}\u2026`);
+      const g = {};
+      await addVideoLoad(g, await ensureInput(a), "L");
+      const save = await addVideoSave(g, ["L", 0], ["L", 2], 24, `${s.saveSubfolder}/stitch_src`, "T");
+      const r = await runPrompt(g, { signal: c.signal });
+      const f = outFile(r.raw, save);
+      clips.push({ filename: f.filename, subfolder: f.subfolder });
+    }
+    c.progress(60, "stitching\u2026");
+    const ov = num2(c.p.overlap, 0);
+    const st = await stitchClips(clips, `${s.saveSubfolder}/stitch`, ov > 0 ? ov : void 0);
+    if (!st.ok || !st.filename) throw new Error(`stitch failed: ${st.error ?? "unknown"}`);
+    return [assetFromFile({ filename: st.filename, subfolder: st.subfolder ?? "", type: "output" }, "video", "video")];
+  },
+  // ---------------- Face Refine
+  "face-refine": async (c) => {
+    const p = c.p;
+    const s = useSettings.getState();
+    const v = need(c.inputs("video")[0], "Video");
+    c.progress(2, "uploading video\u2026");
+    const file = await ensureInput(v);
+    const refs = [];
+    for (const a of c.inputs("image").slice(0, 9)) refs.push(await ensureInput(a));
+    const cards = h3Cards(c);
+    const seed2 = withLegacySeed(c);
+    const picks = str(p.picks).split(",").map((x) => x.trim()).filter(Boolean);
+    const passes = p.select === "manual" && p.pick_mode === "chain" && picks.length > 1 ? picks : [str(p.picks)];
+    let cur = file;
+    let out;
+    for (let i = 0; i < passes.length; i++) {
+      const g = await buildFaceRefineGraph({
+        file: cur,
+        prompt: c.text("prompt"),
+        refs,
+        detector: str(p.detector, "none"),
+        fallback: str(p.fallback, "none"),
+        confidence: num2(p.confidence, 0.35),
+        select: str(p.select, "largest_face"),
+        confirmedPick: passes[i],
+        cutDetection: !!p.cuts,
+        cutThreshold: num2(p.cut_threshold, 3),
+        identityTrack: p.identity !== false,
+        identityThreshold: num2(p.identity_threshold, 0.45),
+        identityModel: str(p.identity_model, "insightface"),
+        cropFactor: num2(p.crop_factor, 2.5),
+        canvasMode: str(p.canvas_mode, "auto_capped_768"),
+        canvasW: num2(p.canvas_w, 768),
+        canvasH: num2(p.canvas_h, 768),
+        smooth: num2(p.smooth, 21),
+        denoise: num2(p.denoise, 0.4),
+        mulSmall: num2(p.mul_small, 1),
+        mulLarge: num2(p.mul_large, 0.35),
+        pxSmall: num2(p.px_small, 30),
+        pxLarge: num2(p.px_large, 120),
+        steps: num2(p.steps, 8),
+        sampler: str(p.sampler, "euler"),
+        scheduler: str(p.scheduler, "simple"),
+        paste: str(p.paste, "face_only"),
+        feather: num2(p.feather, 6),
+        colour: num2(p.colour, 1),
+        blend: num2(p.blend, 1),
+        undetected: str(p.undetected, "fade_out"),
+        opt: optFromCards(cards),
+        loras: cardLoras(c),
+        models: s.video,
+        seed: seed2 + i,
+        saveSubfolder: s.saveSubfolder,
+        stem: "MMH3"
+      });
+      const res = await runPrompt(g.graph, { onProgress: (pct, l) => c.progress(Math.round((i + pct / 100) / passes.length * 100), `face ${i + 1}/${passes.length} ${l ?? ""}`), signal: c.signal });
+      out = outFile(res.raw, g.save);
+      if (i < passes.length - 1) cur = (await copyToInput(out)).filename;
+    }
+    return [assetFromFile(out, "video", "video")];
+  },
+  // ---------------- Character Sheet
+  "character-sheet": async (c) => {
+    const p = c.p;
+    const s = useSettings.getState();
+    const refs = [];
+    for (const a of need(c.inputs("image"), "Character reference").slice(0, 9)) refs.push(await ensureInput(a));
+    const frames = str(p.frames).split(/[,\s]+/).map(Number).filter((n2) => Number.isFinite(n2) && n2 >= 0);
+    const v = await buildSheetVideoGraph({
+      refs,
+      refImageSize: str(p.ref_size, "max"),
+      prompt: c.text("prompt") || CHARSHEET_PROMPT,
+      aspect: str(p.aspect, "3:4"),
+      megapixels: num2(p.megapixels, 0.9),
+      firstPassMp: num2(p.first_mp, 0.36),
+      latentUpscale: !!p.latent_up,
+      secondPassSteps: num2(p.pass2, 3),
+      deblur: str(p.deblur, "none"),
+      rtx: !!p.rtx,
+      rtxSupersample: !!p.supersample,
+      loras: cardLoras(c),
+      seed: withLegacySeed(c),
+      models: s.video,
+      saveSubfolder: s.saveSubfolder,
+      stem: "MMH3"
+    });
+    const r1 = await runPrompt(v.graph, { onProgress: (pct, l) => c.progress(Math.round(pct * 0.85), l), signal: c.signal });
+    const vf = outFile(r1.raw, v.save);
+    c.progress(88, "assembling the sheet\u2026");
+    const inName = (await copyToInput(vf)).filename;
+    const gg = await buildSheetGridGraph({ video: inName, ref: refs[0], frames: frames.length ? frames : CHARSHEET_DEFAULT_FRAMES, cellW: v.width, cellH: v.height, maxDim: num2(p.max_dim, 2048), saveEach: !!p.save_frames, folder: s.saveSubfolder, stem: "MMH3" });
+    const r2 = await runPrompt(gg.graph, { onProgress: (pct, l) => c.progress(88 + Math.round(pct * 0.12), l), signal: c.signal });
+    return [assetFromFile(outFile(r2.raw, gg.save), "image", "image"), assetFromFile(vf, "video", "video")];
+  }
+};
+
 // src/engine/run.ts
-var textAsset = (text3, port) => ({ id: uid(), type: "text", url: "", text: text3, port });
 var portOf = (def, a) => a.port ?? def.outputs[0]?.id;
 function nodeAssets(node, handle2, local) {
   const def = byId.get(node.defId);
@@ -4500,7 +5577,7 @@ async function executeGraph(g, targetId, hooks, signal) {
         local.set(node.id, node.results);
         continue;
       }
-      if (def.id === "import" || def.id === "import-audio") {
+      if (def.id === "import" || def.id === "import-audio" || def.id === "import-video") {
         local.set(node.id, node.results);
         continue;
       }
@@ -4545,12 +5622,6 @@ async function executeGraph(g, targetId, hooks, signal) {
     hooks.error?.(failing, msg);
     throw err;
   }
-}
-var num2 = (v, d = 0) => typeof v === "number" ? v : parseFloat(String(v)) || d;
-var str = (v, d = "") => v === void 0 ? d : String(v);
-function need(v, what) {
-  if (v === void 0 || Array.isArray(v) && !v.length) throw new Error(`${what} is not connected`);
-  return v;
 }
 function sizeFrom(aspect2, mp) {
   const [a, b] = aspect2.split(":").map(Number);
@@ -4602,7 +5673,7 @@ function imageRunner(mode) {
       images: inputFiles,
       mask: maskFile,
       pad: { left: num2(p.left), top: num2(p.top), right: num2(p.right), bottom: num2(p.bottom) },
-      loras: [lora("lora1", "lora1_strength"), lora("lora2", "lora2_strength")],
+      loras: [lora("lora1", "lora1_strength"), lora("lora2", "lora2_strength"), ...cardLoras(c)],
       models: settings.models[family],
       saveSubfolder: settings.saveSubfolder,
       bgModel: str(p.bg_model)
@@ -4632,16 +5703,26 @@ var TASKS = {
   "Booru-style tags": "List comma-separated booru-style tags for this image.",
   "Pose & anatomy": "Describe the pose, body position and anatomy of the subject in detail."
 };
+var parseCard = (a) => {
+  try {
+    return a?.text ? JSON.parse(a.text) : null;
+  } catch {
+    return null;
+  }
+};
 async function runH3(c) {
   const p = c.p;
-  const ref = c.engineId === "h3-ref";
+  const assetCard = parseCard(c.inputs("assets")[0]);
+  const assetRef = assetCard?.kind === "assetlib" ? { project: assetCard.project, ids: assetCard.ids ?? [] } : void 0;
+  const ref = c.engineId === "h3-ref" || !!assetRef;
   const si = c.inputs("seed_in")[0];
   const sv = si ? num2(si.text, -1) : num2(p.seed, -1);
   const seed0 = sv < 0 ? Math.floor(Math.random() * 2 ** 40) : sv;
   const settings = useSettings.getState();
   const prompts = c.text("prompt").split(/\n\s*-{3,}\s*\n/).map((x) => x.trim()).filter(Boolean);
   if (!prompts.length) throw new Error("Prompt is empty");
-  const imgs = c.inputs("image"), lastA = c.inputs("last")[0], lockA = c.inputs("audio")[0];
+  const imgs = c.inputs("image"), lastA = c.inputs("last")[0];
+  const cards = h3Cards(c);
   let size;
   if (str(p.aspect) === "auto" && imgs[0]) {
     const bm = await loadBitmap(imgs[0]);
@@ -4651,30 +5732,12 @@ async function runH3(c) {
   if (ref) for (const a of imgs.slice(0, 9)) refFiles.push(await ensureInput(a));
   let first = !ref && imgs[0] ? await ensureInput(imgs[0]) : void 0;
   const lastFile = !ref && lastA ? await ensureInput(lastA) : void 0;
-  const lockFile = lockA ? await ensureInput(lockA) : void 0;
+  const lockFile = cards.lock?.file;
   const continuity = ref ? "none" : str(p.continuity, "lastframe");
   const lora = (n2, s2) => ({ name: str(p[n2], "none"), strength: num2(p[s2], 1) });
   const seconds = num2(p.seconds, 8);
   const runId = uid("ot").slice(0, 10);
-  const turbo = str(p.turbo, "none");
-  const opt = {
-    ...DEFAULT_OPT,
-    attnBackend: str(p.attn_backend, "none"),
-    attnForward: str(p.attn_forward, "none"),
-    optimizer: str(p.optimizer, "none"),
-    blockCache: str(p.block_cache, "none"),
-    spectrum: !!p.spectrum,
-    fusedModulation: !!p.fused_mod,
-    turbo,
-    turboLora: str(p.turbo_lora, "none"),
-    turboStrength: num2(p.turbo_strength, 1),
-    turboSteps: num2(p.turbo_steps, 8),
-    hires: !!p.hires,
-    hiresStartMp: num2(p.hires_start_mp, 0.5),
-    hiresFinalMp: num2(p.hires_final_mp, 0.9),
-    shiftVideo: num2(p.shift_video, 12),
-    shiftAudio: num2(p.shift_audio, 3)
-  };
+  const opt = optFromCards(cards);
   const clips = [];
   let prevCheckpoint;
   for (let i = 0; i < prompts.length; i++) {
@@ -4694,8 +5757,9 @@ async function runH3(c) {
       steps: num2(p.steps, 20),
       sampler: str(p.sampler, "er_sde"),
       scheduler: str(p.scheduler, "simple"),
-      loras: [lora("lora1", "lora1_strength"), lora("lora2", "lora2_strength")],
-      opt: { ...opt, audioLock: lockFile ? { file: lockFile, startSec: i * (h3Frames(seconds) / 24), mode: str(p.lock_mode, "lock"), strength: num2(p.lock_strength, 0.5), fit: str(p.lock_fit, "pad_silence") } : void 0 },
+      loras: [lora("lora1", "lora1_strength"), lora("lora2", "lora2_strength"), ...cardLoras(c)].filter((l) => l.name && l.name !== "none"),
+      assetRef,
+      opt: { ...opt, audioLock: lockFile ? { file: lockFile, startSec: i * (h3Frames(seconds) / 24), mode: str(cards.lock.mode, "lock"), strength: num2(cards.lock.strength, 0.5), fit: str(cards.lock.fit, "pad_silence") } : void 0 },
       models: settings.video,
       saveSubfolder: settings.saveSubfolder,
       size,
@@ -4736,6 +5800,7 @@ async function runH3(c) {
   return assets;
 }
 var RUNNERS = {
+  ...EXTRA_RUNNERS,
   // ---- sources / data
   prompt: async (c) => {
     const extra = c.inputs("vars").map((a) => a.text ?? "").filter(Boolean);
@@ -4873,7 +5938,7 @@ var RUNNERS = {
       sampler: str(p.sampler, "euler_ancestral"),
       scheduler: str(p.scheduler, "linear_quadratic"),
       stage2Sigmas: str(p.stage2, "0.85, 0.7250, 0.4219, 0.0"),
-      loras: [lora("lora1", "lora1_strength"), lora("lora2", "lora2_strength")],
+      loras: [lora("lora1", "lora1_strength"), lora("lora2", "lora2_strength"), ...cardLoras(c)],
       models: useSettings.getState().video,
       saveSubfolder: useSettings.getState().saveSubfolder,
       size
@@ -4926,7 +5991,7 @@ var RUNNERS = {
   router: async (c) => c.inputs("image").slice(0, 1).map((a) => ({ ...a, port: "image" })),
   // ---- sinks: nothing to compute
   export: async () => [],
-  preview: async () => [],
+  preview: async (c) => c.inputs("image").slice(0, 1).map((a) => ({ ...a, port: "out" })),
   compare: async () => [],
   note: async () => []
 };
@@ -5065,7 +6130,7 @@ var send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 async function handle(msg) {
   const { id, method, params } = msg;
   try {
-    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.0.0" } } });
+    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.1.0" } } });
     if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS.map(({ run: _r, ...t }) => t) } });
     if (method === "tools/call") {
       const tool = TOOLS.find((t) => t.name === params?.name);
