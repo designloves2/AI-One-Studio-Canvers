@@ -59,10 +59,10 @@ export const h3Availability = () => (availCache ??= getJson<{ available?: Record
 export const real = (a?: string[]) => (a ?? []).filter((x) => x && x !== 'none');
 export async function resolveH3Models(user: Record<string, string>, mode: string) {
   const l = await h3ModelLists();
-  const pick = (k: string, list: string[] | undefined, re: RegExp) => user[k] || real(list).find((x) => re.test(x)) || '';
+  const pick = (k: string, list: string[] | undefined, re: RegExp, not?: RegExp) => user[k] || real(list).find((x) => re.test(x) && !(not && not.test(x))) || '';
   return {
     unet: mode === 'reference' ? pick('h3_unet_ref', l.diffusion_models, /h3.*ref/i) : pick('h3_unet_fl', l.diffusion_models, /h3.*(fl2va|first|fl)/i),
-    clip: pick('h3_clip', l.text_encoders_all ?? l.text_encoders, /h3|minimax/i),
+    clip: pick('h3_clip', l.text_encoders_all ?? l.text_encoders, /h3/i, /music|ace15/i),
     vaeVideo: pick('h3_vae_video', l.vaes, /h3.*video/i),
     vaeAudio: pick('h3_vae_audio', l.vaes, /h3.*audio/i),
   };

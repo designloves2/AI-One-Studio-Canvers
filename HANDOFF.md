@@ -24,10 +24,11 @@
 
 - 캔버스 조작: 왼쪽 드래그 = 이동, Ctrl(⌘)+왼쪽 드래그 = 영역 선택.
 
-## 미검증
-- 신규 카드는 mock 으로만 검증. 실제 GPU 품질/노드 입력명은 실기 확인 필요(Face Refine, Character Sheet, FlashVSR/RTX 2-pass, TJ_H3Reference, /h3_facerefine/scan).
-- 옛 e2e2~e2e13 회귀: 재실행 완료, 모두 통과(e2e5 는 'Import'→'이미지 불러오기' 이름 변경에 맞춰 테스트 locator 수정). 신규 e2e14(카드/덱/후처리/Asset/FaceRefine/CharSheet) 통과.
-- 한국어 번역: src/i18n.cards.ts (새 카드 라벨).
+## 실기 검증 (8188 실제 ComfyUI, 2026-10-20)
+- 통과: LTX Director(+오디오·모션 트랙, 캔버스 UI 실행 포함), 후처리 7종(Deblur/Denoise/Grain/Resize/Skin/Interpolate/Upscale), Face Refine, Character Sheet, Video Edit(LTX refine), Video Stitch, Transition Bridge, Beat/Scene Detect, H3 Image, H3 Video Generate, Image Generate, Music Generate, Camera Angle, Krea2 Control/Identity, Anima LLLite, Z-Image ControlNet·Face Redraw(그래프 버그 수정 후 통과: ZImageFunControlnet 은 MODEL 만 출력), Asset Library + H3 레퍼런스 영상.
+- 수정한 자동선택 버그: LTX(영상/오디오 VAE·업스케일러·텍스트인코더), H3 텍스트 인코더(음악용 인코더를 잘못 고르던 것).
+- 미검증: fps 자동 인식 정확도, Face Refine 다인 체인, Anima inpaint/anycontrol 모드, Krea2 canny.
+- UI: 캔버스 미니맵 제거, 손 도구 아이콘을 흰색 SVG 로 교체.
 
 ## 남은 작업 (우선순위)
 1. (완료) 회귀 재실행.

@@ -206,3 +206,4 @@ kbd { background: var(--bg3); border: 1px solid var(--line2); border-radius: 4px
 .adv-toggle { width: 100%; text-align: left; border-top: 1px dashed var(--line); padding: 6px 10px; } .adv-toggle:hover { color: var(--fg); }
 .run { transition: filter .12s; } .run:hover { filter: brightness(1.15); }
 .toolbar .run-all, .toolbar .stop-all { white-space: nowrap; flex: none; }
+.result-frame img, .result-frame video { max-height: 420px; object-fit: contain; background: #000; }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ReactFlow, Background, BackgroundVariant, Controls as RFControls, MiniMap, SelectionMode, useReactFlow,
+  ReactFlow, Background, BackgroundVariant, Controls as RFControls, SelectionMode, useReactFlow,
   type Connection, type Edge, type EdgeChange, type Node, type NodeChange,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
@@ -149,7 +149,6 @@ export function Flow({ tool, onMenu }: { tool: 'select' | 'hand'; onMenu(at: { x
       >
         <Background variant={BackgroundVariant.Dots} gap={22} size={1.2} color="#2a2e38" />
         <RFControls showInteractive={false} position="bottom-right" />
-        <MiniMap pannable zoomable nodeColor="#3a4150" maskColor="rgba(10,12,16,.7)" position="bottom-left" />
       </ReactFlow>
       {ctx && <ContextMenu x={ctx.x} y={ctx.y} items={ctx.edge ? [{ label: 'Disconnect', shortcut: 'Del', danger: true, onClick: () => useGraph.getState().removeEdges([ctx.edge!]) }] : ctxItems(ctx.ids)} onClose={() => setCtx(null)} />}
       {nodes.length === 0 && (

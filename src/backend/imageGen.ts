@@ -268,8 +268,9 @@ function buildZImage(job: ImageJob, m: { model: string; textEncoder: string; vae
     }
     g['Z:pre'] = { class_type: 'AIO_Preprocessor', inputs: { image: src, preprocessor: c.preprocessor, resolution: c.resolution } };
     g['Z:patch'] = { class_type: 'ModelPatchLoader', inputs: { name: c.patch } };
-    g['Z:cn'] = { class_type: 'ZImageFunControlnet', inputs: { model: modelIn, model_patch: ['Z:patch', 0], vae: ['Z:vae', 0], positive: ['Z:pos', 0], negative: ['Z:neg', 0], strength: c.strength, image: ['Z:pre', 0] } };
-    g['Z:sampling'] = { class_type: 'ModelSamplingAuraFlow', inputs: { model: ['Z:cn', 0], shift: 3 } };
+    g['Z:sampling'] = { class_type: 'ModelSamplingAuraFlow', inputs: { model: modelIn, shift: 3 } };
+    // the patch node returns only the patched MODEL (conditioning stays plain)
+    g['Z:cn'] = { class_type: 'ZImageFunControlnet', inputs: { model: ['Z:sampling', 0], model_patch: ['Z:patch', 0], vae: ['Z:vae', 0], strength: c.strength, image: ['Z:pre', 0] } };
     let latent: [string, number];
     if (crop) {
       g['Z:enc'] = { class_type: 'VAEEncode', inputs: { pixels: ['Z:crop', 1], vae: ['Z:vae', 0] } };
@@ -280,7 +281,7 @@ function buildZImage(job: ImageJob, m: { model: string; textEncoder: string; vae
       g['Z:latent'] = { class_type: 'EmptySD3LatentImage', inputs: { width: ['Z:size', 0], height: ['Z:size', 1], batch_size: job.batch } };
       latent = ['Z:latent', 0];
     }
-    g['Z:sampler'] = { class_type: 'KSampler', inputs: { model: ['Z:sampling', 0], positive: ['Z:cn', 1], negative: ['Z:cn', 2], latent_image: latent, seed: job.seed, steps: job.steps, cfg: job.cfg, sampler_name: job.sampler, scheduler: job.scheduler, denoise: crop ? job.denoise : 1 } };
+    g['Z:sampler'] = { class_type: 'KSampler', inputs: { model: ['Z:cn', 0], positive: ['Z:pos', 0], negative: ['Z:neg', 0], latent_image: latent, seed: job.seed, steps: job.steps, cfg: job.cfg, sampler_name: job.sampler, scheduler: job.scheduler, denoise: crop ? job.denoise : 1 } };
     g['Z:decode'] = { class_type: 'VAEDecode', inputs: { samples: ['Z:sampler', 0], vae: ['Z:vae', 0] } };
     let out: [string, number] = ['Z:decode', 0];
     if (crop) { g['Z:stitch'] = { class_type: 'InpaintStitchImproved', inputs: { stitcher: ['Z:crop', 0], inpainted_image: out } }; out = ['Z:stitch', 0]; }

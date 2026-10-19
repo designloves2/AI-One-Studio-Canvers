@@ -3601,8 +3601,8 @@ function buildZImage(job, m) {
     }
     g["Z:pre"] = { class_type: "AIO_Preprocessor", inputs: { image: src, preprocessor: c.preprocessor, resolution: c.resolution } };
     g["Z:patch"] = { class_type: "ModelPatchLoader", inputs: { name: c.patch } };
-    g["Z:cn"] = { class_type: "ZImageFunControlnet", inputs: { model: modelIn, model_patch: ["Z:patch", 0], vae: ["Z:vae", 0], positive: ["Z:pos", 0], negative: ["Z:neg", 0], strength: c.strength, image: ["Z:pre", 0] } };
-    g["Z:sampling"] = { class_type: "ModelSamplingAuraFlow", inputs: { model: ["Z:cn", 0], shift: 3 } };
+    g["Z:sampling"] = { class_type: "ModelSamplingAuraFlow", inputs: { model: modelIn, shift: 3 } };
+    g["Z:cn"] = { class_type: "ZImageFunControlnet", inputs: { model: ["Z:sampling", 0], model_patch: ["Z:patch", 0], vae: ["Z:vae", 0], strength: c.strength, image: ["Z:pre", 0] } };
     let latent;
     if (crop) {
       g["Z:enc"] = { class_type: "VAEEncode", inputs: { pixels: ["Z:crop", 1], vae: ["Z:vae", 0] } };
@@ -3613,7 +3613,7 @@ function buildZImage(job, m) {
       g["Z:latent"] = { class_type: "EmptySD3LatentImage", inputs: { width: ["Z:size", 0], height: ["Z:size", 1], batch_size: job.batch } };
       latent = ["Z:latent", 0];
     }
-    g["Z:sampler"] = { class_type: "KSampler", inputs: { model: ["Z:sampling", 0], positive: ["Z:cn", 1], negative: ["Z:cn", 2], latent_image: latent, seed: job.seed, steps: job.steps, cfg: job.cfg, sampler_name: job.sampler, scheduler: job.scheduler, denoise: crop ? job.denoise : 1 } };
+    g["Z:sampler"] = { class_type: "KSampler", inputs: { model: ["Z:cn", 0], positive: ["Z:pos", 0], negative: ["Z:neg", 0], latent_image: latent, seed: job.seed, steps: job.steps, cfg: job.cfg, sampler_name: job.sampler, scheduler: job.scheduler, denoise: crop ? job.denoise : 1 } };
     g["Z:decode"] = { class_type: "VAEDecode", inputs: { samples: ["Z:sampler", 0], vae: ["Z:vae", 0] } };
     let out = ["Z:decode", 0];
     if (crop) {
@@ -4446,10 +4446,10 @@ var h3Availability = () => availCache2 ??= getJson("/minimax_h3_one/node_availab
 var real3 = (a) => (a ?? []).filter((x) => x && x !== "none");
 async function resolveH3Models(user, mode) {
   const l = await h3ModelLists();
-  const pick = (k, list, re) => user[k] || real3(list).find((x) => re.test(x)) || "";
+  const pick = (k, list, re, not) => user[k] || real3(list).find((x) => re.test(x) && !(not && not.test(x))) || "";
   return {
     unet: mode === "reference" ? pick("h3_unet_ref", l.diffusion_models, /h3.*ref/i) : pick("h3_unet_fl", l.diffusion_models, /h3.*(fl2va|first|fl)/i),
-    clip: pick("h3_clip", l.text_encoders_all ?? l.text_encoders, /h3|minimax/i),
+    clip: pick("h3_clip", l.text_encoders_all ?? l.text_encoders, /h3/i, /music|ace15/i),
     vaeVideo: pick("h3_vae_video", l.vaes, /h3.*video/i),
     vaeAudio: pick("h3_vae_audio", l.vaes, /h3.*audio/i)
   };
