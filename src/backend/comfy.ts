@@ -18,6 +18,12 @@ export async function objectInfo(cls: string): Promise<any> {
   return getJson(`/object_info/${encodeURIComponent(cls)}`);
 }
 
+/** Turn known low-level ComfyUI failures into a message a person can act on. */
+function friendlyError(m: string): string {
+  if (/VHS failed to extract audio/i.test(m)) return 'This video has no sound track, and the video loader needs one. Add a sound track first (Add Audio to Video card), or use a clip that was generated here.';
+  return m;
+}
+
 export async function interrupt(): Promise<void> {
   try { await fetch(url('/interrupt'), { method: 'POST' }); } catch { /* ignore */ }
 }
@@ -149,7 +155,7 @@ export async function runPrompt(graph: Record<string, unknown>, opts: RunOptions
       else if (m.type === 'executing' && d.node === null) finish();          // finished (older servers)
       else if (m.type === 'executed') collect(String(d.node), d.output);
       else if (m.type === 'execution_success') finish();
-      else if (m.type === 'execution_error') finish(new Error(d.exception_message || 'execution error'));
+      else if (m.type === 'execution_error') finish(new Error(friendlyError(d.exception_message || 'execution error')));
       else if (m.type === 'execution_interrupted') finish(new Error('cancelled'));
     });
     const onAbort = () => { void interrupt(); finish(new Error('cancelled')); };
@@ -163,7 +169,7 @@ export async function runPrompt(graph: Record<string, unknown>, opts: RunOptions
         if (!e) return;
         if (e.status?.status_str === 'error') {
           const msg = (e.status.messages ?? []).find((x: any) => x[0] === 'execution_error')?.[1]?.exception_message;
-          return finish(new Error(msg || 'execution error'));
+          return finish(new Error(friendlyError(msg || 'execution error')));
         }
         if (e.outputs && (e.status?.completed || Object.keys(e.outputs).length)) {
           out.images = []; out.videos = []; out.audios = []; out.texts = [];

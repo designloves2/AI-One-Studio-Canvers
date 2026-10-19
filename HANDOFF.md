@@ -27,7 +27,10 @@
 ## 실기 검증 (8188 실제 ComfyUI, 2026-10-20)
 - 통과: LTX Director(+오디오·모션 트랙, 캔버스 UI 실행 포함), 후처리 7종(Deblur/Denoise/Grain/Resize/Skin/Interpolate/Upscale), Face Refine, Character Sheet, Video Edit(LTX refine), Video Stitch, Transition Bridge, Beat/Scene Detect, H3 Image, H3 Video Generate, Image Generate, Music Generate, Camera Angle, Krea2 Control/Identity, Anima LLLite, Z-Image ControlNet·Face Redraw(그래프 버그 수정 후 통과: ZImageFunControlnet 은 MODEL 만 출력), Asset Library + H3 레퍼런스 영상.
 - 수정한 자동선택 버그: LTX(영상/오디오 VAE·업스케일러·텍스트인코더), H3 텍스트 인코더(음악용 인코더를 잘못 고르던 것).
-- 미검증: fps 자동 인식 정확도, Face Refine 다인 체인, Anima inpaint/anycontrol 모드, Krea2 canny.
+- 추가 통과: fps 자동 인식(30fps 입력 → 30fps 출력, 60프레임), Krea2 canny, Anima anycontrol.
+- 알려진 제한: 소리 트랙이 없는 mp4 는 VHS 로더가 실패한다(후처리/Face Refine/Video Edit). 안내 문구만 추가함(comfy.ts friendlyError). 자동 무음 삽입은 미구현.
+- 미검증: Face Refine 다인 체인, Anima inpaint 모드.
+- 테스트 팁: vite HMR 후에는 모듈 URL 에 ?t= 가 붙어 콘솔 import 가 다른 인스턴스가 된다 → performance 리소스 목록의 정확한 URL 로 import.
 - UI: 캔버스 미니맵 제거, 손 도구 아이콘을 흰색 SVG 로 교체.
 
 ## 남은 작업 (우선순위)

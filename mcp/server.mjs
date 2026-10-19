@@ -2380,6 +2380,10 @@ async function systemStats() {
 async function objectInfo(cls) {
   return getJson(`/object_info/${encodeURIComponent(cls)}`);
 }
+function friendlyError(m) {
+  if (/VHS failed to extract audio/i.test(m)) return "This video has no sound track, and the video loader needs one. Add a sound track first (Add Audio to Video card), or use a clip that was generated here.";
+  return m;
+}
 async function interrupt() {
   try {
     await fetch(url("/interrupt"), { method: "POST" });
@@ -2511,7 +2515,7 @@ async function runPrompt(graph, opts = {}) {
       else if (m.type === "executing" && d.node === null) finish();
       else if (m.type === "executed") collect(String(d.node), d.output);
       else if (m.type === "execution_success") finish();
-      else if (m.type === "execution_error") finish(new Error(d.exception_message || "execution error"));
+      else if (m.type === "execution_error") finish(new Error(friendlyError(d.exception_message || "execution error")));
       else if (m.type === "execution_interrupted") finish(new Error("cancelled"));
     });
     const onAbort = () => {
@@ -2526,7 +2530,7 @@ async function runPrompt(graph, opts = {}) {
         if (!e) return;
         if (e.status?.status_str === "error") {
           const msg = (e.status.messages ?? []).find((x) => x[0] === "execution_error")?.[1]?.exception_message;
-          return finish(new Error(msg || "execution error"));
+          return finish(new Error(friendlyError(msg || "execution error")));
         }
         if (e.outputs && (e.status?.completed || Object.keys(e.outputs).length)) {
           out.images = [];
