@@ -34,7 +34,7 @@ const broadcast = (msg) => { for (const s of sockets) if (s.readyState === 1) s.
 const readJson = async (req) => { try { return JSON.parse((await readBody(req)).toString() || '{}'); } catch { return {}; } };
 const tryFile = (p) => { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return null; } };
 
-const KNOWN = new Set(['UNETLoader', 'UnetLoaderGGUF', 'CLIPLoader', 'CLIPLoaderGGUF', 'VAELoader', 'LoraLoaderModelOnly', 'ModelSamplingAuraFlow', 'DifferentialDiffusion', 'CLIPTextEncode', 'ConditioningZeroOut', 'EmptySD3LatentImage', 'EmptyFlux2LatentImage', 'KSampler', 'VAEDecode', 'VAEEncode', 'SaveImage', 'PreviewImage', 'LoadImage', 'ImageScale', 'ImageScaleBy', 'ImageToMask', 'SetLatentNoiseMask', 'ImagePadForOutpaint', 'ImagePadKJ', 'ImageScaleToTotalPixels', 'GetImageSize', 'ReferenceLatent', 'FluxKVCache', 'InpaintCropImproved', 'InpaintStitchImproved', 'InpaintModelConditioning', 'LoadBackgroundRemovalModel', 'RemoveBackground', 'InvertMask', 'JoinImageWithAlpha', 'UpscaleModelLoader', 'ImageUpscaleWithModel', 'CheckpointLoaderSimple', 'LoraLoader', 'EmptyLatentImage', 'VAEEncodeForInpaint', 'CFGNorm', 'FluxKontextImageScale', 'TextEncodeQwenImageEditPlus', 'FluxKontextMultiReferenceLatentMethod', 'TJ_NODE_Krea2UnetLoaderGGUF', 'TJ_NODE_Krea2ClipLoaderGGUF']);
+const KNOWN = new Set(['UNETLoader', 'UnetLoaderGGUF', 'CLIPLoader', 'CLIPLoaderGGUF', 'VAELoader', 'LoraLoaderModelOnly', 'ModelSamplingAuraFlow', 'DifferentialDiffusion', 'CLIPTextEncode', 'ConditioningZeroOut', 'EmptySD3LatentImage', 'EmptyFlux2LatentImage', 'KSampler', 'VAEDecode', 'VAEEncode', 'SaveImage', 'PreviewImage', 'LoadImage', 'ImageScale', 'ImageScaleBy', 'ImageToMask', 'SetLatentNoiseMask', 'ImagePadForOutpaint', 'ImagePadKJ', 'ImageScaleToTotalPixels', 'GetImageSize', 'ReferenceLatent', 'FluxKVCache', 'InpaintCropImproved', 'InpaintStitchImproved', 'InpaintModelConditioning', 'LoadBackgroundRemovalModel', 'RemoveBackground', 'InvertMask', 'JoinImageWithAlpha', 'UpscaleModelLoader', 'ImageUpscaleWithModel', 'CheckpointLoaderSimple', 'LoraLoader', 'EmptyLatentImage', 'VAEEncodeForInpaint', 'CFGNorm', 'LatentUpscaleModelLoader', 'TJ_LTX25ClipLoaderGGUF', 'LTXDirectorTJ25', 'LTXDirectorGuideTJ25', 'LTXDirectorCropGuidesTJ25', 'LTXVConditioning', 'LTXVConcatAVLatent', 'LTXVSeparateAVLatent', 'LTXVLatentUpsampler', 'LTXVAudioVAEDecode', 'CFGGuider', 'ManualSigmas', 'RandomNoise', 'SamplerCustomAdvanced', 'CreateVideo', 'SaveVideo', 'VHS_VideoCombine', 'DualCLIPLoader', 'TextEncodeAceStepAudio1.5', 'EmptyAceStep1.5LatentAudio', 'KSamplerSelect', 'BasicScheduler', 'SamplerCustom', 'VAEDecodeAudio', 'SaveAudioAdvanced', 'MiniMaxMusic3TextEncode', 'EmptyMiniMaxMusic3LatentAudio', 'ModelSamplingFlux', 'QwenImage21Cache', 'TextEncodeQwenImage21', 'FluxKontextImageScale', 'TextEncodeQwenImageEditPlus', 'FluxKontextMultiReferenceLatentMethod', 'TJ_NODE_Krea2UnetLoaderGGUF', 'TJ_NODE_Krea2ClipLoaderGGUF']);
 
 function validate(graph) {
   const errs = {};
@@ -47,7 +47,7 @@ function validate(graph) {
 }
 
 function execute(graph, promptId) {
-  const save = Object.entries(graph).filter(([, n]) => n.class_type === 'SaveImage' || n.class_type === 'PreviewImage');
+  const save = Object.entries(graph).filter(([, n]) => ['SaveImage', 'PreviewImage', 'SaveAudioAdvanced', 'SaveVideo'].includes(n.class_type));
   const lat = Object.values(graph).find((n) => /Empty.*Latent/.test(n.class_type));
   const w = typeof lat?.inputs?.width === 'number' ? lat.inputs.width : 512, h = typeof lat?.inputs?.height === 'number' ? lat.inputs.height : 512;
   const ks = Object.values(graph).find((n) => n.class_type === 'KSampler');
@@ -63,7 +63,9 @@ function execute(graph, promptId) {
       const name = `${path.basename(prefix)}_${String(Date.now()).slice(-6)}_.png`;
       const buf = png(Math.min(w, 512), Math.min(h, 512), (ks?.inputs?.seed ?? 1) % 997);
       files.set(`output/${sub}/${name}`, buf);
-      outputs[id] = { images: [{ filename: name, subfolder: sub, type: 'output' }] };
+      const isVideo = n.class_type === 'SaveVideo'; const isAudio = n.class_type === 'SaveAudioAdvanced';
+      if (isVideo) { const vn = name.replace('.png', '.mp4'); files.set(`output/${sub}/${vn}`, buf); outputs[id] = { images: [{ filename: vn, subfolder: sub, type: 'output', animated: true }] }; broadcast({ type: 'executed', data: { node: id, output: outputs[id], prompt_id: promptId } }); continue; } const an = name.replace('.png', '.flac'); if (isAudio) files.set(`output/${sub}/${an}`, buf);
+      outputs[id] = isAudio ? { audio: [{ filename: an, subfolder: sub, type: 'output' }] } : { images: [{ filename: name, subfolder: sub, type: 'output' }] };
       broadcast({ type: 'executed', data: { node: id, output: outputs[id], prompt_id: promptId } });
     }
     history[promptId] = { outputs, status: { status_str: 'success', completed: true, messages: [] } };
@@ -95,8 +97,12 @@ const routes = {
   '/system_stats': () => ({ system: { comfyui_version: '0.mock' }, devices: [{ name: 'Mock GPU' }] }),
   '/object_info/KSampler': () => ({ KSampler: { input: { required: { sampler_name: [['euler', 'res_multistep', 'er_sde', 'dpmpp_2m']], scheduler: [['simple', 'normal', 'karras']] } } } }),
   '/object_info/UpscaleModelLoader': () => ({ UpscaleModelLoader: { input: { required: { model_name: [['4x-UltraSharp.pth']] } } } }),
-  ...familyRoutes('/flux_klein', 'klein'), ...familyRoutes('/z_image_turbo', 'zimage'), ...familyRoutes('/krea2_one', 'krea2'), ...familyRoutes('/anima_one', 'anima'), ...familyRoutes('/qwen2511_one', 'qwen'), ...familyRoutes('/sdxl_one', 'sdxl'),
+  ...familyRoutes('/flux_klein', 'klein'), ...familyRoutes('/z_image_turbo', 'zimage'), ...familyRoutes('/krea2_one', 'krea2'), ...familyRoutes('/anima_one', 'anima'), ...familyRoutes('/qwenimage21_one', 'qwen21'), ...familyRoutes('/qwen2511_one', 'qwen'), ...familyRoutes('/sdxl_one', 'sdxl'),
   '/tj_studio_one/llm/models': () => ({ ok: true, gguf: ['qwen3.5-4B.gguf'], mmproj: ['mmproj-qwen3.5.gguf'], text_encoders: ['gemma4_e4b_it_fp8_scaled.safetensors'], clip_loader_types: ['Auto', 'flux2', 'lumina2'], local_available: true, openrouter_key_set: !!orKey, openrouter_key_hint: orKey ? '…' + orKey.slice(-4) : '', or_model_text: 'google/gemini-2.5-flash', or_model_vision: 'google/gemini-2.5-flash' }),
+  '/music_one/models': () => ({ diffusion_models: ['ace_step_v1.5.safetensors', 'minimax_music3.safetensors'], text_encoders: ['qwen_0.6b_ace.safetensors', 'qwen_4b_ace.safetensors', 'minimax_music_te.safetensors'], vaes: ['ace_vae.safetensors', 'audio_vae.safetensors'], loras: ['none'] }),
+  '/music_one/config': () => ({}),
+  '/ltx25_one/models': () => ({ diffusion_models: ['ltx-2.5-dev.safetensors'], text_encoders: ['gemma_3_12b.safetensors'], vaes: ['ltx_video_vae.safetensors', 'ltx_audio_vae.safetensors'], latent_upscale_models: ['ltx-2.5-upscaler-x2.safetensors'], loras: ['none'] }),
+  '/ltx25_one/node_availability': () => ({ available: { VHS_VideoCombine: false } }),
   '/tj_shared/llm_settings': () => ({ ok: true, settings: llmSettings }),
 };
 

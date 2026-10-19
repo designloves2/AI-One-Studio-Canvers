@@ -14,8 +14,10 @@ ComfyUI :8188  ── 표준 API: /prompt /ws /upload/image /view /history /obje
 | 용도 | 라우트 |
 |---|---|
 | 워크플로우 템플릿 (Klein) | `GET /flux_klein/workflow_{t2i,i2i,edit,inpaint,faceswap,remove_bg}` |
-| 모델 목록 / 저장된 선택 | `GET /{flux_klein,z_image_turbo,krea2_one,sdxl_one,anima_one,qwen2511_one}/{models,config}` |
+| 모델 목록 / 저장된 선택 | `GET /{flux_klein,z_image_turbo,krea2_one,sdxl_one,anima_one,qwen2511_one,qwenimage21_one}/{models,config}` |
 | 갤러리 / 삭제 / 입력 복사 | `GET …/gallery`, `POST …/delete`, `POST …/copy_to_input` |
+| 음악 모델/설정 | `GET /music_one/{models,config}` |
+| LTX 모델/가용 노드 | `GET /ltx25_one/{models,node_availability}` (없으면 `/minimax_h3_one/models`) |
 | LLM 카탈로그 | `GET /tj_studio_one/llm/models` |
 | LLM 텍스트 (4방식 공통) | `POST /tj_studio_one/llm/enhance` (`backend`: local · comfy · openrouter · custom) |
 | LLM 비전 (4방식 공통) | `POST /tj_studio_one/llm/image_to_prompt` |
@@ -33,6 +35,8 @@ ComfyUI :8188  ── 표준 API: /prompt /ws /upload/image /view /history /obje
 | `backend/comfy.ts` | ComfyUI 표준 API (업로드, 큐, WebSocket 진행률, 히스토리 폴백) |
 | `backend/imageGen.ts` | 모델 계열별 ComfyUI 그래프 생성 (Klein=템플릿 패치, 나머지=직접 구성) |
 | `backend/llm.ts` | LLM 4방식 클라이언트 + 서버 설정 동기화 |
+| `backend/ltx.ts`, `backend/music.ts`, `backend/workflow.ts` | LTX 2.5 비디오, Ace-Step/MiniMax 음악, 임의 API 워크플로우 |
+| `mcp/server.ts` | MCP 서버 (`npm run build:mcp` 로 `mcp/server.mjs` 생성) |
 | `backend/studio.ts` | STUDIO_ONE 라우트 래퍼, 모델 자동 선택 |
 | `editing/ops.ts` | 브라우저(Canvas 2D) 이미지 연산 |
 | `canvas/*` | React Flow 캔버스, 노드 카드, 뷰어, 페인터 |
@@ -48,8 +52,10 @@ ComfyUI :8188  ── 표준 API: /prompt /ws /upload/image /view /history /obje
 | 편집 노드(crop…pixelate), Painter, Blend, Matte | ✅ |
 | Import/Export/Preview/Router/Compare/Note/Number/Text/Toggle/Seed, 그룹 | ✅ |
 | ComfyUI Workflow 노드 (임의 API 워크플로우 → 비디오 포함) | ✅ |
-| Video Generate / Foley / Image→3D / Alpha Matte / Mask by Text | 🔜 (비디오는 H3·LTX 라우트로 연결 예정) |
-| 모델 다운로드 관리자, MCP 서버 | 🔜 |
+| Video Generate (LTX 2.5) | ✅ |
+| MCP 서버 | ✅ |
+| Foley / Image→3D / Alpha Matte / Mask by Text | 🔜 |
+| 모델 다운로드 관리자 | 🔜 (STUDIO_ONE에 다운로드 라우트가 생기면 연결) |
 
 ## 새 모델 계열 추가 순서
 1. `backend/studio.ts` 의 `FAMILIES` 에 라우트 접두사 추가

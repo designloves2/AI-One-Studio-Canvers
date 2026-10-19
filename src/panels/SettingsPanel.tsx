@@ -179,6 +179,48 @@ function Llm() {
   );
 }
 
+function MusicModels() {
+  const T = useT();
+  const music = useSettings((s) => s.music);
+  const setMusic = useSettings((s) => s.setMusic);
+  const [lists, setLists] = useState<{ diffusion_models: string[]; text_encoders: string[]; vaes: string[] } | null>(null);
+  const [auto, setAuto] = useState<Record<string, string | number>>({});
+  useEffect(() => {
+    void import('../backend/music').then(async (m) => { try { setLists((await m.musicBackend()).models); setAuto(await m.resolveMusicModels({})); } catch { /* backend without MusicMaker */ } });
+  }, []);
+  const rows: [string, string, string[] | undefined][] = [
+    ['ace_unet', 'Ace-Step diffusion', lists?.diffusion_models], ['ace_clip1', 'Ace-Step CLIP 1', lists?.text_encoders], ['ace_clip2', 'Ace-Step CLIP 2', lists?.text_encoders], ['ace_vae', 'Ace-Step VAE', lists?.vaes],
+    ['dit', 'MiniMax Music DiT', lists?.diffusion_models], ['clip', 'MiniMax Music encoder', lists?.text_encoders], ['dav', 'MiniMax Music audio VAE', lists?.vaes],
+  ];
+  return (
+    <section>
+      <h3>{T('Music models')}</h3>
+      {rows.map(([k, label, opts]) => <Row key={k} label={label}><Select value={music[k] ?? ''} onChange={(v) => setMusic(k, v)} options={opts ?? []} blank={`(auto${auto[k] ? ': ' + auto[k] : ''})`} /></Row>)}
+    </section>
+  );
+}
+
+function VideoModels() {
+  const T = useT();
+  const video = useSettings((s) => s.video);
+  const setVideo = useSettings((s) => s.setVideo);
+  const [lists, setLists] = useState<Awaited<ReturnType<typeof import('../backend/ltx').ltxModelLists>> | null>(null);
+  const [auto, setAuto] = useState<Record<string, string>>({});
+  useEffect(() => {
+    void import('../backend/ltx').then(async (m) => { try { setLists(await m.ltxModelLists()); const a = await m.resolveLtxModels({}); setAuto({ ltx_unet: a.unet, ltx_clip: a.clip, ltx_vae_video: a.vaeVideo, ltx_vae_audio: a.vaeAudio, ltx_upscaler: a.upscaler }); } catch { /* no LTX routes */ } });
+  }, []);
+  const rows: [string, string, string[] | undefined][] = [
+    ['ltx_unet', 'LTX diffusion', lists?.diffusion_models], ['ltx_clip', 'LTX text encoder', lists?.text_encoders_all ?? lists?.text_encoders], ['ltx_vae_video', 'LTX video VAE', lists?.vaes],
+    ['ltx_vae_audio', 'LTX audio VAE', lists?.vaes], ['ltx_upscaler', 'LTX latent upscaler', lists?.latent_upscale_models],
+  ];
+  return (
+    <section>
+      <h3>{T('Video models')}</h3>
+      {rows.map(([k, label, opts]) => <Row key={k} label={label}><Select value={video[k] ?? ''} onChange={(v) => setVideo(k, v)} options={opts ?? []} blank={`(auto${auto[k] ? ': ' + auto[k] : ''})`} /></Row>)}
+    </section>
+  );
+}
+
 export function SettingsPanel() {
-  return <div className="panel-body settings"><Connection /><Llm /><ImageModels /></div>;
+  return <div className="panel-body settings"><Connection /><Llm /><ImageModels /><VideoModels /><MusicModels /></div>;
 }

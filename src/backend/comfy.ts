@@ -82,7 +82,7 @@ export function onSocket(l: Listener): () => void {
   return () => listeners.delete(l);
 }
 
-export interface RunResult { promptId: string; images: FileRef[]; videos: FileRef[]; texts: string[]; raw: Record<string, any> }
+export interface RunResult { promptId: string; images: FileRef[]; videos: FileRef[]; audios: FileRef[]; texts: string[]; raw: Record<string, any> }
 
 export interface RunOptions {
   onProgress?: (pct: number, label?: string) => void;
@@ -104,7 +104,7 @@ export async function runPrompt(graph: Record<string, unknown>, opts: RunOptions
   const promptId: string = data.prompt_id;
 
   return new Promise<RunResult>((resolve, reject) => {
-    const out: RunResult = { promptId, images: [], videos: [], texts: [], raw: {} };
+    const out: RunResult = { promptId, images: [], videos: [], audios: [], texts: [], raw: {} };
     let settled = false;
     let poll: ReturnType<typeof setInterval> | undefined;
 
@@ -115,7 +115,7 @@ export async function runPrompt(graph: Record<string, unknown>, opts: RunOptions
       if (poll) clearInterval(poll);
       opts.signal?.removeEventListener('abort', onAbort);
       if (err) return reject(err);
-      if (out.images.length || out.videos.length || out.texts.length) return resolve(out);
+      if (out.images.length || out.videos.length || out.audios.length || out.texts.length) return resolve(out);
       // fully cached runs send no `executed` events — read the outputs from the history instead
       void (async () => {
         for (let i = 0; i < 6; i++) {
@@ -132,6 +132,7 @@ export async function runPrompt(graph: Record<string, unknown>, opts: RunOptions
       out.raw[nodeId] = output;
       for (const im of output?.images ?? []) out.images.push({ filename: im.filename, subfolder: im.subfolder ?? '', type: im.type ?? 'output' });
       for (const v of output?.gifs ?? output?.videos ?? []) out.videos.push({ filename: v.filename, subfolder: v.subfolder ?? '', type: v.type ?? 'output' });
+      for (const a of output?.audio ?? []) out.audios.push({ filename: a.filename, subfolder: a.subfolder ?? '', type: a.type ?? 'output' });
       for (const tx of output?.text ?? []) out.texts.push(String(tx));
     };
     const off = onSocket((m) => {
@@ -158,7 +159,7 @@ export async function runPrompt(graph: Record<string, unknown>, opts: RunOptions
           return finish(new Error(msg || 'execution error'));
         }
         if (e.outputs && (e.status?.completed || Object.keys(e.outputs).length)) {
-          out.images = []; out.videos = []; out.texts = [];
+          out.images = []; out.videos = []; out.audios = []; out.texts = [];
           for (const [nid, o] of Object.entries(e.outputs)) collect(nid, o);
           if (e.status?.completed) finish();
         }

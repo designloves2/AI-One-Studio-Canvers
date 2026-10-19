@@ -7,6 +7,8 @@ import { buildImageGraph, type ImageJob, type ImageMode } from '../backend/image
 import { FAMILIES, pickModels, type Family } from '../backend/studio';
 import { runLlm } from '../backend/llm';
 import { loadOptions } from '../backend/options';
+import { buildMusicGraph } from '../backend/music';
+import { buildLtxGraph, ltxSize } from '../backend/ltx';
 import { parseWorkflow, setField, VIDEO_EXT } from '../backend/workflow';
 import { useSettings } from '../store/settings';
 import { applyOp, blendOp, canvasToAsset, channelOp, invertMask, loadBitmap, maskGrow, palette, videoFrame } from '../editing/ops';
@@ -135,9 +137,11 @@ function sizeFrom(aspect: string, mp: number): { w: number; h: number } {
 async function runGraph(c: Ctx, graph: Record<string, unknown>): Promise<Asset[]> {
   const res = await runPrompt(graph, { onProgress: c.progress, signal: c.signal });
   const files = [...res.images, ...res.videos];
-  if (!files.length) throw new Error('ComfyUI finished but returned no image or video');
+  if (!files.length && !res.audios.length) throw new Error('ComfyUI finished but returned no image, video or audio');
   // SaveVideo reports mp4 files under `images`; sort by extension
-  return files.map((f) => (VIDEO_EXT.test(f.filename) ? assetFromFile(f, 'video', 'video') : assetFromFile(f, 'image', 'image')));
+  const audios = res.audios.map((f) => assetFromFile(f, 'audio', 'audio'));
+  if (audios.length && !files.length) return audios;
+  return [...audios, ...files.map((f) => (VIDEO_EXT.test(f.filename) ? assetFromFile(f, 'video', 'video') : assetFromFile(f, 'image', 'image')))];
 }
 
 function imageRunner(mode: (c: Ctx) => ImageMode): Runner {
@@ -154,7 +158,7 @@ function imageRunner(mode: (c: Ctx) => ImageMode): Runner {
     const imgs = c.inputs('image');
     const refs = m === 'faceswap' ? [...imgs, ...c.inputs('face')] : imgs;
     const inputFiles: string[] = [];
-    for (const a of refs.slice(0, 3)) inputFiles.push(await ensureInput(a));
+    for (const a of refs.slice(0, 10)) inputFiles.push(await ensureInput(a));
     const maskA = c.inputs('mask')[0];
     const maskFile = maskA ? await ensureInput(maskA) : undefined;
 
@@ -240,7 +244,7 @@ const RUNNERS: Record<string, Runner> = {
 
   // ---- image generation
   'image-generate': imageRunner(() => 't2i'),
-  'image-edit': imageRunner((c) => (c.engineId === 'klein-edit' || c.engineId === 'qwen-edit' || !c.engineId ? 'edit' : 'i2i')),
+  'image-edit': imageRunner((c) => (c.engineId === 'klein-edit' || c.engineId === 'qwen-edit' || c.engineId === 'qwen21-edit' || !c.engineId ? 'edit' : 'i2i')),
   inpaint: imageRunner(() => 'inpaint'),
   outpaint: imageRunner(() => 'outpaint'),
   'face-swap': imageRunner(() => 'faceswap'),
@@ -263,6 +267,17 @@ const RUNNERS: Record<string, Runner> = {
     g.u5 = { class_type: 'SaveImage', inputs: { images: last, filename_prefix: `${sub}/upscale` } };
     return runGraph(c, g);
   },
+  'music-generate': async (c) => {
+    const p = c.p; const si = c.inputs('seed_in')[0]; const sv = si ? num(si.text, -1) : num(p.seed, -1);
+    const stages = c.engineId === 'minimax' ? [num(p.steps1, 30)] : [num(p.steps1, 30), num(p.steps2, 20), num(p.steps3, 15)];
+    const graph = await buildMusicGraph({
+      engine: c.engineId === 'minimax' ? 'minimax' : 'acestep', caption: c.text('prompt'), lyrics: c.text('lyrics'),
+      seconds: num(p.seconds, 60), seed: sv < 0 ? Math.floor(Math.random() * 2 ** 40) : sv, bpm: num(p.bpm, 120), keyscale: str(p.keyscale, 'A minor'),
+      timesignature: str(p.timesignature, '4'), language: str(p.language, 'en'), format: str(p.format, 'flac') as 'flac', stageSteps: stages, cfg: num(p.cfg, 1),
+      models: useSettings.getState().music, saveSubfolder: useSettings.getState().saveSubfolder,
+    });
+    return runGraph(c, graph);
+  },
   'comfy-workflow': async (c) => {
     const { graph, error } = parseWorkflow(str(c.p.workflow));
     if (error) throw new Error(error);
@@ -281,7 +296,21 @@ const RUNNERS: Record<string, Runner> = {
     }
     return runGraph(c, g);
   },
-  'video-generate': async () => { throw new Error('Video engines (MiniMax H3 / LTX 2.5) are planned for the next phase.'); },
+  'video-generate': async (c) => {
+    const p = c.p; const si = c.inputs('seed_in')[0]; const sv = si ? num(si.text, -1) : num(p.seed, -1);
+    const first = c.inputs('image')[0], last = c.inputs('last')[0];
+    let size: { width: number; height: number } | undefined;
+    if (first && str(p.aspect) === 'auto') { const bm = await loadBitmap(first); size = ltxSize(`${bm.width}:${bm.height}`, num(p.megapixels, 1)); }
+    const lora = (n: string, s2: string) => ({ name: str(p[n], 'none'), strength: num(p[s2], 1) });
+    const graph = await buildLtxGraph({
+      prompt: c.text('prompt'), seconds: num(p.seconds, 5), aspect: str(p.aspect, '16:9'), megapixels: num(p.megapixels, 1),
+      first: first ? await ensureInput(first) : undefined, last: last ? await ensureInput(last) : undefined,
+      seed: sv < 0 ? Math.floor(Math.random() * 2 ** 40) : sv, steps: num(p.steps, 12), cfg: num(p.cfg, 1),
+      sampler: str(p.sampler, 'euler_ancestral'), scheduler: str(p.scheduler, 'linear_quadratic'), stage2Sigmas: str(p.stage2, '0.85, 0.7250, 0.4219, 0.0'),
+      loras: [lora('lora1', 'lora1_strength'), lora('lora2', 'lora2_strength')], models: useSettings.getState().video, saveSubfolder: useSettings.getState().saveSubfolder, size,
+    });
+    return runGraph(c, graph);
+  },
 
   // ---- browser-side edits
   crop: opRunner('crop'), resize: opRunner('resize'), blur: opRunner('blur'), levels: opRunner('levels'),

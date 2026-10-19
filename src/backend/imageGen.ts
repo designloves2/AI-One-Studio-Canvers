@@ -326,6 +326,30 @@ function buildQwen(job: ImageJob, m: { model: string; textEncoder: string; vae: 
   return { graph: g, hint: `Qwen Edit ${job.mode.toUpperCase()}` };
 }
 
+// ------------------------------------------------------------------------- Qwen Image 2.1
+function buildQwen21(job: ImageJob, m: { model: string; textEncoder: string; vae: string }): Built {
+  if (!['t2i', 'i2i', 'edit'].includes(job.mode)) throw new Error(`Qwen Image 2.1 has no "${job.mode}" mode`);
+  const g: G = {};
+  g['Q21:unet'] = unet(m.model);
+  g['Q21:clip'] = { class_type: 'CLIPLoader', inputs: { clip_name: m.textEncoder, type: 'qwen_image', device: 'default' } };
+  g['Q21:vae'] = { class_type: 'VAELoader', inputs: { vae_name: m.vae } };
+  const model = loraChain(g, ['Q21:unet', 0], job.loras, 'Q21:');
+  const w = job.width > 0 ? job.width : 1024, h = job.height > 0 ? job.height : 1024;
+  g['Q21:samp'] = { class_type: 'ModelSamplingFlux', inputs: { model, max_shift: 0.69, base_shift: 0.5, width: w, height: h } };
+  g['Q21:cache'] = { class_type: 'QwenImage21Cache', inputs: { model: ['Q21:samp', 0], device: 'auto', dtype: 'default' } };
+  const enc: G = { clip: ['Q21:clip', 0], vae: ['Q21:vae', 0], prompt: job.prompt, negative_prompt: job.negative, resolution: Math.max(w, h) };
+  const refs = job.mode === 't2i' ? [] : job.images.slice(0, 10);
+  if (job.mode !== 't2i' && !refs.length) throw new Error('Source image is required');
+  refs.forEach((img, i) => { g[`Q21:img${i}`] = { class_type: 'LoadImage', inputs: { image: img } }; enc[`images.image_${i + 1}`] = [`Q21:img${i}`, 0]; });
+  g['Q21:enc'] = { class_type: 'TextEncodeQwenImage21', inputs: enc };
+  let latent: [string, number] = ['Q21:enc', 2], denoise = job.mode === 'i2i' ? job.denoise : 1;
+  if (job.mode === 't2i') { g['Q21:latent'] = { class_type: 'EmptyLatentImage', inputs: { width: w, height: h, batch_size: job.batch } }; latent = ['Q21:latent', 0]; }
+  g['Q21:sampler'] = { class_type: 'KSampler', inputs: { model: ['Q21:cache', 0], positive: ['Q21:enc', 0], negative: ['Q21:enc', 1], latent_image: latent, seed: job.seed, steps: job.steps, cfg: job.cfg, sampler_name: job.sampler, scheduler: job.scheduler, denoise } };
+  g['Q21:decode'] = { class_type: 'VAEDecode', inputs: { samples: ['Q21:sampler', 0], vae: ['Q21:vae', 0] } };
+  g['Q21:save'] = saveNode(job, ['Q21:decode', 0], 'Q21');
+  return { graph: g, hint: `Qwen 2.1 ${job.mode.toUpperCase()}` };
+}
+
 // ------------------------------------------------------------------------- SDXL (checkpoint)
 function buildSdxl(job: ImageJob, m: { model: string }): Built {
   const g: G = {};
@@ -399,6 +423,7 @@ export async function buildImageGraph(job: ImageJob): Promise<Built> {
   const withDefaults = { ...job, negative: job.negative || picked.negative };
   if (job.family === 'klein') return buildKlein(withDefaults, m);
   if (job.family === 'krea2') return buildKrea2(withDefaults, m);
+  if (job.family === 'qwen21') return buildQwen21(withDefaults, m);
   if (job.family === 'qwen') return buildQwen(withDefaults, m);
   if (job.family === 'anima') return buildKrea2(withDefaults, m, true);
   if (job.family === 'sdxl') return buildSdxl(withDefaults, m);

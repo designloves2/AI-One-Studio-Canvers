@@ -39,19 +39,33 @@ LLM 4가지 방식은 [ComfyUI-TJ_NODE](https://github.com/designloves2/ComfyUI-
 
 설정은 서버에 저장되어 브라우저를 바꿔도 같습니다. `Test` 버튼으로 바로 확인하세요.
 
-## 지원 현황 (v0.1)
+## 지원 현황 (v0.3)
 
 | 구분 | 상태 |
 |---|---|
-| 이미지 생성/편집/인페인트/아웃페인트: Z-Image Turbo, Flux.2 Klein, Krea 2, SDXL, Anima, Qwen Image Edit 2511 | ✅ |
-| **ComfyUI Workflow 노드** — API 형식 JSON을 불러와 프롬프트/이미지/시드를 연결 (비디오 H3·LTX·Wan 등 어떤 워크플로우든 실행) | ✅ |
+| 이미지 생성/편집/인페인트/아웃페인트: Z-Image Turbo, Flux.2 Klein, Krea 2, SDXL, Anima, Qwen Image Edit 2511, Qwen Image 2.1 | ✅ |
 | 얼굴 교체(Klein), 배경 제거, 업스케일(ESRGAN 계열) | ✅ |
-| 브라우저 편집 노드 20종 (자르기·블러·레벨·블렌드·마스크 등), 페인터(마스크 그리기) | ✅ |
-| LLM 노드 3종 + 4가지 백엔드 | ✅ |
+| **비디오: LTX 2.5** (텍스트→영상, 첫/마지막 프레임→영상, 오디오 포함, 2단계 업스케일) | ✅ |
+| **음악: Ace-Step 1.5 / MiniMax Music 3** (스타일+가사 → 오디오) | ✅ |
+| **ComfyUI Workflow 노드** — API 형식 JSON을 불러와 어떤 워크플로우든 실행 (MiniMax H3, Wan 등 비디오 포함) | ✅ |
+| **MCP 서버** — Claude Code 등에서 생성·캔버스 실행 | ✅ |
+| 브라우저 편집 노드 20종, 페인터(마스크 그리기) | ✅ |
+| LLM 노드 3종 + 4가지 백엔드, 프롬프트 노드 ✨ 강화 버튼 | ✅ |
 | 그룹, 잠금, 실행취소/다시실행, 비교, 메모, 갤러리 | ✅ |
-| 비디오 전용 노드(MiniMax H3 · LTX 2.5 옵션 UI), Qwen 2.1, 음악(MusicMaker), MCP 서버 | 🔜 다음 단계 |
+| MiniMax H3 전용 옵션 화면, YuE2(음악), 모델 자동 다운로드 | 🔜 (H3는 워크플로우 노드로 사용 가능) |
 
-**비디오 쓰는 법:** ComfyUI에서 H3/LTX 워크플로우를 `Save (API Format)`으로 저장 → `ComfyUI Workflow` 노드에서 불러오기 → 프롬프트·이미지·시드 칸을 고르면 끝. 결과 영상은 노드에 재생됩니다.
+**H3 등 다른 비디오:** ComfyUI에서 워크플로우를 `Save (API Format)`으로 저장 → `ComfyUI Workflow` 노드에서 불러오기 → 프롬프트·이미지·시드 칸 선택.
+
+**모델 위치 설정:** 설정 탭의 *이미지/비디오/음악 모델*에서 파일을 고르거나 `(auto)`로 두면 STUDIO_ONE에 저장된 선택 또는 파일 이름으로 자동 선택합니다.
+
+## Claude에서 쓰기 (MCP)
+
+```
+npm run build:mcp
+claude mcp add canvers -e COMFY_URL=http://127.0.0.1:8188 -- node C:\경로\AI-One-Studio-Canvers\mcp\server.mjs
+```
+
+도구: `canvers_generate`(이미지·편집·비디오·음악 한 번 실행), `canvers_llm`, `canvers_build_canvas`(프롬프트 여러 개 → 캔버스 파일), `canvers_run_canvas`(캔버스 파일 실행), `canvers_list_nodes`, `canvers_status`.
 
 자세한 구조·백엔드 API 목록은 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 

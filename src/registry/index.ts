@@ -50,6 +50,10 @@ const qwen = (id: string, label: string, extra: ParamDef[] = [], size = false): 
   id, label, family: 'qwen',
   params: [...sizeParams(size), ...extra, ...sampler(20, 4, 'euler'), negative, ...loras('qwen'), num('batch', 'Batch', 1, { advanced: true }, 1, 4, 1), seed],
 });
+const qwen21 = (id: string, label: string, extra: ParamDef[] = [], size = false): EngineDef => ({
+  id, label, family: 'qwen21',
+  params: [...sizeParams(size), ...extra, ...sampler(20, 1, 'euler'), negative, ...loras('qwen21'), num('batch', 'Batch', 1, { advanced: true }, 1, 4, 1), seed],
+});
 const sdxl = (id: string, label: string, extra: ParamDef[] = [], size = false): EngineDef => ({
   id, label, family: 'sdxl',
   params: [...sizeParams(size), ...extra, ...sampler(20, 7, 'euler_ancestral', 'karras'), { ...negative, default: 'low quality, blurry, deformed, watermark' }, ...loras('sdxl'), num('batch', 'Batch', 1, { advanced: true }, 1, 4, 1), seed],
@@ -107,11 +111,13 @@ export const REGISTRY: NodeDef[] = [
       sdxl('sdxl', 'SDXL (local)', [], true),
       anima('anima', 'Anima (local)', [], true),
       qwen('qwen', 'Qwen Image Edit 2511 (local)', [], true),
+      qwen21('qwen21', 'Qwen Image 2.1 (local)', [], true),
     ], description: 'Text to image on your own ComfyUI.' },
   { id: 'image-edit', title: 'Image Edit', category: 'Image', kind: 'generate',
     inputs: [P.textIn(), P.imgIn('image', 'Images', false, true), P.seedIn()], outputs: [P.imgOut()], params: [],
     engines: [
       { ...klein('klein-edit', 'Flux.2 Klein — edit with references (local)'), default: true },
+      qwen21('qwen21-edit', 'Qwen Image 2.1 — up to 10 references (local)'),
       { ...qwen('qwen-edit', 'Qwen Image Edit 2511 — up to 3 references (local)') },
       klein('klein-i2i', 'Flux.2 Klein — img2img (local)', [slider('denoise', 'Denoise', 0.05, 1, 0.05, 0.75)]),
       zimage('zimage-i2i', 'Z-Image Turbo — img2img (local)', [slider('denoise', 'Denoise', 0.05, 1, 0.05, 0.75)]),
@@ -146,17 +152,21 @@ export const REGISTRY: NodeDef[] = [
     inputs: [P.imgIn()], outputs: [P.imgOut()], params: [],
     engines: [{ id: 'esrgan', label: 'Upscale model (ComfyUI core)', family: 'core', default: true, params: [dyn('upscale_model', 'Model', 'upscalers', 'none'), slider('scale_by', 'Final scale', 0.25, 4, 0.25, 1, { advanced: true })] }],
     description: 'Enlarge with an ESRGAN-type model from ComfyUI/models/upscale_models.' },
+  { id: 'music-generate', title: 'Music Generate', category: 'Audio', kind: 'generate',
+    inputs: [P.textIn('prompt', 'Style', false), P.textIn('lyrics', 'Lyrics', true), P.seedIn()], outputs: [{ id: 'audio', label: 'Audio', type: 'audio' }],
+    params: [], engines: [
+      { id: 'acestep', label: 'Ace-Step 1.5 (local)', family: 'music', default: true, params: [slider('seconds', 'Length (s)', 5, 300, 1, 60), num('bpm', 'BPM', 120, {}, 40, 240, 1), text('keyscale', 'Key', 'A minor'), sel('timesignature', 'Time signature', ['2', '3', '4', '6'], '4', { advanced: true }), sel('language', 'Language', ['en', 'ko', 'ja', 'zh', 'es', 'fr', 'de'], 'en', { advanced: true }), sel('format', 'Format', ['flac', 'mp3', 'opus'], 'flac', { advanced: true }), slider('steps1', 'Stage 1 steps', 1, 60, 1, 30, { advanced: true }), slider('steps2', 'Stage 2 steps (0 = off)', 0, 60, 1, 20, { advanced: true }), slider('steps3', 'Stage 3 steps (0 = off)', 0, 60, 1, 15, { advanced: true }), slider('cfg', 'Guidance', 0, 10, 0.1, 1, { advanced: true }), seed] },
+      { id: 'minimax', label: 'MiniMax Music 3 (local)', family: 'music', params: [slider('seconds', 'Length (s)', 5, 300, 1, 60), sel('format', 'Format', ['flac', 'mp3', 'opus'], 'flac', { advanced: true }), slider('steps1', 'Steps', 1, 80, 1, 30, { advanced: true }), slider('cfg', 'Guidance', 0, 10, 0.1, 1.7, { advanced: true }), seed] },
+    ], description: 'Songs and instrumentals. Style prompt (+ optional lyrics) in, audio out. Models: Settings → Music models.' },
   { id: 'comfy-workflow', title: 'ComfyUI Workflow', category: 'Workflow', kind: 'generate',
     inputs: [P.textIn('prompt', 'Prompt', true), P.imgIn('image', 'Images', true, true), { id: 'video', label: 'Video', type: 'video', optional: true }, P.seedIn()],
     outputs: [P.imgOut('image', 'Image'), { id: 'video', label: 'Video', type: 'video' }],
     params: [text('workflow', 'Workflow JSON', '', true, { advanced: true }), text('prompt_target', 'Prompt field', '', false, { advanced: true }), text('image_target', 'Image 1 field', '', false, { advanced: true }), text('image2_target', 'Image 2 field', '', false, { advanced: true }), text('video_target', 'Video field', '', false, { advanced: true }), text('seed_target', 'Seed field', '', false, { advanced: true }), { id: 'seed', label: 'Seed', control: { kind: 'seed' }, default: -1, advanced: true }],
     description: 'Run any API-format ComfyUI workflow (video, LTX, H3, Wan…). Load the JSON, pick which fields take the prompt / images / seed.' },
-  { id: 'video-generate', title: 'Video Generate', category: 'Video', kind: 'generate', planned: true,
-    inputs: [P.textIn('prompt', 'Prompt', true), P.imgIn('image', 'First frame', true), P.imgIn('last', 'Last frame', true)], outputs: [{ id: 'video', label: 'Video', type: 'video' }], params: [],
-    engines: [
-      { id: 'h3', label: 'MiniMax H3 ONE STUDIO', family: 'minimax', default: true, note: 'planned' },
-      { id: 'ltx25', label: 'LTX 2.5 ONE STUDIO', family: 'ltx25', note: 'planned' },
-    ], description: 'Planned: MiniMax H3 and LTX 2.5 through the STUDIO_ONE video routes.' },
+  { id: 'video-generate', title: 'Video Generate', category: 'Video', kind: 'generate',
+    inputs: [P.textIn('prompt', 'Prompt', false), P.imgIn('image', 'First frame', true), P.imgIn('last', 'Last frame', true), P.seedIn()], outputs: [{ id: 'video', label: 'Video', type: 'video' }], params: [],
+    engines: [{ id: 'ltx25', label: 'LTX 2.5 (local, with audio)', family: 'ltx25', default: true, params: [sel('aspect', 'Aspect ratio', [...ASPECTS, 'auto'], '16:9'), megapixels(1), slider('seconds', 'Length (s)', 2, 20, 1, 5), slider('steps', 'Steps', 1, 40, 1, 12, { advanced: true }), slider('cfg', 'Guidance', 0, 10, 0.1, 1, { advanced: true }), dyn('sampler', 'Sampler', 'samplers', 'euler_ancestral', { advanced: true }), dyn('scheduler', 'Scheduler', 'schedulers', 'linear_quadratic', { advanced: true }), text('stage2', 'Stage-2 sigmas', '0.85, 0.7250, 0.4219, 0.0', false, { advanced: true }), ...loras('ltx25'), seed] }],
+    description: 'Text → video, or first/last frame → video (LTX 2.5). For MiniMax H3 and others use the ComfyUI Workflow node.' },
 
   // ============================================================ Edit (runs in the browser)
   edit('crop', 'Crop', [num('x', 'X %', 0, {}, 0, 100, 1), num('y', 'Y %', 0, {}, 0, 100, 1), num('w', 'Width %', 100, {}, 1, 100, 1), num('h', 'Height %', 100, {}, 1, 100, 1)], 'Cut out a rectangle (percent of the image).'),
@@ -198,7 +208,7 @@ export const REGISTRY: NodeDef[] = [
 ];
 
 export const byId = new Map(REGISTRY.map((n) => [n.id, n]));
-export const CATEGORIES = ['Text / LLM', 'Image', 'Video', 'Workflow', 'Edit', 'Utility', 'Data'];
+export const CATEGORIES = ['Text / LLM', 'Image', 'Video', 'Audio', 'Workflow', 'Edit', 'Utility', 'Data'];
 
 /** the params a node shows: the engine's own set when it has one, else the node's. */
 export function paramsFor(def: NodeDef, engineId?: string): ParamDef[] {

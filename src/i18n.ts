@@ -47,6 +47,8 @@ const KO: Record<string, string> = {
   'Leave empty to use the built-in proxy (recommended).': '비워두면 내장 프록시를 사용합니다 (권장).',
   'Write a prompt first.': '먼저 프롬프트를 입력하세요.', Restore: '되돌리기',
   'Load workflow (API JSON)…': '워크플로우 불러오기 (API JSON)…', 'Replace workflow…': '워크플로우 바꾸기…', 'ComfyUI Workflow': 'ComfyUI 워크플로우', Workflow: '워크플로우', 'Prompt field': '프롬프트 칸', 'Image 1 field': '이미지 1 칸', 'Image 2 field': '이미지 2 칸', 'Video field': '비디오 칸', 'Seed field': '시드 칸',
+  'Music models': '음악 모델', 'Music Generate': '음악 생성', Audio: '오디오', 'Length (s)': '길이 (초)', Key: '키', Lyrics: '가사', Style: '스타일',
+  'Video models': '비디오 모델', 'First frame': '첫 프레임', 'Last frame': '마지막 프레임', 'Stage-2 sigmas': '2단계 시그마',
   // messages
   'Nothing here yet.': '아직 아무것도 없습니다.', 'Connect an input first.': '먼저 입력을 연결하세요.',
 };

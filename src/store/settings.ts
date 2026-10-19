@@ -43,7 +43,13 @@ export interface Settings {
   keys: { custom: string; openrouter: string };
   /** per image family overrides picked in Settings → Image models (blank = backend default) */
   models: Record<string, ModelChoice>;
+  /** MusicMaker model files (ace_unet, ace_clip1, ace_clip2, ace_vae, dit, clip, dav); blank = backend default */
+  music: Record<string, string>;
+  /** LTX 2.5 model files (ltx_unet, ltx_clip, ltx_vae_video, ltx_vae_audio, ltx_upscaler) */
+  video: Record<string, string>;
+  setVideo: (k: string, v: string) => void;
   saveSubfolder: string;
+  setMusic: (k: string, v: string) => void;
   set: (patch: Partial<Pick<Settings, 'comfyUrl' | 'saveSubfolder'>>) => void;
   setLlm: (patch: Partial<LlmSettings>) => void;
   setKey: (which: 'custom' | 'openrouter', v: string) => void;
@@ -59,8 +65,8 @@ function load(): Partial<Settings> {
 export const useSettings = create<Settings>((set, get) => {
   const saved = load();
   const persist = () => {
-    const { comfyUrl, llm, models, saveSubfolder } = get();
-    try { localStorage.setItem(KEY, JSON.stringify({ comfyUrl, llm, models, saveSubfolder })); } catch { /* ignore */ }
+    const { comfyUrl, llm, models, saveSubfolder, music, video } = get();
+    try { localStorage.setItem(KEY, JSON.stringify({ comfyUrl, llm, models, saveSubfolder, music, video })); } catch { /* ignore */ }
   };
   return {
     comfyUrl: saved.comfyUrl ?? '',
@@ -68,6 +74,10 @@ export const useSettings = create<Settings>((set, get) => {
     keys: { custom: '', openrouter: '' },
     models: saved.models ?? {},
     saveSubfolder: saved.saveSubfolder ?? 'ai-one-canvers',
+    music: saved.music ?? {},
+    video: saved.video ?? {},
+    setVideo: (k, v) => { set({ video: { ...get().video, [k]: v } }); persist(); },
+    setMusic: (k, v) => { set({ music: { ...get().music, [k]: v } }); persist(); },
     set: (patch) => { set(patch); persist(); },
     setLlm: (patch) => { set({ llm: { ...get().llm, ...patch } }); persist(); },
     setKey: (which, v) => set({ keys: { ...get().keys, [which]: v } }),

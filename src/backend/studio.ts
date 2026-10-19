@@ -1,13 +1,14 @@
 // Client for the routes that ComfyUI-TJ_NODE_STUDIO_ONE adds to ComfyUI.
 import { getJson, postJson } from './http';
 
-export type Family = 'klein' | 'zimage' | 'krea2' | 'sdxl' | 'anima' | 'qwen';
+export type Family = 'klein' | 'zimage' | 'krea2' | 'sdxl' | 'anima' | 'qwen' | 'qwen21';
 
 export const FAMILIES: Record<Family, { prefix: string; label: string; match: RegExp }> = {
   klein: { prefix: '/flux_klein', label: 'Flux.2 Klein', match: /klein/i },
   zimage: { prefix: '/z_image_turbo', label: 'Z-Image Turbo', match: /z[_-]?image/i },
   krea2: { prefix: '/krea2_one', label: 'Krea 2', match: /krea/i },
   qwen: { prefix: '/qwen2511_one', label: 'Qwen Image Edit 2511', match: /qwen.*(image|edit)/i },
+  qwen21: { prefix: '/qwenimage21_one', label: 'Qwen Image 2.1', match: /qwen.*(image|2\.?1)/i },
   anima: { prefix: '/anima_one', label: 'Anima', match: /anima/i },
   sdxl: { prefix: '/sdxl_one', label: 'SDXL', match: /xl|juggernaut|pony|illustrious/i },
 };
@@ -62,8 +63,8 @@ export async function pickModels(f: Family, override?: { model?: string; textEnc
   const savedModel = f === 'sdxl' ? (cfg.selected_checkpoint || cfg.checkpoint) : cfg.selected_model;
   return {
     model: pick(override?.model, savedModel, modelList, f === 'sdxl' ? undefined : m),
-    textEncoder: pick(override?.textEncoder, cfg.selected_text_encoder, lists?.text_encoders, f === 'klein' ? /qwen.*8b/i : f === 'krea2' ? /qwen3vl/i : f === 'anima' ? /qwen_3_06b/i : f === 'qwen' ? /qwen_2\.5_vl/i : /qwen.*4b/i),
-    vae: pick(override?.vae, cfg.selected_vae, lists?.vaes, f === 'klein' ? /flux2/i : f === 'krea2' || f === 'anima' || f === 'qwen' ? /qwen_image/i : /^ae/i),
+    textEncoder: pick(override?.textEncoder, cfg.selected_text_encoder, lists?.text_encoders, f === 'klein' ? /qwen.*8b/i : f === 'krea2' ? /qwen3vl/i : f === 'anima' ? /qwen_3_06b/i : f === 'qwen' || f === 'qwen21' ? /qwen_2\.5_vl|qwen.*vl|qwen3/i : /qwen.*4b/i),
+    vae: pick(override?.vae, cfg.selected_vae, lists?.vaes, f === 'klein' ? /flux2/i : f === 'krea2' || f === 'anima' || f === 'qwen' || f === 'qwen21' ? /qwen_image/i : /^ae/i),
     negative: (cfg.negative_prompt as string) ?? '',
     suffix: (cfg.prompt_suffix as string) ?? '',
     lists,
