@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useT } from '../i18n';
 
-export interface CtxItem { label: string; shortcut?: string; danger?: boolean; disabled?: boolean; divider?: boolean; onClick?: () => void }
+export interface CtxItem { swatches?: { value: string | undefined; title: string }[]; onPick?: (v: string | undefined) => void; label: string; shortcut?: string; danger?: boolean; disabled?: boolean; divider?: boolean; onClick?: () => void }
 
 /** Right-click menu for cards, selections and the empty canvas. */
 export function ContextMenu({ x, y, items, onClose }: { x: number; y: number; items: CtxItem[]; onClose(): void }) {
@@ -18,9 +18,11 @@ export function ContextMenu({ x, y, items, onClose }: { x: number; y: number; it
       {items.map((it, i) => (
         <div key={i}>
           {it.divider && <hr />}
-          <button className={it.danger ? 'danger' : ''} disabled={it.disabled} onClick={() => { it.onClick?.(); onClose(); }}>
+          {it.swatches ? (
+            <div className="ctx-swatches"><span>{T(it.label)}</span>{it.swatches.map((sw, k) => <i key={k} title={sw.title} style={{ background: sw.value ?? 'var(--bg2)' }} className={sw.value ? '' : 'none'} onClick={() => { it.onPick?.(sw.value); onClose(); }} />)}</div>
+          ) : <button className={it.danger ? 'danger' : ''} disabled={it.disabled} onClick={() => { it.onClick?.(); onClose(); }}>
             <span>{T(it.label)}</span>{it.shortcut && <kbd>{it.shortcut}</kbd>}
-          </button>
+          </button>}
         </div>
       ))}
     </div>

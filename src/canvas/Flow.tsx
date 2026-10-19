@@ -18,7 +18,7 @@ import { saveSelectionAsDeck } from '../decks';
 const nodeTypes = { card: CanvasNode, group: GroupNode };
 
 export function Flow({ tool, onMenu }: { tool: 'select' | 'hand'; onMenu(at: { x: number; y: number; flow: { x: number; y: number }; pending?: Pending }): void }) {
-  const [ctx, setCtx] = useState<{ x: number; y: number; ids: string[] } | null>(null);
+  const [ctx, setCtx] = useState<{ x: number; y: number; ids: string[]; edge?: string } | null>(null);
   const nodes = useGraph((s) => s.nodes);
   const edges = useGraph((s) => s.edges);
   const selected = useGraph((s) => s.selected);
@@ -37,11 +37,12 @@ export function Flow({ tool, onMenu }: { tool: 'select' | 'hand'; onMenu(at: { x
     };
   }), [nodes, selected]);
 
+  const [selEdges, setSelEdges] = useState<string[]>([]);
   const rfEdges = useMemo<Edge[]>(() => edges.map((e) => {
     const src = nodes.find((n) => n.id === e.source);
     const port = src ? byId.get(src.defId)?.outputs.find((o) => o.id === e.sourceHandle) : undefined;
-    return { id: e.id, source: e.source, sourceHandle: e.sourceHandle, target: e.target, targetHandle: e.targetHandle, style: { stroke: port ? PORT_COLORS[port.type] : '#777', strokeWidth: 2 } };
-  }), [edges, nodes]);
+    return { id: e.id, selected: selEdges.includes(e.id), interactionWidth: 26, source: e.source, sourceHandle: e.sourceHandle, target: e.target, targetHandle: e.targetHandle, style: { stroke: port ? PORT_COLORS[port.type] : '#777', strokeWidth: 2 } };
+  }), [edges, nodes, selEdges]);
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     const g = useGraph.getState();
@@ -71,6 +72,7 @@ export function Flow({ tool, onMenu }: { tool: 'select' | 'hand'; onMenu(at: { x
   }, []);
 
   const onEdgesChange = useCallback((changes: EdgeChange[]) => {
+    for (const c of changes) if (c.type === 'select') setSelEdges((cur) => (c.selected ? [...new Set([...cur, c.id])] : cur.filter((x) => x !== c.id)));
     const rm = changes.filter((c) => c.type === 'remove').map((c) => (c as any).id as string);
     if (rm.length) useGraph.getState().removeEdges(rm);
   }, []);
@@ -90,6 +92,7 @@ export function Flow({ tool, onMenu }: { tool: 'select' | 'hand'; onMenu(at: { x
     onMenu({ x: e.clientX, y: e.clientY, flow: rf.screenToFlowPosition({ x: e.clientX, y: e.clientY }), pending: { node: node.id, handle: port.id, dir, type: port.type } });
   }, [rf, onMenu]);
 
+  const COLORS = [{ value: undefined, title: 'default' }, { value: '#2a1d1f', title: 'red' }, { value: '#2a2418', title: 'amber' }, { value: '#1b2a1f', title: 'green' }, { value: '#182a2c', title: 'teal' }, { value: '#1b2233', title: 'blue' }, { value: '#251d33', title: 'purple' }, { value: '#2e1d2a', title: 'pink' }, { value: '#2b2b2b', title: 'grey' }];
   const ctxItems = (ids: string[]): CtxItem[] => {
     const g = useGraph.getState(); const has = ids.length > 0;
     const lockedAll = has && ids.every((id) => g.nodes.find((n) => n.id === id)?.locked);
@@ -100,6 +103,7 @@ export function Flow({ tool, onMenu }: { tool: 'select' | 'hand'; onMenu(at: { x
       grp ? { label: 'Ungroup', shortcut: 'Ctrl G', divider: true, onClick: () => g.ungroup(ids[0]) } : { label: 'Group selection', shortcut: 'Ctrl G', disabled: !has, divider: true, onClick: () => g.group(ids) },
       { label: 'Duplicate', shortcut: 'Ctrl D', disabled: !has, onClick: () => g.duplicateNodes(ids) },
       { label: lockedAll ? 'Unlock' : 'Lock', disabled: !has, onClick: () => g.setLocked(ids, !lockedAll) },
+      { label: 'Card colour', swatches: COLORS, divider: true, onPick: (v) => g.setColor(ids, v), disabled: !has },
       { label: 'Save selection as deck', disabled: !has, onClick: () => { g.select(ids); saveSelectionAsDeck(`Deck ${new Date().toLocaleTimeString()}`); } },
       { label: 'Delete', shortcut: 'Del', danger: true, disabled: !has, divider: true, onClick: () => g.removeNodes(ids) },
     ];
@@ -129,6 +133,10 @@ export function Flow({ tool, onMenu }: { tool: 'select' | 'hand'; onMenu(at: { x
       <ReactFlow
         nodes={rfNodes} edges={rfEdges} nodeTypes={nodeTypes}
         onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect} onConnectEnd={onConnectEnd} isValidConnection={isValid}
+        onEdgeContextMenu={(e, ed) => { e.preventDefault(); setCtx({ x: e.clientX, y: e.clientY, ids: [], edge: ed.id }); }}
+        onEdgeDoubleClick={(_, ed) => useGraph.getState().removeEdges([ed.id])}
+        edgesReconnectable onReconnect={(old, c) => { const g = useGraph.getState(); if (!c.source || !c.target || !c.sourceHandle || !c.targetHandle) return; g.removeEdges([old.id]); g.connect({ source: c.source, sourceHandle: c.sourceHandle, target: c.target, targetHandle: c.targetHandle }); }}
+        onReconnectEnd={(_, ed, __, st) => { if (!st.isValid) useGraph.getState().removeEdges([ed.id]); }}
         onNodeContextMenu={(e, n) => { e.preventDefault(); const sel = useGraph.getState().selected; const ids = sel.includes(n.id) ? sel : [n.id]; if (!sel.includes(n.id)) useGraph.getState().select([n.id]); setCtx({ x: e.clientX, y: e.clientY, ids }); }}
         onSelectionContextMenu={(e, ns) => { e.preventDefault(); setCtx({ x: e.clientX, y: e.clientY, ids: ns.map((n) => n.id) }); }}
         onPaneContextMenu={(e) => { e.preventDefault(); setCtx({ x: e.clientX, y: e.clientY, ids: [] }); }}
@@ -143,7 +151,7 @@ export function Flow({ tool, onMenu }: { tool: 'select' | 'hand'; onMenu(at: { x
         <RFControls showInteractive={false} position="bottom-right" />
         <MiniMap pannable zoomable nodeColor="#3a4150" maskColor="rgba(10,12,16,.7)" position="bottom-left" />
       </ReactFlow>
-      {ctx && <ContextMenu x={ctx.x} y={ctx.y} items={ctxItems(ctx.ids)} onClose={() => setCtx(null)} />}
+      {ctx && <ContextMenu x={ctx.x} y={ctx.y} items={ctx.edge ? [{ label: 'Disconnect', shortcut: 'Del', danger: true, onClick: () => useGraph.getState().removeEdges([ctx.edge!]) }] : ctxItems(ctx.ids)} onClose={() => setCtx(null)} />}
       {nodes.length === 0 && (
         <div className="hint">
           <h2>AI ONE Studio Canvers</h2>

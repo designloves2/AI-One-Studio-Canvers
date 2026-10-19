@@ -259,7 +259,7 @@ const PlainNode = memo(function PlainNode({ id, selected }: NodeProps) {
   }
 
   return (
-    <div className={`cnode ${selected ? 'sel' : ''} ${running ? 'running' : ''} ${rt?.status === 'error' ? 'err' : ''}`} style={{ width: node.w ?? 300, ['--k' as string]: color }}>
+    <div className={`cnode ${selected ? 'sel' : ''} ${running ? 'running' : ''} ${rt?.status === 'error' ? 'err' : ''}`} style={{ width: node.w ?? 300, ['--k' as string]: color, ...(node.color ? { background: node.color } : {}) }}>
       {running && <div className="run-overlay"><span className="spin" /><b>RUNNING…</b>{rt?.label && <em>{rt.label}</em>}</div>}
       <div className="cnode-head">
         <i className="dot" />

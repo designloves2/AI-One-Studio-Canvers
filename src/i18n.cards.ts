@@ -19,6 +19,7 @@ export const KO_CARDS: Record<string, string> = {
   'DiT model': 'DiT 모델', 'VAE model': 'VAE 모델', 'Target resolution (short edge)': '목표 해상도 (짧은 변)', 'Max resolution': '최대 해상도', 'Colour correction': '색 보정', 'Offload device': '오프로드 장치', 'Blocks to swap': '스왑 블록 수',
   'Add Audio to Video': '영상에 오디오 넣기', 'Start the audio at (s)': '오디오 시작 위치 (초)',
   'Scene Detect': '장면 감지', 'Beat Detect': '비트 감지', 'Sensitivity (lower = more cuts)': '민감도 (낮을수록 더 많이 자름)', 'Audio / video': '오디오 / 영상',
+  Disconnect: '연결 끊기', 'Card colour': '카드 색상',
   // ports
   'LoRA cards': 'LoRA 카드', 'H3 option cards': 'H3 옵션 카드', 'Option cards': '옵션 카드', Video: '영상', Videos: '영상들', 'Videos (in order)': '영상 (연결 순서)',
   'Face references': '얼굴 레퍼런스', 'Character reference': '캐릭터 레퍼런스', 'Prompt (optional)': '프롬프트 (선택)', 'Overall prompt': '전체 프롬프트', 'Images (in time order)': '이미지 (시간순)',

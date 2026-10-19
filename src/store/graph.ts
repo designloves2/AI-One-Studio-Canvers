@@ -58,6 +58,7 @@ interface State {
   setParam(id: string, key: string, v: Primitive): void;
   setEngine(id: string, engineId: string): void;
   setTitle(id: string, title: string): void;
+  setColor(ids: string[], color: string | undefined): void;
   setLocked(ids: string[], locked: boolean): void;
   setResults(id: string, assets: Asset[], mode?: 'append' | 'replace'): void;
   clearResults(id: string): void;
@@ -160,6 +161,7 @@ export const useGraph = create<State>((set, get) => ({
       }),
     });
   },
+  setColor: (ids, color) => { get().snapshot(); set({ nodes: get().nodes.map((n) => (ids.includes(n.id) ? { ...n, color } : n)) }); },
   setTitle: (id, title) => set({ nodes: get().nodes.map((n) => (n.id === id ? { ...n, title } : n)) }),
   setLocked: (ids, locked) => set({ nodes: get().nodes.map((n) => (ids.includes(n.id) ? { ...n, locked } : n)) }),
   setResults: (id, assets, mode = 'replace') =>

@@ -91,6 +91,8 @@ export interface GraphNode {
   activeResult: number;
   locked?: boolean;
   title?: string;
+  /** card background colour (right-click → Card colour) */
+  color?: string;
   /** group frame: ids of the nodes that move with it */
   members?: string[];
 }

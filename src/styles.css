@@ -178,3 +178,6 @@ kbd { background: var(--bg3); border: 1px solid var(--line2); border-radius: 4px
 .run-overlay b { letter-spacing: .14em; font-size: 13px; animation: runpulse 1.2s ease-in-out infinite; } .run-overlay em { font-style: normal; font-size: 11px; color: var(--muted); max-width: 90%; text-align: center; }
 .run-overlay .spin { width: 22px; height: 22px; border: 3px solid rgba(255,255,255,.25); border-top-color: var(--acc); border-radius: 50%; animation: runspin .8s linear infinite; }
 @keyframes runspin { to { transform: rotate(360deg); } } @keyframes runpulse { 50% { opacity: .45; } }
+
+.ctx-swatches { display: flex; align-items: center; gap: 6px; padding: 7px 10px; flex-wrap: wrap; } .ctx-swatches span { flex-basis: 100%; color: var(--muted); font-size: 11px; } .ctx-swatches i { width: 20px; height: 20px; border-radius: 6px; border: 1px solid var(--line2); cursor: pointer; } .ctx-swatches i.none { background: repeating-linear-gradient(45deg, var(--bg3), var(--bg3) 4px, var(--bg2) 4px, var(--bg2) 8px) !important; } .ctx-swatches i:hover { outline: 2px solid var(--acc); }
+.react-flow__edge:hover path.react-flow__edge-path { stroke-width: 3.5; filter: brightness(1.4); } .react-flow__edge.selected path.react-flow__edge-path { stroke-width: 3.5; stroke-dasharray: 6 4; }
