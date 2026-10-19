@@ -1,4 +1,5 @@
 import type { Asset, GraphEdge, GraphNode, Project } from '../types';
+import { notify } from '../ui/dialog';
 import { useGraph, type ComposerRun } from '../store/graph';
 import { executeGraph, importFile } from './run';
 import { byId, defaultParams, engineFor } from '../registry';
@@ -63,7 +64,7 @@ export function openProjectFile() {
       const p = JSON.parse(await f.text()) as Project;
       if (!Array.isArray(p.nodes) || !Array.isArray(p.edges)) throw new Error('not a canvas file');
       useGraph.getState().loadProject(p);
-    } catch (e) { alert(`Cannot open: ${(e as Error).message}`); }
+    } catch (e) { void notify(`Cannot open: ${(e as Error).message}`); }
   };
   i.click();
 }

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useGraph } from '../store/graph';
 import { byId, engineFor, defaultParams, paramsFor } from '../registry';
 import { Field } from '../ui/Controls';
@@ -7,8 +7,12 @@ import { runComposer, download, addImports } from '../engine/actions';
 import { importFile } from '../engine/run';
 import type { Asset, Primitive } from '../types';
 import { runLlm } from '../backend/llm';
+import { formatFor, NO_AESTHETIC } from '../backend/promptStyle';
+import { enhanceWithImages } from '../backend/refEnhance';
+import { runRefine } from '../ui/refine';
 import { useT } from '../i18n';
 import { useOptions } from '../backend/options';
+import { openLightbox } from '../ui/Lightbox';
 
 const MODELS = ['image-generate', 'image-edit', 'outpaint', 'video-generate'];
 
@@ -32,11 +36,22 @@ export function SimpleView() {
   const shown = useMemo(() => paramsFor(def, engineId).filter((p) => (!p.when || p.when(params))), [def, engineId, params]);
   const needsImage = def.inputs.some((i) => i.type === 'image' && !i.optional);
 
+  const styleNow = () => ({ ...formatFor(defId, engineId), aesthetic: NO_AESTHETIC, extra_instructions: '' });
   const enhance = async () => {
     if (!prompt.trim()) return; setBusy(true); setNote('');
     try {
-      setPrompt(await runLlm({ system: 'Rewrite the idea as a rich, detailed image-generation prompt in English. Output only the prompt.', prompt }));
+      const style = styleNow();
+      const imgs = refs.filter((r) => r.type === 'image');
+      setPrompt(imgs.length
+        ? await enhanceWithImages({ idea: prompt, images: imgs, purpose: style.purpose, modelStyle: style })
+        : await runLlm({ system: '', prompt, style }));
     } catch (e) { setNote((e as Error).message); } finally { setBusy(false); }
+  };
+  const refine = async () => {
+    if (!prompt.trim()) return; setNote('');
+    const style = styleNow(); const cur = prompt;
+    const accepted = await runRefine(cur, (instruction) => runLlm({ system: '', prompt: cur, refine: instruction, style }));
+    if (accepted) setPrompt(accepted);
   };
   // H3 speed-up (Turbo LoRA + optional 7+1 hi-res finish) rides along as an option card
   const [turbo, setTurbo] = useState({ on: false, lora: 'none', hires: true });
@@ -53,21 +68,16 @@ export function SimpleView() {
         {!runs.length && <div className="hint"><h2>AI ONE Studio Canvers</h2><p>{T('Describe what you want below and press Generate.')}</p></div>}
         {runs.map((r) => (
           <article key={r.id} className="sim-run">
-            <header><b>{r.engineLabel}</b><span className="muted">{new Date(r.createdAt).toLocaleTimeString()}</span><span className="spacer" /><button className="x" onClick={() => useGraph.getState().removeComposerRun(r.id)}>✕</button></header>
-            <p className="run-prompt">{r.prompt}</p>
-            {r.status === 'running' && <div className="bar big"><b style={{ width: `${Math.max(6, r.pct)}%` }} /><em>{r.pct}%</em></div>}
-            {r.status === 'error' && <div className="error">{r.error}</div>}
-            <div className="run-results">
-              {r.results.map((a) => (
-                <div key={a.id} className="run-img">
-                  <AssetView asset={a} />
-                  <div className="run-actions">
-                    <button className="btn" onClick={() => download(a.url, a.file?.filename ?? 'result.png')}>{T('Download')}</button>
-                    <button className="btn" onClick={() => setRefs((p) => [...p, a])}>{T('Use as reference')}</button>
-                    <button className="btn" onClick={() => { const g = useGraph.getState(); const id = g.addNode('import', 100, 100); g.setResults(id, [a]); g.setMode('canvas'); }}>{T('To canvas')}</button>
-                  </div>
-                </div>
-              ))}
+            <div className="bubble user"><p className="run-prompt">{r.prompt}</p><time>{new Date(r.createdAt).toLocaleTimeString()}</time></div>
+            <div className="bubble bot">
+              <header><b>{r.engineLabel}</b><span className="spacer" /><button className="x" title={T('Delete')} onClick={() => useGraph.getState().removeComposerRun(r.id)}>✕</button></header>
+              {r.status === 'running' && <div className="bar big"><b style={{ width: `${Math.max(6, r.pct)}%` }} /><em>{r.pct}%</em></div>}
+              {r.status === 'error' && <div className="error">{r.error}</div>}
+              <div className="run-results">
+                {r.results.map((a) => (
+                  <RunImg key={a.id} a={a} onRef={() => setRefs((p) => [...p, a])} />
+                ))}
+              </div>
             </div>
           </article>
         ))}
@@ -83,6 +93,7 @@ export function SimpleView() {
           <button className="btn" onClick={() => file.current?.click()}>＋ {T('Reference')}</button>
           <button className="btn" onClick={() => setOpen((o) => !o)}>⚙ {T('Options')}</button>
           <button className="btn" disabled={busy || !prompt.trim()} onClick={() => void enhance()} title="LLM (Settings)">✨ {T('Enhance')}</button>
+          <button className="btn" disabled={busy || !prompt.trim()} onClick={() => void refine()}>✎ {T('Refine')}</button>
           <span className="spacer" />
           {note && <span className="error-inline">{note}</span>}
           <button className="btn primary big" disabled={!prompt.trim() && !needsImage} onClick={go}>{T('Generate')}</button>
@@ -100,3 +111,28 @@ export function SimpleView() {
   );
 }
 export { addImports };
+
+/** One result of a simple-mode run. When its file is gone (deleted from the gallery / disk) the actions are disabled. */
+function RunImg({ a, onRef }: { a: Asset; onRef(): void }) {
+  const T = useT();
+  const [gone, setGone] = useState(false);
+  useEffect(() => {
+    let live = true;
+    if (a.type === 'text' || !a.url) return;
+    fetch(a.url, { method: 'HEAD' }).then((r) => { if (live && r.status === 404) setGone(true); }).catch(() => undefined);
+    return () => { live = false; };
+  }, [a.url]);
+  return (
+    <div className={`run-img${gone ? ' gone' : ''}`}>
+      <div className={`run-media${gone || a.type === 'text' || a.type === 'audio' ? '' : ' zoomable'}`} title={gone ? undefined : T('Click to enlarge')} onClick={() => { if (!gone && (a.type === 'image' || a.type === 'video')) openLightbox({ url: a.url, type: a.type, name: a.file?.filename ?? (a.type === 'video' ? 'result.mp4' : 'result.png') }); }}>
+        <AssetView asset={a} controls={false} onBroken={() => setGone(true)} />
+        {a.type === 'video' && !gone && <span className="play-badge">▶</span>}
+      </div>
+      <div className="run-actions">
+        <button className="btn" disabled={gone} onClick={() => download(a.url, a.file?.filename ?? 'result.png')}>{T('Download')}</button>
+        <button className="btn" disabled={gone} onClick={onRef}>{T('Use as reference')}</button>
+        <button className="btn" disabled={gone} onClick={() => { const g = useGraph.getState(); const id = g.addNode(a.type === 'video' ? 'import-video' : 'import', 100, 100); g.setResults(id, [a]); g.setMode('canvas'); }}>{T('To canvas')}</button>
+      </div>
+    </div>
+  );
+}

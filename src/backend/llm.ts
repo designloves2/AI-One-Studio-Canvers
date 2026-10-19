@@ -87,7 +87,12 @@ async function ensureCustomKeys(roles: string[]): Promise<void> {
 
 // ---- generation
 export interface LlmRequest {
+  /** full system prompt (used when `style` and `refine` are not given) */
   system: string;
+  /** let the server build the system prompt from the target model format / aesthetic / purpose (ONE STUDIO style) */
+  style?: { model_format: string; aesthetic: string; purpose: string; extra_instructions: string };
+  /** revise `prompt` according to this instruction instead of enhancing it */
+  refine?: string;
   prompt: string;
   images?: Asset[];
   /** override a few sampler knobs per call */
@@ -154,7 +159,9 @@ export async function runLlm(req: LlmRequest): Promise<string> {
   } else {
     res = await postJson('/tj_studio_one/llm/enhance', {
       ...common(l, req),
-      system_override: req.system || 'You are a helpful assistant. Answer concisely.',
+      ...(req.refine ? { refine_instruction: req.refine, ...(req.style ?? {}) }
+        : req.style ? { ...req.style }
+        : { system_override: req.system || 'You are a helpful assistant. Answer concisely.' }),
       prompt: req.prompt,
     });
   }

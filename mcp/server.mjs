@@ -2697,9 +2697,9 @@ var REGISTRY = [
     title: "Prompt Enhancer",
     category: "Text / LLM",
     kind: "llm",
-    inputs: [P.textIn("text", "Text")],
+    inputs: [P.textIn("text", "Text"), P.imgIn("image", "Reference images (optional)", true, true)],
     outputs: [P.textOut()],
-    params: [sel("purpose", "For", ["Image", "Video"], "Image"), text("style", "Guidelines", "Rewrite as a rich, detailed generation prompt. Keep the core idea.", true), toggle("english", "Write in English", true, { advanced: true })],
+    params: [dyn("fmt", "Write for", "promptformats", "auto"), dyn("aes", "Aesthetic", "promptaesthetics", "None (no aesthetic injection)"), sel("purpose", "For", ["Image", "Video"], "Image"), text("style", "Guidelines", "Rewrite as a rich, detailed generation prompt. Keep the core idea.", true), toggle("english", "Write in English", true, { advanced: true })],
     description: "Rewrites a short idea into a detailed prompt."
   },
   {
@@ -3299,6 +3299,11 @@ function defaultParams(def, engineId) {
   const out = {};
   for (const p of paramsFor(def, engineId)) out[p.id] = p.default;
   return out;
+}
+function compatible(a, b) {
+  if (a === b || a === "any" || b === "any") return true;
+  const imageLike = (t) => t === "image" || t === "mask";
+  return imageLike(a) && imageLike(b);
 }
 
 // src/engine/run.ts
@@ -3996,12 +4001,283 @@ async function runLlm(req) {
   } else {
     res = await postJson("/tj_studio_one/llm/enhance", {
       ...common(l, req),
-      system_override: req.system || "You are a helpful assistant. Answer concisely.",
+      ...req.refine ? { refine_instruction: req.refine, ...req.style ?? {} } : req.style ? { ...req.style } : { system_override: req.system || "You are a helpful assistant. Answer concisely." },
       prompt: req.prompt
     });
   }
   if (!res.ok) throw new Error(res.error || "LLM request failed");
   return (res.result ?? "").trim();
+}
+
+// src/backend/promptStyle.ts
+init_http();
+
+// src/store/graph.ts
+init_esm();
+init_comfy();
+var MODE_KEY = "canvers.mode";
+var RUNS_KEY = "canvers.runs.v1";
+var readMode = () => {
+  try {
+    return localStorage.getItem(MODE_KEY) === "simple" ? "simple" : "canvas";
+  } catch {
+    return "canvas";
+  }
+};
+var readRuns = () => {
+  try {
+    return JSON.parse(localStorage.getItem(RUNS_KEY) ?? "[]");
+  } catch {
+    return [];
+  }
+};
+var writeRuns = (r) => {
+  try {
+    localStorage.setItem(RUNS_KEY, JSON.stringify(r.slice(0, 150).map((x) => x.status === "running" ? { ...x, status: "error", error: "interrupted" } : x)));
+  } catch {
+  }
+};
+var hostSerializer = null;
+var useGraph = create((set2, get) => ({
+  projectId: uid("p"),
+  projectName: "untitled",
+  nodes: [],
+  edges: [],
+  runtime: {},
+  selected: [],
+  past: [],
+  future: [],
+  mode: readMode(),
+  panel: null,
+  viewer: null,
+  painter: null,
+  melody: null,
+  assetPicker: null,
+  facePicker: null,
+  fitTick: 0,
+  composerRuns: readRuns(),
+  setMode: (mode) => {
+    try {
+      localStorage.setItem(MODE_KEY, mode);
+    } catch {
+    }
+    set2({ mode, ...mode === "simple" && (get().panel === "decks" || get().panel === "nodes") ? { panel: null } : {} });
+  },
+  setPanel: (panel) => set2({ panel }),
+  setName: (projectName) => set2({ projectName }),
+  snapshot: () => {
+    const { nodes, edges, past } = get();
+    set2({ past: [...past.slice(-59), { nodes, edges }], future: [] });
+  },
+  undo: () => {
+    const { past, future, nodes, edges } = get();
+    const prev = past[past.length - 1];
+    if (!prev) return;
+    set2({ ...prev, past: past.slice(0, -1), future: [{ nodes, edges }, ...future] });
+  },
+  redo: () => {
+    const { past, future, nodes, edges } = get();
+    const next = future[0];
+    if (!next) return;
+    set2({ ...next, past: [...past, { nodes, edges }], future: future.slice(1) });
+  },
+  addNode: (defId, x, y, init) => {
+    const def = byId.get(defId);
+    if (!def) throw new Error(`unknown node ${defId}`);
+    get().snapshot();
+    const engine = engineFor(def);
+    const node = {
+      id: uid("n"),
+      defId,
+      x,
+      y,
+      results: [],
+      activeResult: 0,
+      engineId: engine?.id,
+      params: defaultParams(def, engine?.id),
+      ...defId === "note" ? { w: 240, h: 160 } : {},
+      ...init
+    };
+    set2({ nodes: [...get().nodes, node], selected: [node.id] });
+    return node.id;
+  },
+  removeNodes: (ids) => {
+    const set_ = new Set(ids);
+    get().snapshot();
+    set2({
+      nodes: get().nodes.filter((n2) => !set_.has(n2.id)).map((n2) => n2.members ? { ...n2, members: n2.members.filter((m) => !set_.has(m)) } : n2),
+      edges: get().edges.filter((e) => !set_.has(e.source) && !set_.has(e.target)),
+      selected: get().selected.filter((s) => !set_.has(s))
+    });
+  },
+  duplicateNodes: (ids) => {
+    get().snapshot();
+    const map = /* @__PURE__ */ new Map();
+    const copies = [];
+    for (const n2 of get().nodes) if (ids.includes(n2.id)) {
+      const id = uid("n");
+      map.set(n2.id, id);
+      copies.push({ ...n2, id, x: n2.x + 40, y: n2.y + 40, params: { ...n2.params }, results: [], activeResult: 0, locked: false, members: void 0 });
+    }
+    const edges = get().edges.filter((e) => map.has(e.source) && map.has(e.target)).map((e) => ({ ...e, id: uid("e"), source: map.get(e.source), target: map.get(e.target) }));
+    set2({ nodes: [...get().nodes, ...copies], edges: [...get().edges, ...edges], selected: copies.map((c) => c.id) });
+  },
+  moveNode: (id, x, y) => set2({ nodes: get().nodes.map((n2) => n2.id === id ? { ...n2, x, y } : n2) }),
+  moveMany: (deltas) => {
+    const m = new Map(deltas.map((d) => [d.id, d]));
+    set2({ nodes: get().nodes.map((n2) => m.has(n2.id) ? { ...n2, x: m.get(n2.id).x, y: m.get(n2.id).y } : n2) });
+  },
+  setSize: (id, w, h) => set2({ nodes: get().nodes.map((n2) => n2.id === id ? { ...n2, w, h } : n2) }),
+  setParam: (id, key, v) => set2({ nodes: get().nodes.map((n2) => n2.id === id ? { ...n2, params: { ...n2.params, [key]: v } } : n2) }),
+  setEngine: (id, engineId) => {
+    get().snapshot();
+    set2({
+      nodes: get().nodes.map((n2) => {
+        if (n2.id !== id) return n2;
+        const def = byId.get(n2.defId);
+        const fresh = defaultParams(def, engineId);
+        const params = { ...fresh };
+        for (const k of Object.keys(fresh)) if (k in n2.params && typeof n2.params[k] === typeof fresh[k]) params[k] = n2.params[k];
+        return { ...n2, engineId, params };
+      })
+    });
+  },
+  setColor: (ids, color) => {
+    get().snapshot();
+    set2({ nodes: get().nodes.map((n2) => ids.includes(n2.id) ? { ...n2, color, ...color === void 0 ? { textColor: void 0 } : {} } : n2) });
+  },
+  setCardColors: (ids, color, textColor) => {
+    get().snapshot();
+    set2({ nodes: get().nodes.map((n2) => ids.includes(n2.id) ? { ...n2, color, textColor } : n2) });
+  },
+  setTitle: (id, title) => set2({ nodes: get().nodes.map((n2) => n2.id === id ? { ...n2, title } : n2) }),
+  setLocked: (ids, locked) => set2({ nodes: get().nodes.map((n2) => ids.includes(n2.id) ? { ...n2, locked } : n2) }),
+  setResults: (id, assets, mode = "replace") => set2({
+    nodes: get().nodes.map((n2) => {
+      if (n2.id !== id) return n2;
+      const results = mode === "append" ? [...n2.results, ...assets] : assets;
+      return { ...n2, results, activeResult: mode === "append" ? n2.results.length : 0 };
+    })
+  }),
+  clearResults: (id) => set2({ nodes: get().nodes.map((n2) => n2.id === id ? { ...n2, results: [], activeResult: 0 } : n2) }),
+  setActive: (id, idx) => set2({ nodes: get().nodes.map((n2) => n2.id === id ? { ...n2, activeResult: Math.max(0, Math.min(idx, Math.max(0, n2.results.length - 1))) } : n2) }),
+  connect: (e) => {
+    const { nodes, edges } = get();
+    const s = nodes.find((n2) => n2.id === e.source), t = nodes.find((n2) => n2.id === e.target);
+    if (!s || !t || s.id === t.id) return false;
+    const sp = byId.get(s.defId)?.outputs.find((o) => o.id === e.sourceHandle);
+    const tp = byId.get(t.defId)?.inputs.find((i) => i.id === e.targetHandle);
+    if (!sp || !tp || !compatible(sp.type, tp.type)) return false;
+    const keep = tp.multi ? edges : edges.filter((x) => !(x.target === e.target && x.targetHandle === e.targetHandle));
+    if (keep.some((x) => x.source === e.source && x.sourceHandle === e.sourceHandle && x.target === e.target && x.targetHandle === e.targetHandle)) return false;
+    get().snapshot();
+    set2({ edges: [...keep, { ...e, id: uid("e") }] });
+    return true;
+  },
+  moveEdge: (id, delta) => {
+    const es = get().edges;
+    const e = es.find((x) => x.id === id);
+    if (!e) return;
+    const group = es.filter((x) => x.target === e.target && x.targetHandle === e.targetHandle);
+    const k = group.findIndex((x) => x.id === id), other = group[k + delta];
+    if (!other) return;
+    get().snapshot();
+    set2({ edges: es.map((x) => x.id === id ? other : x.id === other.id ? e : x) });
+  },
+  removeEdges: (ids) => {
+    get().snapshot();
+    set2({ edges: get().edges.filter((e) => !ids.includes(e.id)) });
+  },
+  setRuntime: (id, rt) => set2({ runtime: { ...get().runtime, [id]: { ...{ status: "idle", pct: 0 }, ...get().runtime[id], ...rt } } }),
+  select: (selected) => set2({ selected }),
+  group: (ids) => {
+    const members = get().nodes.filter((n2) => ids.includes(n2.id) && !n2.members);
+    if (members.length < 1) return;
+    get().snapshot();
+    const pad = 40;
+    const x = Math.min(...members.map((n2) => n2.x)) - pad, y = Math.min(...members.map((n2) => n2.y)) - pad - 20;
+    const x2 = Math.max(...members.map((n2) => n2.x + (n2.w ?? 300))) + pad, y2 = Math.max(...members.map((n2) => n2.y + (n2.h ?? 260))) + pad;
+    const g = { id: uid("g"), defId: "group", x, y, w: x2 - x, h: y2 - y, params: {}, results: [], activeResult: 0, title: "Group", members: members.map((m) => m.id) };
+    set2({ nodes: [g, ...get().nodes], selected: [g.id] });
+  },
+  ungroup: (id) => {
+    get().snapshot();
+    set2({ nodes: get().nodes.filter((n2) => n2.id !== id), selected: [] });
+  },
+  openViewer: (nodeId) => set2({ viewer: nodeId ? { nodeId } : null }),
+  openPainter: (nodeId) => set2({ painter: nodeId }),
+  openMelody: (nodeId) => set2({ melody: nodeId }),
+  openAssetPicker: (nodeId) => set2({ assetPicker: nodeId }),
+  openFacePicker: (nodeId) => set2({ facePicker: nodeId }),
+  toProject: () => ({ app: "ai-one-studio-canvers", version: 1, id: get().projectId, name: get().projectName, nodes: hostSerializer ? get().nodes.map(hostSerializer) : get().nodes, edges: get().edges, updatedAt: (/* @__PURE__ */ new Date()).toISOString() }),
+  loadProject: (p) => set2({ projectId: p.id ?? uid("p"), projectName: p.name || "untitled", nodes: p.nodes ?? [], edges: p.edges ?? [], runtime: {}, selected: [], past: [], future: [], fitTick: get().fitTick + 1 }),
+  newProject: () => set2({ projectId: uid("p"), projectName: "untitled", nodes: [], edges: [], runtime: {}, selected: [], past: [], future: [] }),
+  requestFit: () => set2({ fitTick: get().fitTick + 1 }),
+  addComposerRun: (r) => {
+    const runs = [r, ...get().composerRuns];
+    writeRuns(runs);
+    set2({ composerRuns: runs });
+  },
+  patchComposerRun: (id, patch) => {
+    const runs = get().composerRuns.map((r) => r.id === id ? { ...r, ...patch } : r);
+    writeRuns(runs);
+    set2({ composerRuns: runs });
+  },
+  removeComposerRun: (id) => {
+    const runs = get().composerRuns.filter((r) => r.id !== id);
+    writeRuns(runs);
+    set2({ composerRuns: runs });
+  }
+}));
+
+// src/backend/promptStyle.ts
+var AUTO = "auto";
+var NO_AESTHETIC = "None (no aesthetic injection)";
+var FORMAT_BY_FAMILY = {
+  zimage: "Z-Image & Lumina-2 (LLM text encoder)",
+  klein: "Flux & Chroma (natural language)",
+  krea2: "KREA2 (Prompt Enhance)",
+  sdxl: "SDXL (tags + weights)",
+  anima: "Anima (anime illustration prose)",
+  qwen: "Qwen Image 2.1 (Edit)",
+  qwen21: "Qwen Image 2.1 (T2I)"
+};
+var FORMAT_BY_ENGINE = { h3: "Minimax H3 (Video)", "h3-ref": "Minimax H3 (Video)", ltx25: "LTX Video (motion-focused prose)" };
+var FORMAT_BY_DEF = { "h3-image": "Minimax H3 (Video)", "ltx-director": "LTX Video (motion-focused prose)", "character-sheet": "Minimax H3 (Video)", "face-refine": "Minimax H3 (Video)", "video-refine": "LTX Video (motion-focused prose)" };
+var catalog = null;
+function styleCatalog() {
+  catalog ??= getJson("/tj_studio_one/llm/models").then((d) => ({
+    formats: d.model_formats ?? ["Universal Natural Language"],
+    aesthetics: d.aesthetics ?? [NO_AESTHETIC],
+    purposes: d.purposes ?? ["Image", "Video"]
+  })).catch((e) => {
+    catalog = null;
+    throw e;
+  });
+  return catalog;
+}
+function formatFor(defId, engineId) {
+  const def = byId.get(defId);
+  const eng = def ? engineFor(def, engineId) : void 0;
+  const video = def?.category === "Video" || defId === "h3-image" && false;
+  const fmt = engineId && FORMAT_BY_ENGINE[engineId] || FORMAT_BY_DEF[defId] || eng?.family && FORMAT_BY_FAMILY[eng.family] || eng && FORMAT_BY_ENGINE[eng.id] || "Universal Natural Language";
+  return { model_format: fmt, purpose: video ? "Video" : defId === "image-edit" ? "Edit (Inpainting/I2V)" : "Image" };
+}
+function downstreamTarget(nodeId) {
+  const { nodes, edges } = useGraph.getState();
+  for (const e of edges.filter((x) => x.source === nodeId)) {
+    const t = nodes.find((n2) => n2.id === e.target);
+    if (!t) continue;
+    const def = byId.get(t.defId);
+    if (!def || def.kind !== "generate") continue;
+    return formatFor(t.defId, t.engineId);
+  }
+  return null;
+}
+function styleOf(nodeId, p, fallback = { model_format: "Universal Natural Language", purpose: "Image" }) {
+  const auto = downstreamTarget(nodeId) ?? fallback;
+  const fmt = p.fmt && p.fmt !== AUTO ? String(p.fmt) : auto.model_format;
+  return { model_format: fmt, purpose: p.purpose_sel && p.purpose_sel !== AUTO ? String(p.purpose_sel) : auto.purpose, aesthetic: p.aes ? String(p.aes) : NO_AESTHETIC, extra_instructions: String(p.extra ?? "") };
 }
 
 // src/backend/options.ts
@@ -4034,6 +4310,13 @@ async function load2(source) {
   if (source === "preprocessors") {
     const i = await objectInfo("AIO_Preprocessor");
     return i?.AIO_Preprocessor?.input?.required?.preprocessor?.[0] ?? ["DepthAnythingPreprocessor"];
+  }
+  if (source === "promptformats") {
+    const c = await styleCatalog();
+    return ["auto", ...c.formats];
+  }
+  if (source === "promptaesthetics") {
+    return (await styleCatalog()).aesthetics;
   }
   if (source === "modelpatches") {
     const i = await objectInfo("ModelPatchLoader");
@@ -5924,6 +6207,64 @@ beats at (s): ${secs.join(", ")}`)];
   }
 };
 
+// src/canvas/helpers.ts
+function portAssets(node, port) {
+  const def = byId.get(node.defId);
+  if (!def) return node.results;
+  const p = port ?? def.outputs[0]?.id;
+  return node.results.filter((a) => def.outputs.length === 1 || (a.port ?? def.outputs[0]?.id) === p);
+}
+function activeAsset(node, port) {
+  const list = portAssets(node, port);
+  return list[Math.min(node.activeResult, list.length - 1)] ?? list[0];
+}
+
+// src/backend/refEnhance.ts
+function downstreamImages(nodeId) {
+  const { nodes, edges } = useGraph.getState();
+  const images = [];
+  let purpose = "Image";
+  const seen = /* @__PURE__ */ new Set();
+  for (const e of edges.filter((x) => x.source === nodeId)) {
+    const target = nodes.find((n2) => n2.id === e.target);
+    const def = target && byId.get(target.defId);
+    if (!target || !def) continue;
+    if (def.category === "Video") purpose = "Video";
+    for (const inp of def.inputs.filter((i) => i.type === "image")) {
+      for (const ie of edges.filter((x) => x.target === target.id && x.targetHandle === inp.id)) {
+        const src = nodes.find((n2) => n2.id === ie.source);
+        const a = src && activeAsset(src, ie.sourceHandle);
+        if (src && a && a.type === "image" && !seen.has(a.id)) {
+          seen.add(a.id);
+          images.push({ asset: a, from: src.id });
+        }
+      }
+    }
+  }
+  return { images, purpose };
+}
+var DESCRIBE = "Describe this image for a reference-based video/image prompt in 1-2 short sentences: who or what it shows (appearance, hair, clothing, colours), pose, setting. Output ONLY the description.";
+async function enhanceWithImages(o) {
+  const imgs = o.images.slice(0, 9);
+  const descs = [];
+  for (let i = 0; i < imgs.length; i++) {
+    o.progress?.(10 + Math.round(i / imgs.length * 60), `looking at @image${i + 1}\u2026`);
+    descs.push(await runLlm({ system: DESCRIBE, prompt: "Describe this image.", images: [imgs[i]] }));
+  }
+  o.progress?.(80, "writing\u2026");
+  const refRules = [
+    `The generator receives ${imgs.length} reference image${imgs.length > 1 ? "s" : ""}. They are numbered in the order they are connected and MUST be referred to by these exact tokens in the prompt:`,
+    ...descs.map((d, i) => `@image${i + 1}: ${d}`),
+    '- Use the @imageN tokens (not "the first image") wherever the prompt talks about those subjects, e.g. "@image1 walks toward @image2".',
+    "- Do not re-describe what each image already shows in detail; say what they DO, how they move/interact, camera and light."
+  ].join("\n");
+  if (o.modelStyle) {
+    return runLlm({ system: "", prompt: o.idea, style: { ...o.modelStyle, extra_instructions: [o.modelStyle.extra_instructions, refRules].filter(Boolean).join("\n") } });
+  }
+  const system = [enhanceInstruction(o.purpose, o.style ?? "", o.english ?? true), refRules].join("\n");
+  return runLlm({ system, prompt: o.idea });
+}
+
 // src/engine/run.ts
 var portOf = (def, a) => a.port ?? def.outputs[0]?.id;
 function nodeAssets(node, handle2, local) {
@@ -6091,7 +6432,6 @@ function enhanceInstruction(purpose, style, english = true) {
     style ? `- Guidelines: ${style}` : ""
   ].filter(Boolean).join("\n");
 }
-var enhanceSystem = (c) => enhanceInstruction(str(c.p.purpose), str(c.p.style), !!c.p.english);
 var TASKS = {
   "Plain description": "Describe the image plainly and accurately in a few sentences.",
   "Generation prompt": "Write a detailed text-to-image prompt that would recreate this image.",
@@ -6224,7 +6564,12 @@ var RUNNERS = {
   "prompt-enhancer": async (c) => {
     const t = need(c.text("text") || void 0, "Text");
     c.progress(10, "enhancing\u2026");
-    return [textAsset(await runLlm({ system: enhanceSystem(c), prompt: t }))];
+    const own = c.inputs("image");
+    const down = own.length ? null : downstreamImages(c.node.id);
+    const imgs = own.length ? own : down.images.map((x) => x.asset);
+    const ms = styleOf(c.node.id, { fmt: c.p.fmt, aes: c.p.aes, extra: c.p.style, purpose_sel: c.p.purpose }, { model_format: "Universal Natural Language", purpose: str(c.p.purpose) || down?.purpose || "Image" });
+    if (imgs.length) return [textAsset(await enhanceWithImages({ idea: t, images: imgs, purpose: ms.purpose, modelStyle: ms, progress: c.progress }))];
+    return [textAsset(await runLlm({ system: "", prompt: t, style: ms }))];
   },
   "music-writer": async (c) => {
     const t = need(c.text("text") || void 0, "Text");
@@ -6563,7 +6908,7 @@ var send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 async function handle(msg) {
   const { id, method, params } = msg;
   try {
-    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.5.0" } } });
+    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.6.0" } } });
     if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS.map(({ run: _r, ...t }) => t) } });
     if (method === "tools/call") {
       const tool = TOOLS.find((t) => t.name === params?.name);

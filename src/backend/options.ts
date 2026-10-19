@@ -1,3 +1,4 @@
+import { styleCatalog } from './promptStyle';
 // Dynamic option lists for `select` controls whose values come from the backend.
 import { useEffect, useState } from 'react';
 import { getJson } from './http';
@@ -24,6 +25,8 @@ async function load(source: string): Promise<string[]> {
   if (source === 'seedvr2dit') { const i = await objectInfo('SeedVR2LoadDiTModel'); return ['none', ...(i?.SeedVR2LoadDiTModel?.input?.required?.model?.[0] ?? [])]; }
   if (source === 'seedvr2vae') { const i = await objectInfo('SeedVR2LoadVAEModel'); return ['none', ...(i?.SeedVR2LoadVAEModel?.input?.required?.model?.[0] ?? [])]; }
   if (source === 'preprocessors') { const i = await objectInfo('AIO_Preprocessor'); return i?.AIO_Preprocessor?.input?.required?.preprocessor?.[0] ?? ['DepthAnythingPreprocessor']; }
+  if (source === 'promptformats') { const c = await styleCatalog(); return ['auto', ...c.formats]; }
+  if (source === 'promptaesthetics') { return (await styleCatalog()).aesthetics; }
   if (source === 'modelpatches') { const i = await objectInfo('ModelPatchLoader'); return ['none', ...(i?.ModelPatchLoader?.input?.required?.name?.[0] ?? [])]; }
   if (source === 'bboxdetectors') { const i = await objectInfo('UltralyticsDetectorProvider'); return ['none', ...(i?.UltralyticsDetectorProvider?.input?.required?.model_name?.[0] ?? [])]; }
   if (source === 'facedetectors') {

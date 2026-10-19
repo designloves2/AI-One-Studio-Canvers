@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { askConfirm, askText } from '../ui/dialog';
+import { useSensitive } from '../backend/sensitive';
 import { useGraph } from '../store/graph';
 import { useUpstream } from './helpers';
 import { useT } from '../i18n';
@@ -17,6 +19,9 @@ export function AssetPicker() {
   const [q, setQ] = useState(''); const [cat, setCat] = useState('');
   const [sel, setSel] = useState<string[]>([]); const [project, setProject] = useState('');
   const [err, setErr] = useState(''); const [busy, setBusy] = useState(false);
+  const hiddenSet = useSensitive((st) => st.items);
+  const revealAll = useSensitive((st) => st.revealAll);
+  useEffect(() => { void useSensitive.getState().load(); }, []);
   const file = useRef<HTMLInputElement>(null);
   const [newCat, setNewCat] = useState('character');
   const close = () => useGraph.getState().openAssetPicker(null);
@@ -39,8 +44,8 @@ export function AssetPicker() {
         <input placeholder={T('Search')} value={q} onChange={(e) => setQ(e.target.value)} />
         <select value={cat} onChange={(e) => setCat(e.target.value)}><option value="">{T('All categories')}</option>{cats.map((c) => <option key={c}>{c}</option>)}</select>
         <select value={project} onChange={(e) => { setProject(e.target.value); if (e.target.value) setSel([]); }}><option value="">{T('— pick assets below —')}</option>{projects.map((p) => <option key={p.id} value={p.id}>{T('Project')}: {p.name}</option>)}</select>
-        <button className="btn" disabled={!sel.length} title={T('Save the chosen assets as a project')} onClick={() => { const n = prompt(T('Project name')); if (n?.trim()) void saveProject(n.trim(), sel).then((r) => { if (!r.ok) setErr(r.detail ?? r.code ?? 'save failed'); else void load(); }).catch((e) => setErr(String(e))); }}>{T('Save as project')}</button>
-        {project && <button className="btn" onClick={() => { if (confirm(T('Delete this project?'))) void deleteProject(project).then(() => { setProject(''); void load(); }).catch((e) => setErr(String(e))); }}>{T('Delete project')}</button>}
+        <button className="btn" disabled={!sel.length} title={T('Save the chosen assets as a project')} onClick={async () => { const n = await askText(T('Project name')); if (n?.trim()) void saveProject(n.trim(), sel).then((r) => { if (!r.ok) setErr(r.detail ?? r.code ?? 'save failed'); else void load(); }).catch((e) => setErr(String(e))); }}>{T('Save as project')}</button>
+        {project && <button className="btn" onClick={async () => { if (await askConfirm(T('Delete this project?'))) void deleteProject(project).then(() => { setProject(''); void load(); }).catch((e) => setErr(String(e))); }}>{T('Delete project')}</button>}
         <span className="spacer" />
         <input ref={file} type="file" multiple hidden accept="image/*,video/*,audio/*" onChange={(e) => { void upload(e.target.files); e.target.value = ''; }} />
         <input className="narrow" value={newCat} onChange={(e) => setNewCat(e.target.value)} title={T('Category for new assets')} />
@@ -51,10 +56,11 @@ export function AssetPicker() {
       {err && <div className="error" style={{ margin: 12 }}>{err}</div>}
       <div className="asset-grid">
         {shown.map((a) => (
-          <div key={a.id} className={`asset-tile ${sel.includes(String(a.id)) ? 'on' : ''}`} onClick={() => toggle(a)} title={`@${a.name}`}>
+          <div key={a.id} className={`asset-tile ${sel.includes(String(a.id)) ? 'on' : ''}${hiddenSet.has(`reflib/${a.id}`) && !revealAll ? ' blurred' : ''}`} onClick={() => toggle(a)} title={`@${a.name}`}>
+            <button className="eye" title={T(hiddenSet.has(`reflib/${a.id}`) ? 'Reveal this item' : 'Hide this item')} onClick={(e) => { e.stopPropagation(); useSensitive.getState().toggle(`reflib/${a.id}`); }}>{hiddenSet.has(`reflib/${a.id}`) ? '⊘' : '👁︎'}</button>
             <img src={libThumb(a.id)} alt="" loading="lazy" />
             <b>{a.name}</b><small>{a.kind} · {a.category}</small>
-            <button className="mini" onClick={(e) => { e.stopPropagation(); if (confirm(`${T('Delete')} ${a.name}?`)) void deleteAsset(a.id).then(load).catch((x) => setErr(String(x))); }}>✕</button>
+            <button className="mini" onClick={async (e) => { e.stopPropagation(); if (await askConfirm(`${T('Delete')} ${a.name}?`)) void deleteAsset(a.id).then(load).catch((x) => setErr(String(x))); }}>✕</button>
           </div>
         ))}
         {!shown.length && !err && <div className="empty">{T('No assets yet — register some files.')}</div>}

@@ -4,7 +4,7 @@ import { byId, compatible, defaultParams, engineFor } from '../registry';
 import { uid } from '../backend/comfy';
 
 export type AppMode = 'canvas' | 'simple';
-export type PanelId = null | 'nodes' | 'decks' | 'assets' | 'settings' | 'models';
+export type PanelId = null | 'nodes' | 'decks' | 'assets' | 'library' | 'settings' | 'models';
 
 export interface ComposerRun {
   id: string;
@@ -59,12 +59,16 @@ interface State {
   setEngine(id: string, engineId: string): void;
   setTitle(id: string, title: string): void;
   setColor(ids: string[], color: string | undefined): void;
+  /** background and text colour together (custom colour popup) */
+  setCardColors(ids: string[], color: string | undefined, textColor: string | undefined): void;
   setLocked(ids: string[], locked: boolean): void;
   setResults(id: string, assets: Asset[], mode?: 'append' | 'replace'): void;
   clearResults(id: string): void;
   setActive(id: string, idx: number): void;
   connect(e: Omit<GraphEdge, 'id'>): boolean;
   removeEdges(ids: string[]): void;
+  /** swap an edge with its neighbour feeding the same input port (changes the @imageN order) */
+  moveEdge(id: string, delta: -1 | 1): void;
   setRuntime(id: string, rt: Partial<NodeRuntime>): void;
   select(ids: string[]): void;
   group(ids: string[]): void;
@@ -101,7 +105,7 @@ export const useGraph = create<State>((set, get) => ({
   mode: readMode(), panel: null, viewer: null, painter: null, melody: null, assetPicker: null, facePicker: null, fitTick: 0,
   composerRuns: readRuns(),
 
-  setMode: (mode) => { try { localStorage.setItem(MODE_KEY, mode); } catch { /* ignore */ } set({ mode }); },
+  setMode: (mode) => { try { localStorage.setItem(MODE_KEY, mode); } catch { /* ignore */ } set({ mode, ...(mode === 'simple' && (get().panel === 'decks' || get().panel === 'nodes') ? { panel: null } : {}) }); },
   setPanel: (panel) => set({ panel }),
   setName: (projectName) => set({ projectName }),
 
@@ -161,7 +165,8 @@ export const useGraph = create<State>((set, get) => ({
       }),
     });
   },
-  setColor: (ids, color) => { get().snapshot(); set({ nodes: get().nodes.map((n) => (ids.includes(n.id) ? { ...n, color } : n)) }); },
+  setColor: (ids, color) => { get().snapshot(); set({ nodes: get().nodes.map((n) => (ids.includes(n.id) ? { ...n, color, ...(color === undefined ? { textColor: undefined } : {}) } : n)) }); },
+  setCardColors: (ids, color, textColor) => { get().snapshot(); set({ nodes: get().nodes.map((n) => (ids.includes(n.id) ? { ...n, color, textColor } : n)) }); },
   setTitle: (id, title) => set({ nodes: get().nodes.map((n) => (n.id === id ? { ...n, title } : n)) }),
   setLocked: (ids, locked) => set({ nodes: get().nodes.map((n) => (ids.includes(n.id) ? { ...n, locked } : n)) }),
   setResults: (id, assets, mode = 'replace') =>
@@ -188,6 +193,13 @@ export const useGraph = create<State>((set, get) => ({
     get().snapshot();
     set({ edges: [...keep, { ...e, id: uid('e') }] });
     return true;
+  },
+  moveEdge: (id, delta) => {
+    const es = get().edges; const e = es.find((x) => x.id === id); if (!e) return;
+    const group = es.filter((x) => x.target === e.target && x.targetHandle === e.targetHandle);
+    const k = group.findIndex((x) => x.id === id), other = group[k + delta]; if (!other) return;
+    get().snapshot();
+    set({ edges: es.map((x) => (x.id === id ? other : x.id === other.id ? e : x)) });
   },
   removeEdges: (ids) => { get().snapshot(); set({ edges: get().edges.filter((e) => !ids.includes(e.id)) }); },
   setRuntime: (id, rt) => set({ runtime: { ...get().runtime, [id]: { ...({ status: 'idle', pct: 0 } as NodeRuntime), ...get().runtime[id], ...rt } } }),

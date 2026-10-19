@@ -15,6 +15,8 @@ import { parseWorkflow, setField, VIDEO_EXT } from '../backend/workflow';
 import { useSettings } from '../store/settings';
 import { textAsset, num, str, need } from './util';
 import { EXTRA_RUNNERS, cardLoras, h3Cards, optFromCards } from './more';
+import { downstreamImages, enhanceWithImages } from '../backend/refEnhance';
+import { styleOf } from '../backend/promptStyle';
 import { applyOp, blendOp, canvasToAsset, channelOp, invertMask, loadBitmap, maskGrow, palette, videoFrame } from '../editing/ops';
 
 export interface GraphLike { nodes: GraphNode[]; edges: GraphEdge[] }
@@ -307,7 +309,12 @@ const RUNNERS: Record<string, Runner> = {
   'prompt-enhancer': async (c) => {
     const t = need(c.text('text') || undefined, 'Text');
     c.progress(10, 'enhancing…');
-    return [textAsset(await runLlm({ system: enhanceSystem(c), prompt: t }))];
+    // reference images: connected straight to this card, or else the ones wired to the card this prompt feeds
+    const own = c.inputs('image'); const down = own.length ? null : downstreamImages(c.node.id);
+    const imgs = own.length ? own : down!.images.map((x) => x.asset);
+    const ms = styleOf(c.node.id, { fmt: c.p.fmt, aes: c.p.aes, extra: c.p.style, purpose_sel: c.p.purpose }, { model_format: 'Universal Natural Language', purpose: str(c.p.purpose) || down?.purpose || 'Image' });
+    if (imgs.length) return [textAsset(await enhanceWithImages({ idea: t, images: imgs, purpose: ms.purpose, modelStyle: ms, progress: c.progress }))];
+    return [textAsset(await runLlm({ system: '', prompt: t, style: ms }))];
   },
   'music-writer': async (c) => {
     const t = need(c.text('text') || undefined, 'Text');

@@ -93,6 +93,8 @@ export interface GraphNode {
   title?: string;
   /** card background colour (right-click → Card colour) */
   color?: string;
+  /** card text colour (custom colour popup); undefined = theme default */
+  textColor?: string;
   /** group frame: ids of the nodes that move with it */
   members?: string[];
 }

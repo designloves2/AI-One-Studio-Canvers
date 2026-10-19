@@ -10,11 +10,38 @@ import { activeAsset, portAssets, useUpstream } from './helpers';
 import { runNode, stopNode, addImports, download } from '../engine/actions';
 import { importFile, enhanceInstruction } from '../engine/run';
 import { runLlm } from '../backend/llm';
+import { PromptTools } from './PromptTools';
+import { useSensitive } from '../backend/sensitive';
 import { useSettings } from '../store/settings';
 import { t, useT } from '../i18n';
 import { HostCard } from '../host/HostCard';
 
 const KIND_COLOR: Record<string, string> = { source: '#8b7bff', edit: '#4f8dff', generate: '#34c98e', llm: '#c08bff', output: '#ff9d3d', note: '#e6c34a' };
+
+/** Numbered strip for a multi-image input: shows which connection is @image1, @image2 … and lets you reorder them. */
+function RefOrder({ nodeId, inp }: { nodeId: string; inp: PortDef }) {
+  const T = useT();
+  const edges = useGraph((s) => s.edges);
+  const nodes = useGraph((s) => s.nodes);
+  const hiddenSet = useSensitive((st) => st.items);
+  const revealAll = useSensitive((st) => st.revealAll);
+  const list = edges.filter((e) => e.target === nodeId && e.targetHandle === inp.id);
+  if (!list.length) return null;
+  return (
+    <div className="ref-order" title={T('Order of the connected images — use @image1, @image2 … in the prompt')}>
+      {list.map((e, i) => {
+        const src = nodes.find((n) => n.id === e.source); const a = src && activeAsset(src, e.sourceHandle);
+        return (
+          <div key={e.id} className="ref-chip nodrag">
+            {a?.url ? <img className={(a.meta as { assetId?: number } | undefined)?.assetId !== undefined && hiddenSet.has(`reflib/${(a.meta as { assetId: number }).assetId}`) && !revealAll ? 'blurred' : ''} src={a.url} alt="" /> : <i />}
+            <b>@image{i + 1}</b>
+            {list.length > 1 && <span className="mv"><button disabled={i === 0} onClick={() => useGraph.getState().moveEdge(e.id, -1)}>◀</button><button disabled={i === list.length - 1} onClick={() => useGraph.getState().moveEdge(e.id, 1)}>▶</button></span>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 function PortRow({ nodeId, inp, out }: { nodeId: string; inp?: PortDef; out?: PortDef }) {
   return (
@@ -84,38 +111,26 @@ async function replaceImport(id: string, f: File) {
   catch (e) { g.setRuntime(id, { status: 'error', error: (e as Error).message }); }
 }
 
-/** Asset Library names as clickable chips: a click appends @name to the prompt. */
+/** @names of the Asset Library cards wired into this prompt, as clickable chips (cut the wire and the chips go away). */
 function MentionBar({ id }: { id: string }) {
   const T = useT();
+  const nodes = useGraph((s) => s.nodes);
+  const edges = useGraph((s) => s.edges);
+  const libs = edges.filter((e) => e.target === id).map((e) => nodes.find((n) => n.id === e.source)).filter((n) => n?.defId === 'asset-library');
+  const key = libs.map((n) => `${n!.id}:${n!.params.ids ?? ''}:${n!.results.length}`).join('|');
   const [names, setNames] = useState<string[]>([]);
-  useEffect(() => { let live = true; void import('../backend/assetlib').then((m) => m.listAssets()).then((a) => { if (live) setNames(a.filter((x) => x.kind !== 'audio').map((x) => x.name).filter((n) => /^[A-Za-z0-9_\u3131-\uD79D]+$/.test(n)).slice(0, 12)); }).catch(() => undefined); return () => { live = false; }; }, []);
-  if (!names.length) return null;
+  useEffect(() => {
+    let live = true;
+    const fromRuns = libs.flatMap((n) => n!.results.filter((a) => a.port === 'mentions').flatMap((a) => (a.text ?? '').split(/\s+/).filter(Boolean).map((t) => t.replace(/^@/, ''))));
+    if (fromRuns.length || !libs.length) { setNames([...new Set(fromRuns)]); return; }
+    // not run yet: look the chosen ids up in the library
+    const ids = new Set(libs.flatMap((n) => String(n!.params.ids ?? '').split(/[,\s]+/).filter(Boolean)));
+    void import('../backend/assetlib').then((m) => m.listAssets()).then((a) => { if (live) setNames(a.filter((x) => ids.has(String(x.id)) && x.kind !== 'audio').map((x) => x.name)); }).catch(() => undefined);
+    return () => { live = false; };
+  }, [key]);
+  if (!libs.length || !names.length) return null;
   const add = (n: string) => { const g = useGraph.getState(); const cur = String(g.nodes.find((x) => x.id === id)?.params.text ?? ''); g.setParam(id, 'text', `${cur}${cur && !/\s$/.test(cur) ? ' ' : ''}@${n} `); };
   return <div className="mentions nodrag" title={T('Asset Library names — click to add')}>{names.map((n) => <button key={n} className="chip" onClick={() => add(n)}>@{n}</button>)}</div>;
-}
-
-function EnhanceButton({ id }: { id: string }) {
-  const T = useT();
-  const [busy, setBusy] = useState(false);
-  const [prev, setPrev] = useState<string | null>(null);
-  const [err, setErr] = useState('');
-  const go = async () => {
-    const g = useGraph.getState();
-    const cur = String(g.nodes.find((n) => n.id === id)?.params.text ?? '');
-    if (!cur.trim()) { setErr(T('Write a prompt first.')); return; }
-    setBusy(true); setErr(''); g.setRuntime(id, { status: 'running', pct: 0, label: 'enhancing…' });
-    try {
-      const out = await runLlm({ system: enhanceInstruction('Image', '', true), prompt: cur });
-      if (out) { setPrev(cur); useGraph.getState().setParam(id, 'text', out); }
-    } catch (e) { setErr((e as Error).message); } finally { setBusy(false); useGraph.getState().setRuntime(id, { status: 'idle', pct: 100 }); }
-  };
-  return (
-    <div className="enhance-row">
-      <button className="btn nodrag" disabled={busy} onClick={() => void go()}>{busy ? '…' : '✨ ' + T('Enhance')}</button>
-      {prev !== null && <button className="btn nodrag" onClick={() => { useGraph.getState().setParam(id, 'text', prev); setPrev(null); }}>{T('Restore')}</button>}
-      {err && <span className="error-inline">{err}</span>}
-    </div>
-  );
 }
 
 function WorkflowBody({ id }: { id: string }) {
@@ -172,10 +187,35 @@ function AssetLibBody({ id }: { id: string }) {
   const T = useT();
   const node = useGraph((s) => s.nodes.find((n) => n.id === id))!;
   const ids = String(node.params.ids ?? '').split(/[,\s]+/).filter(Boolean);
+  const project = String(node.params.project ?? '');
+  const [proj, setProj] = useState<{ ids: string[]; name: string } | null>(null);
+  const [names, setNames] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let live = true;
+    void import('../backend/assetlib').then(async (m) => {
+      const all = await m.listAssets(); if (live) setNames(Object.fromEntries(all.map((a) => [String(a.id), a.name])));
+      if (project) { const p = (await m.listProjects()).find((x) => String(x.id) === project); if (live) setProj(p ? { name: p.name, ids: (p.items ?? []).map((i) => String(i.asset_id)) } : null); } else if (live) setProj(null);
+    }).catch(() => undefined);
+    return () => { live = false; };
+  }, [project, node.params.ids]);
+  const shown = project ? proj?.ids ?? [] : ids;
+  const hiddenSet = useSensitive((st) => st.items);
+  const revealAll = useSensitive((st) => st.revealAll);
+  useEffect(() => { void useSensitive.getState().load(); }, []);
   return (
     <div className="import-body">
       <button className="btn nodrag" onClick={() => useGraph.getState().openAssetPicker(id)}>📚 {T('Choose from library…')}</button>
-      <span className="muted">{node.params.project ? `${T('Project')} #${node.params.project}` : ids.length ? `${ids.length} ${T('assets')}` : T('nothing chosen yet')}</span>
+      <span className="muted">{project ? `${T('Project')}: ${proj?.name ?? '#' + project}` : ids.length ? `${ids.length} ${T('assets')}` : T('nothing chosen yet')}</span>
+      {shown.length > 0 && (
+        <div className="asset-chosen nodrag">
+          {shown.map((i) => (
+            <figure key={i} title={`@${names[i] ?? i}`} className={hiddenSet.has(`reflib/${i}`) && !revealAll ? 'blurred' : ''}>
+              <img src={`/tj_node/reflib/thumb/${i}`} alt="" loading="lazy" />
+              <figcaption>@{names[i] ?? i}</figcaption>
+            </figure>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -259,7 +299,7 @@ const PlainNode = memo(function PlainNode({ id, selected }: NodeProps) {
   }
 
   return (
-    <div className={`cnode ${selected ? 'sel' : ''} ${running ? 'running' : ''} ${rt?.status === 'error' ? 'err' : ''}`} style={{ width: node.w ?? 300, ['--k' as string]: color, ...(node.color ? { background: node.color } : {}) }}>
+    <div className={`cnode ${selected ? 'sel' : ''} ${running ? 'running' : ''} ${rt?.status === 'error' ? 'err' : ''}`} style={{ width: node.w ?? 300, ['--k' as string]: color, ...(node.color ? { background: node.color } : {}), ...(node.textColor ? { color: node.textColor, ['--fg' as string]: node.textColor, ['--muted' as string]: `color-mix(in srgb, ${node.textColor} 68%, transparent)` } : {}) }}>
       {running && <div className="run-overlay"><span className="spin" /><b>RUNNING…</b>{rt?.label && <em>{rt.label}</em>}</div>}
       <div className="cnode-head">
         <i className="dot" />
@@ -282,6 +322,7 @@ const PlainNode = memo(function PlainNode({ id, selected }: NodeProps) {
       {def.engines && def.engines.length === 1 && <div className="engine-fixed">{engine?.label}</div>}
 
       {rows > 0 && <div className="ports">{Array.from({ length: rows }, (_, i) => <PortRow key={i} nodeId={id} inp={def.inputs[i]} out={def.outputs[i]} />)}</div>}
+      {def.inputs.filter((i) => i.multi && i.type === 'image').map((i) => <RefOrder key={i.id} nodeId={id} inp={i} />)}
 
       {(def.id === 'import' || def.id === 'import-audio' || def.id === 'import-video') && <ImportBody id={id} />}
       {(def.id === 'export' || def.id === 'preview' || def.id === 'compare') && <DisplayBody id={id} defId={def.id} />}
@@ -293,7 +334,7 @@ const PlainNode = memo(function PlainNode({ id, selected }: NodeProps) {
         </div>
       )}
       {def.id === 'prompt' && <MentionBar id={id} />}
-      {def.id === 'prompt' && <EnhanceButton id={id} />}
+      {def.id === 'prompt' && <PromptTools id={id} />}
       {hasAdv && <button className="adv-toggle nodrag" onClick={() => setAdv((v) => !v)}>{adv ? '▾' : '▸'} {T('Advanced')}</button>}
 
       {def.id === 'melody-editor' && <MelodyBody id={id} />}

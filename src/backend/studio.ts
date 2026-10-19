@@ -42,6 +42,14 @@ export interface GalleryItem { filename: string; subfolder: string; mtime: numbe
 export const getGallery = (f: Family, subfolder: string, offset = 0, limit = 40): Promise<{ images: GalleryItem[]; total: number }> =>
   getJson(`${FAMILIES[f].prefix}/gallery?subfolder=${encodeURIComponent(subfolder)}&offset=${offset}&limit=${limit}`);
 
+/** Videos of an output folder (newest first). VHS writes `x.mp4` next to `x-audio.mp4`; only the one with sound is kept. */
+export async function getVideoGallery(subfolder: string, offset = 0, limit = 40): Promise<{ images: GalleryItem[]; total: number }> {
+  const r = await getJson<{ images: GalleryItem[]; total: number }>(`/tj_shared/output_gallery_video?subfolder=${encodeURIComponent(subfolder)}&offset=${offset}&limit=${limit}`);
+  const names = new Set(r.images.map((i) => i.filename));
+  const images = r.images.filter((i) => !names.has(i.filename.replace(/\.([^.]+)$/, '-audio.$1'))).map((i) => ({ ...i, key: `${i.subfolder}/${i.filename}` }));
+  return { images, total: r.total - (r.images.length - images.length) };
+}
+
 export const deleteOutput = (f: Family, filename: string, subfolder: string) =>
   postJson(`${FAMILIES[f].prefix}/delete`, { filename, subfolder });
 

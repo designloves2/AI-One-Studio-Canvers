@@ -103,7 +103,7 @@ export function Flow({ tool, onMenu }: { tool: 'select' | 'hand'; onMenu(at: { x
       grp ? { label: 'Ungroup', shortcut: 'Ctrl G', divider: true, onClick: () => g.ungroup(ids[0]) } : { label: 'Group selection', shortcut: 'Ctrl G', disabled: !has, divider: true, onClick: () => g.group(ids) },
       { label: 'Duplicate', shortcut: 'Ctrl D', disabled: !has, onClick: () => g.duplicateNodes(ids) },
       { label: lockedAll ? 'Unlock' : 'Lock', disabled: !has, onClick: () => g.setLocked(ids, !lockedAll) },
-      { label: 'Card colour', swatches: COLORS, divider: true, onPick: (v) => g.setColor(ids, v), disabled: !has },
+      { label: 'Card colour', swatches: COLORS, custom: true, divider: true, onPick: (v) => g.setColor(ids, v), onCustom: (bg, text) => g.setCardColors(ids, bg, text), disabled: !has },
       { label: 'Save selection as deck', disabled: !has, onClick: () => { g.select(ids); saveSelectionAsDeck(`Deck ${new Date().toLocaleTimeString()}`); } },
       { label: 'Delete', shortcut: 'Del', danger: true, disabled: !has, divider: true, onClick: () => g.removeNodes(ids) },
     ];

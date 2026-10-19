@@ -31,6 +31,17 @@ export async function registerAsset(file: File, category: string, name?: string)
   if (!j.ok) throw new Error(j.detail ?? j.code ?? 'register failed');
   return j.asset as LibAsset;
 }
+export interface LibInfo { categories: string[]; asset_count: number }
+export const libCategories = () => libInfo().then((i) => (Array.isArray(i.categories) ? (i.categories as string[]) : ['character', 'background', 'prop', 'etc']));
+/** rename / move / retag; the server moves the file when name or category changes */
+export const updateAsset = (id: number, fields: { name?: string; category?: string; tags?: string; note?: string }) =>
+  postJson<{ ok: boolean; asset: LibAsset }>(`${BASE}/assets/${id}/update`, fields);
+export async function replaceAssetMedia(id: number, file: File): Promise<LibAsset> {
+  const fd = new FormData(); fd.append('file', file, file.name);
+  const j = await (await fetch(url(`${BASE}/assets/${id}/replace`), { method: 'POST', body: fd })).json();
+  if (!j.ok) throw new Error(j.detail ?? j.code ?? 'replace failed');
+  return j.asset as LibAsset;
+}
 export const deleteAsset = (id: number) => postJson(`${BASE}/assets/${id}/delete`, { force: false });
 
 let namesCache: Promise<string[]> | null = null;

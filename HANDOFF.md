@@ -1,4 +1,4 @@
-# HANDOFF — AI ONE Studio Canvers (v2.1, 카드 덱 방식)
+# HANDOFF — AI ONE Studio Canvers (v2.6.0, 카드 덱 방식)
 
 이어서 작업하는 쪽은 이 문서만 읽으면 됩니다. (작업 중 계속 갱신됨)
 
@@ -28,6 +28,23 @@
 - 통과: LTX Director(+오디오·모션 트랙, 캔버스 UI 실행 포함), 후처리 7종(Deblur/Denoise/Grain/Resize/Skin/Interpolate/Upscale), Face Refine, Character Sheet, Video Edit(LTX refine), Video Stitch, Transition Bridge, Beat/Scene Detect, H3 Image, H3 Video Generate, Image Generate, Music Generate, Camera Angle, Krea2 Control/Identity, Anima LLLite, Z-Image ControlNet·Face Redraw(그래프 버그 수정 후 통과: ZImageFunControlnet 은 MODEL 만 출력), Asset Library + H3 레퍼런스 영상.
 - 수정한 자동선택 버그: LTX(영상/오디오 VAE·업스케일러·텍스트인코더), H3 텍스트 인코더(음악용 인코더를 잘못 고르던 것).
 - 추가 통과: fps 자동 인식(30fps 입력 → 30fps 출력, 60프레임), Krea2 canny, Anima anycontrol.
+- 심플 모드 실기 통과: 이미지 생성(Z-Image), '참조로 사용', '캔버스로', 영상 LTX 2.5(참조 이미지 첫 프레임), 영상 H3 터보. 영어로 남아 있던 라벨 일부 한글화(i18n.cards.ts).
+- 앱 내장 브라우저는 confirm()/prompt()/alert() 를 자동 거절한다 → src/ui/dialog.tsx (askConfirm/askText/notify + DialogHost)로 교체. 새 코드에서 네이티브 대화상자 사용 금지. '새로 만들기' 정상화.
+- 갤러리: 썸네일 클릭 = 확대(Esc/바깥 클릭으로 닫기, 하단 '캔버스로'·다운로드), 더블클릭 = 캔버스 카드로 추가.
+- 갤러리 눈가리기: 썸네일 우하단 👁 = 개별 가리기(블러), 헤더 👁/🙈 = 전체 잠깐 보기. 서버 목록 /tj_shared/sensitive_media(키 `<subfolder>/<filename>`)를 One Studio 갤러리와 공유(src/backend/sensitive.ts). 가린 항목은 클릭/더블클릭/드래그 불가.
+- UI: 왼쪽 사이드 패널 가로 조절(경계 드래그, 더블클릭=340px, localStorage), 다크 스크롤바, 전체 실행 버튼 보라색(호버: 흰 배경+보라 글씨).
+- 레퍼런스 이미지 순서: 다중 이미지 입력 포트 아래에 @image1, @image2… 칩(썸네일+◀▶ 순서 변경)을 표시(store.moveEdge). 프롬프트 카드 ✨강화·Prompt Enhancer 는 연결된(또는 이 프롬프트가 연결된 생성 카드의) 이미지를 한 장씩 비전 설명 → 텍스트 LLM 이 @imageN 토큰으로 프롬프트 작성(src/backend/refEnhance.ts). 실기 통과(2장).
+- 프롬프트 작성(ONE STUDIO 방식): 서버 /tj_studio_one/llm/enhance 가 model_format(모델별 지침)·aesthetic·purpose·extra_instructions·refine_instruction 으로 시스템 프롬프트를 만든다. 앱은 연결된 생성 카드의 모델 계열로 형식을 자동 선택(src/backend/promptStyle.ts), 프롬프트 카드에 ✨강화 / ✎수정(Refine: 지시 입력 → 원본·수정본 비교 → 적용, src/ui/refine.tsx) / ⚙옵션(작성 대상·미감·추가 지시). 심플 모드 강화·수정도 동일. Prompt Enhancer 카드에도 Write for/Aesthetic 파라미터.
+- 프롬프트 카드 @태그 칩: 에셋 라이브러리 카드가 연결돼 있을 때만 표시(연결을 끊으면 사라짐).
+- 에셋 라이브러리: 카드에 선택한 에셋 썸네일 표시, 사이드 메뉴 '에셋 라이브러리' 패널(등록·이름/카테고리/태그/메모 수정·파일 교체·삭제, src/panels/LibraryPanel.tsx; 서버 /tj_node/reflib/*).
+- 카드 색상: 우클릭 메뉴는 프리셋 + 마지막 '커스텀'(무지개) 칸 하나만 둔다. 클릭하면 팝업(src/ui/ColorPopup.tsx): 왼쪽=배경색, 오른쪽=글씨색 각각 팔레트·색상띠·HEX·'저장' 버튼·저장 색 목록(클릭=선택 / 우클릭=확인창 후 삭제). 적용하면 node.color + node.textColor(--fg/--muted 덮어씀)로 저장. localStorage canvers_custom_colors_v1 / canvers_custom_text_colors_v1.
+- UI 규칙: 앱 확인창(dialog.tsx)은 z-index 3000 으로 모든 팝업 위. 왼쪽 레일 라벨은 공백에서 줄바꿈(에셋/라이브러리, Asset/Library), 레일 너비는 auto(min 62px)라 긴 단어에 맞춰 자동 확장.
+- 에셋 관리: 타일 클릭=편집 팝업(큰 미리보기·이름/카테고리/태그/메모·파일 교체(업로드/갤러리)·삭제), '＋ 에셋 등록'=등록 팝업(업로드/끌어다 놓기/갤러리에서 선택 + 이름·카테고리) (src/panels/AssetDialog.tsx). 에셋 눈가리기: 라이브러리 타일·편집 팝업·에셋 카드 썸네일·선택창에서 👁(우하단)로 가리기, 키 reflib/<id> 를 갤러리와 같은 숨김 목록에 저장.
+- 갤러리: 이미지/영상 탭(영상은 /tj_shared/output_gallery_video, VHS 의 x.mp4 / x-audio.mp4 중 소리 있는 쪽만 표시), 심플·캔버스 모드 모두에서 열림. 심플 모드 왼쪽 메뉴에서는 캔버스 전용(덱·노드) 숨김. 결과 파일이 서버에서 사라지면 깨진 그림 대신 '파일을 찾을 수 없어요' 표시(AssetView).
+- 심플 모드: 결과 파일이 삭제돼 있으면 '삭제됨' 표시 + 다운로드/참조로 사용/캔버스로 비활성화(삭제된 이미지 복구는 하지 않음). 영상 결과의 '캔버스로'는 Load Video 카드로 전달.
+- 심플 모드 화면: 가운데 정렬 대화 영역(최대 860px, 입력창도 같은 폭). 내 프롬프트는 오른쪽 말풍선(보라), 결과(엔진명·진행률·이미지/영상·버튼)는 왼쪽 말풍선.
+- 심플 모드 결과(이미지·영상) 클릭 → 큰 화면 뷰어(src/ui/Lightbox.tsx; 영상은 컨트롤+자동재생, Esc/바깥 클릭으로 닫기, 다운로드).
+- 파일 로드: AssetView 는 서버가 404 일 때만 '삭제됨', 그 외 실패는 '불러오지 못했어요 · 다시 시도'. (2026-10-20 ComfyUI /view 가 응답을 안 줘서 영상·이미지가 안 뜬 적 있음 → Manager reboot API 로 재시작해 해결. 재시작 방법은 사용자 규칙: POST /api/manager/reboot, 사용자 OK 후, 프로세스 강제 종료 금지.)
 - 알려진 제한: 소리 트랙이 없는 mp4 는 VHS 로더가 실패한다(후처리/Face Refine/Video Edit). 안내 문구만 추가함(comfy.ts friendlyError). 자동 무음 삽입은 미구현.
 - 미검증: Face Refine 다인 체인, Anima inpaint 모드.
 - 테스트 팁: vite HMR 후에는 모듈 URL 에 ?t= 가 붙어 콘솔 import 가 다른 인스턴스가 된다 → performance 리소스 목록의 정확한 URL 로 import.
