@@ -6,7 +6,7 @@
 - freavy식 **카드(노드) 그래프 캔버스** + 기능은 전부 **STUDIO_ONE / TJ_NODE 를 백엔드 API 로** 호출.
 - v2.0 의 "원본 패널 통째로 불러오기(src/host)"는 잘못된 방향 → 기본 OFF (Settings → Legacy `hostPanels`). 코드는 남겨둠.
 - 한 카드 = 한 기능, 선으로 연결. 예) 프롬프트→이미지생성→결과보기→프롬프트→영상생성→결과보기 / 영상로드→업스케일→디블러→스티치→결과보기.
-- 사용자: 비개발자 디자이너, 설명 짧게, 버그수정은 원인·계획 허락 후, 결과는 압축파일로 전달. 크레딧 $1 남으면 커밋/푸시+이 문서 갱신 후 중단.
+- 사용자: 비개발자 디자이너. 중간 보고 없이 끝까지 진행. 커밋은 사용자 지시 후, 릴리스 전 `npm run build:mcp` 매번. 테스트는 mock 없이 8188 실제 ComfyUI.
 
 ## 완료 (`npm run build` 통과, mock e2e14 통과)
 - 포트 `lora` 추가. 카드: LoRA(체인), H3 Turbo·7+1, H3 Speed&Attention, H3 Audio Lock, Asset Library(@토큰/TJ_H3Reference).

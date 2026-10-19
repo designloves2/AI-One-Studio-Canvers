@@ -33,7 +33,7 @@ export async function resolveLtxModels(user: Record<string, string>) {
   const l = await ltxModelLists();
   const pick = (k: string, list: string[] | undefined, re: RegExp, not?: RegExp) => {
     if (user[k]) return user[k];
-    const c = real(list).filter((x) => re.test(x) && !(not && not.test(x)));
+    const c = real(list).filter((x) => re.test(x) && !(not && not.test(x))).sort((a, b) => Number(/q[12]_/i.test(a)) - Number(/q[12]_/i.test(b)));
     return c.find((x) => /2[._]?5/.test(x)) ?? c[0] ?? '';
   };
   return {

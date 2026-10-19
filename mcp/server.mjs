@@ -4212,7 +4212,7 @@ async function resolveLtxModels(user) {
   const l = await ltxModelLists();
   const pick = (k, list, re, not) => {
     if (user[k]) return user[k];
-    const c = real2(list).filter((x) => re.test(x) && !(not && not.test(x)));
+    const c = real2(list).filter((x) => re.test(x) && !(not && not.test(x))).sort((a, b) => Number(/q[12]_/i.test(a)) - Number(/q[12]_/i.test(b)));
     return c.find((x) => /2[._]?5/.test(x)) ?? c[0] ?? "";
   };
   return {
