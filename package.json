@@ -1,0 +1,29 @@
+{
+  "name": "ai-one-studio-canvers",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Node-canvas frontend for ComfyUI-TJ_NODE_STUDIO_ONE (backend API)",
+  "scripts": {
+    "dev": "vite --port 5917 --host",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "start": "node serve.mjs",
+    "mock": "node mock/mock-comfy.mjs"
+  },
+  "dependencies": {
+    "@xyflow/react": "12.8.2",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "zustand": "5.0.8"
+  },
+  "devDependencies": {
+    "@types/react": "18.3.23",
+    "@types/react-dom": "18.3.7",
+    "@types/ws": "^8.18.1",
+    "@vitejs/plugin-react": "4.7.0",
+    "typescript": "5.8.3",
+    "vite": "6.3.5",
+    "ws": "^8.18.3"
+  }
+}

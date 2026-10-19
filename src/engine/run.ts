@@ -1,0 +1,321 @@
+// Graph executor: walks the nodes upstream of a target and runs each one.
+// Generators/LLMs run on the backend (ComfyUI + STUDIO_ONE); edit nodes run in the browser.
+import type { Asset, GraphEdge, GraphNode, NodeDef, Primitive } from '../types';
+import { byId, engineFor } from '../registry';
+import { assetFromFile, ensureInput, fetchBlob, runPrompt, uid, uploadToInput } from '../backend/comfy';
+import { buildImageGraph, type ImageJob, type ImageMode } from '../backend/imageGen';
+import { FAMILIES, pickModels, type Family } from '../backend/studio';
+import { runLlm } from '../backend/llm';
+import { loadOptions } from '../backend/options';
+import { useSettings } from '../store/settings';
+import { applyOp, blendOp, canvasToAsset, channelOp, invertMask, loadBitmap, maskGrow, palette, videoFrame } from '../editing/ops';
+
+export interface GraphLike { nodes: GraphNode[]; edges: GraphEdge[] }
+
+export interface Hooks {
+  start?(id: string): void;
+  progress?(id: string, pct: number, label?: string): void;
+  done?(id: string, assets: Asset[], mode: 'append' | 'replace'): void;
+  error?(id: string, message: string): void;
+}
+
+interface Ctx {
+  node: GraphNode;
+  def: NodeDef;
+  p: Record<string, Primitive>;
+  engineId?: string;
+  inputs(handle: string): Asset[];
+  text(handle: string): string;
+  progress(pct: number, label?: string): void;
+  signal?: AbortSignal;
+}
+
+const textAsset = (text: string, port?: string): Asset => ({ id: uid(), type: 'text', url: '', text, port });
+
+const portOf = (def: NodeDef, a: Asset) => a.port ?? def.outputs[0]?.id;
+
+function nodeAssets(node: GraphNode, handle: string, local: Map<string, Asset[]>): Asset | undefined {
+  const def = byId.get(node.defId);
+  if (!def) return undefined;
+  const all = local.get(node.id) ?? node.results;
+  const mine = all.filter((a) => portOf(def, a) === handle || def.outputs.length === 1);
+  if (!mine.length) return undefined;
+  return mine[Math.min(node.activeResult, mine.length - 1)] ?? mine[0];
+}
+
+function upstream(g: GraphLike, targetId: string): GraphNode[] {
+  const nodes = new Map(g.nodes.map((n) => [n.id, n]));
+  const order: GraphNode[] = []; const seen = new Set<string>();
+  const visit = (id: string, stack: Set<string>) => {
+    if (seen.has(id)) return;
+    if (stack.has(id)) throw new Error('The graph has a loop');
+    stack.add(id);
+    for (const e of g.edges) if (e.target === id) visit(e.source, stack);
+    stack.delete(id); seen.add(id);
+    const n = nodes.get(id); if (n) order.push(n);
+  };
+  visit(targetId, new Set());
+  return order;
+}
+
+// edit-node results are cached by input identity + params so re-running a chain is instant
+const editCache = new Map<string, { key: string; assets: Asset[] }>();
+
+export async function executeGraph(g: GraphLike, targetId: string, hooks: Hooks, signal?: AbortSignal): Promise<void> {
+  const local = new Map<string, Asset[]>();
+  let failing = targetId;
+  try {
+    for (const node of upstream(g, targetId)) {
+      if (signal?.aborted) throw new Error('cancelled');
+      const def = byId.get(node.defId);
+      if (!def) throw new Error(`Unknown node type ${node.defId}`);
+      failing = node.id;
+      const isTarget = node.id === targetId;
+      const heavy = def.kind === 'generate' || def.kind === 'llm';
+
+      if (heavy && !isTarget && node.results.length) { local.set(node.id, node.results); continue; }
+      if (def.id === 'import') { local.set(node.id, node.results); continue; }
+
+      const inputs = (handle: string): Asset[] => {
+        const out: Asset[] = [];
+        for (const e of g.edges) {
+          if (e.target !== node.id || e.targetHandle !== handle) continue;
+          const src = g.nodes.find((n) => n.id === e.source); if (!src) continue;
+          const a = nodeAssets(src, e.sourceHandle, local); if (a) out.push(a);
+        }
+        return out;
+      };
+      const ctx: Ctx = {
+        node, def, p: node.params, engineId: node.engineId, inputs, signal,
+        text: (h) => inputs(h).map((a) => a.text ?? '').filter(Boolean).join(', '),
+        progress: (pct, label) => hooks.progress?.(node.id, pct, label),
+      };
+
+      // cheap, deterministic nodes: reuse when nothing changed
+      let cacheKey = '';
+      if (def.kind === 'edit') {
+        cacheKey = JSON.stringify([node.defId, node.params, def.inputs.map((i) => inputs(i.id).map((a) => a.id))]);
+        const hit = editCache.get(node.id);
+        if (hit && hit.key === cacheKey && node.results.length) { local.set(node.id, node.results); continue; }
+      }
+
+      if (heavy || def.kind === 'edit') hooks.start?.(node.id);
+      const assets = await RUNNERS[def.id]?.(ctx) ?? [];
+      local.set(node.id, assets.length || def.kind === 'generate' ? assets : node.results);
+      if (cacheKey) editCache.set(node.id, { key: cacheKey, assets });
+      if (heavy || def.kind === 'edit' || def.kind === 'source') hooks.done?.(node.id, assets, heavy ? 'append' : 'replace');
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    hooks.error?.(failing, msg);
+    throw err;
+  }
+}
+
+// ------------------------------------------------------------------ runners
+type Runner = (c: Ctx) => Promise<Asset[]>;
+
+const num = (v: Primitive | undefined, d = 0) => (typeof v === 'number' ? v : parseFloat(String(v)) || d);
+const str = (v: Primitive | undefined, d = '') => (v === undefined ? d : String(v));
+
+function need<T>(v: T | undefined, what: string): T {
+  if (v === undefined || (Array.isArray(v) && !v.length)) throw new Error(`${what} is not connected`);
+  return v;
+}
+
+function sizeFrom(aspect: string, mp: number): { w: number; h: number } {
+  const [a, b] = aspect.split(':').map(Number);
+  const r = a && b ? a / b : 1;
+  const px = mp * 1_000_000;
+  const round16 = (v: number) => Math.max(256, Math.round(v / 16) * 16);
+  return { w: round16(Math.sqrt(px * r)), h: round16(Math.sqrt(px / r)) };
+}
+
+async function runGraph(c: Ctx, graph: Record<string, unknown>): Promise<Asset[]> {
+  const res = await runPrompt(graph, { onProgress: c.progress, signal: c.signal });
+  if (!res.images.length && !res.videos.length) throw new Error('ComfyUI finished but returned no image');
+  return [...res.images.map((f) => assetFromFile(f, 'image')), ...res.videos.map((f) => assetFromFile(f, 'video'))];
+}
+
+function imageRunner(mode: (c: Ctx) => ImageMode): Runner {
+  return async (c) => {
+    const eng = engineFor(c.def, c.engineId)!;
+    const family = eng.family as Family;
+    const m = mode(c);
+    const p = c.p;
+    const settings = useSettings.getState();
+    const seedIn = c.inputs('seed_in')[0];
+    const seedParam = seedIn ? num(seedIn.text, -1) : num(p.seed, -1);
+    const seed = seedParam < 0 ? Math.floor(Math.random() * 2 ** 40) : seedParam;
+
+    const imgs = c.inputs('image');
+    const refs = m === 'faceswap' ? [...imgs, ...c.inputs('face')] : imgs;
+    const inputFiles: string[] = [];
+    for (const a of refs.slice(0, 2)) inputFiles.push(await ensureInput(a));
+    const maskA = c.inputs('mask')[0];
+    const maskFile = maskA ? await ensureInput(maskA) : undefined;
+
+    const { w, h } = typeof p.aspect === 'string' && m === 't2i' ? sizeFrom(String(p.aspect), num(p.megapixels, 1)) : { w: 0, h: 0 };
+    const lora = (n: string, s: string) => ({ name: str(p[n], 'none'), strength: num(p[s], 1) });
+
+    const job: ImageJob = {
+      family, mode: m,
+      prompt: [c.text('prompt') || c.text('text')].filter(Boolean).join(', '),
+      negative: str(p.negative),
+      width: w, height: h,
+      steps: num(p.steps, 8), cfg: num(p.cfg, 1), sampler: str(p.sampler, 'euler'), scheduler: str(p.scheduler, 'simple'),
+      seed, denoise: num(p.denoise, 1), batch: Math.max(1, num(p.batch, 1)),
+      images: inputFiles, mask: maskFile,
+      pad: { left: num(p.left), top: num(p.top), right: num(p.right), bottom: num(p.bottom) },
+      loras: [lora('lora1', 'lora1_strength'), lora('lora2', 'lora2_strength')],
+      models: settings.models[family], saveSubfolder: settings.saveSubfolder,
+      bgModel: str(p.bg_model),
+    };
+    if ((m === 't2i' || m === 'edit' || m === 'i2i' || m === 'inpaint' || m === 'outpaint') && !job.prompt && m !== 'outpaint') throw new Error('Prompt is empty');
+    const built = await buildImageGraph(job);
+    c.progress(2, built.hint);
+    return runGraph(c, built.graph);
+  };
+}
+
+const textOnlySystem = (c: Ctx) => str(c.p.system);
+
+function enhanceSystem(c: Ctx): string {
+  const forVideo = c.p.purpose === 'Video';
+  return [
+    `You rewrite a short idea into a richer text-to-${forVideo ? 'video' : 'image'} prompt.`,
+    '- Output ONLY the rewritten prompt: no preamble, no quotes, no markdown.',
+    '- Keep the user\'s subject and intent; add concrete detail (composition, light, materials, mood, lens, style).',
+    forVideo ? '- Describe motion and camera movement across time.' : '',
+    c.p.english ? '- Always write the result in English, even if the input is another language.' : '',
+    str(c.p.style) ? `- Guidelines: ${str(c.p.style)}` : '',
+  ].filter(Boolean).join('\n');
+}
+
+const TASKS: Record<string, string> = {
+  'Plain description': 'Describe the image plainly and accurately in a few sentences.',
+  'Generation prompt': 'Write a detailed text-to-image prompt that would recreate this image.',
+  'Booru-style tags': 'List comma-separated booru-style tags for this image.',
+  'Pose & anatomy': 'Describe the pose, body position and anatomy of the subject in detail.',
+};
+
+const RUNNERS: Record<string, Runner> = {
+  // ---- sources / data
+  prompt: async (c) => {
+    const extra = c.inputs('vars').map((a) => a.text ?? '').filter(Boolean);
+    return [textAsset([str(c.p.text), ...extra].filter(Boolean).join('\n'))];
+  },
+  'text-data': async (c) => [textAsset(str(c.p.text))],
+  concat: async (c) => [textAsset(c.inputs('texts').map((a) => a.text ?? '').filter(Boolean).join(str(c.p.separator, ', ')))],
+  number: async (c) => [textAsset(String(num(c.p.value)), 'value')],
+  'seed-node': async (c) => [textAsset(String(num(c.p.value, 0)), 'value')],
+  toggle: async (c) => [textAsset(c.p.value ? 'true' : 'false', 'value')],
+
+  // ---- LLM (four backends, chosen in Settings)
+  'llm-tj': async (c) => {
+    const t = c.text('text');
+    const prompt = [t, str(c.p.prompt)].filter(Boolean).join('\n\n');
+    const images = c.inputs('image');
+    if (!prompt && !images.length) throw new Error('Give the LLM some text or an image');
+    c.progress(10, 'asking the model…');
+    const temperature = num(c.p.temperature, 0);
+    return [textAsset(await runLlm({ system: textOnlySystem(c), prompt, images, temperature: temperature > 0 ? temperature : undefined }))];
+  },
+  'prompt-enhancer': async (c) => {
+    const t = need(c.text('text') || undefined, 'Text');
+    c.progress(10, 'enhancing…');
+    return [textAsset(await runLlm({ system: enhanceSystem(c), prompt: t }))];
+  },
+  'image-describer': async (c) => {
+    const images = need(c.inputs('image'), 'Image');
+    c.progress(10, 'looking at the image…');
+    const system = ['You describe images.', TASKS[str(c.p.task)] ?? TASKS['Plain description'], 'Output ONLY the description, no preamble.', str(c.p.guidelines)].filter(Boolean).join('\n');
+    return [textAsset(await runLlm({ system, prompt: 'Describe this image.', images }))];
+  },
+
+  // ---- image generation
+  'image-generate': imageRunner(() => 't2i'),
+  'image-edit': imageRunner((c) => (c.engineId === 'klein-edit' || !c.engineId ? 'edit' : 'i2i')),
+  inpaint: imageRunner(() => 'inpaint'),
+  outpaint: imageRunner(() => 'outpaint'),
+  'face-swap': imageRunner(() => 'faceswap'),
+  'remove-bg': imageRunner(() => 'removebg'),
+  upscale: async (c) => {
+    const src = need(c.inputs('image')[0], 'Image');
+    let model = str(c.p.upscale_model);
+    if (!model || model === 'none') model = (await loadOptions('upscalers')).find((x) => x !== 'none') ?? '';
+    if (!model) throw new Error('No upscale model found in ComfyUI/models/upscale_models');
+    const file = await ensureInput(src);
+    const sub = useSettings.getState().saveSubfolder;
+    const g: Record<string, any> = {
+      u1: { class_type: 'LoadImage', inputs: { image: file } },
+      u2: { class_type: 'UpscaleModelLoader', inputs: { model_name: model } },
+      u3: { class_type: 'ImageUpscaleWithModel', inputs: { upscale_model: ['u2', 0], image: ['u1', 0] } },
+    };
+    let last: [string, number] = ['u3', 0];
+    const by = num(c.p.scale_by, 1);
+    if (by !== 1) { g.u4 = { class_type: 'ImageScaleBy', inputs: { image: last, upscale_method: 'lanczos', scale_by: by } }; last = ['u4', 0]; }
+    g.u5 = { class_type: 'SaveImage', inputs: { images: last, filename_prefix: `${sub}/upscale` } };
+    return runGraph(c, g);
+  },
+  'video-generate': async () => { throw new Error('Video engines (MiniMax H3 / LTX 2.5) are planned for the next phase.'); },
+
+  // ---- browser-side edits
+  crop: opRunner('crop'), resize: opRunner('resize'), blur: opRunner('blur'), levels: opRunner('levels'),
+  'rotate-flip': opRunner('rotate-flip'), 'color-correct': opRunner('color-correct'), sharpen: opRunner('sharpen'),
+  grayscale: opRunner('grayscale'), threshold: opRunner('threshold'), posterize: opRunner('posterize'),
+  'hue-rotate': opRunner('hue-rotate'), vignette: opRunner('vignette'), pixelate: opRunner('pixelate'), invert: opRunner('invert'),
+  channels: async (c) => {
+    const img = await loadBitmap(need(c.inputs('image')[0], 'Image'));
+    const { image, mask } = channelOp(img, str(c.p.channel));
+    return [await canvasToAsset(image, 'image'), await canvasToAsset(mask, 'mask')];
+  },
+  blend: async (c) => {
+    const base = await loadBitmap(need(c.inputs('base')[0], 'Base'));
+    const top = await loadBitmap(need(c.inputs('top')[0], 'Top'));
+    const m = c.inputs('mask')[0];
+    return [await canvasToAsset(blendOp(base, top, m ? await loadBitmap(m) : null, c.p))];
+  },
+  'mask-grow': async (c) => {
+    const img = await loadBitmap(need(c.inputs('mask')[0], 'Mask'));
+    return [await canvasToAsset(maskGrow(img, num(c.p.amount, 8), num(c.p.feather)), 'mask')];
+  },
+  'invert-mask': async (c) => [await canvasToAsset(invertMask(await loadBitmap(need(c.inputs('mask')[0], 'Mask'))), 'mask')],
+  'color-palette': async (c) => {
+    const img = await loadBitmap(need(c.inputs('image')[0], 'Image'));
+    return [textAsset(palette(img, num(c.p.count, 5)).join(', '))];
+  },
+  'extract-frame': async (c) => {
+    const v = need(c.inputs('video')[0], 'Video');
+    return [await canvasToAsset(await videoFrame(v, num(c.p.position, 100)))];
+  },
+  painter: async (c) => {
+    // the Painter editor stores its drawing in node.results; the runner just hands it on
+    if (!c.node.results.length) throw new Error('Open the Painter (double-click the preview) and draw first');
+    return c.node.results;
+  },
+  router: async (c) => c.inputs('image').slice(0, 1).map((a) => ({ ...a, port: 'image' })),
+
+  // ---- sinks: nothing to compute
+  export: async () => [], preview: async () => [], compare: async () => [], note: async () => [],
+};
+
+function opRunner(op: string): Runner {
+  return async (c) => {
+    const img = await loadBitmap(need(c.inputs('image')[0], 'Image'));
+    c.progress(30, op);
+    return [await canvasToAsset(applyOp(op, img, c.p))];
+  };
+}
+
+export async function importFile(file: File): Promise<Asset> {
+  const isVideo = file.type.startsWith('video/');
+  const ref = await uploadToInput(file, `canvers_${uid('')}_${file.name.replace(/[^\w.\-]+/g, '_')}`);
+  return assetFromFile(ref, isVideo ? 'video' : 'image');
+}
+
+export async function importBlob(blob: Blob): Promise<Asset> {
+  return assetFromFile(await uploadToInput(blob), blob.type.startsWith('video/') ? 'video' : 'image');
+}
+
+export { fetchBlob, pickModels, FAMILIES };

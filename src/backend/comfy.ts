@@ -1,0 +1,172 @@
+// Thin client for the stock ComfyUI HTTP/WebSocket API. Everything the canvas generates goes
+// through here (ComfyUI is the engine behind ComfyUI-TJ_NODE_STUDIO_ONE).
+import type { Asset, FileRef } from '../types';
+import { getJson, postJson, url, wsUrl } from './http';
+
+export const clientId: string = (globalThis.crypto?.randomUUID?.() ?? String(Math.random()).slice(2));
+
+export const viewUrl = (f: FileRef) =>
+  url(`/view?filename=${encodeURIComponent(f.filename)}&subfolder=${encodeURIComponent(f.subfolder)}&type=${f.type}`);
+
+export const uid = (p = 'a') => `${p}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+
+export async function systemStats(): Promise<any> {
+  return getJson('/system_stats');
+}
+
+export async function objectInfo(cls: string): Promise<any> {
+  return getJson(`/object_info/${encodeURIComponent(cls)}`);
+}
+
+export async function interrupt(): Promise<void> {
+  try { await fetch(url('/interrupt'), { method: 'POST' }); } catch { /* ignore */ }
+}
+
+/** Upload bytes into ComfyUI's input folder; returns the file reference. */
+export async function uploadToInput(blob: Blob, name?: string): Promise<FileRef> {
+  const ext = blob.type.includes('jpeg') ? 'jpg' : blob.type.includes('webp') ? 'webp' : blob.type.includes('mp4') ? 'mp4' : blob.type.includes('webm') ? 'webm' : 'png';
+  const fd = new FormData();
+  fd.append('image', blob, name ?? `canvers_${uid('')}.${ext}`);
+  fd.append('type', 'input');
+  fd.append('overwrite', 'true');
+  const r = await fetch(url('/upload/image'), { method: 'POST', body: fd });
+  if (!r.ok) throw new Error(`upload failed: HTTP ${r.status}`);
+  const j = await r.json();
+  return { filename: j.name, subfolder: j.subfolder ?? '', type: 'input' };
+}
+
+export async function fetchBlob(a: Asset | string): Promise<Blob> {
+  const u = typeof a === 'string' ? a : a.url;
+  const r = await fetch(u);
+  if (!r.ok) throw new Error(`cannot read ${u}: HTTP ${r.status}`);
+  return r.blob();
+}
+
+/** Make sure an asset lives in ComfyUI's input folder (LoadImage can only read from there). */
+export async function ensureInput(a: Asset): Promise<string> {
+  if (a.file?.type === 'input') return a.file.subfolder ? `${a.file.subfolder}/${a.file.filename}` : a.file.filename;
+  const ref = await uploadToInput(await fetchBlob(a));
+  return ref.filename;
+}
+
+export function assetFromFile(f: FileRef, type: Asset['type'] = 'image', port?: string): Asset {
+  return { id: uid(), type, url: viewUrl(f), file: f, port };
+}
+
+// ---------------------------------------------------------------- websocket + job tracking
+type Listener = (msg: any) => void;
+let ws: WebSocket | null = null;
+const listeners = new Set<Listener>();
+let opening: Promise<void> | null = null;
+
+function openSocket(): Promise<void> {
+  if (ws && ws.readyState === WebSocket.OPEN) return Promise.resolve();
+  if (opening) return opening;
+  opening = new Promise<void>((resolve) => {
+    const s = new WebSocket(wsUrl(clientId));
+    ws = s;
+    s.onopen = () => { opening = null; resolve(); };
+    s.onerror = () => { opening = null; resolve(); }; // fall back to polling /history
+    s.onclose = () => { ws = null; opening = null; };
+    s.onmessage = (ev) => {
+      if (typeof ev.data !== 'string') return; // binary = live preview frames
+      try { const m = JSON.parse(ev.data); for (const l of listeners) l(m); } catch { /* ignore */ }
+    };
+  });
+  return opening;
+}
+
+export function onSocket(l: Listener): () => void {
+  listeners.add(l);
+  void openSocket();
+  return () => listeners.delete(l);
+}
+
+export interface RunResult { promptId: string; images: FileRef[]; videos: FileRef[]; texts: string[]; raw: Record<string, any> }
+
+export interface RunOptions {
+  onProgress?: (pct: number, label?: string) => void;
+  signal?: AbortSignal;
+}
+
+/** Queue an API-format graph and resolve with everything its output nodes produced. */
+export async function runPrompt(graph: Record<string, unknown>, opts: RunOptions = {}): Promise<RunResult> {
+  await openSocket();
+  const res = await fetch(url('/prompt'), {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt: graph, client_id: clientId }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data.error) {
+    const nodeErr = data.node_errors ? Object.values<any>(data.node_errors).map((n) => (n.errors ?? []).map((e: any) => e.message + (e.details ? ` (${e.details})` : '')).join('; ')).filter(Boolean).join(' | ') : '';
+    throw new Error([data.error?.message, nodeErr].filter(Boolean).join(' — ') || `queue failed: HTTP ${res.status}`);
+  }
+  const promptId: string = data.prompt_id;
+
+  return new Promise<RunResult>((resolve, reject) => {
+    const out: RunResult = { promptId, images: [], videos: [], texts: [], raw: {} };
+    let settled = false;
+    let poll: ReturnType<typeof setInterval> | undefined;
+
+    const finish = (err?: Error) => {
+      if (settled) return;
+      settled = true;
+      off();
+      if (poll) clearInterval(poll);
+      opts.signal?.removeEventListener('abort', onAbort);
+      if (err) return reject(err);
+      if (out.images.length || out.videos.length || out.texts.length) return resolve(out);
+      // fully cached runs send no `executed` events — read the outputs from the history instead
+      void (async () => {
+        for (let i = 0; i < 6; i++) {
+          try {
+            const h = (await getJson(`/history/${promptId}`))[promptId];
+            if (h?.outputs && Object.keys(h.outputs).length) { for (const [nid, o] of Object.entries(h.outputs)) collect(nid, o); break; }
+          } catch { /* retry */ }
+          await new Promise((r) => setTimeout(r, 400));
+        }
+        resolve(out);
+      })();
+    };
+    const collect = (nodeId: string, output: any) => {
+      out.raw[nodeId] = output;
+      for (const im of output?.images ?? []) out.images.push({ filename: im.filename, subfolder: im.subfolder ?? '', type: im.type ?? 'output' });
+      for (const v of output?.gifs ?? output?.videos ?? []) out.videos.push({ filename: v.filename, subfolder: v.subfolder ?? '', type: v.type ?? 'output' });
+      for (const tx of output?.text ?? []) out.texts.push(String(tx));
+    };
+    const off = onSocket((m) => {
+      const d = m.data ?? {};
+      if (d.prompt_id && d.prompt_id !== promptId) return;
+      if (m.type === 'progress' && d.max) opts.onProgress?.(Math.round((d.value / d.max) * 100), `${d.value}/${d.max}`);
+      else if (m.type === 'executing' && d.node === null) finish();          // finished (older servers)
+      else if (m.type === 'executed') collect(String(d.node), d.output);
+      else if (m.type === 'execution_success') finish();
+      else if (m.type === 'execution_error') finish(new Error(d.exception_message || 'execution error'));
+      else if (m.type === 'execution_interrupted') finish(new Error('cancelled'));
+    });
+    const onAbort = () => { void interrupt(); finish(new Error('cancelled')); };
+    opts.signal?.addEventListener('abort', onAbort);
+
+    // Safety net: if the socket is not delivering (proxy, CORS), poll the history instead.
+    poll = setInterval(async () => {
+      try {
+        const h = await getJson(`/history/${promptId}`);
+        const e = h[promptId];
+        if (!e) return;
+        if (e.status?.status_str === 'error') {
+          const msg = (e.status.messages ?? []).find((x: any) => x[0] === 'execution_error')?.[1]?.exception_message;
+          return finish(new Error(msg || 'execution error'));
+        }
+        if (e.outputs && (e.status?.completed || Object.keys(e.outputs).length)) {
+          out.images = []; out.videos = []; out.texts = [];
+          for (const [nid, o] of Object.entries(e.outputs)) collect(nid, o);
+          if (e.status?.completed) finish();
+        }
+      } catch { /* keep polling */ }
+    }, 1500);
+  });
+}
+
+export async function freeModels(): Promise<void> {
+  try { await postJson('/free', { unload_models: true, free_memory: true }); } catch { /* ignore */ }
+}
