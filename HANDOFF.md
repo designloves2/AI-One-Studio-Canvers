@@ -32,6 +32,9 @@
 7. 카드 디자인 다듬기, README/ARCHITECTURE 카드 방식으로 갱신.
 8. 릴리스: build:mcp → 커밋 → release/AI-One-Studio-Canvers_v2.x.zip.
 
+## ITDA(타임라인 편집기) 상태
+- Video Stitch / Add Audio to Video(오디오 교체) 카드로 핵심 일부 대체. 미구현: 장면 감지(/itda_studio_one/api/scene_detect), 비트 감지(beat_detect), 3레인 타임라인 편집 UI, ffmpeg export. 필요 시 scene/beat 감지를 카드(텍스트 출력)로 추가.
+
 ## 개발 메모
 - 노드 추가: registry def → runner(EXTRA_RUNNERS in engine/more.ts) → 필요 시 backend 빌더.
 - 카드 데이터는 text asset JSON(kind: lora|turbo|speed|lock|assetlib). `h3Cards(c)`, `cardLoras(c)`.

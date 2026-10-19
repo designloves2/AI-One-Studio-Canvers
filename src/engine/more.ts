@@ -47,6 +47,15 @@ export function optFromCards(cards: H3Cards): H3Options {
 }
 
 // ---- helpers
+/** the stitcher reads ComfyUI's output folder: bring a video there first when it lives elsewhere */
+async function asOutputClip(a: Asset, c: Ctx): Promise<{ filename: string; subfolder: string }> {
+  if (a.file?.type === 'output') return { filename: a.file.filename, subfolder: a.file.subfolder };
+  const g: Record<string, any> = {}; await addVideoLoad(g, await ensureInput(a), 'L');
+  const save = await addVideoSave(g, ['L', 0], ['L', 2], 24, `${useSettings.getState().saveSubfolder}/stitch_src`, 'T');
+  const r = await runPrompt(g, { signal: c.signal }); const f = outFile(r.raw, save);
+  return { filename: f.filename, subfolder: f.subfolder };
+}
+
 async function videoSize(url: string): Promise<{ w: number; h: number }> {
   return new Promise((resolve) => {
     const v = document.createElement('video');
@@ -178,19 +187,22 @@ export const EXTRA_RUNNERS: Record<string, Runner> = {
     const vids = c.inputs('videos'); if (vids.length < 2) throw new Error('Connect at least two videos to stitch');
     const s = useSettings.getState();
     const clips: { filename: string; subfolder: string }[] = [];
-    for (let i = 0; i < vids.length; i++) {
-      const a = vids[i];
-      if (a.file?.type === 'output') { clips.push({ filename: a.file.filename, subfolder: a.file.subfolder }); continue; }
-      // the stitcher reads ComfyUI's output folder: bring other videos there first
-      c.progress(Math.round((i / vids.length) * 40), `preparing clip ${i + 1}…`);
-      const g: Record<string, any> = {}; await addVideoLoad(g, await ensureInput(a), 'L');
-      const save = await addVideoSave(g, ['L', 0], ['L', 2], 24, `${s.saveSubfolder}/stitch_src`, 'T');
-      const r = await runPrompt(g, { signal: c.signal }); const f = outFile(r.raw, save); clips.push({ filename: f.filename, subfolder: f.subfolder });
-    }
+    for (let i = 0; i < vids.length; i++) { c.progress(Math.round((i / vids.length) * 40), `preparing clip ${i + 1}…`); clips.push(await asOutputClip(vids[i], c)); }
     c.progress(60, 'stitching…');
     const ov = num(c.p.overlap, 0);
     const st = await stitchClips(clips, `${s.saveSubfolder}/stitch`, ov > 0 ? ov : undefined);
     if (!st.ok || !st.filename) throw new Error(`stitch failed: ${st.error ?? 'unknown'}`);
+    return [assetFromFile({ filename: st.filename, subfolder: st.subfolder ?? '', type: 'output' }, 'video', 'video')];
+  },
+  'video-audio': async (c) => {
+    const v = need(c.inputs('video')[0], 'Video'); const a = need(c.inputs('audio')[0], 'Audio');
+    const s = useSettings.getState();
+    c.progress(10, 'preparing…');
+    const clip = await asOutputClip(v, c);
+    const audioFile = await ensureInput(a);
+    c.progress(50, 'mixing…');
+    const st = await stitchClips([clip], `${s.saveSubfolder}/withaudio`, undefined, { filename: audioFile, type: 'input', start: num(c.p.start, 0) });
+    if (!st.ok || !st.filename) throw new Error(`could not add the audio: ${st.error ?? 'unknown'}`);
     return [assetFromFile({ filename: st.filename, subfolder: st.subfolder ?? '', type: 'output' }, 'video', 'video')];
   },
 
