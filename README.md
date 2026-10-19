@@ -89,10 +89,12 @@ npm run mock       # GPU 없이 UI 시험용 가짜 ComfyUI (:8188)
 - *Stitch*: 끝나면 ffmpeg로 하나의 영상으로 합칩니다 (STUDIO_ONE 의 stitch 라우트 사용).
 - **Lock audio** 포트에 오디오(음악 노드 결과·가져온 파일)를 연결하면 그 소리에 맞춰 생성합니다.
 
-## v2.1 — 카드 덱 방식
+## v2.2 — 카드 덱 방식
 기능은 **카드 한 장 = 기능 하나**로 나뉘어 있고 선으로 연결합니다. 모든 생성은 STUDIO_ONE / TJ_NODE 를 백엔드 API 로 사용합니다.
 - 카드: LoRA, H3 Turbo·7+1, H3 Speed, H3 Audio Lock, Asset Library(@이름)
-- 이미지/영상/음악 생성, Video Edit(LTX), Face Refine, Character Sheet, Stitch
+- 이미지: 생성·편집·인페인트·아웃페인트·페이스스왑·업스케일(ESRGAN/SeedVR2), Z-Image ControlNet·Face Redraw, Krea 2 ControlNet·Identity Edit, Anima Control/Inpaint, Qwen Camera Angle, H3 이미지, Character Sheet
+- 영상: H3(텍스트/첫-끝/레퍼런스) · LTX · LTX Director · Video Edit(LTX) · Face Refine · Stitch · 오디오 넣기 · Scene/Beat Detect
+- 음악: Ace-Step / MiniMax / YuE2(커버·멜로디), Music Writer(LLM)
 - Postprocess: Deblur · Denoise · Upscale · Skin · Grain · Interpolate · Resize (각각 카드)
 - 왼쪽 **Decks** 에서 스타터 덱을 펼치거나 내가 만든 연결을 덱으로 저장
 - 선을 빈 곳에 놓으면 연결 가능한 카드 메뉴가 뜹니다 / 우클릭 메뉴 / 카드 선택 후 추가하면 자동 연결

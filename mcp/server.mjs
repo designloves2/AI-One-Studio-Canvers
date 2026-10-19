@@ -2699,6 +2699,16 @@ var REGISTRY = [
     description: "Rewrites a short idea into a detailed prompt."
   },
   {
+    id: "music-writer",
+    title: "Music Writer (LLM)",
+    category: "Text / LLM",
+    kind: "llm",
+    inputs: [P.textIn("text", "Idea / theme / lyrics")],
+    outputs: [P.textOut()],
+    params: [sel("task", "Write", ["lyrics from theme", "lyrics from title", "enhance lyrics", "style caption \u2014 Ace-Step", "style caption \u2014 MiniMax Music", "style caption \u2014 YuE2", "cover prompt", "song title"], "lyrics from theme")],
+    description: "Uses your LLM and the MusicMaker prompt library to write lyrics, a style caption, a cover prompt or a title. Wire the result into Music Generate."
+  },
+  {
     id: "image-describer",
     title: "Image Describer",
     category: "Text / LLM",
@@ -2747,6 +2757,72 @@ var REGISTRY = [
       sdxl("sdxl-i2i", "SDXL \u2014 img2img (local)", [slider("denoise", "Denoise", 0.05, 1, 0.05, 0.6)])
     ],
     description: "Edit or restyle images. The first image sets the output size."
+  },
+  {
+    id: "controlnet",
+    title: "ControlNet Generate (Z-Image)",
+    category: "Image",
+    kind: "generate",
+    inputs: [P.textIn(), P.imgIn("image", "Control image"), P.loraIn(), P.seedIn()],
+    outputs: [P.imgOut()],
+    params: [],
+    engines: [{ ...zimage("zimage-cn", "Z-Image Turbo Fun ControlNet (local)", [dyn("cn_patch", "ControlNet model", "modelpatches", "none"), dyn("cn_pre", "Preprocessor", "preprocessors", "DepthAnythingPreprocessor"), slider("cn_strength", "Control strength", 0, 2, 0.05, 1), num("cn_res", "Preprocess resolution", 1024, { advanced: true }, 256, 2048, 64)]), default: true }],
+    description: "Generate following the pose / depth / edges of a control image (preprocessor + Z-Image Fun ControlNet)."
+  },
+  {
+    id: "krea2-control",
+    title: "ControlNet Generate (Krea 2)",
+    category: "Image",
+    kind: "generate",
+    inputs: [P.textIn(), P.imgIn("image", "Control image"), P.loraIn(), P.seedIn()],
+    outputs: [P.imgOut()],
+    params: [],
+    engines: [{ ...krea2("krea2-ctrl", "Krea 2 depth / canny control (local)", [sel("kc_type", "Control type", ["depth", "canny"], "depth"), dyn("kc_lora", "Control LoRA", "loras:krea2", "none"), slider("kc_strength", "Control strength", 0, 2, 0.05, 1), num("kc_res", "Preprocess resolution", 512, { advanced: true }, 256, 2048, 64), num("canny_low", "Canny low", 100, { advanced: true, when: (p) => p.kc_type === "canny" }, 0, 255, 1), num("canny_high", "Canny high", 200, { advanced: true, when: (p) => p.kc_type === "canny" }, 0, 255, 1)], true), default: true }],
+    description: "Krea 2 following a depth map or canny edges of a control image (Control LoRA)."
+  },
+  {
+    id: "krea2-identity",
+    title: "Identity Edit (Krea 2)",
+    category: "Image",
+    kind: "generate",
+    inputs: [P.textIn("prompt", "Edit instruction"), P.imgIn("image", "Image (+ optional 2nd)", false, true), P.loraIn(), P.seedIn()],
+    outputs: [P.imgOut()],
+    params: [],
+    engines: [{ ...krea2("krea2-id", "Krea 2 identity edit (local)", [dyn("id_lora", "Identity-edit LoRA", "loras:krea2", "none"), slider("id_strength", "LoRA strength", 0, 2, 0.05, 1), sel("id_fit", "Fit", ["fit", "crop (legacy)"], "fit", { advanced: true }), slider("id_boost", "Reference boost", 0, 3, 0.05, 1, { advanced: true }), num("id_ground", "Grounding px", 768, { advanced: true }, 256, 2048, 64)], true), default: true }],
+    description: "Edit an image by instruction while keeping the subject (Krea 2 identity-edit LoRA). A second image can be a reference."
+  },
+  {
+    id: "anima-control",
+    title: "Control / Inpaint (Anima)",
+    category: "Image",
+    kind: "generate",
+    inputs: [P.textIn(), P.imgIn("image", "Image"), P.maskIn("mask", "Mask (inpaint)", true), P.loraIn(), P.seedIn()],
+    outputs: [P.imgOut()],
+    params: [],
+    engines: [{ ...anima("anima-ctrl", "Anima LLLite control (local)", [sel("an_type", "Mode", ["anycontrol", "depthcontrol", "inpaint"], "anycontrol"), dyn("an_patch", "LLLite model", "modelpatches", "none"), slider("an_strength", "Strength", 0, 2, 0.05, 1), slider("an_start", "Start", 0, 1, 0.05, 0, { advanced: true }), slider("an_end", "End", 0, 1, 0.05, 1, { advanced: true }), num("an_res", "Depth preprocess resolution", 512, { advanced: true, when: (p) => p.an_type === "depthcontrol" }, 256, 2048, 64)], true), default: true }],
+    description: "Anima with LLLite control: any-control, depth-control or inpainting."
+  },
+  {
+    id: "face-redraw",
+    title: "Face Redraw (Z-Image)",
+    category: "Image",
+    kind: "generate",
+    inputs: [P.textIn(), P.imgIn("image", "Portrait"), P.loraIn(), P.seedIn()],
+    outputs: [P.imgOut()],
+    params: [],
+    engines: [{ ...zimage("zimage-fr", "Z-Image Turbo \u2014 face redraw (local)", [dyn("fr_detector", "Face detector", "bboxdetectors", "none"), dyn("cn_patch", "ControlNet model", "modelpatches", "none"), dyn("cn_pre", "Preprocessor", "preprocessors", "DepthAnythingPreprocessor"), slider("cn_strength", "Control strength", 0, 2, 0.05, 1), slider("denoise", "Redraw strength", 0.05, 1, 0.05, 0.55), slider("fr_threshold", "Detect threshold", 0.1, 1, 0.05, 0.5, { advanced: true }), num("fr_dilation", "Mask dilation", 4, { advanced: true }, 0, 64, 1), slider("fr_context", "Context around the face", 1, 4, 0.1, 1.8, { advanced: true }), num("fr_size", "Working size px", 1024, { advanced: true }, 512, 2048, 64), num("cn_res", "Preprocess resolution", 1024, { advanced: true }, 256, 2048, 64)]), default: true }],
+    description: "Detect the face in an image and redraw only that area (with your face LoRA) using ControlNet depth, then paste it back."
+  },
+  {
+    id: "camera-angle",
+    title: "Camera Angle (Qwen)",
+    category: "Image",
+    kind: "generate",
+    inputs: [P.imgIn("image", "Image"), P.textIn("prompt", "Extra prompt (optional)", true), P.loraIn(), P.seedIn()],
+    outputs: [P.imgOut()],
+    params: [],
+    engines: [{ ...qwen("qwen-angle", "Qwen Image Edit 2511 \u2014 multi-angle (local)", [slider("angle_h", "Horizontal angle (\xB0)", 0, 359, 1, 0), slider("angle_v", "Vertical angle (\xB0)", -30, 60, 1, 0), slider("angle_zoom", "Distance (close 0 \u2026 wide 10)", 0, 10, 0.5, 4), dyn("angle_lora", "Angle LoRA", "loras:qwen", "none"), slider("angle_strength", "Angle LoRA strength", 0, 2, 0.05, 1)]), default: true }],
+    description: "View the same subject from another camera angle (needs a multi-angle LoRA)."
   },
   {
     id: "inpaint",
@@ -2806,10 +2882,13 @@ var REGISTRY = [
     title: "Upscale",
     category: "Image",
     kind: "generate",
-    inputs: [P.imgIn()],
+    inputs: [P.imgIn(), P.seedIn()],
     outputs: [P.imgOut()],
     params: [],
-    engines: [{ id: "esrgan", label: "Upscale model (ComfyUI core)", family: "core", default: true, params: [dyn("upscale_model", "Model", "upscalers", "none"), slider("scale_by", "Final scale", 0.25, 4, 0.25, 1, { advanced: true })] }],
+    engines: [
+      { id: "seedvr2", label: "SeedVR2 (local)", family: "core", params: [dyn("sv_dit", "DiT model", "seedvr2dit", "none"), dyn("sv_vae", "VAE model", "seedvr2vae", "none"), num("sv_res", "Target resolution (short edge)", 2048, {}, 256, 8192, 64), num("sv_max", "Max resolution", 4096, { advanced: true }, 512, 16384, 64), sel("sv_color", "Colour correction", ["lab", "wavelet", "wavelet_adaptive", "hsv", "adain", "none"], "lab", { advanced: true }), sel("sv_offload", "Offload device", ["cpu", "none"], "cpu", { advanced: true }), num("sv_swap", "Blocks to swap", 0, { advanced: true }, 0, 36, 1), sel("sv_attn", "Attention", ["sdpa", "flash_attn_2", "sageattn_2"], "sdpa", { advanced: true }), num("seed", "Seed", 42, { advanced: true })] },
+      { id: "esrgan", label: "Upscale model (ComfyUI core)", family: "core", default: true, params: [dyn("upscale_model", "Model", "upscalers", "none"), slider("scale_by", "Final scale", 0.25, 4, 0.25, 1, { advanced: true })] }
+    ],
     description: "Enlarge with an ESRGAN-type model from ComfyUI/models/upscale_models."
   },
   {
@@ -3137,6 +3216,36 @@ var REGISTRY = [
     description: "Re-render an existing clip with LTX 2.5: 2\xD7 latent upscale + a light, prompt-guided refine (keeps the sound)."
   },
   {
+    id: "video-audio",
+    title: "Add Audio to Video",
+    category: "Video",
+    kind: "generate",
+    inputs: [{ id: "video", label: "Video", type: "video" }, { id: "audio", label: "Audio", type: "audio" }],
+    outputs: [{ id: "video", label: "Video", type: "video" }],
+    params: [slider("start", "Start the audio at (s)", 0, 120, 0.5, 0)],
+    description: "Replace a video\u2019s sound with an audio track (for example from Music Generate)."
+  },
+  {
+    id: "scene-detect",
+    title: "Scene Detect",
+    category: "Video",
+    kind: "generate",
+    inputs: [{ id: "video", label: "Video", type: "video" }],
+    outputs: [P.textOut()],
+    params: [slider("threshold", "Sensitivity (lower = more cuts)", 0.05, 0.95, 0.05, 0.3)],
+    description: "Find the cuts in a video (ITDA ONE STUDIO). The times come out as text."
+  },
+  {
+    id: "beat-detect",
+    title: "Beat Detect",
+    category: "Audio",
+    kind: "generate",
+    inputs: [{ id: "media", label: "Audio / video", type: "any" }],
+    outputs: [P.textOut()],
+    params: [],
+    description: "Find the tempo and beat times of a song or video (ITDA ONE STUDIO). Needs librosa on the server."
+  },
+  {
     id: "video-stitch",
     title: "Video Stitch",
     category: "Video",
@@ -3456,11 +3565,54 @@ function buildZImage(job, m) {
     g["Z:sampler"] = zSampler(job, modelOut, ["Z:noise", 0], 1);
     return { graph: finish(g, ["Z:sampler", 0]), hint: "Z-Image Outpaint" };
   }
+  if (job.mode === "controlnet" || job.mode === "facedraw") {
+    const c = job.control;
+    if (!c || !c.patch || c.patch === "none") throw new Error("Pick the Z-Image ControlNet model patch (ModelPatchLoader) on the card");
+    if (!job.images[0]) throw new Error("Source image is required");
+    const { g } = zBase(job, m);
+    const modelIn = g["Z:sampling"].inputs.model;
+    delete g["Z:sampling"];
+    g["Z:load"] = { class_type: "LoadImage", inputs: { image: job.images[0] } };
+    let src = ["Z:load", 0];
+    let crop = false;
+    if (job.mode === "facedraw") {
+      const f = job.face;
+      if (!f.detector || f.detector === "none") throw new Error("Pick a face detector on the card");
+      g["Z:bbox"] = { class_type: "UltralyticsDetectorProvider", inputs: { model_name: f.detector } };
+      g["Z:faceMask"] = { class_type: "BboxDetectorCombined_v2", inputs: { bbox_detector: ["Z:bbox", 0], image: src, threshold: f.threshold, dilation: f.dilation } };
+      g["Z:crop"] = { class_type: "InpaintCropImproved", inputs: { image: src, mask: ["Z:faceMask", 0], downscale_algorithm: "bilinear", upscale_algorithm: "bicubic", preresize: false, preresize_mode: "ensure minimum resolution", preresize_min_width: 1024, preresize_min_height: 1024, preresize_max_width: 16384, preresize_max_height: 16384, mask_fill_holes: true, mask_expand_pixels: 0, mask_invert: false, mask_blend_pixels: 32, mask_hipass_filter: 0.1, extend_for_outpainting: false, extend_up_factor: 1, extend_down_factor: 1, extend_left_factor: 1, extend_right_factor: 1, context_from_mask_extend_factor: f.context, output_resize_to_target_size: true, output_target_width: f.size, output_target_height: f.size, output_padding: "32", device_mode: "gpu (much faster)" } };
+      src = ["Z:crop", 1];
+      crop = true;
+    }
+    g["Z:pre"] = { class_type: "AIO_Preprocessor", inputs: { image: src, preprocessor: c.preprocessor, resolution: c.resolution } };
+    g["Z:patch"] = { class_type: "ModelPatchLoader", inputs: { name: c.patch } };
+    g["Z:cn"] = { class_type: "ZImageFunControlnet", inputs: { model: modelIn, model_patch: ["Z:patch", 0], vae: ["Z:vae", 0], positive: ["Z:pos", 0], negative: ["Z:neg", 0], strength: c.strength, image: ["Z:pre", 0] } };
+    g["Z:sampling"] = { class_type: "ModelSamplingAuraFlow", inputs: { model: ["Z:cn", 0], shift: 3 } };
+    let latent;
+    if (crop) {
+      g["Z:enc"] = { class_type: "VAEEncode", inputs: { pixels: ["Z:crop", 1], vae: ["Z:vae", 0] } };
+      g["Z:noise"] = { class_type: "SetLatentNoiseMask", inputs: { samples: ["Z:enc", 0], mask: ["Z:crop", 2] } };
+      latent = ["Z:noise", 0];
+    } else {
+      g["Z:size"] = { class_type: "GetImageSize", inputs: { image: ["Z:pre", 0] } };
+      g["Z:latent"] = { class_type: "EmptySD3LatentImage", inputs: { width: ["Z:size", 0], height: ["Z:size", 1], batch_size: job.batch } };
+      latent = ["Z:latent", 0];
+    }
+    g["Z:sampler"] = { class_type: "KSampler", inputs: { model: ["Z:sampling", 0], positive: ["Z:cn", 1], negative: ["Z:cn", 2], latent_image: latent, seed: job.seed, steps: job.steps, cfg: job.cfg, sampler_name: job.sampler, scheduler: job.scheduler, denoise: crop ? job.denoise : 1 } };
+    g["Z:decode"] = { class_type: "VAEDecode", inputs: { samples: ["Z:sampler", 0], vae: ["Z:vae", 0] } };
+    let out = ["Z:decode", 0];
+    if (crop) {
+      g["Z:stitch"] = { class_type: "InpaintStitchImproved", inputs: { stitcher: ["Z:crop", 0], inpainted_image: out } };
+      out = ["Z:stitch", 0];
+    }
+    g["Z:save"] = saveNode(job, out, "ZIT");
+    return { graph: g, hint: crop ? "Z-Image Face Redraw" : "Z-Image ControlNet" };
+  }
   throw new Error(`Z-Image Turbo has no "${job.mode}" mode`);
 }
 function buildKrea2(job, m, anima2 = false) {
   const label = anima2 ? "Anima" : "Krea 2";
-  if (job.mode !== "t2i" && job.mode !== "i2i" && job.mode !== "edit") throw new Error(`${label} has no "${job.mode}" mode`);
+  if (job.mode !== "t2i" && job.mode !== "i2i" && job.mode !== "edit" && !(job.mode === "krea2control" && !anima2) && !(job.mode === "identity" && !anima2) && !(job.mode === "animactrl" && anima2)) throw new Error(`${label} has no "${job.mode}" mode`);
   const g = {};
   g["K:unet"] = isGguf(m.model) && !anima2 ? { class_type: "TJ_NODE_Krea2UnetLoaderGGUF", inputs: { unet_name: m.model } } : unet(m.model);
   g["K:clip"] = isGguf(m.textEncoder) && !anima2 ? { class_type: "TJ_NODE_Krea2ClipLoaderGGUF", inputs: { clip_name: m.textEncoder } } : clip(m.textEncoder, anima2 ? "stable_diffusion" : "krea2");
@@ -3468,9 +3620,81 @@ function buildKrea2(job, m, anima2 = false) {
   const model = loraChain(g, ["K:unet", 0], job.loras, "K:");
   g["K:pos"] = { class_type: "CLIPTextEncode", inputs: { clip: ["K:clip", 0], text: job.prompt } };
   g["K:neg"] = job.negative.trim() ? { class_type: "CLIPTextEncode", inputs: { clip: ["K:clip", 0], text: job.negative } } : { class_type: "ConditioningZeroOut", inputs: { conditioning: ["K:pos", 0] } };
+  if (job.mode === "identity") {
+    const c = job.identity;
+    if (!c.lora || c.lora === "none") throw new Error("Pick the Krea 2 identity-edit LoRA on the card");
+    if (!job.images[0]) throw new Error("Source image is required");
+    if (!job.prompt.trim()) throw new Error("Write an edit instruction (for example: recolor the car to matte black)");
+    const gi = { "K:unet": g["K:unet"], "K:clip": g["K:clip"], "K:vae": g["K:vae"] };
+    gi["ID:lora"] = { class_type: "LoraLoaderModelOnly", inputs: { model: ["K:unet", 0], lora_name: c.lora, strength_model: c.strength } };
+    const m2 = loraChain(gi, ["ID:lora", 0], job.loras, "ID:");
+    gi["ID:load"] = { class_type: "LoadImage", inputs: { image: job.images[0] } };
+    gi["ID:enc"] = { class_type: "VAEEncode", inputs: { pixels: ["ID:load", 0], vae: ["K:vae", 0] } };
+    const patch = { model: m2, source_latent: ["ID:enc", 0], vae: ["K:vae", 0], source_image: ["ID:load", 0], fit_mode: c.fit, ref_boost: c.refBoost };
+    const posEnc = { clip: ["K:clip", 0], prompt: job.prompt, image: ["ID:load", 0], grounding_px: c.groundingPx };
+    const negEnc = { clip: ["K:clip", 0], prompt: "", image: ["ID:load", 0], grounding_px: c.groundingPx };
+    if (job.images[1]) {
+      gi["ID:loadB"] = { class_type: "LoadImage", inputs: { image: job.images[1] } };
+      gi["ID:encB"] = { class_type: "VAEEncode", inputs: { pixels: ["ID:loadB", 0], vae: ["K:vae", 0] } };
+      patch.source_latent_b = ["ID:encB", 0];
+      patch.source_image_b = ["ID:loadB", 0];
+      posEnc.image_b = ["ID:loadB", 0];
+      negEnc.image_b = ["ID:loadB", 0];
+    }
+    gi["ID:patch"] = { class_type: "Krea2EditModelPatch", inputs: patch };
+    gi["ID:pos"] = { class_type: "Krea2EditGroundedEncode", inputs: posEnc };
+    gi["ID:neg"] = { class_type: "Krea2EditGroundedEncode", inputs: negEnc };
+    gi["ID:latent"] = { class_type: "EmptySD3LatentImage", inputs: { width: c.width || 1024, height: c.height || 1024, batch_size: 1 } };
+    gi["ID:sampler"] = { class_type: "KSampler", inputs: { model: ["ID:patch", 0], positive: ["ID:pos", 0], negative: ["ID:neg", 0], latent_image: ["ID:latent", 0], seed: job.seed, steps: job.steps, cfg: job.cfg, sampler_name: job.sampler, scheduler: job.scheduler, denoise: 1 } };
+    gi["ID:decode"] = { class_type: "VAEDecode", inputs: { samples: ["ID:sampler", 0], vae: ["K:vae", 0] } };
+    gi["ID:save"] = saveNode(job, ["ID:decode", 0], "K2ID");
+    return { graph: gi, hint: "Krea 2 Identity Edit" };
+  }
   let latent;
   let denoise = 1;
-  if (job.mode === "t2i") {
+  let modelOut = model;
+  if (job.mode === "animactrl") {
+    const a = job.anima;
+    if (!job.images[0]) throw new Error("Source image is required");
+    if (a.type === "inpaint" && !job.mask) throw new Error("A mask is required for Anima inpainting");
+    g["K:src"] = { class_type: "LoadImage", inputs: { image: job.images[0] } };
+    if (job.mask) {
+      g["K:msrc"] = { class_type: "LoadImage", inputs: { image: job.mask } };
+      g["K:mask"] = { class_type: "ImageToMask", inputs: { image: ["K:msrc", 0], channel: "red" } };
+    } else g["K:mask"] = { class_type: "SolidMask", inputs: { value: 1, width: job.width || 1024, height: job.height || 1024 } };
+    let ctrl = ["K:src", 0];
+    if (a.type === "depthcontrol") {
+      g["K:depth"] = { class_type: "DepthAnythingV2Preprocessor", inputs: { image: ctrl, ckpt_name: a.depthCkpt || "depth_anything_v2_vitl.pth", resolution: a.resolution } };
+      ctrl = ["K:depth", 0];
+    }
+    if (!a.patch || a.patch === "none") throw new Error("Pick the Anima LLLite model (ModelPatchLoader) on the card");
+    g["K:patch"] = { class_type: "ModelPatchLoader", inputs: { name: a.patch } };
+    g["K:lllite"] = { class_type: "AnimaLLLiteApply", inputs: { model, model_patch: ["K:patch", 0], image: ctrl, mask: ["K:mask", 0], strength: a.strength, start_percent: a.start, end_percent: a.end } };
+    modelOut = ["K:lllite", 0];
+    g["K:latent"] = { class_type: "EmptyLatentImage", inputs: { width: job.width || 1024, height: job.height || 1024, batch_size: 1 } };
+    latent = ["K:latent", 0];
+  } else if (job.mode === "krea2control") {
+    const c = job.kcontrol;
+    if (!c.lora || c.lora === "none") throw new Error("Pick the control LoRA on the card (depth or canny)");
+    if (!job.images[0]) throw new Error("Control image is required");
+    g["K:ctrlImg"] = { class_type: "LoadImage", inputs: { image: job.images[0] } };
+    g["K:pre"] = c.type === "canny" ? { class_type: "CannyEdgePreprocessor", inputs: { image: ["K:ctrlImg", 0], low_threshold: c.cannyLow, high_threshold: c.cannyHigh, resolution: c.resolution } } : { class_type: "DepthAnythingV2Preprocessor", inputs: { image: ["K:ctrlImg", 0], ckpt_name: c.depthCkpt || "depth_anything_v2_vitl.pth", resolution: c.resolution } };
+    g["K:latent"] = { class_type: "EmptyLatentImage", inputs: { width: job.width || 1024, height: job.height || 1024, batch_size: job.batch } };
+    latent = ["K:latent", 0];
+    if (c.type === "canny") {
+      g["K:cscale"] = { class_type: "ImageScaleToTotalPixels", inputs: { image: ["K:pre", 0], upscale_method: "lanczos", megapixels: 1, resolution_steps: 16 } };
+      g["K:cenc"] = { class_type: "VAEEncode", inputs: { pixels: ["K:cscale", 0], vae: ["K:vae", 0] } };
+      g["K:nk2e"] = { class_type: "NK2EInContextEditNode", inputs: { model, reference: ["K:cenc", 0] } };
+      g["K:clora"] = { class_type: "LoraLoaderModelOnly", inputs: { model: ["K:nk2e", 0], lora_name: c.lora, strength_model: c.strength } };
+      modelOut = ["K:clora", 0];
+      latent = ["K:cenc", 0];
+    } else {
+      g["K:clora"] = { class_type: "Krea2ControlLoRALoader", inputs: { model, lora_name: c.lora, strength: c.strength } };
+      g["K:cenc"] = { class_type: "Krea2ControlImageEncode", inputs: { control_image: ["K:pre", 0], vae: ["K:vae", 0], latent, resize: "match_latent_size", upscale_method: "bicubic", crop: "center", channel_mode: "rgb", normalize: "per_image_minmax", invert: false, batch_mode: "independent_images" } };
+      g["K:capply"] = { class_type: "Krea2ControlApply", inputs: { model: ["K:clora", 0], control_latent: ["K:cenc", 0] } };
+      modelOut = ["K:capply", 0];
+    }
+  } else if (job.mode === "t2i") {
     g["K:latent"] = { class_type: "EmptyLatentImage", inputs: { width: job.width, height: job.height, batch_size: job.batch } };
     latent = ["K:latent", 0];
   } else {
@@ -3487,7 +3711,7 @@ function buildKrea2(job, m, anima2 = false) {
   }
   g["K:sampler"] = {
     class_type: "KSampler",
-    inputs: { model, positive: ["K:pos", 0], negative: ["K:neg", 0], latent_image: latent, seed: job.seed, steps: job.steps, cfg: job.cfg, sampler_name: job.sampler, scheduler: job.scheduler, denoise }
+    inputs: { model: modelOut, positive: ["K:pos", 0], negative: ["K:neg", 0], latent_image: latent, seed: job.seed, steps: job.steps, cfg: job.cfg, sampler_name: job.sampler, scheduler: job.scheduler, denoise }
   };
   g["K:decode"] = { class_type: "VAEDecode", inputs: { samples: ["K:sampler", 0], vae: ["K:vae", 0] } };
   g["K:save"] = saveNode(job, ["K:decode", 0], anima2 ? "Anima" : "K2");
@@ -3780,6 +4004,26 @@ async function load2(source) {
     const lists = await Promise.all([...Object.keys(FAMILIES).map((f) => getModels(f).then((m) => m.loras ?? []).catch(() => [])), getJson("/minimax_h3_one/models").then((l) => l.loras ?? []).catch(() => [])]);
     return ["none", ...new Set(lists.flat().filter((x) => x && x !== "none"))];
   }
+  if (source === "seedvr2dit") {
+    const i = await objectInfo("SeedVR2LoadDiTModel");
+    return ["none", ...i?.SeedVR2LoadDiTModel?.input?.required?.model?.[0] ?? []];
+  }
+  if (source === "seedvr2vae") {
+    const i = await objectInfo("SeedVR2LoadVAEModel");
+    return ["none", ...i?.SeedVR2LoadVAEModel?.input?.required?.model?.[0] ?? []];
+  }
+  if (source === "preprocessors") {
+    const i = await objectInfo("AIO_Preprocessor");
+    return i?.AIO_Preprocessor?.input?.required?.preprocessor?.[0] ?? ["DepthAnythingPreprocessor"];
+  }
+  if (source === "modelpatches") {
+    const i = await objectInfo("ModelPatchLoader");
+    return ["none", ...i?.ModelPatchLoader?.input?.required?.name?.[0] ?? []];
+  }
+  if (source === "bboxdetectors") {
+    const i = await objectInfo("UltralyticsDetectorProvider");
+    return ["none", ...i?.UltralyticsDetectorProvider?.input?.required?.model_name?.[0] ?? []];
+  }
   if (source === "facedetectors") {
     const l = await getJson("/minimax_h3_one/models");
     return ["none", ...(l.face_detectors ?? []).filter((x) => x && x !== "none")];
@@ -3812,6 +4056,9 @@ function loadOptions(source) {
   }));
   return memo2.get(source);
 }
+
+// src/engine/run.ts
+init_http();
 
 // src/backend/music.ts
 init_http();
@@ -4417,7 +4664,7 @@ async function buildH3Graph(job) {
 }
 var pickChainFrame = (images) => postJson("/minimax_h3_one/pick_chain_frame", { images });
 var copyToInput = (f) => postJson("/minimax_h3_one/copy_to_input", f);
-var stitchClips = (clips, filenamePrefix, overlapSeconds) => postJson("/minimax_h3_one/stitch", { clips, filename_prefix: filenamePrefix, ...overlapSeconds ? { overlap_seconds: overlapSeconds } : {} });
+var stitchClips = (clips, filenamePrefix, overlapSeconds, overrideAudio) => postJson("/minimax_h3_one/stitch", { clips, filename_prefix: filenamePrefix, ...overlapSeconds ? { overlap_seconds: overlapSeconds } : {}, ...overrideAudio ? { override_audio: { type: "input", subfolder: "", start: 0, ...overrideAudio } } : {} });
 
 // src/backend/workflow.ts
 function parseWorkflow(src) {
@@ -5063,6 +5310,25 @@ async function videoFrame(a, positionPct) {
   }
 }
 
+// src/backend/itda.ts
+init_http();
+init_comfy();
+var PROJECT = "canvers";
+async function itdaUpload(a) {
+  const blob = await fetchBlob(a);
+  const ext = a.type === "audio" ? "flac" : "mp4";
+  const fd = new FormData();
+  fd.append("project", PROJECT);
+  fd.append("files", blob, `canvers_${a.id}.${ext}`);
+  const r = await fetch(url("/itda_studio_one/api/media/upload"), { method: "POST", body: fd });
+  const j = await r.json();
+  const p = j.items?.[0];
+  if (!r.ok || !p) throw new Error("ITDA could not take the file (is ITDA ONE STUDIO installed?)");
+  return p;
+}
+var sceneDetect = (path2, threshold, fps = 24) => postJson("/itda_studio_one/api/scene_detect", { project: PROJECT, path: path2, fps, threshold });
+var beatDetect = (path2, fps = 24) => postJson("/itda_studio_one/api/beat_detect", { project: PROJECT, path: path2, fps });
+
 // src/backend/ltxRefine.ts
 async function buildRefineGraph(j) {
   const r = await resolveLtxModels(j.models);
@@ -5237,6 +5503,15 @@ function optFromCards(cards) {
     ...s ? { attnBackend: s.attn_backend, attnForward: s.attn_forward, optimizer: s.optimizer, blockCache: s.block_cache, spectrum: !!s.spectrum, fusedModulation: !!s.fused_mod, shiftVideo: s.shift_video, shiftAudio: s.shift_audio } : {},
     ...t ? { turbo: t.turbo, turboLora: t.turbo_lora, turboStrength: t.turbo_strength, turboSteps: t.turbo_steps, hires: !!t.hires, hiresStartMp: t.hires_start_mp, hiresFinalMp: t.hires_final_mp } : {}
   };
+}
+async function asOutputClip(a, c) {
+  if (a.file?.type === "output") return { filename: a.file.filename, subfolder: a.file.subfolder };
+  const g = {};
+  await addVideoLoad(g, await ensureInput(a), "L");
+  const save = await addVideoSave(g, ["L", 0], ["L", 2], 24, `${useSettings.getState().saveSubfolder}/stitch_src`, "T");
+  const r = await runPrompt(g, { signal: c.signal });
+  const f = outFile(r.raw, save);
+  return { filename: f.filename, subfolder: f.subfolder };
 }
 async function videoSize(url2) {
   return new Promise((resolve) => {
@@ -5419,24 +5694,46 @@ var EXTRA_RUNNERS = {
     const s = useSettings.getState();
     const clips = [];
     for (let i = 0; i < vids.length; i++) {
-      const a = vids[i];
-      if (a.file?.type === "output") {
-        clips.push({ filename: a.file.filename, subfolder: a.file.subfolder });
-        continue;
-      }
       c.progress(Math.round(i / vids.length * 40), `preparing clip ${i + 1}\u2026`);
-      const g = {};
-      await addVideoLoad(g, await ensureInput(a), "L");
-      const save = await addVideoSave(g, ["L", 0], ["L", 2], 24, `${s.saveSubfolder}/stitch_src`, "T");
-      const r = await runPrompt(g, { signal: c.signal });
-      const f = outFile(r.raw, save);
-      clips.push({ filename: f.filename, subfolder: f.subfolder });
+      clips.push(await asOutputClip(vids[i], c));
     }
     c.progress(60, "stitching\u2026");
     const ov = num2(c.p.overlap, 0);
     const st = await stitchClips(clips, `${s.saveSubfolder}/stitch`, ov > 0 ? ov : void 0);
     if (!st.ok || !st.filename) throw new Error(`stitch failed: ${st.error ?? "unknown"}`);
     return [assetFromFile({ filename: st.filename, subfolder: st.subfolder ?? "", type: "output" }, "video", "video")];
+  },
+  "video-audio": async (c) => {
+    const v = need(c.inputs("video")[0], "Video");
+    const a = need(c.inputs("audio")[0], "Audio");
+    const s = useSettings.getState();
+    c.progress(10, "preparing\u2026");
+    const clip2 = await asOutputClip(v, c);
+    const audioFile = await ensureInput(a);
+    c.progress(50, "mixing\u2026");
+    const st = await stitchClips([clip2], `${s.saveSubfolder}/withaudio`, void 0, { filename: audioFile, type: "input", start: num2(c.p.start, 0) });
+    if (!st.ok || !st.filename) throw new Error(`could not add the audio: ${st.error ?? "unknown"}`);
+    return [assetFromFile({ filename: st.filename, subfolder: st.subfolder ?? "", type: "output" }, "video", "video")];
+  },
+  // ---------------- ITDA analysis
+  "scene-detect": async (c) => {
+    const v = need(c.inputs("video")[0], "Video");
+    c.progress(10, "uploading\u2026");
+    const r = await sceneDetect(await itdaUpload(v), num2(c.p.threshold, 0.3));
+    if (!r.ok) throw new Error(r.error ?? "scene detection failed");
+    const secs = (r.frames ?? []).map((f) => +(f / 24).toFixed(2));
+    return [textAsset(secs.length ? `cuts at (s): ${secs.join(", ")}
+frames: ${(r.frames ?? []).join(", ")}` : "no cuts found")];
+  },
+  "beat-detect": async (c) => {
+    const a = c.inputs("media")[0];
+    if (!a) throw new Error("Media is not connected");
+    c.progress(10, "uploading\u2026");
+    const r = await beatDetect(await itdaUpload(a));
+    if (!r.ok) throw new Error(r.error ?? "beat detection failed");
+    const secs = (r.frames ?? []).map((f) => +(f / 24).toFixed(2));
+    return [textAsset(`BPM ${r.bpm ?? "?"}
+beats at (s): ${secs.join(", ")}`)];
   },
   // ---------------- Face Refine
   "face-refine": async (c) => {
@@ -5654,7 +5951,7 @@ function imageRunner(mode) {
     for (const a of refs.slice(0, 10)) inputFiles.push(await ensureInput(a));
     const maskA = c.inputs("mask")[0];
     const maskFile = maskA ? await ensureInput(maskA) : void 0;
-    const { w, h } = typeof p.aspect === "string" && m === "t2i" ? sizeFrom(String(p.aspect), num2(p.megapixels, 1)) : { w: 0, h: 0 };
+    const { w, h } = typeof p.aspect === "string" && (m === "t2i" || m === "krea2control" || m === "identity" || m === "animactrl") ? sizeFrom(String(p.aspect), num2(p.megapixels, 1)) : { w: 0, h: 0 };
     const lora = (n2, s) => ({ name: str(p[n2], "none"), strength: num2(p[s], 1) });
     const job = {
       family,
@@ -5676,7 +5973,12 @@ function imageRunner(mode) {
       loras: [lora("lora1", "lora1_strength"), lora("lora2", "lora2_strength"), ...cardLoras(c)],
       models: settings.models[family],
       saveSubfolder: settings.saveSubfolder,
-      bgModel: str(p.bg_model)
+      bgModel: str(p.bg_model),
+      control: { preprocessor: str(p.cn_pre, "DepthAnythingPreprocessor"), resolution: num2(p.cn_res, 1024), strength: num2(p.cn_strength, 1), patch: str(p.cn_patch, "none") },
+      kcontrol: { type: str(p.kc_type, "depth"), lora: str(p.kc_lora, "none"), strength: num2(p.kc_strength, 1), resolution: num2(p.kc_res, 512), depthCkpt: "", cannyLow: num2(p.canny_low, 100), cannyHigh: num2(p.canny_high, 200) },
+      identity: { lora: str(p.id_lora, "none"), strength: num2(p.id_strength, 1), fit: str(p.id_fit, "fit"), refBoost: num2(p.id_boost, 1), groundingPx: num2(p.id_ground, 768), width: w || 1024, height: h || 1024 },
+      anima: { type: str(p.an_type, "anycontrol"), patch: str(p.an_patch, "none"), strength: num2(p.an_strength, 1), start: num2(p.an_start, 0), end: num2(p.an_end, 1), depthCkpt: "", resolution: num2(p.an_res, 512) },
+      face: { detector: str(p.fr_detector, "none"), threshold: num2(p.fr_threshold, 0.5), dilation: num2(p.fr_dilation, 4), context: num2(p.fr_context, 1.8), size: num2(p.fr_size, 1024) }
     };
     if ((m === "t2i" || m === "edit" || m === "i2i" || m === "inpaint" || m === "outpaint") && !job.prompt && m !== "outpaint") throw new Error("Prompt is empty");
     const built = await buildImageGraph(job);
@@ -5831,6 +6133,16 @@ var RUNNERS = {
     c.progress(10, "enhancing\u2026");
     return [textAsset(await runLlm({ system: enhanceSystem(c), prompt: t }))];
   },
+  "music-writer": async (c) => {
+    const t = need(c.text("text") || void 0, "Text");
+    const key = { "lyrics from theme": "lyrics_from_theme", "lyrics from title": "lyrics_from_title", "enhance lyrics": "lyrics_enhance", "style caption \u2014 Ace-Step": "caption_acestep", "style caption \u2014 MiniMax Music": "caption_minimax", "style caption \u2014 YuE2": "caption_yue2", "cover prompt": "cover_prompt", "song title": "title" }[str(c.p.task)] ?? "lyrics_from_theme";
+    c.progress(10, "loading prompt\u2026");
+    const lib = await getJson("/music_one/llm/prompts");
+    const system = lib.prompts?.[key];
+    if (!system) throw new Error(`The MusicMaker prompt "${key}" was not found on the server`);
+    c.progress(30, "writing\u2026");
+    return [textAsset(await runLlm({ system, prompt: t }))];
+  },
   "image-describer": async (c) => {
     const images = need(c.inputs("image"), "Image");
     c.progress(10, "looking at the image\u2026");
@@ -5839,6 +6151,19 @@ var RUNNERS = {
   },
   // ---- image generation
   "image-generate": imageRunner(() => "t2i"),
+  "camera-angle": (c) => {
+    const h = num2(c.p.angle_h), v = num2(c.p.angle_v), z = num2(c.p.angle_zoom, 4);
+    const ha = (h % 360 + 360) % 360;
+    const hDir = ha < 22.5 || ha >= 337.5 ? "front view" : ha < 67.5 ? "front-right quarter view" : ha < 112.5 ? "right side view" : ha < 157.5 ? "back-right quarter view" : ha < 202.5 ? "back view" : ha < 247.5 ? "back-left quarter view" : ha < 292.5 ? "left side view" : "front-left quarter view";
+    const angle = `<sks> ${hDir} ${v < -15 ? "high-angle shot" : v < 15 ? "eye-level shot" : v < 45 ? "elevated shot" : "low-angle shot"} ${z < 4 ? "close-up" : z < 7 ? "medium shot" : "wide shot"}`;
+    const extra = c.text("prompt");
+    return imageRunner(() => "edit")({ ...c, p: { ...c.p, lora2: c.p.angle_lora, lora2_strength: c.p.angle_strength }, text: (hd) => hd === "prompt" ? [angle, extra].filter(Boolean).join(", ") : c.text(hd) });
+  },
+  controlnet: imageRunner(() => "controlnet"),
+  "krea2-control": imageRunner(() => "krea2control"),
+  "krea2-identity": imageRunner(() => "identity"),
+  "anima-control": imageRunner(() => "animactrl"),
+  "face-redraw": imageRunner(() => "facedraw"),
   "image-edit": imageRunner((c) => c.engineId === "klein-edit" || c.engineId === "qwen-edit" || c.engineId === "qwen21-edit" || !c.engineId ? "edit" : "i2i"),
   inpaint: imageRunner(() => "inpaint"),
   outpaint: imageRunner(() => "outpaint"),
@@ -5846,6 +6171,21 @@ var RUNNERS = {
   "remove-bg": imageRunner(() => "removebg"),
   upscale: async (c) => {
     const src = need(c.inputs("image")[0], "Image");
+    if (c.engineId === "seedvr2") {
+      const p = c.p;
+      if (!str(p.sv_dit) || p.sv_dit === "none" || !str(p.sv_vae) || p.sv_vae === "none") throw new Error("Pick the SeedVR2 DiT and VAE models on the card");
+      const off = str(p.sv_offload, "cpu");
+      const file2 = await ensureInput(src);
+      const sub2 = useSettings.getState().saveSubfolder;
+      const si = c.inputs("seed_in")[0];
+      return runGraph(c, {
+        "UP:dit": { class_type: "SeedVR2LoadDiTModel", inputs: { model: str(p.sv_dit), device: "cuda:0", blocks_to_swap: num2(p.sv_swap, 0), swap_io_components: false, offload_device: off, cache_model: off !== "none", attention_mode: str(p.sv_attn, "sdpa") } },
+        "UP:vae": { class_type: "SeedVR2LoadVAEModel", inputs: { model: str(p.sv_vae), device: "cuda:0", encode_tiled: true, encode_tile_size: 1024, encode_tile_overlap: 128, decode_tiled: true, decode_tile_size: 1024, decode_tile_overlap: 128, tile_debug: "false", offload_device: off, cache_model: false } },
+        "UP:load": { class_type: "LoadImage", inputs: { image: file2 } },
+        "UP:run": { class_type: "SeedVR2VideoUpscaler", inputs: { image: ["UP:load", 0], dit: ["UP:dit", 0], vae: ["UP:vae", 0], seed: (si ? num2(si.text, 42) : num2(p.seed, 42)) % 4294967295, resolution: num2(p.sv_res, 2048), max_resolution: num2(p.sv_max, 4096), batch_size: 1, uniform_batch_size: false, color_correction: str(p.sv_color, "lab"), temporal_overlap: 0, prepend_frames: 0, input_noise_scale: 0, latent_noise_scale: 0, offload_device: off, enable_debug: false } },
+        "UP:save": { class_type: "SaveImage", inputs: { images: ["UP:run", 0], filename_prefix: `${sub2}/seedvr2` } }
+      });
+    }
     let model = str(c.p.upscale_model);
     if (!model || model === "none") model = (await loadOptions("upscalers")).find((x) => x !== "none") ?? "";
     if (!model) throw new Error("No upscale model found in ComfyUI/models/upscale_models");
@@ -6130,7 +6470,7 @@ var send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 async function handle(msg) {
   const { id, method, params } = msg;
   try {
-    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.1.0" } } });
+    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.2.0" } } });
     if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS.map(({ run: _r, ...t }) => t) } });
     if (method === "tools/call") {
       const tool = TOOLS.find((t) => t.name === params?.name);
