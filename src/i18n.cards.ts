@@ -14,6 +14,7 @@ export const KO_CARDS: Record<string, string> = {
   'ControlNet Generate (Z-Image)': '컨트롤넷 생성 (Z-Image)', 'Face Redraw (Z-Image)': '얼굴 다시 그리기 (Z-Image)', 'Control image': '컨트롤 이미지', Portrait: '인물 사진', 'ControlNet model': '컨트롤넷 모델', Preprocessor: '전처리기', 'Control strength': '컨트롤 강도', 'Preprocess resolution': '전처리 해상도', 'Detect threshold': '검출 임계값', 'Mask dilation': '마스크 확장', 'Context around the face': '얼굴 주변 범위', 'Working size px': '작업 크기 px',
   'Camera Angle (Qwen)': '카메라 앵글 (Qwen)', 'Extra prompt (optional)': '추가 프롬프트 (선택)', 'Horizontal angle (°)': '가로 각도 (°)', 'Vertical angle (°)': '세로 각도 (°)', 'Distance (close 0 … wide 10)': '거리 (가까움 0 … 멀리 10)', 'Angle LoRA': '앵글 LoRA', 'Angle LoRA strength': '앵글 LoRA 강도',
   'Music Writer (LLM)': '음악 작사·스타일 (LLM)', 'Idea / theme / lyrics': '아이디어 / 주제 / 가사', Write: '작성',
+  'ControlNet Generate (Krea 2)': '컨트롤넷 생성 (Krea 2)', 'Control type': '컨트롤 종류', 'Control LoRA': '컨트롤 LoRA', 'Canny low': '캐니 하한', 'Canny high': '캐니 상한',
   // ports
   'LoRA cards': 'LoRA 카드', 'H3 option cards': 'H3 옵션 카드', 'Option cards': '옵션 카드', Video: '영상', Videos: '영상들', 'Videos (in order)': '영상 (연결 순서)',
   'Face references': '얼굴 레퍼런스', 'Character reference': '캐릭터 레퍼런스', 'Prompt (optional)': '프롬프트 (선택)', 'Overall prompt': '전체 프롬프트', 'Images (in time order)': '이미지 (시간순)',

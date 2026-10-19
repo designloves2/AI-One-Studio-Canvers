@@ -2,7 +2,7 @@
 // Klein graphs start from the templates STUDIO_ONE serves; Z-Image graphs are assembled from core nodes.
 import { getWorkflow, pickModels, type Family } from './studio';
 
-export type ImageMode = 't2i' | 'i2i' | 'edit' | 'inpaint' | 'outpaint' | 'faceswap' | 'removebg' | 'controlnet' | 'facedraw';
+export type ImageMode = 't2i' | 'i2i' | 'edit' | 'inpaint' | 'outpaint' | 'faceswap' | 'removebg' | 'controlnet' | 'facedraw' | 'krea2control';
 
 export interface Lora { name: string; strength: number }
 
@@ -32,6 +32,8 @@ export interface ImageJob {
   /** Z-Image Fun ControlNet (controlnet / facedraw modes) */
   control?: { preprocessor: string; resolution: number; strength: number; patch: string };
   /** face redraw: detector + crop settings */
+  /** Krea 2 control (depth = Control LoRA, canny = NK2E in-context edit) */
+  kcontrol?: { type: 'depth' | 'canny'; lora: string; strength: number; resolution: number; depthCkpt: string; cannyLow: number; cannyHigh: number };
   face?: { detector: string; threshold: number; dilation: number; context: number; size: number };
 }
 
@@ -287,7 +289,7 @@ function buildZImage(job: ImageJob, m: { model: string; textEncoder: string; vae
 // ------------------------------------------------------------------------- Krea 2
 function buildKrea2(job: ImageJob, m: { model: string; textEncoder: string; vae: string }, anima = false): Built {
   const label = anima ? 'Anima' : 'Krea 2';
-  if (job.mode !== 't2i' && job.mode !== 'i2i' && job.mode !== 'edit') throw new Error(`${label} has no "${job.mode}" mode`);
+  if (job.mode !== 't2i' && job.mode !== 'i2i' && job.mode !== 'edit' && !(job.mode === 'krea2control' && !anima)) throw new Error(`${label} has no "${job.mode}" mode`);
   const g: G = {};
   g['K:unet'] = isGguf(m.model) && !anima ? { class_type: 'TJ_NODE_Krea2UnetLoaderGGUF', inputs: { unet_name: m.model } } : unet(m.model);
   g['K:clip'] = isGguf(m.textEncoder) && !anima ? { class_type: 'TJ_NODE_Krea2ClipLoaderGGUF', inputs: { clip_name: m.textEncoder } } : clip(m.textEncoder, anima ? 'stable_diffusion' : 'krea2');
@@ -299,7 +301,29 @@ function buildKrea2(job: ImageJob, m: { model: string; textEncoder: string; vae:
     : { class_type: 'ConditioningZeroOut', inputs: { conditioning: ['K:pos', 0] } };
   let latent: [string, number];
   let denoise = 1;
-  if (job.mode === 't2i') {
+  let modelOut: [string, number] = model;
+  if (job.mode === 'krea2control') {
+    const c = job.kcontrol!; if (!c.lora || c.lora === 'none') throw new Error('Pick the control LoRA on the card (depth or canny)');
+    if (!job.images[0]) throw new Error('Control image is required');
+    g['K:ctrlImg'] = { class_type: 'LoadImage', inputs: { image: job.images[0] } };
+    g['K:pre'] = c.type === 'canny'
+      ? { class_type: 'CannyEdgePreprocessor', inputs: { image: ['K:ctrlImg', 0], low_threshold: c.cannyLow, high_threshold: c.cannyHigh, resolution: c.resolution } }
+      : { class_type: 'DepthAnythingV2Preprocessor', inputs: { image: ['K:ctrlImg', 0], ckpt_name: c.depthCkpt || 'depth_anything_v2_vitl.pth', resolution: c.resolution } };
+    g['K:latent'] = { class_type: 'EmptyLatentImage', inputs: { width: job.width || 1024, height: job.height || 1024, batch_size: job.batch } };
+    latent = ['K:latent', 0];
+    if (c.type === 'canny') {
+      g['K:cscale'] = { class_type: 'ImageScaleToTotalPixels', inputs: { image: ['K:pre', 0], upscale_method: 'lanczos', megapixels: 1, resolution_steps: 16 } };
+      g['K:cenc'] = { class_type: 'VAEEncode', inputs: { pixels: ['K:cscale', 0], vae: ['K:vae', 0] } };
+      g['K:nk2e'] = { class_type: 'NK2EInContextEditNode', inputs: { model, reference: ['K:cenc', 0] } };
+      g['K:clora'] = { class_type: 'LoraLoaderModelOnly', inputs: { model: ['K:nk2e', 0], lora_name: c.lora, strength_model: c.strength } };
+      modelOut = ['K:clora', 0]; latent = ['K:cenc', 0];
+    } else {
+      g['K:clora'] = { class_type: 'Krea2ControlLoRALoader', inputs: { model, lora_name: c.lora, strength: c.strength } };
+      g['K:cenc'] = { class_type: 'Krea2ControlImageEncode', inputs: { control_image: ['K:pre', 0], vae: ['K:vae', 0], latent, resize: 'match_latent_size', upscale_method: 'bicubic', crop: 'center', channel_mode: 'rgb', normalize: 'per_image_minmax', invert: false, batch_mode: 'independent_images' } };
+      g['K:capply'] = { class_type: 'Krea2ControlApply', inputs: { model: ['K:clora', 0], control_latent: ['K:cenc', 0] } };
+      modelOut = ['K:capply', 0];
+    }
+  } else if (job.mode === 't2i') {
     g['K:latent'] = { class_type: 'EmptyLatentImage', inputs: { width: job.width, height: job.height, batch_size: job.batch } };
     latent = ['K:latent', 0];
   } else {
@@ -312,7 +336,7 @@ function buildKrea2(job: ImageJob, m: { model: string; textEncoder: string; vae:
   }
   g['K:sampler'] = {
     class_type: 'KSampler',
-    inputs: { model, positive: ['K:pos', 0], negative: ['K:neg', 0], latent_image: latent, seed: job.seed, steps: job.steps, cfg: job.cfg, sampler_name: job.sampler, scheduler: job.scheduler, denoise },
+    inputs: { model: modelOut, positive: ['K:pos', 0], negative: ['K:neg', 0], latent_image: latent, seed: job.seed, steps: job.steps, cfg: job.cfg, sampler_name: job.sampler, scheduler: job.scheduler, denoise },
   };
   g['K:decode'] = { class_type: 'VAEDecode', inputs: { samples: ['K:sampler', 0], vae: ['K:vae', 0] } };
   g['K:save'] = saveNode(job, ['K:decode', 0], anima ? 'Anima' : 'K2');
