@@ -59,20 +59,14 @@ const sdxl = (id: string, label: string, extra: ParamDef[] = [], size = false): 
   params: [...sizeParams(size), ...extra, ...sampler(20, 7, 'euler_ancestral', 'karras'), { ...negative, default: 'low quality, blurry, deformed, watermark' }, ...loras('sdxl'), num('batch', 'Batch', 1, { advanced: true }, 1, 4, 1), seed],
 });
 
+// The H3 node keeps only the basics. Turbo / 7+1 hi-res, speed & attention, Audio Lock and LoRAs are separate cards
+// that plug into its "Option cards" / "LoRA cards" inputs.
 const h3Params = (ref: boolean): ParamDef[] => [
   sel('aspect', 'Aspect ratio', [...ASPECTS, 'auto'], '16:9'), megapixels(0.9), slider('seconds', 'Clip length (s)', 5.2, 15, 0.5, 8),
   ...(ref ? [] : [sel('continuity', 'Several clips (separate prompts with ---)', ['none', 'lastframe', 'onetake'], 'lastframe'), toggle('stitch', 'Stitch clips into one video', true)]),
   slider('steps', 'Steps (no turbo)', 1, 60, 1, 20, { advanced: true }), dyn('sampler', 'Sampler', 'samplers', 'er_sde', { advanced: true }), dyn('scheduler', 'Scheduler', 'schedulers', 'simple', { advanced: true }),
-  sel('turbo', 'Turbo', ['none', 'larryvrh', 'pdd', 'lightx2v'], 'none', { advanced: true }), dyn('turbo_lora', 'Turbo LoRA', 'loras:h3', 'none', { advanced: true, when: (p) => p.turbo !== 'none' }),
-  slider('turbo_strength', 'Turbo strength', 0, 2, 0.05, 1, { advanced: true, when: (p) => p.turbo !== 'none' }), slider('turbo_steps', 'Turbo steps', 1, 16, 1, 8, { advanced: true, when: (p) => p.turbo !== 'none' }),
-  toggle('hires', '7+1 hi-res finish (Turbo LoRA Basic = pdd)', false, { advanced: true, when: (p) => p.turbo === 'pdd' }), slider('hires_start_mp', 'Start MP', 0.2, 1, 0.05, 0.5, { advanced: true, when: (p) => p.turbo === 'pdd' && !!p.hires }), slider('hires_final_mp', 'Final MP', 0.4, 3, 0.05, 0.9, { advanced: true, when: (p) => p.turbo === 'pdd' && !!p.hires }),
-  sel('attn_backend', 'Attention backend', ['none', 'ck', 'sage', 'solattn_kijai', 'sla'], 'none', { advanced: true }), sel('attn_forward', 'Attention forward patch', ['none', 'memeff_sage', 'solattn_sag'], 'none', { advanced: true }),
-  sel('optimizer', 'H3 optimizer', ['none', 'memory', 'memory_sparse'], 'none', { advanced: true }), sel('block_cache', 'Block cache', ['none', 'fbcache'], 'none', { advanced: true }),
-  toggle('spectrum', 'Spectrum', false, { advanced: true }), toggle('fused_mod', 'Fused modulation', false, { advanced: true }),
-  slider('shift_video', 'Shift (video)', 1, 20, 0.5, 12, { advanced: true }), slider('shift_audio', 'Shift (audio)', 1, 10, 0.5, 3, { advanced: true }),
-  text('lock_mode', 'Audio lock mode', 'lock', false, { advanced: true }), slider('lock_strength', 'Audio lock strength', 0, 1, 0.05, 0.5, { advanced: true }), text('lock_fit', 'Audio lock fit', 'pad_silence', false, { advanced: true }),
-  dyn('upscale_model', 'Upscale model', 'upscalers', 'none', { advanced: true }),
-  ...loras('h3'), seed,
+  dyn('upscale_model', 'Upscale model (after render)', 'upscalers', 'none', { advanced: true }),
+  seed,
 ];
 
 const klein = (id: string, label: string, extra: ParamDef[] = [], size = false): EngineDef => ({
@@ -92,6 +86,8 @@ const P = {
   imgOut: (id = 'image', label = 'Image'): PortDef => ({ id, label, type: 'image' }),
   maskIn: (id = 'mask', label = 'Mask', optional = false): PortDef => ({ id, label, type: 'mask', optional }),
   maskOut: (id = 'mask', label = 'Mask'): PortDef => ({ id, label, type: 'mask' }),
+  loraIn: (): PortDef => ({ id: 'loras', label: 'LoRA cards', type: 'lora', optional: true, multi: true }),
+  cardIn: (label = 'Option cards'): PortDef => ({ id: 'cards', label, type: 'pipe', optional: true, multi: true }),
   seedIn: (): PortDef => ({ id: 'seed_in', label: 'Seed', type: 'number', optional: true }),
 };
 
@@ -119,7 +115,7 @@ export const REGISTRY: NodeDef[] = [
 
   // ============================================================ Image generation
   { id: 'image-generate', title: 'Image Generate', category: 'Image', kind: 'generate',
-    inputs: [P.textIn(), P.seedIn()], outputs: [P.imgOut()], params: [],
+    inputs: [P.textIn(), P.loraIn(), P.seedIn()], outputs: [P.imgOut()], params: [],
     engines: [
       { ...zimage('zimage', 'Z-Image Turbo (local)', [], true), default: true },
       klein('klein', 'Flux.2 Klein (local)', [], true),
@@ -130,7 +126,7 @@ export const REGISTRY: NodeDef[] = [
       qwen21('qwen21', 'Qwen Image 2.1 (local)', [], true),
     ], description: 'Text to image on your own ComfyUI.' },
   { id: 'image-edit', title: 'Image Edit', category: 'Image', kind: 'generate',
-    inputs: [P.textIn(), P.imgIn('image', 'Images', false, true), P.seedIn()], outputs: [P.imgOut()], params: [],
+    inputs: [P.textIn(), P.imgIn('image', 'Images', false, true), P.loraIn(), P.seedIn()], outputs: [P.imgOut()], params: [],
     engines: [
       { ...klein('klein-edit', 'Flux.2 Klein — edit with references (local)'), default: true },
       qwen21('qwen21-edit', 'Qwen Image 2.1 — up to 10 references (local)'),
@@ -142,7 +138,7 @@ export const REGISTRY: NodeDef[] = [
       sdxl('sdxl-i2i', 'SDXL — img2img (local)', [slider('denoise', 'Denoise', 0.05, 1, 0.05, 0.6)]),
     ], description: 'Edit or restyle images. The first image sets the output size.' },
   { id: 'inpaint', title: 'Inpaint', category: 'Image', kind: 'generate',
-    inputs: [P.textIn(), P.imgIn(), P.maskIn(), P.seedIn()], outputs: [P.imgOut()], params: [],
+    inputs: [P.textIn(), P.imgIn(), P.maskIn(), P.loraIn(), P.seedIn()], outputs: [P.imgOut()], params: [],
     engines: [
       { ...zimage('zimage', 'Z-Image Turbo (local)', [slider('denoise', 'Denoise', 0.05, 1, 0.05, 0.85)]), default: true },
       klein('klein', 'Flux.2 Klein (local)', [slider('denoise', 'Denoise', 0.05, 1, 0.05, 1)]),
@@ -150,7 +146,7 @@ export const REGISTRY: NodeDef[] = [
       qwen('qwen', 'Qwen Image Edit 2511 (local)', [slider('denoise', 'Denoise', 0.05, 1, 0.05, 0.85)]),
     ], description: 'Repaint the white area of a mask.' },
   { id: 'outpaint', title: 'Outpaint', category: 'Image', kind: 'generate',
-    inputs: [P.textIn('prompt', 'Prompt', true), P.imgIn(), P.seedIn()], outputs: [P.imgOut()], params: [],
+    inputs: [P.textIn('prompt', 'Prompt', true), P.imgIn(), P.loraIn(), P.seedIn()], outputs: [P.imgOut()], params: [],
     engines: [
       { ...zimage('zimage', 'Z-Image Turbo (local)', [num('left', 'Left px', 0, {}, 0, 2048, 64), num('top', 'Top px', 0, {}, 0, 2048, 64), num('right', 'Right px', 256, {}, 0, 2048, 64), num('bottom', 'Bottom px', 0, {}, 0, 2048, 64)]), default: true },
       klein('klein', 'Flux.2 Klein (local, needs KJNodes)', [num('left', 'Left px', 0, {}, 0, 2048, 64), num('top', 'Top px', 0, {}, 0, 2048, 64), num('right', 'Right px', 256, {}, 0, 2048, 64), num('bottom', 'Bottom px', 0, {}, 0, 2048, 64)]),
@@ -183,7 +179,7 @@ export const REGISTRY: NodeDef[] = [
     params: [text('workflow', 'Workflow JSON', '', true, { advanced: true }), text('prompt_target', 'Prompt field', '', false, { advanced: true }), text('image_target', 'Image 1 field', '', false, { advanced: true }), text('image2_target', 'Image 2 field', '', false, { advanced: true }), text('video_target', 'Video field', '', false, { advanced: true }), text('seed_target', 'Seed field', '', false, { advanced: true }), { id: 'seed', label: 'Seed', control: { kind: 'seed' }, default: -1, advanced: true }],
     description: 'Run any API-format ComfyUI workflow (video, LTX, H3, Wan…). Load the JSON, pick which fields take the prompt / images / seed.' },
   { id: 'video-generate', title: 'Video Generate', category: 'Video', kind: 'generate',
-    inputs: [P.textIn('prompt', 'Prompt', false), P.imgIn('image', 'First frame / references', true, true), P.imgIn('last', 'Last frame', true), { id: 'audio', label: 'Lock audio', type: 'audio', optional: true }, P.seedIn()], outputs: [{ id: 'video', label: 'Video', type: 'video' }], params: [],
+    inputs: [P.textIn('prompt', 'Prompt', false), P.imgIn('image', 'First frame / references', true, true), P.imgIn('last', 'Last frame', true), P.cardIn('H3 option cards'), P.loraIn(), { id: 'assets', label: 'Asset Library', type: 'pipe', optional: true }, P.seedIn()], outputs: [{ id: 'video', label: 'Video', type: 'video' }], params: [],
     engines: [
       { id: 'h3', label: 'MiniMax H3 — text / first-last frame (local)', family: 'h3', default: true, params: h3Params(false) },
       { id: 'h3-ref', label: 'MiniMax H3 — multi-reference (local)', family: 'h3', params: h3Params(true) },
@@ -217,12 +213,105 @@ export const REGISTRY: NodeDef[] = [
     params: [num('width', 'Canvas width', 1024, {}, 64, 4096, 8), num('height', 'Canvas height', 1024, {}, 64, 4096, 8)], description: 'Draw on an image or paint a mask. Double-click the preview to open the editor.' },
 
   // ============================================================ Utility
+  // ---------------------------------------------------------------- cards (small settings blocks you wire in)
+  { id: 'lora-card', title: 'LoRA', category: 'Cards', kind: 'source',
+    inputs: [{ id: 'lora_in', label: 'More LoRAs', type: 'lora', optional: true, multi: true }], outputs: [{ id: 'lora', label: 'LoRA', type: 'lora' }],
+    params: [dyn('lora', 'LoRA', 'loras:all', 'none'), slider('strength', 'Strength', -2, 2, 0.05, 1)],
+    description: 'One LoRA. Wire it into any image or video node — chain several cards to stack LoRAs.' },
+  { id: 'h3-turbo', title: 'H3 Turbo · 7+1', category: 'Cards', kind: 'source', inputs: [], outputs: [{ id: 'card', label: 'Turbo', type: 'pipe' }],
+    params: [
+      sel('turbo', 'Turbo', ['pdd', 'larryvrh', 'lightx2v', 'none'], 'pdd'), dyn('turbo_lora', 'Turbo LoRA', 'loras:h3', 'none', { when: (p) => p.turbo !== 'none' }),
+      slider('turbo_strength', 'Turbo strength', 0, 2, 0.05, 1, { when: (p) => p.turbo !== 'none' }), slider('turbo_steps', 'Turbo steps', 1, 16, 1, 8, { advanced: true, when: (p) => p.turbo !== 'none' }),
+      toggle('hires', '7+1 hi-res finish (7 steps small → upscale → 1 step big)', true, { when: (p) => p.turbo === 'pdd' }),
+      slider('hires_start_mp', 'Start size (MP)', 0.2, 1, 0.05, 0.5, { when: (p) => p.turbo === 'pdd' && !!p.hires }), slider('hires_final_mp', 'Final size (MP)', 0.4, 3, 0.05, 0.9, { when: (p) => p.turbo === 'pdd' && !!p.hires }),
+    ], description: 'H3 speed-up: Turbo LoRA and the 7+1 hi-res finish. Wire into Video Generate → H3 option cards.' },
+  { id: 'h3-speed', title: 'H3 Speed & Attention', category: 'Cards', kind: 'source', inputs: [], outputs: [{ id: 'card', label: 'Speed', type: 'pipe' }],
+    params: [
+      sel('attn_backend', 'Attention backend', ['none', 'ck', 'sage', 'solattn_kijai', 'sla'], 'none'), sel('attn_forward', 'Attention forward patch', ['none', 'memeff_sage', 'solattn_sag'], 'none'),
+      sel('optimizer', 'H3 optimizer', ['none', 'memory', 'memory_sparse'], 'none'), sel('block_cache', 'Block cache', ['none', 'fbcache'], 'none'),
+      toggle('spectrum', 'Spectrum', false), toggle('fused_mod', 'Fused modulation', false),
+      slider('shift_video', 'Shift (video)', 1, 20, 0.5, 12, { advanced: true }), slider('shift_audio', 'Shift (audio)', 1, 10, 0.5, 3, { advanced: true }),
+    ], description: 'H3 attention backends, memory optimiser, block cache, Spectrum and sigma shift.' },
+  { id: 'h3-audiolock', title: 'H3 Audio Lock', category: 'Cards', kind: 'source',
+    inputs: [{ id: 'audio', label: 'Audio', type: 'audio' }], outputs: [{ id: 'card', label: 'Audio lock', type: 'pipe' }],
+    params: [sel('lock_mode', 'Mode', ['lock', 'remix'], 'lock'), slider('lock_strength', 'Strength (remix)', 0, 1, 0.05, 0.5, { when: (p) => p.lock_mode === 'remix' }), sel('lock_fit', 'If the audio is shorter', ['pad_silence', 'loop', 'none'], 'pad_silence')],
+    description: 'Make H3 use your audio (voice / music) instead of generating its own; each clip gets its own slice.' },
+  { id: 'asset-library', title: 'Asset Library', category: 'Cards', kind: 'source', inputs: [],
+    outputs: [P.imgOut('image', 'Images'), P.textOut('mentions', '@names'), { id: 'assets', label: 'For H3', type: 'pipe' }],
+    params: [text('project', 'Project id', ''), text('ids', 'Asset ids', '')],
+    description: 'Pick characters, places and props from your reference library. Write @name in the prompt; H3 Reference resolves it.' },
+
+  // ---------------------------------------------------------------- post-processing (one card per step, video in → video out)
+  ...((): NodeDef[] => {
+    const vin = [{ id: 'video', label: 'Video', type: 'video' as const }], vout = [{ id: 'video', label: 'Video', type: 'video' as const }];
+    const pp = (id: string, title: string, params: ParamDef[], description: string, engines?: EngineDef[]): NodeDef =>
+      ({ id, title, category: 'Postprocess', kind: 'generate', inputs: vin, outputs: vout, params, engines, description });
+    const rtxP = (pre: string, whenOk: (p: Record<string, any>) => boolean = () => true): ParamDef[] => [
+      sel(`${pre}mode`, 'Size by', ['scale', 'short', 'long', 'wh'], 'scale', { when: whenOk }),
+      slider(`${pre}scale`, 'Scale', 1, 4, 0.25, 2, { when: (p) => whenOk(p) && p[`${pre}mode`] === 'scale' }),
+      num(`${pre}short`, 'Short edge px', 1080, { when: (p) => whenOk(p) && p[`${pre}mode`] === 'short' }, 8, 8192, 8), num(`${pre}long`, 'Long edge px', 1920, { when: (p) => whenOk(p) && p[`${pre}mode`] === 'long' }, 8, 8192, 8),
+      num(`${pre}w`, 'Width', 1920, { when: (p) => whenOk(p) && p[`${pre}mode`] === 'wh' }, 8, 8192, 8), num(`${pre}h`, 'Height', 1080, { when: (p) => whenOk(p) && p[`${pre}mode`] === 'wh' }, 8, 8192, 8),
+      sel(`${pre}anchor`, 'Crop anchor', ['center', 'left', 'right', 'top', 'bottom'], 'center', { advanced: true, when: (p) => whenOk(p) && p[`${pre}mode`] === 'wh' }),
+      sel(`${pre}quality`, 'Quality', ['LOW', 'MEDIUM', 'HIGH', 'ULTRA'], 'ULTRA', { when: whenOk }),
+    ];
+    return [
+      pp('pp-deblur', 'Deblur (RTX)', [sel('strength', 'Strength', ['LOW', 'MEDIUM', 'HIGH', 'ULTRA'], 'MEDIUM')], 'NVIDIA RTX Deblur on every frame.'),
+      pp('pp-denoise', 'Denoise (RTX)', [sel('strength', 'Strength', ['LOW', 'MEDIUM', 'HIGH', 'ULTRA'], 'MEDIUM')], 'NVIDIA RTX Denoise on every frame.'),
+      pp('pp-upscale', 'Video Upscale', [], 'Enlarge a video: FlashVSR, RTX VSR or an upscale model; optional second RTX pass.', [
+        { id: 'flashvsr', label: 'FlashVSR', family: 'post', default: true, params: [
+          sel('fv_model', 'Model', ['FlashVSR-v1.1', 'FlashVSR'], 'FlashVSR-v1.1'), sel('fv_mode', 'Mode', ['tiny', 'tiny-long', 'full'], 'tiny'), slider('fv_scale', 'Scale', 2, 4, 1, 2), toggle('fv_color', 'Colour fix', true),
+          num('fv_tile', 'Tile size', 384, { advanced: true }, 64, 2048, 32), num('fv_overlap', 'Tile overlap', 32, { advanced: true }, 0, 512, 8), num('fv_seed', 'Seed', 42, { advanced: true }),
+          toggle('two_pass', '2nd pass with RTX VSR', false), ...rtxP('p2_', (p) => !!p.two_pass)] },
+        { id: 'rtx', label: 'RTX VSR (TJ)', family: 'post', params: rtxP('rtx_') },
+        { id: 'model', label: 'Upscale model (ESRGAN…)', family: 'post', params: [dyn('model_name', 'Model', 'upscalers', 'none'), toggle('two_pass', '2nd pass with RTX VSR', false), ...rtxP('p2_', (p) => !!p.two_pass)] },
+      ]),
+      pp('pp-skin', 'Skin Retouch', [slider('evenness', 'Evenness', 0, 1, 0.01, 0.3), slider('smoothing', 'Smoothing', 0, 1, 0.01, 0.2), slider('redness', 'Redness', 0, 1, 0.01, 0), slider('shine', 'Shine', 0, 1, 0.01, 0), sel('blemish', 'Blemish fix', ['off', 'subtle', 'strong'], 'off'), toggle('preserve', 'Keep moles / scars', true, { advanced: true }), slider('microtexture', 'Micro-texture', 0, 3, 0.05, 0, { advanced: true })], 'Non-generative skin evening, de-shine and blemish fix.'),
+      pp('pp-grain', 'Film Grain', [slider('amount', 'Amount', 0, 1, 0.01, 0.25), slider('size', 'Size', 0.3, 3, 0.05, 1), slider('color', 'Colour grain', 0, 1, 0.01, 0), slider('lum_bias', 'Shadow bias', 0, 1, 0.01, 0), sel('noise', 'Noise', ['smooth', 'grainy'], 'smooth')], 'Add film grain (ComfyUI core GLSL shader).'),
+      pp('pp-interpolate', 'Frame Interpolation', [slider('target_fps', 'Target FPS', 24, 120, 1, 48), slider('scale', 'Flow scale', 0.25, 2, 0.25, 1, { advanced: true }), text('model_name', 'RIFE model', 'flownet.pkl', false, { advanced: true }), num('batch', 'Batch size', 8, { advanced: true }, 1, 64, 1), toggle('fp16', 'FP16', true, { advanced: true })], 'RIFE: smooth motion by adding in-between frames.'),
+      pp('pp-resize', 'Video Resize', [sel('mode', 'Mode', ['Long side', 'Short side', 'Ratio', 'Mega Pixel', 'Width x Height'], 'Long side'), num('target_px', 'Target px', 1920, { when: (p) => p.mode === 'Long side' || p.mode === 'Short side' }, 8, 16384, 2), num('ratio_w', 'Ratio W', 16, { when: (p) => p.mode === 'Ratio' }, 1, 64, 1), num('ratio_h', 'Ratio H', 9, { when: (p) => p.mode === 'Ratio' }, 1, 64, 1), slider('megapixels', 'Megapixels', 0.1, 8, 0.1, 1, { when: (p) => p.mode === 'Mega Pixel' }), num('width', 'Width', 1280, { when: (p) => p.mode === 'Width x Height' }, 8, 16384, 2), num('height', 'Height', 720, { when: (p) => p.mode === 'Width x Height' }, 8, 16384, 2), sel('crop', 'Fit', ['crop', 'stretch'], 'crop', { when: (p) => p.mode === 'Width x Height' }), sel('method', 'Resampling', ['lanczos', 'bilinear', 'bicubic', 'area', 'nearest-exact'], 'lanczos', { advanced: true })], 'Change the video size or aspect ratio.'),
+      { id: 'face-refine', title: 'Face Refine (H3)', category: 'Postprocess', kind: 'generate',
+        inputs: [{ id: 'video', label: 'Video', type: 'video' }, P.textIn('prompt', 'Prompt', true), P.imgIn('image', 'Face references', true, true), P.cardIn('H3 option cards'), P.loraIn(), P.seedIn()], outputs: vout,
+        params: [
+          dyn('detector', 'Face detector', 'facedetectors', 'none'), dyn('fallback', 'Fallback detector', 'facedetectors', 'none', { advanced: true }),
+          sel('select', 'Which face', ['largest_face', 'smallest_face', 'left_most', 'right_most', 'top_most', 'bottom_most', 'centre_most', 'detector_score', 'manual'], 'largest_face'), text('picks', 'Picked faces (manual)', '', false, { when: (p) => p.select === 'manual' }), text('pick_mode', 'Pick mode', 'shots', false, { advanced: true, when: () => false }),
+          slider('denoise', 'Redraw strength', 0.05, 1, 0.05, 0.4), slider('confidence', 'Detect confidence', 0.05, 1, 0.05, 0.35, { advanced: true }),
+          slider('crop_factor', 'Crop factor', 1, 6, 0.1, 2.5, { advanced: true }), sel('canvas_mode', 'Canvas', ['auto_capped_768', 'auto_no_downscale', 'manual'], 'auto_capped_768', { advanced: true }),
+          num('canvas_w', 'Canvas W', 768, { advanced: true, when: (p) => p.canvas_mode === 'manual' }, 64, 2048, 32), num('canvas_h', 'Canvas H', 768, { advanced: true, when: (p) => p.canvas_mode === 'manual' }, 64, 2048, 32),
+          num('smooth', 'Smooth window', 21, { advanced: true }, 1, 99, 2), toggle('cuts', 'Detect scene cuts', false, { advanced: true }), slider('cut_threshold', 'Cut threshold', 1, 10, 0.5, 3, { advanced: true, when: (p) => !!p.cuts }),
+          toggle('identity', 'Follow the same person', true, { advanced: true }), slider('identity_threshold', 'Identity threshold', 0.1, 0.9, 0.01, 0.45, { advanced: true }), sel('identity_model', 'Identity model', ['insightface', 'clip_vision', 'ccip'], 'insightface', { advanced: true }),
+          slider('mul_small', 'Small face ×', 0, 2, 0.05, 1, { advanced: true }), slider('mul_large', 'Large face ×', 0, 2, 0.05, 0.35, { advanced: true }), slider('px_small', 'Small face px', 8, 200, 1, 30, { advanced: true }), slider('px_large', 'Large face px', 20, 600, 1, 120, { advanced: true }),
+          slider('steps', 'Steps (no turbo)', 1, 30, 1, 8, { advanced: true }), dyn('sampler', 'Sampler', 'samplers', 'euler', { advanced: true }), dyn('scheduler', 'Scheduler', 'schedulers', 'simple', { advanced: true }),
+          sel('paste', 'Paste back', ['face_only', 'face_ellipse', 'full_crop'], 'face_only', { advanced: true }), slider('feather', 'Feather', 0, 64, 1, 6, { advanced: true }), slider('colour', 'Colour match', 0, 1, 0.05, 1, { advanced: true }), slider('blend', 'Blend', 0, 1, 0.05, 1, { advanced: true }),
+          sel('undetected', 'Frames without a face', ['fade_out', 'skip', 'composite_anyway'], 'fade_out', { advanced: true }), seed,
+        ], description: 'Redraw small faces in a finished H3 clip: track → crop → H3 redraw → stitch back. Needs ComfyUI-H3-FaceRefine.' },
+      { id: 'character-sheet', title: 'Character Sheet', category: 'Image', kind: 'generate',
+        inputs: [P.imgIn('image', 'Character reference', false, true), P.textIn('prompt', 'Prompt (optional)', true), P.loraIn(), P.seedIn()],
+        outputs: [P.imgOut('image', 'Sheet'), { id: 'video', label: 'Turnaround video', type: 'video' }],
+        params: [
+          sel('aspect', 'Aspect ratio', ['3:4', '9:16', '1:1', '16:9', '4:3'], '3:4'), megapixels(0.9),
+          text('frames', 'Frames for the 8 cells', '7, 22, 37, 52, 67, 82, 107, 118'), toggle('save_frames', 'Also save each frame', false, { advanced: true }),
+          toggle('latent_up', 'Cheap first pass + latent upscale', false, { advanced: true }), slider('first_mp', 'First pass size (MP)', 0.2, 1, 0.05, 0.36, { advanced: true, when: (p) => !!p.latent_up }), slider('pass2', 'Second pass steps', 3, 5, 1, 3, { advanced: true, when: (p) => !!p.latent_up }),
+          sel('deblur', 'RTX Deblur', ['none', 'LOW', 'MEDIUM', 'HIGH', 'ULTRA'], 'none', { advanced: true }), toggle('rtx', 'RTX VSR', false, { advanced: true }), toggle('supersample', 'Scale back down (supersample)', false, { advanced: true, when: (p) => !!p.rtx }),
+          sel('ref_size', 'Reference size', ['max', 'match'], 'max', { advanced: true }), num('max_dim', 'Sheet max size px', 2048, { advanced: true }, 512, 8192, 64), seed,
+        ], description: 'H3 reference-to-video turnaround (front / back / profile / ¾ / expressions) assembled into a model sheet.' },
+    ];
+  })(),
+
+  { id: 'video-refine', title: 'Video Edit (LTX 2.5 refine)', category: 'Video', kind: 'generate',
+    inputs: [{ id: 'video', label: 'Video', type: 'video' }, P.textIn('prompt', 'Prompt', true), P.loraIn(), P.seedIn()], outputs: [{ id: 'video', label: 'Video', type: 'video' }],
+    params: [slider('steps', 'Steps', 1, 20, 1, 4), slider('denoise', 'Change amount', 0.05, 1, 0.05, 0.15), text('negative', 'Negative prompt', 'bad anatomy, inconsistent look, low resolution,', true, { advanced: true }), dyn('sampler', 'Sampler', 'samplers', 'euler_ancestral', { advanced: true }), dyn('scheduler', 'Scheduler', 'schedulers', 'simple', { advanced: true }), seed],
+    description: 'Re-render an existing clip with LTX 2.5: 2× latent upscale + a light, prompt-guided refine (keeps the sound).' },
+  { id: 'video-stitch', title: 'Video Stitch', category: 'Video', kind: 'generate',
+    inputs: [{ id: 'videos', label: 'Videos (in order)', type: 'video', multi: true }], outputs: [{ id: 'video', label: 'Video', type: 'video' }],
+    params: [slider('overlap', 'Trim overlap (s)', 0, 3, 0.05, 0, { advanced: true })],
+    description: 'Join several videos into one, in the order they are connected.' },
   { id: 'import-audio', title: 'Import Audio', category: 'Utility', kind: 'source', inputs: [], outputs: [{ id: 'audio', label: 'Audio', type: 'audio' }], params: [], description: 'Load an audio file (e.g. a recording for YuE2 Cover Music).' },
-  { id: 'import', title: 'Import', category: 'Utility', kind: 'source', inputs: [], outputs: [{ id: 'image', label: 'Media', type: 'image' }], params: [], description: 'Load an image or video from your computer, or drop one on the canvas.' },
-  { id: 'export', title: 'Export', category: 'Utility', kind: 'output', inputs: [P.imgIn('image', 'Media')], outputs: [], params: [text('name', 'File name', 'canvers')], description: 'Download the connected result.' },
-  { id: 'preview', title: 'Preview', category: 'Utility', kind: 'output', inputs: [P.imgIn('image', 'Media', true)], outputs: [], params: [], description: 'Look at any image or text.' },
+  { id: 'import', title: 'Load Image', category: 'Utility', kind: 'source', inputs: [], outputs: [{ id: 'image', label: 'Image', type: 'image' }], params: [], description: 'Load an image from your computer, or drop one on the canvas.' },
+  { id: 'import-video', title: 'Load Video', category: 'Utility', kind: 'source', inputs: [], outputs: [{ id: 'video', label: 'Video', type: 'video' }], params: [], description: 'Load a video from your computer, or drop one on the canvas.' },
+  { id: 'export', title: 'Export', category: 'Utility', kind: 'output', inputs: [{ id: 'image', label: 'Media', type: 'any' }], outputs: [], params: [text('name', 'File name', 'canvers')], description: 'Download the connected result.' },
+  { id: 'preview', title: 'Result Viewer', category: 'Utility', kind: 'output', inputs: [{ id: 'image', label: 'Image / video / audio / text', type: 'any', optional: true }], outputs: [{ id: 'out', label: 'Pass through', type: 'any' }], params: [], description: 'Look at any image or text.' },
   { id: 'router', title: 'Router', category: 'Utility', kind: 'edit', inputs: [P.imgIn('image', 'In', false)], outputs: [P.imgOut('image', 'Out')], params: [], description: 'A pass-through to tidy wires.' },
-  { id: 'compare', title: 'Compare', category: 'Utility', kind: 'output', inputs: [P.imgIn('a', 'A'), P.imgIn('b', 'B')], outputs: [], params: [], description: 'Drag a slider between two images.' },
+  { id: 'compare', title: 'Compare', category: 'Utility', kind: 'output', inputs: [{ id: 'a', label: 'A', type: 'any' }, { id: 'b', label: 'B', type: 'any' }], outputs: [], params: [], description: 'Drag a slider between two images.' },
   { id: 'note', title: 'Sticky Note', category: 'Utility', kind: 'note', inputs: [], outputs: [], params: [text('text', 'Note', '', true)], description: 'A memo on the canvas.' },
   { id: 'number', title: 'Number', category: 'Data', kind: 'source', inputs: [], outputs: [{ id: 'value', label: 'Value', type: 'number' }], params: [num('value', 'Value', 0, {}, undefined, undefined, 1)], description: 'A number to wire into other nodes.' },
   { id: 'text-data', title: 'Text', category: 'Data', kind: 'source', inputs: [], outputs: [P.textOut()], params: [text('text', 'Text', '', true)], description: 'A fixed piece of text.' },
@@ -231,7 +320,7 @@ export const REGISTRY: NodeDef[] = [
 ];
 
 export const byId = new Map(REGISTRY.map((n) => [n.id, n]));
-export const CATEGORIES = ['STUDIO ONE', 'TJ NODE', 'Text / LLM', 'Image', 'Video', 'Audio', 'Workflow', 'Edit', 'Utility', 'Data'];
+export const CATEGORIES = ['Cards', 'Text / LLM', 'Image', 'Video', 'Postprocess', 'Audio', 'Workflow', 'Edit', 'Utility', 'Data', 'STUDIO ONE', 'TJ NODE'];
 
 /** the params a node shows: the engine's own set when it has one, else the node's. */
 export function paramsFor(def: NodeDef, engineId?: string): ParamDef[] {

@@ -33,6 +33,8 @@ export interface H3Job {
   saveSubfolder: string;
   size?: { width: number; height: number };
   upscaleModel?: string;
+  /** reference assets from the Asset Library card (TJ_H3Reference resolves @tokens in the prompt) */
+  assetRef?: { project?: string; ids: string[] };
   /** clip bookkeeping for One-Take / Audio Lock */
   clipIndex: number; prevCheckpoint?: string; checkpoint?: string;
   saveLastFrame: boolean;
@@ -54,7 +56,7 @@ export const h3ModelLists = () => (cache ??= getJson<Lists>('/minimax_h3_one/mod
 let availCache: Promise<Record<string, boolean>> | null = null;
 export const h3Availability = () => (availCache ??= getJson<{ available?: Record<string, boolean> }>('/minimax_h3_one/node_availability').then((r) => r.available ?? (r as any)).catch(() => ({})));
 
-const real = (a?: string[]) => (a ?? []).filter((x) => x && x !== 'none');
+export const real = (a?: string[]) => (a ?? []).filter((x) => x && x !== 'none');
 export async function resolveH3Models(user: Record<string, string>, mode: string) {
   const l = await h3ModelLists();
   const pick = (k: string, list: string[] | undefined, re: RegExp) => user[k] || real(list).find((x) => re.test(x)) || '';
@@ -81,34 +83,22 @@ export function h3Size(aspect: string, mp: number) {
   return { width: snap(w), height: snap(h) };
 }
 
-type L = [string, number];
+export type L = [string, number];
 
 export interface H3Graph { graph: Record<string, any>; videoNode: string; lastFrameNode?: string; tailNode?: string; checkpoint?: string }
 
-export async function buildH3Graph(job: H3Job): Promise<H3Graph> {
-  const o = job.opt;
-  const m = await resolveH3Models(job.models, job.mode);
-  const miss = ([['H3 diffusion model', m.unet], ['text encoder', m.clip], ['video VAE', m.vaeVideo], ['audio VAE', m.vaeAudio]] as const).filter(([, v]) => !v).map(([k]) => k);
-  if (miss.length) throw new Error(`Pick the MiniMax H3 ${miss.join(', ')} in Settings → Video models.`);
-  if (!job.prompt.trim()) throw new Error('Prompt is empty');
-  if (job.mode === 'reference' && !job.refs.length) throw new Error('Connect at least one reference image');
-  const avail = await h3Availability();
-  const has = (n: string) => !!avail[n];
-  const needNode = (n: string, why: string) => { if (!has(n)) throw new Error(`${why} needs the ${n} node — install the ComfyUI pack that provides it, or switch the option off.`); };
+/** A turbo choice only counts when its LoRA is picked and its node pack is installed. */
+export function effectiveTurbo(o: H3Options, has: (n: string) => boolean): H3Options['turbo'] {
+  const lora = !!o.turboLora && o.turboLora !== 'none';
+  if (o.turbo === 'larryvrh') return has('MiniMaxH3TurboLoRA') && lora ? 'larryvrh' : 'none';
+  if (o.turbo === 'lightx2v') return has('H3SLAAttention') && lora ? 'lightx2v' : 'none';
+  if (o.turbo === 'pdd') return lora ? 'pdd' : 'none';
+  return o.turbo;
+}
 
-  const frames = h3Frames(job.seconds);
-  const turbo = o.turbo === 'larryvrh' && (!has('MiniMaxH3TurboLoRA') || !o.turboLora || o.turboLora === 'none') ? 'none'
-    : o.turbo === 'lightx2v' && (!has('H3SLAAttention') || !o.turboLora || o.turboLora === 'none') ? 'none'
-    : o.turbo === 'pdd' && (!o.turboLora || o.turboLora === 'none') ? 'none' : o.turbo;
-  const hires = o.hires && turbo === 'pdd';
-  const final = job.size ?? h3Size(job.aspect, hires ? o.hiresFinalMp : job.megapixels);
-  const start = hires ? h3Size(job.aspect, o.hiresStartMp) : final;
-  const steps = hires ? 8 : turbo === 'none' ? Math.max(1, Math.round(job.steps)) : Math.max(1, Math.round(o.turboSteps));
-
-  const g: Record<string, any> = {};
-  g.unet = m.unet.toLowerCase().endsWith('.gguf') ? { class_type: 'UnetLoaderGGUF', inputs: { unet_name: m.unet } } : { class_type: 'UNETLoader', inputs: { unet_name: m.unet, weight_dtype: 'default' } };
-  let model: L = ['unet', 0];
-
+/** The H3 model chain shared by video, Face Refine and Character Sheet: attention patches, sigma shift, LoRAs, turbo, caches, optimisers. */
+export function h3ModelChain(g: Record<string, any>, start: L, o: H3Options, turbo: H3Options['turbo'], loras: { name: string; strength: number }[], has: (n: string) => boolean): L {
+  let model: L = start;
   // ── attention backend (one slot; last writer wins) ──
   if (o.attnBackend === 'ck' && has('ModelAttentionBackend')) { g.ck = { class_type: 'ModelAttentionBackend', inputs: { model, attention: 'comfy kitchen attention' } }; model = ['ck', 0]; }
   else if (o.attnBackend === 'sage' && has('PathchSageAttentionKJ')) { g.sage = { class_type: 'PathchSageAttentionKJ', inputs: { model, sage_attention: 'auto' } }; model = ['sage', 0]; }
@@ -122,7 +112,7 @@ export async function buildH3Graph(job: H3Job): Promise<H3Graph> {
   }
   // PDD's heads are trained against a 12/3 shift
   g.shift = { class_type: 'MiniMaxH3SigmaShift', inputs: { model, shift_video: turbo === 'pdd' ? 12 : o.shiftVideo, shift_audio: turbo === 'pdd' ? 3 : o.shiftAudio } }; model = ['shift', 0];
-  job.loras.forEach((l, i) => {
+  loras.forEach((l, i) => {
     if (!l.name || l.name === 'none' || !(l.strength > 0)) return;
     g[`lora${i}`] = { class_type: 'LoraLoaderModelOnly', inputs: { model, lora_name: l.name, strength_model: l.strength } }; model = [`lora${i}`, 0];
   });
@@ -146,13 +136,46 @@ export async function buildH3Graph(job: H3Job): Promise<H3Graph> {
     g.sla = { class_type: 'H3SLAAttention', inputs: { model, sparsity_ratio: 0.9, block_size: '64', min_seq_len: 8192, dense_last_steps: 0, protect_audio: true, enabled: true } }; model = ['sla', 0];
   }
 
+  return model;
+}
+
+export async function buildH3Graph(job: H3Job): Promise<H3Graph> {
+  const o = job.opt;
+  const m = await resolveH3Models(job.models, job.mode);
+  const miss = ([['H3 diffusion model', m.unet], ['text encoder', m.clip], ['video VAE', m.vaeVideo], ['audio VAE', m.vaeAudio]] as const).filter(([, v]) => !v).map(([k]) => k);
+  if (miss.length) throw new Error(`Pick the MiniMax H3 ${miss.join(', ')} in Settings → Video models.`);
+  if (!job.prompt.trim()) throw new Error('Prompt is empty');
+  if (job.mode === 'reference' && !job.refs.length && !job.assetRef) throw new Error('Connect at least one reference image or an Asset Library card');
+  const avail = await h3Availability();
+  const has = (n: string) => !!avail[n];
+  const needNode = (n: string, why: string) => { if (!has(n)) throw new Error(`${why} needs the ${n} node — install the ComfyUI pack that provides it, or switch the option off.`); };
+
+  const frames = h3Frames(job.seconds);
+  const turbo = effectiveTurbo(o, has);
+  const hires = o.hires && turbo === 'pdd';
+  const final = job.size ?? h3Size(job.aspect, hires ? o.hiresFinalMp : job.megapixels);
+  const start = hires ? h3Size(job.aspect, o.hiresStartMp) : final;
+  const steps = hires ? 8 : turbo === 'none' ? Math.max(1, Math.round(job.steps)) : Math.max(1, Math.round(o.turboSteps));
+
+  const g: Record<string, any> = {};
+  g.unet = m.unet.toLowerCase().endsWith('.gguf') ? { class_type: 'UnetLoaderGGUF', inputs: { unet_name: m.unet } } : { class_type: 'UNETLoader', inputs: { unet_name: m.unet, weight_dtype: 'default' } };
+  let model: L = ['unet', 0];
+
+  model = h3ModelChain(g, model, o, turbo, job.loras, has);
+
   g.clip = { class_type: 'CLIPLoader', inputs: { clip_name: m.clip, type: 'minimax', device: 'default' } };
   g.vaeV = { class_type: 'VAELoader', inputs: { vae_name: m.vaeVideo } };
   g.vaeA = { class_type: 'VAELoader', inputs: { vae_name: m.vaeAudio } };
 
   // ── conditioning (at stage-1 size; hires adds a second one at the final size when images are involved) ──
   const cond = (key: string, w: number, h: number) => {
-    if (job.mode === 'reference') {
+    if (job.mode === 'reference' && job.assetRef) {
+      needNode('TJ_H3Reference', 'Asset Library references');
+      const lib: Record<string, any> = { clip: ['clip', 0], vae: ['vaeV', 0], audio_vae: ['vaeA', 0], prompt: job.prompt, width: w, height: h, length: frames, ref_image_size: 'match', match_check: 'warn' };
+      if (job.assetRef.project) { lib.mode = 'project'; lib.project = String(job.assetRef.project); }
+      else { const ids = job.assetRef.ids.slice(0, 15); lib.mode = 'assets'; lib.asset_count = ids.length; ids.forEach((id, i) => { lib[`asset_${i + 1}`] = String(id); }); }
+      g[key] = { class_type: 'TJ_H3Reference', inputs: lib };
+    } else if (job.mode === 'reference') {
       const inputs: Record<string, any> = { clip: ['clip', 0], vae: ['vaeV', 0], audio_vae: ['vaeA', 0], prompt: job.prompt, width: w, height: h, length: frames, ref_image_size: 'match' };
       job.refs.slice(0, 9).forEach((f, i) => { g[`ref${i}`] ??= { class_type: 'LoadImage', inputs: { image: f } }; inputs[`ref_images.ref_image_${i}`] = [`ref${i}`, 0]; });
       g[key] = { class_type: 'MiniMaxH3ReferenceToVideo', inputs };

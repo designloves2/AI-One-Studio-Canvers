@@ -49,8 +49,10 @@ export interface Settings {
   video: Record<string, string>;
   setVideo: (k: string, v: string) => void;
   saveSubfolder: string;
+  /** load the original STUDIO_ONE panels as extra (legacy) nodes; off = card nodes only */
+  hostPanels: boolean;
   setMusic: (k: string, v: string) => void;
-  set: (patch: Partial<Pick<Settings, 'comfyUrl' | 'saveSubfolder'>>) => void;
+  set: (patch: Partial<Pick<Settings, 'comfyUrl' | 'saveSubfolder' | 'hostPanels'>>) => void;
   setLlm: (patch: Partial<LlmSettings>) => void;
   setKey: (which: 'custom' | 'openrouter', v: string) => void;
   setModel: (family: string, patch: Partial<ModelChoice>) => void;
@@ -65,8 +67,8 @@ function load(): Partial<Settings> {
 export const useSettings = create<Settings>((set, get) => {
   const saved = load();
   const persist = () => {
-    const { comfyUrl, llm, models, saveSubfolder, music, video } = get();
-    try { localStorage.setItem(KEY, JSON.stringify({ comfyUrl, llm, models, saveSubfolder, music, video })); } catch { /* ignore */ }
+    const { comfyUrl, llm, models, saveSubfolder, music, video, hostPanels } = get();
+    try { localStorage.setItem(KEY, JSON.stringify({ comfyUrl, llm, models, saveSubfolder, music, video, hostPanels })); } catch { /* ignore */ }
   };
   return {
     comfyUrl: saved.comfyUrl ?? '',
@@ -74,6 +76,7 @@ export const useSettings = create<Settings>((set, get) => {
     keys: { custom: '', openrouter: '' },
     models: saved.models ?? {},
     saveSubfolder: saved.saveSubfolder ?? 'ai-one-canvers',
+    hostPanels: saved.hostPanels ?? false,
     music: saved.music ?? {},
     video: saved.video ?? {},
     setVideo: (k, v) => { set({ video: { ...get().video, [k]: v } }); persist(); },

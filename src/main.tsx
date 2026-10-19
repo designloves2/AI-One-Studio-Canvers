@@ -1,3 +1,5 @@
+import { insertDeck, BUILTIN_DECKS } from './decks';
+import { importFile } from './engine/run';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { ReactFlowProvider } from '@xyflow/react';
@@ -17,4 +19,4 @@ createRoot(document.getElementById('root')!).render(
 );
 
 // dev-only handle for the end-to-end checks
-if (import.meta.env.DEV) Object.assign(window, { __canvers: { useGraph, runNode, buildImageGraph, useSettings, REGISTRY, hostStatus, hostApp } });
+if (import.meta.env.DEV) Object.assign(window, { __canvers: { useGraph, runNode, buildImageGraph, useSettings, REGISTRY, hostStatus, hostApp, insertDeck, BUILTIN_DECKS, importFile } });

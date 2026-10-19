@@ -4,7 +4,7 @@ import { byId, compatible, defaultParams, engineFor } from '../registry';
 import { uid } from '../backend/comfy';
 
 export type AppMode = 'canvas' | 'simple';
-export type PanelId = null | 'nodes' | 'assets' | 'settings' | 'models';
+export type PanelId = null | 'nodes' | 'decks' | 'assets' | 'settings' | 'models';
 
 export interface ComposerRun {
   id: string;
@@ -38,6 +38,8 @@ interface State {
   viewer: { nodeId: string } | null;
   painter: string | null;
   melody: string | null;
+  assetPicker: string | null;
+  facePicker: string | null;
   fitTick: number;
   composerRuns: ComposerRun[];
 
@@ -69,6 +71,8 @@ interface State {
   openViewer(nodeId: string | null): void;
   openPainter(nodeId: string | null): void;
   openMelody(nodeId: string | null): void;
+  openAssetPicker(nodeId: string | null): void;
+  openFacePicker(nodeId: string | null): void;
   toProject(): Project;
   loadProject(p: Project): void;
   newProject(): void;
@@ -93,7 +97,7 @@ export const useGraph = create<State>((set, get) => ({
   projectId: uid('p'),
   projectName: 'untitled',
   nodes: [], edges: [], runtime: {}, selected: [], past: [], future: [],
-  mode: readMode(), panel: null, viewer: null, painter: null, melody: null, fitTick: 0,
+  mode: readMode(), panel: null, viewer: null, painter: null, melody: null, assetPicker: null, facePicker: null, fitTick: 0,
   composerRuns: readRuns(),
 
   setMode: (mode) => { try { localStorage.setItem(MODE_KEY, mode); } catch { /* ignore */ } set({ mode }); },
@@ -202,6 +206,8 @@ export const useGraph = create<State>((set, get) => ({
   openViewer: (nodeId) => set({ viewer: nodeId ? { nodeId } : null }),
   openPainter: (nodeId) => set({ painter: nodeId }),
   openMelody: (nodeId) => set({ melody: nodeId }),
+  openAssetPicker: (nodeId) => set({ assetPicker: nodeId }),
+  openFacePicker: (nodeId) => set({ facePicker: nodeId }),
 
   toProject: () => ({ app: 'ai-one-studio-canvers', version: 1, id: get().projectId, name: get().projectName, nodes: hostSerializer ? get().nodes.map(hostSerializer) : get().nodes, edges: get().edges, updatedAt: new Date().toISOString() }),
   loadProject: (p) => set({ projectId: p.id ?? uid('p'), projectName: p.name || 'untitled', nodes: p.nodes ?? [], edges: p.edges ?? [], runtime: {}, selected: [], past: [], future: [], fitTick: get().fitTick + 1 }),

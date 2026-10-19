@@ -70,7 +70,7 @@ function ImportBody({ id }: { id: string }) {
   const T = useT();
   return (
     <div className="import-body">
-      <input ref={ref} type="file" accept={node.defId === 'import-audio' ? 'audio/*' : 'image/*,video/*'} multiple hidden onChange={(e) => { void addImports([...(e.target.files ?? [])].slice(1), { x: node.x + 340, y: node.y }); const f = e.target.files?.[0]; if (f) void replaceImport(id, f); e.target.value = ''; }} />
+      <input ref={ref} type="file" accept={node.defId === 'import-audio' ? 'audio/*' : node.defId === 'import-video' ? 'video/*' : 'image/*'} multiple hidden onChange={(e) => { void addImports([...(e.target.files ?? [])].slice(1), { x: node.x + 340, y: node.y }); const f = e.target.files?.[0]; if (f) void replaceImport(id, f); e.target.value = ''; }} />
       <button className="btn nodrag" onClick={() => ref.current?.click()}>{node.results.length ? T('Replace…') : T('Choose file…')}</button>
       <span className="muted">{T('or drop a file on the canvas')}</span>
     </div>
@@ -158,6 +158,30 @@ function MelodyBody({ id }: { id: string }) {
   );
 }
 
+function AssetLibBody({ id }: { id: string }) {
+  const T = useT();
+  const node = useGraph((s) => s.nodes.find((n) => n.id === id))!;
+  const ids = String(node.params.ids ?? '').split(/[,\s]+/).filter(Boolean);
+  return (
+    <div className="import-body">
+      <button className="btn nodrag" onClick={() => useGraph.getState().openAssetPicker(id)}>📚 {T('Choose from library…')}</button>
+      <span className="muted">{node.params.project ? `${T('Project')} #${node.params.project}` : ids.length ? `${ids.length} ${T('assets')}` : T('nothing chosen yet')}</span>
+    </div>
+  );
+}
+
+function FacePickBody({ id }: { id: string }) {
+  const T = useT();
+  const node = useGraph((s) => s.nodes.find((n) => n.id === id))!;
+  if (node.params.select !== 'manual') return null;
+  return (
+    <div className="import-body">
+      <button className="btn nodrag" onClick={() => useGraph.getState().openFacePicker(id)}>🙂 {T('Pick faces')}</button>
+      <span className="muted">{String(node.params.picks || '') || T('none picked')}</span>
+    </div>
+  );
+}
+
 function DisplayBody({ id, defId }: { id: string; defId: string }) {
   const a = useUpstream(id, defId === 'compare' ? 'a' : 'image');
   const b = useUpstream(id, 'b');
@@ -208,7 +232,7 @@ const PlainNode = memo(function PlainNode({ id, selected }: NodeProps) {
 
   const color = KIND_COLOR[def.kind] ?? '#888';
   const params = paramsFor(def, node.engineId);
-  const shown = params.filter((p) => (adv || !p.advanced) && (!p.when || p.when(node.params)) && !(def.id === 'comfy-workflow' && /target$|^workflow$/.test(p.id)) && !(def.id === 'melody-editor'));
+  const shown = params.filter((p) => (adv || !p.advanced) && (!p.when || p.when(node.params)) && !(def.id === 'comfy-workflow' && /target$|^workflow$/.test(p.id)) && !(def.id === 'melody-editor') && !(def.id === 'asset-library') && !(def.id === 'face-refine' && (p.id === 'picks' || p.id === 'pick_mode')));
   const hasAdv = params.some((p) => p.advanced);
   const rows = Math.max(def.inputs.length, def.outputs.length);
   const running = rt?.status === 'running';
@@ -248,7 +272,7 @@ const PlainNode = memo(function PlainNode({ id, selected }: NodeProps) {
 
       {rows > 0 && <div className="ports">{Array.from({ length: rows }, (_, i) => <PortRow key={i} nodeId={id} inp={def.inputs[i]} out={def.outputs[i]} />)}</div>}
 
-      {(def.id === 'import' || def.id === 'import-audio') && <ImportBody id={id} />}
+      {(def.id === 'import' || def.id === 'import-audio' || def.id === 'import-video') && <ImportBody id={id} />}
       {(def.id === 'export' || def.id === 'preview' || def.id === 'compare') && <DisplayBody id={id} defId={def.id} />}
 
       {def.id === 'comfy-workflow' && <WorkflowBody id={id} />}
@@ -261,12 +285,14 @@ const PlainNode = memo(function PlainNode({ id, selected }: NodeProps) {
       {hasAdv && <button className="adv-toggle nodrag" onClick={() => setAdv((v) => !v)}>{adv ? '▾' : '▸'} {T('Advanced')}</button>}
 
       {def.id === 'melody-editor' && <MelodyBody id={id} />}
+      {def.id === 'asset-library' && <AssetLibBody id={id} />}
+      {def.id === 'face-refine' && <FacePickBody id={id} />}
       {def.id === 'painter' && <button className="btn nodrag open-painter" onClick={() => openPainter(id)}>{T('Open painter')}</button>}
 
       {running && <div className="bar"><b style={{ width: `${Math.max(4, rt!.pct)}%` }} /><em>{rt!.label ?? `${rt!.pct}%`}</em></div>}
       {rt?.status === 'error' && <div className="error">{rt.error}</div>}
 
-      {def.kind !== 'output' && (def.kind !== 'source' || def.id === 'import' || def.id === 'import-audio') && <Results id={id} />}
+      {def.kind !== 'output' && (def.kind !== 'source' || def.id === 'import' || def.id === 'import-audio' || def.id === 'import-video') && <Results id={id} />}
       <NodeResizer minWidth={240} maxWidth={720} isVisible={selected} handleStyle={{ width: 8, height: 8 }} lineStyle={{ opacity: 0 }} onResizeEnd={(_, p) => useGraph.getState().setSize(id, p.width, p.height)} keepAspectRatio={false} />
     </div>
   );

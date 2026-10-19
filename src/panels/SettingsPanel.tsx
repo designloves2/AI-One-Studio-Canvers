@@ -58,6 +58,7 @@ function ImageModels() {
   const models = useSettings((s) => s.models);
   const setModel = useSettings((s) => s.setModel);
   const save = useSettings((s) => s.saveSubfolder);
+  const hostPanels = useSettings((s) => s.hostPanels);
   const set = useSettings((s) => s.set);
   const [lists, setLists] = useState<Partial<Record<Family, ModelLists>>>({});
   const [auto, setAuto] = useState<Partial<Record<Family, string>>>({});
@@ -81,6 +82,7 @@ function ImageModels() {
           </div>
         );
       })}
+      <Row label={T('Legacy: load original STUDIO_ONE panels')} hint={T('Adds the old all-in-one panels as extra nodes (reload needed). Off = card nodes only.')}><input type="checkbox" checked={hostPanels} onChange={(e) => set({ hostPanels: e.target.checked })} /></Row>
       <Row label={T('Output folder')} hint="ComfyUI/output/<folder>"><input value={save} onChange={(e) => set({ saveSubfolder: e.target.value.replace(/[^\w\-/]+/g, '_') })} /></Row>
     </section>
   );

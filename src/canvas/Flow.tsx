@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ReactFlow, Background, BackgroundVariant, Controls as RFControls, MiniMap, SelectionMode, useReactFlow,
   type Connection, type Edge, type EdgeChange, type Node, type NodeChange,
@@ -9,11 +9,16 @@ import { byId, compatible } from '../registry';
 import { CanvasNode } from './CanvasNode';
 import { GroupNode } from './GroupNode';
 import { PORT_COLORS } from '../types';
-import { addImports } from '../engine/actions';
+import { addImports, runAll } from '../engine/actions';
+import { runNode } from '../engine/actions';
+import { ContextMenu, type CtxItem } from './ContextMenu';
+import type { Pending } from './NodeMenu';
+import { saveSelectionAsDeck } from '../decks';
 
 const nodeTypes = { card: CanvasNode, group: GroupNode };
 
-export function Flow({ tool, onMenu }: { tool: 'select' | 'hand'; onMenu(at: { x: number; y: number; flow: { x: number; y: number } }): void }) {
+export function Flow({ tool, onMenu }: { tool: 'select' | 'hand'; onMenu(at: { x: number; y: number; flow: { x: number; y: number }; pending?: Pending }): void }) {
+  const [ctx, setCtx] = useState<{ x: number; y: number; ids: string[] } | null>(null);
   const nodes = useGraph((s) => s.nodes);
   const edges = useGraph((s) => s.edges);
   const selected = useGraph((s) => s.selected);
@@ -75,6 +80,31 @@ export function Flow({ tool, onMenu }: { tool: 'select' | 'hand'; onMenu(at: { x
     useGraph.getState().connect({ source: c.source, sourceHandle: c.sourceHandle, target: c.target, targetHandle: c.targetHandle });
   }, []);
 
+  // dragging a wire and letting go on empty canvas opens the card menu, filtered to cards that fit the wire
+  const onConnectEnd = useCallback((ev: MouseEvent | TouchEvent, st: any) => {
+    if (st.isValid || !st.fromNode || !st.fromHandle) return;
+    const e = ev as MouseEvent; if (e.clientX === undefined) return;
+    const g = useGraph.getState(); const node = g.nodes.find((n) => n.id === st.fromNode.id); if (!node) return;
+    const def = byId.get(node.defId); const dir = st.fromHandle.type === 'source' ? 'out' : 'in';
+    const port = (dir === 'out' ? def?.outputs : def?.inputs)?.find((p) => p.id === st.fromHandle.id); if (!port) return;
+    onMenu({ x: e.clientX, y: e.clientY, flow: rf.screenToFlowPosition({ x: e.clientX, y: e.clientY }), pending: { node: node.id, handle: port.id, dir, type: port.type } });
+  }, [rf, onMenu]);
+
+  const ctxItems = (ids: string[]): CtxItem[] => {
+    const g = useGraph.getState(); const has = ids.length > 0;
+    const lockedAll = has && ids.every((id) => g.nodes.find((n) => n.id === id)?.locked);
+    const grp = ids.length === 1 && g.nodes.find((n) => n.id === ids[0])?.members;
+    return [
+      { label: 'Run this card', disabled: ids.length !== 1, onClick: () => void runNode(ids[0]) },
+      { label: 'Run everything', onClick: () => void runAll() },
+      grp ? { label: 'Ungroup', shortcut: 'Ctrl G', divider: true, onClick: () => g.ungroup(ids[0]) } : { label: 'Group selection', shortcut: 'Ctrl G', disabled: !has, divider: true, onClick: () => g.group(ids) },
+      { label: 'Duplicate', shortcut: 'Ctrl D', disabled: !has, onClick: () => g.duplicateNodes(ids) },
+      { label: lockedAll ? 'Unlock' : 'Lock', disabled: !has, onClick: () => g.setLocked(ids, !lockedAll) },
+      { label: 'Save selection as deck', disabled: !has, onClick: () => { g.select(ids); saveSelectionAsDeck(`Deck ${new Date().toLocaleTimeString()}`); } },
+      { label: 'Delete', shortcut: 'Del', danger: true, disabled: !has, divider: true, onClick: () => g.removeNodes(ids) },
+    ];
+  };
+
   const isValid = useCallback((c: Connection | Edge) => {
     const g = useGraph.getState();
     const s = g.nodes.find((n) => n.id === c.source), t = g.nodes.find((n) => n.id === c.target);
@@ -98,9 +128,12 @@ export function Flow({ tool, onMenu }: { tool: 'select' | 'hand'; onMenu(at: { x
     <div className="flow" ref={wrap} onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
       <ReactFlow
         nodes={rfNodes} edges={rfEdges} nodeTypes={nodeTypes}
-        onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect} isValidConnection={isValid}
+        onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect} onConnectEnd={onConnectEnd} isValidConnection={isValid}
+        onNodeContextMenu={(e, n) => { e.preventDefault(); const sel = useGraph.getState().selected; const ids = sel.includes(n.id) ? sel : [n.id]; if (!sel.includes(n.id)) useGraph.getState().select([n.id]); setCtx({ x: e.clientX, y: e.clientY, ids }); }}
+        onSelectionContextMenu={(e, ns) => { e.preventDefault(); setCtx({ x: e.clientX, y: e.clientY, ids: ns.map((n) => n.id) }); }}
+        onPaneContextMenu={(e) => { e.preventDefault(); setCtx({ x: e.clientX, y: e.clientY, ids: [] }); }}
         onNodeDragStart={() => useGraph.getState().snapshot()}
-        onPaneClick={() => useGraph.getState().select([])}
+        onPaneClick={() => { useGraph.getState().select([]); setCtx(null); }}
         onDoubleClick={(e) => { if ((e.target as HTMLElement).classList.contains('react-flow__pane')) onMenu({ x: e.clientX, y: e.clientY, flow: rf.screenToFlowPosition({ x: e.clientX, y: e.clientY }) }); }}
         panOnDrag={tool === 'hand' ? true : [1, 2]} selectionOnDrag={tool === 'select'} selectionMode={SelectionMode.Partial}
         zoomOnDoubleClick={false} minZoom={0.1} maxZoom={2.5} fitView={false} deleteKeyCode={['Backspace', 'Delete']}
@@ -110,6 +143,7 @@ export function Flow({ tool, onMenu }: { tool: 'select' | 'hand'; onMenu(at: { x
         <RFControls showInteractive={false} position="bottom-right" />
         <MiniMap pannable zoomable nodeColor="#3a4150" maskColor="rgba(10,12,16,.7)" position="bottom-left" />
       </ReactFlow>
+      {ctx && <ContextMenu x={ctx.x} y={ctx.y} items={ctxItems(ctx.ids)} onClose={() => setCtx(null)} />}
       {nodes.length === 0 && (
         <div className="hint">
           <h2>AI ONE Studio Canvers</h2>

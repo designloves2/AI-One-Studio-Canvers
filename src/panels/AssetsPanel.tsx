@@ -26,8 +26,9 @@ export function AssetsPanel() {
   const toCanvas = (it: GalleryItem) => {
     const g = useGraph.getState();
     const file = { filename: it.filename, subfolder: it.subfolder, type: 'output' as const };
-    const id = g.addNode('import', 120 + Math.random() * 160, 120 + Math.random() * 160);
-    g.setResults(id, [{ id: uid(), type: 'image', url: viewUrl(file), file }]);
+    const vid = /\.(mp4|webm|mov|mkv|gif)$/i.test(it.filename);
+    const id = g.addNode(vid ? 'import-video' : 'import', 120 + Math.random() * 160, 120 + Math.random() * 160);
+    g.setResults(id, [{ id: uid(), type: vid ? 'video' : 'image', url: viewUrl(file), file }]);
   };
 
   return (

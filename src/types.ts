@@ -1,4 +1,4 @@
-export type PortType = 'text' | 'image' | 'video' | 'mask' | 'number' | 'boolean' | 'audio' | 'pipe' | 'any';
+export type PortType = 'text' | 'image' | 'video' | 'mask' | 'number' | 'boolean' | 'audio' | 'pipe' | 'lora' | 'any';
 export type NodeKind = 'source' | 'edit' | 'generate' | 'llm' | 'output' | 'note' | 'host';
 
 export interface PortDef {
@@ -129,5 +129,6 @@ export const PORT_COLORS: Record<PortType, string> = {
   boolean: '#e8a33d',
   audio: '#4fd1e8',
   pipe: '#e86bb0',
+  lora: '#f0c24b',
   any: '#9aa3b5',
 };

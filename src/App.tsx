@@ -6,7 +6,9 @@ import { NodeMenu } from './canvas/NodeMenu';
 import { Viewer } from './canvas/Viewer';
 import { Painter } from './canvas/Painter';
 import { MelodyEditor } from './canvas/MelodyEditor';
+import { AssetPicker, FacePicker } from './canvas/Pickers';
 import { NodesPanel } from './panels/NodesPanel';
+import { DecksPanel } from './panels/DecksPanel';
 import { AssetsPanel } from './panels/AssetsPanel';
 import { SettingsPanel } from './panels/SettingsPanel';
 import { StatusPanel } from './panels/StatusPanel';
@@ -15,6 +17,7 @@ import { addImports, openProjectFile, runAll, saveProjectFile, stopAll } from '.
 import { systemStats } from './backend/comfy';
 import { loadServerSettings } from './backend/llm';
 import { useT } from './i18n';
+import { useSettings } from './store/settings';
 import { loadStudio, serializeHost, syncLinks, wireHostStore } from './host';
 import { setHostSerializer } from './store/graph';
 
@@ -59,7 +62,7 @@ function Rail() {
   const T = useT();
   const panel = useGraph((s) => s.panel);
   const setPanel = useGraph((s) => s.setPanel);
-  const items: [Exclude<PanelId, null>, string, string][] = [['nodes', 'Nodes', ICONS.nodes], ['assets', 'Gallery', ICONS.assets], ['models', 'Models', ICONS.status], ['settings', 'Settings', ICONS.settings]];
+  const items: [Exclude<PanelId, null>, string, string][] = [['decks', 'Decks', ICONS.nodes], ['nodes', 'Nodes', ICONS.nodes], ['assets', 'Gallery', ICONS.assets], ['models', 'Models', ICONS.status], ['settings', 'Settings', ICONS.settings]];
   return (
     <div className="rail">
       {items.map(([id, label, d]) => (
@@ -113,14 +116,14 @@ export function App() {
   const mode = useGraph((s) => s.mode);
   const panel = useGraph((s) => s.panel);
   const [tool, setTool] = useState<'select' | 'hand'>('select');
-  const [menu, setMenu] = useState<{ x: number; y: number; flow: { x: number; y: number } } | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; flow: { x: number; y: number }; pending?: import('./canvas/NodeMenu').Pending } | null>(null);
   const { screenToFlowPosition } = useReactFlow();
   const T = useT();
 
   useEffect(() => {
     setHostSerializer(serializeHost); wireHostStore();
     // ONE STUDIO panels need their extensions loaded before a saved canvas that uses them is restored
-    void loadStudio().catch(() => undefined).finally(() => { restoreAutosave(); startAutosave(); syncLinks(); });
+    void (useSettings.getState().hostPanels ? loadStudio().catch(() => undefined) : Promise.resolve()).finally(() => { restoreAutosave(); startAutosave(); syncLinks(); });
     void loadServerSettings();
     const t = setInterval(() => { const g = useGraph.getState(); if (g.nodes.some((n) => n.defId.startsWith('host:'))) { try { localStorage.setItem('canvers.autosave.v1', JSON.stringify(g.toProject())); } catch { /* quota */ } } }, 4000);
     return () => clearInterval(t);
@@ -158,7 +161,8 @@ export function App() {
         <Rail />
         {panel && mode === 'canvas' || panel === 'settings' || panel === 'models' ? (
           <aside className="panel">
-            <header><b>{T(({ nodes: 'Nodes', assets: 'Gallery', settings: 'Settings', models: 'Models' } as const)[panel!])}</b><button onClick={() => useGraph.getState().setPanel(null)}>✕</button></header>
+            <header><b>{T(({ decks: 'Decks', nodes: 'Nodes', assets: 'Gallery', settings: 'Settings', models: 'Models' } as const)[panel!])}</b><button onClick={() => useGraph.getState().setPanel(null)}>✕</button></header>
+            {panel === 'decks' && <DecksPanel />}
             {panel === 'nodes' && <NodesPanel />}
             {panel === 'assets' && <AssetsPanel />}
             {panel === 'settings' && <SettingsPanel />}
@@ -175,10 +179,12 @@ export function App() {
           ) : <SimpleView />}
         </main>
       </div>
-      {menu && <NodeMenu at={menu} flow={menu.flow} onClose={() => setMenu(null)} />}
+      {menu && <NodeMenu at={menu} flow={menu.flow} pending={menu.pending} onClose={() => setMenu(null)} />}
       <Viewer />
       <Painter />
       <MelodyEditor />
+      <AssetPicker />
+      <FacePicker />
     </div>
   );
 }

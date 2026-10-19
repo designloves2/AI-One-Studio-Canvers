@@ -89,9 +89,11 @@ npm run mock       # GPU 없이 UI 시험용 가짜 ComfyUI (:8188)
 - *Stitch*: 끝나면 ffmpeg로 하나의 영상으로 합칩니다 (STUDIO_ONE 의 stitch 라우트 사용).
 - **Lock audio** 포트에 오디오(음악 노드 결과·가져온 파일)를 연결하면 그 소리에 맞춰 생성합니다.
 
-## v2.0 — Studio Host (STUDIO ONE 100% 기능)
-
-STUDIO ONE의 모든 패널(H3 고급옵션·One-Take·AudioLock, LTX Director, Music/YuE2 멜로디 에디터, ITDA 등)과
-LLM(TJ)·PromptDB 노드는 **원본 UI를 그대로** 캔버스 노드로 불러옵니다.
-설치된 ComfyUI의 `/extensions`에서 런타임에 로드하므로 STUDIO_ONE / TJ_NODE 가 ComfyUI에 설치되어 있어야 합니다.
-(STUDIO_ONE은 GPL-3 — 번들하지 않고 런타임에 불러옵니다.) 기존 네이티브 노드는 "빠른 노드"로 유지됩니다.
+## v2.1 — 카드 덱 방식
+기능은 **카드 한 장 = 기능 하나**로 나뉘어 있고 선으로 연결합니다. 모든 생성은 STUDIO_ONE / TJ_NODE 를 백엔드 API 로 사용합니다.
+- 카드: LoRA, H3 Turbo·7+1, H3 Speed, H3 Audio Lock, Asset Library(@이름)
+- 이미지/영상/음악 생성, Video Edit(LTX), Face Refine, Character Sheet, Stitch
+- Postprocess: Deblur · Denoise · Upscale · Skin · Grain · Interpolate · Resize (각각 카드)
+- 왼쪽 **Decks** 에서 스타터 덱을 펼치거나 내가 만든 연결을 덱으로 저장
+- 선을 빈 곳에 놓으면 연결 가능한 카드 메뉴가 뜹니다 / 우클릭 메뉴 / 카드 선택 후 추가하면 자동 연결
+자세한 진행 상황과 남은 작업은 `HANDOFF.md` 참고. (원본 패널 불러오기는 Settings 의 Legacy 옵션)

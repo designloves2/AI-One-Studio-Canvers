@@ -17,6 +17,14 @@ async function load(source: string): Promise<string[]> {
     const req = info?.KSampler?.input?.required;
     return (source === 'samplers' ? req?.sampler_name?.[0] : req?.scheduler?.[0]) ?? FALLBACK[source];
   }
+  if (source === 'loras:all') {
+    const lists = await Promise.all([...Object.keys(FAMILIES).map((f) => getModels(f as Family).then((m) => m.loras ?? []).catch(() => [] as string[])), getJson<{ loras: string[] }>('/minimax_h3_one/models').then((l) => l.loras ?? []).catch(() => [] as string[])]);
+    return ['none', ...new Set(lists.flat().filter((x) => x && x !== 'none'))];
+  }
+  if (source === 'facedetectors') {
+    const l = await getJson<{ face_detectors?: string[] }>('/minimax_h3_one/models');
+    return ['none', ...(l.face_detectors ?? []).filter((x) => x && x !== 'none')];
+  }
   if (source.startsWith('loras:')) {
     const fam = source.slice(6) as string;
     if (fam === 'h3' || fam === 'ltx25') { const l = await getJson<{ loras: string[] }>('/minimax_h3_one/models'); return ['none', ...(l.loras ?? []).filter((x) => x && x !== 'none')]; }

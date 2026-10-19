@@ -72,8 +72,9 @@ export function openProjectFile() {
 export async function addImports(files: File[], at: { x: number; y: number }) {
   let k = 0;
   for (const f of files) {
-    if (!f.type.startsWith('image/') && !f.type.startsWith('video/')) continue;
-    const id = useGraph.getState().addNode('import', at.x + k * 40, at.y + k * 40);
+    const isAudio = f.type.startsWith('audio/') || /\.(flac|mp3|wav|ogg|opus|m4a)$/i.test(f.name);
+    if (!f.type.startsWith('image/') && !f.type.startsWith('video/') && !isAudio) continue;
+    const id = useGraph.getState().addNode(f.type.startsWith('video/') ? 'import-video' : isAudio ? 'import-audio' : 'import', at.x + k * 40, at.y + k * 40);
     k++;
     try { useGraph.getState().setResults(id, [await importFile(f)]); }
     catch (e) { useGraph.getState().setRuntime(id, { status: 'error', error: (e as Error).message }); }

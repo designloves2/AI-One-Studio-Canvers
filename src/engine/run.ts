@@ -9,9 +9,11 @@ import { runLlm } from '../backend/llm';
 import { loadOptions } from '../backend/options';
 import { buildMusicGraph } from '../backend/music';
 import { buildLtxGraph, ltxSize } from '../backend/ltx';
-import { buildH3Graph, h3Size, h3Frames, DEFAULT_OPT, pickChainFrame, copyToInput, stitchClips, ONE_TAKE_OVERLAP_FRAMES } from '../backend/h3';
+import { buildH3Graph, h3Size, h3Frames, pickChainFrame, copyToInput, stitchClips, ONE_TAKE_OVERLAP_FRAMES } from '../backend/h3';
 import { parseWorkflow, setField, VIDEO_EXT } from '../backend/workflow';
 import { useSettings } from '../store/settings';
+import { textAsset, num, str, need } from './util';
+import { EXTRA_RUNNERS, cardLoras, h3Cards, optFromCards } from './more';
 import { applyOp, blendOp, canvasToAsset, channelOp, invertMask, loadBitmap, maskGrow, palette, videoFrame } from '../editing/ops';
 
 export interface GraphLike { nodes: GraphNode[]; edges: GraphEdge[] }
@@ -23,7 +25,7 @@ export interface Hooks {
   error?(id: string, message: string): void;
 }
 
-interface Ctx {
+export interface Ctx {
   node: GraphNode;
   def: NodeDef;
   p: Record<string, Primitive>;
@@ -34,7 +36,6 @@ interface Ctx {
   signal?: AbortSignal;
 }
 
-const textAsset = (text: string, port?: string): Asset => ({ id: uid(), type: 'text', url: '', text, port });
 
 const portOf = (def: NodeDef, a: Asset) => a.port ?? def.outputs[0]?.id;
 
@@ -78,7 +79,7 @@ export async function executeGraph(g: GraphLike, targetId: string, hooks: Hooks,
       const heavy = def.kind === 'generate' || def.kind === 'llm';
 
       if (heavy && !isTarget && node.results.length) { local.set(node.id, node.results); continue; }
-      if (def.id === 'import' || def.id === 'import-audio') { local.set(node.id, node.results); continue; }
+      if (def.id === 'import' || def.id === 'import-audio' || def.id === 'import-video') { local.set(node.id, node.results); continue; }
 
       const inputs = (handle: string): Asset[] => {
         const out: Asset[] = [];
@@ -119,13 +120,6 @@ export async function executeGraph(g: GraphLike, targetId: string, hooks: Hooks,
 // ------------------------------------------------------------------ runners
 type Runner = (c: Ctx) => Promise<Asset[]>;
 
-const num = (v: Primitive | undefined, d = 0) => (typeof v === 'number' ? v : parseFloat(String(v)) || d);
-const str = (v: Primitive | undefined, d = '') => (v === undefined ? d : String(v));
-
-function need<T>(v: T | undefined, what: string): T {
-  if (v === undefined || (Array.isArray(v) && !v.length)) throw new Error(`${what} is not connected`);
-  return v;
-}
 
 function sizeFrom(aspect: string, mp: number): { w: number; h: number } {
   const [a, b] = aspect.split(':').map(Number);
@@ -175,7 +169,7 @@ function imageRunner(mode: (c: Ctx) => ImageMode): Runner {
       seed, denoise: num(p.denoise, 1), batch: Math.max(1, num(p.batch, 1)),
       images: inputFiles, mask: maskFile,
       pad: { left: num(p.left), top: num(p.top), right: num(p.right), bottom: num(p.bottom) },
-      loras: [lora('lora1', 'lora1_strength'), lora('lora2', 'lora2_strength')],
+      loras: [lora('lora1', 'lora1_strength'), lora('lora2', 'lora2_strength'), ...cardLoras(c)],
       models: settings.models[family], saveSubfolder: settings.saveSubfolder,
       bgModel: str(p.bg_model),
     };
@@ -209,30 +203,31 @@ const TASKS: Record<string, string> = {
   'Pose & anatomy': 'Describe the pose, body position and anatomy of the subject in detail.',
 };
 
+const parseCard = (a: Asset | undefined): any => { try { return a?.text ? JSON.parse(a.text) : null; } catch { return null; } };
+
 async function runH3(c: Ctx): Promise<Asset[]> {
-  const p = c.p; const ref = c.engineId === 'h3-ref';
+  const p = c.p;
+  const assetCard = parseCard(c.inputs('assets')[0]);
+  const assetRef = assetCard?.kind === 'assetlib' ? { project: assetCard.project as string | undefined, ids: (assetCard.ids ?? []) as string[] } : undefined;
+  const ref = c.engineId === 'h3-ref' || !!assetRef;
   const si = c.inputs('seed_in')[0]; const sv = si ? num(si.text, -1) : num(p.seed, -1);
   const seed0 = sv < 0 ? Math.floor(Math.random() * 2 ** 40) : sv;
   const settings = useSettings.getState();
   const prompts = c.text('prompt').split(/\n\s*-{3,}\s*\n/).map((x) => x.trim()).filter(Boolean);
   if (!prompts.length) throw new Error('Prompt is empty');
-  const imgs = c.inputs('image'), lastA = c.inputs('last')[0], lockA = c.inputs('audio')[0];
+  const imgs = c.inputs('image'), lastA = c.inputs('last')[0];
+  const cards = h3Cards(c);
   let size: { width: number; height: number } | undefined;
   if (str(p.aspect) === 'auto' && imgs[0]) { const bm = await loadBitmap(imgs[0]); size = h3Size(`${bm.width}:${bm.height}`, num(p.megapixels, 0.9)); }
   const refFiles: string[] = []; if (ref) for (const a of imgs.slice(0, 9)) refFiles.push(await ensureInput(a));
   let first = !ref && imgs[0] ? await ensureInput(imgs[0]) : undefined;
   const lastFile = !ref && lastA ? await ensureInput(lastA) : undefined;
-  const lockFile = lockA ? await ensureInput(lockA) : undefined;
+  const lockFile: string | undefined = cards.lock?.file;
   const continuity: string = ref ? 'none' : str(p.continuity, 'lastframe');
   const lora = (n: string, s2: string) => ({ name: str(p[n], 'none'), strength: num(p[s2], 1) });
   const seconds = num(p.seconds, 8);
   const runId = uid('ot').slice(0, 10);
-  const turbo = str(p.turbo, 'none') as 'none';
-  const opt = {
-    ...DEFAULT_OPT, attnBackend: str(p.attn_backend, 'none') as 'none', attnForward: str(p.attn_forward, 'none') as 'none', optimizer: str(p.optimizer, 'none') as 'none', blockCache: str(p.block_cache, 'none') as 'none',
-    spectrum: !!p.spectrum, fusedModulation: !!p.fused_mod, turbo, turboLora: str(p.turbo_lora, 'none'), turboStrength: num(p.turbo_strength, 1), turboSteps: num(p.turbo_steps, 8),
-    hires: !!p.hires, hiresStartMp: num(p.hires_start_mp, 0.5), hiresFinalMp: num(p.hires_final_mp, 0.9), shiftVideo: num(p.shift_video, 12), shiftAudio: num(p.shift_audio, 3),
-  };
+  const opt = optFromCards(cards);
   const clips: { filename: string; subfolder: string }[] = [];
   let prevCheckpoint: string | undefined;
   for (let i = 0; i < prompts.length; i++) {
@@ -243,8 +238,9 @@ async function runH3(c: Ctx): Promise<Asset[]> {
       mode, prompt: prompts[i], seconds, aspect: str(p.aspect, '16:9'), megapixels: num(p.megapixels, 0.9),
       first: first, last: i === prompts.length - 1 ? lastFile : undefined, refs: refFiles,
       seed: seed0 + i, steps: num(p.steps, 20), sampler: str(p.sampler, 'er_sde'), scheduler: str(p.scheduler, 'simple'),
-      loras: [lora('lora1', 'lora1_strength'), lora('lora2', 'lora2_strength')],
-      opt: { ...opt, audioLock: lockFile ? { file: lockFile, startSec: i * (h3Frames(seconds) / 24), mode: str(p.lock_mode, 'lock'), strength: num(p.lock_strength, 0.5), fit: str(p.lock_fit, 'pad_silence') } : undefined },
+      loras: [lora('lora1', 'lora1_strength'), lora('lora2', 'lora2_strength'), ...cardLoras(c)].filter((l) => l.name && l.name !== 'none'),
+      assetRef,
+      opt: { ...opt, audioLock: lockFile ? { file: lockFile, startSec: i * (h3Frames(seconds) / 24), mode: str(cards.lock.mode, 'lock'), strength: num(cards.lock.strength, 0.5), fit: str(cards.lock.fit, 'pad_silence') } : undefined },
       models: settings.video, saveSubfolder: settings.saveSubfolder, size, upscaleModel: str(p.upscale_model, 'none'),
       clipIndex: i, prevCheckpoint, checkpoint, saveLastFrame: continuity === 'lastframe' && i < prompts.length - 1, stem: 'MMH3',
     });
@@ -275,6 +271,7 @@ async function runH3(c: Ctx): Promise<Asset[]> {
 }
 
 const RUNNERS: Record<string, Runner> = {
+  ...EXTRA_RUNNERS,
   // ---- sources / data
   prompt: async (c) => {
     const extra = c.inputs('vars').map((a) => a.text ?? '').filter(Boolean);
@@ -380,7 +377,7 @@ const RUNNERS: Record<string, Runner> = {
       first: first ? await ensureInput(first) : undefined, last: last ? await ensureInput(last) : undefined,
       seed: sv < 0 ? Math.floor(Math.random() * 2 ** 40) : sv, steps: num(p.steps, 12), cfg: num(p.cfg, 1),
       sampler: str(p.sampler, 'euler_ancestral'), scheduler: str(p.scheduler, 'linear_quadratic'), stage2Sigmas: str(p.stage2, '0.85, 0.7250, 0.4219, 0.0'),
-      loras: [lora('lora1', 'lora1_strength'), lora('lora2', 'lora2_strength')], models: useSettings.getState().video, saveSubfolder: useSettings.getState().saveSubfolder, size,
+      loras: [lora('lora1', 'lora1_strength'), lora('lora2', 'lora2_strength'), ...cardLoras(c)], models: useSettings.getState().video, saveSubfolder: useSettings.getState().saveSubfolder, size,
     });
     return runGraph(c, graph);
   },
@@ -422,7 +419,7 @@ const RUNNERS: Record<string, Runner> = {
   router: async (c) => c.inputs('image').slice(0, 1).map((a) => ({ ...a, port: 'image' })),
 
   // ---- sinks: nothing to compute
-  export: async () => [], preview: async () => [], compare: async () => [], note: async () => [],
+  export: async () => [], preview: async (c) => c.inputs('image').slice(0, 1).map((a) => ({ ...a, port: 'out' })), compare: async () => [], note: async () => [],
 };
 
 function opRunner(op: string): Runner {
