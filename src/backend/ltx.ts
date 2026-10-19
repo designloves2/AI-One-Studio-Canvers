@@ -14,7 +14,9 @@ export interface LtxJob {
   /** exact output size (overrides aspect/megapixels, e.g. taken from the first frame) */
   size?: { width: number; height: number };
   /** Director timeline: a prompt per beat (seconds) and images pinned in time */
-  timeline?: { texts: { startSec: number; endSec: number; prompt: string }[]; images: { file: string; startSec: number; end?: boolean; strength?: number }[] };
+  timeline?: { texts: { startSec: number; endSec: number; prompt: string }[]; images: { file: string; startSec: number; end?: boolean; strength?: number }[];
+    /** custom audio / motion-guide video (ComfyUI input filenames) placed at startSec */
+    audio?: { file: string; startSec: number; lengthSec?: number }; motion?: { file: string; startSec: number; lengthSec?: number; strength?: number; attention?: number } };
 }
 
 interface Lists { diffusion_models: string[]; text_encoders: string[]; text_encoders_all?: string[]; vaes: string[]; latent_upscale_models?: string[]; loras: string[] }
@@ -91,7 +93,7 @@ export async function buildLtxGraph(job: LtxJob): Promise<Record<string, any>> {
   const seg = (file: string, last: boolean, i: number) => ({ id: `cv-${i}`, start: last ? Math.max(0, frames - ANCHOR) : 0, length: ANCHOR, prompt: '', type: 'image', isAnchor: false, imageFile: file, imageB64: '', isEndFrame: last });
   if (job.first) tl.segments.push(seg(job.first, false, 0));
   if (job.last) tl.segments.push(seg(job.last, true, 1));
-  let localPrompts = '', segLens = '', guideStrength = '';
+  let localPrompts = '', segLens = '', guideStrength = '', useAudio = false, useMotion = false;
   if (job.timeline) {
     const T = job.timeline;
     const fr = (sec: number) => Math.max(0, Math.min(frames - 1, Math.round(sec * FPS)));
@@ -100,6 +102,8 @@ export async function buildLtxGraph(job: LtxJob): Promise<Record<string, any>> {
     const imgs = [...T.images].sort((a, b) => a.startSec - b.startSec);
     imgs.forEach((im, i) => (tl.segments as any[]).push({ id: `cvi-${i}`, start: im.end ? Math.max(0, fr(im.startSec) - ANCHOR + 1) : fr(im.startSec), length: ANCHOR, prompt: '', type: 'image', isAnchor: false, imageFile: im.file, imageB64: '', isEndFrame: !!im.end }));
     if (texts.length) { tl.disable_prompt_relay = false; localPrompts = texts.map((t) => t.prompt).join(' | '); segLens = (tl.segments as any[]).filter((x) => x.type === 'text').map((x) => x.length).join(','); }
+    if (T.audio) { const st = fr(T.audio.startSec); const len = Math.max(1, Math.min(frames - st, Math.round((T.audio.lengthSec ?? secs - T.audio.startSec) * FPS))); (tl.audioSegments as any[]).push({ id: 'cva-0', start: st, length: len, trimStart: 0, audioFile: T.audio.file }); useAudio = true; }
+    if (T.motion) { const st = fr(T.motion.startSec); const len = Math.max(1, Math.min(frames - st, Math.round((T.motion.lengthSec ?? secs - T.motion.startSec) * FPS))); (tl.motionSegments as any[]).push({ id: 'cvm-0', type: 'motion_video', start: st, length: len, trimStart: 0, videoDurationFrames: len, videoFile: T.motion.file, fileName: T.motion.file, videoStrength: T.motion.strength ?? 1, videoAttentionStrength: T.motion.attention ?? 0.65, resampleMode: 'nearest' }); useMotion = true; }
     if (imgs.some((i) => i.strength !== undefined)) guideStrength = imgs.map((i) => (i.strength ?? 1).toFixed(2)).join(',');
   }
 
@@ -107,7 +111,7 @@ export async function buildLtxGraph(job: LtxJob): Promise<Record<string, any>> {
     model, clip: ['clip', 0], audio_vae: ['vaeA', 0], vae: ['vaeV', 0],
     start_second: 0, end_second: secs, duration_seconds: secs, start_frame: 0, end_frame: frames, duration_frames: frames,
     timeline_data: JSON.stringify(tl), local_prompts: localPrompts, segment_lengths: segLens, epsilon: 0.001, guide_strength: guideStrength,
-    global_prompt: job.prompt, use_custom_audio: false, use_custom_motion: false, inpaint_audio: true, frame_rate: FPS,
+    global_prompt: job.prompt, use_custom_audio: useAudio, use_custom_motion: useMotion, inpaint_audio: true, frame_rate: FPS,
     display_mode: 'seconds', custom_width: W, custom_height: H, resize_method: 'stretch to fit',
     divisible_by: 32, img_compression: 18, override_audio: false, reference_strength: 1.0,
   } };

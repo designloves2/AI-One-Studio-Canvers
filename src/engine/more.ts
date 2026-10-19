@@ -187,11 +187,14 @@ export const EXTRA_RUNNERS: Record<string, Runner> = {
     let size: { width: number; height: number } | undefined;
     if (imgs[0] && str(p.aspect) === 'auto') { const bm = await loadBitmap(imgs[0]); size = ltxSize(`${bm.width}:${bm.height}`, num(p.megapixels, 1)); }
     const seconds = num(p.seconds, 8);
+    const aud = c.inputs('audio')[0], mot = c.inputs('video')[0];
+    const audio = aud ? { file: await ensureInput(aud), startSec: num(p.audio_start, 0) } : undefined;
+    const motion = mot ? { file: await ensureInput(mot), startSec: num(p.motion_start, 0), strength: num(p.motion_strength, 1) } : undefined;
     const graph = await buildLtxGraph({
       prompt: c.text('prompt'), seconds, aspect: str(p.aspect, '16:9'), megapixels: num(p.megapixels, 1), seed: withLegacySeed(c),
       steps: num(p.steps, 12), cfg: num(p.cfg, 1), sampler: str(p.sampler, 'euler_ancestral'), scheduler: str(p.scheduler, 'linear_quadratic'), stage2Sigmas: str(p.stage2, '0.85, 0.7250, 0.4219, 0.0'),
       loras: cardLoras(c), models: s.video, saveSubfolder: s.saveSubfolder, size,
-      timeline: { texts: beats, images: files.map((file, i) => ({ file, startSec: i === files.length - 1 && p.last_at_end ? seconds : (times[i] ?? 0), end: i === files.length - 1 && !!p.last_at_end })) },
+      timeline: { texts: beats, images: files.map((file, i) => ({ file, startSec: i === files.length - 1 && p.last_at_end ? seconds : (times[i] ?? 0), end: i === files.length - 1 && !!p.last_at_end })), audio, motion },
     });
     const res = await runPrompt(graph, { onProgress: c.progress, signal: c.signal });
     const f = res.videos[0] ?? res.images[0]; if (!f) throw new Error('ComfyUI returned no video');

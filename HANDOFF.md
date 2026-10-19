@@ -32,7 +32,7 @@
 ## 남은 작업 (우선순위)
 1. (완료) 회귀 재실행.
 2. (완료) H3 Image Generator 카드 `h3-image` — src/backend/h3Image.ts, mock 통과. 실기 미검증.
-3. (완료·간이) LTX Director 카드 `ltx-director`: 구간별 프롬프트(beats: `0-3: 문장`) + 이미지 시간 고정. 오디오/모션 트랙은 미구현. (원본 director UI 는 GPL, 열람·복사 금지 — W1 규칙)
+3. (완료·간이) LTX Director 카드 `ltx-director`: 구간별 프롬프트(beats: `0-3: 문장`) + 이미지 시간 고정. 오디오/모션 트랙은 아래 섹션 참고. (원본 director UI 는 GPL, 열람·복사 금지 — W1 규칙)
 4. (진행) 이미지 모드 점검: Z-Image ControlNet / Face Redraw 카드 추가 완료(mock 통과). Camera Angle(Qwen) 카드도 추가. Krea2 depth/canny 컨트롤 카드도 추가(mock 통과). Krea2 Identity Edit·Anima LLLite(any/depth/inpaint) 카드도 추가(mock 통과). Image Upscale 카드에 SeedVR2 엔진 추가. 이미지 쪽 STUDIO_ONE 모드는 대부분 카드화됨. 남음: 음악: Music Writer(LLM) 카드 추가(가사·스타일 캡션·커버 프롬프트·제목, /music_one/llm/prompts 사용). 남음: 음악 생성 모드별(Ace-Step/MiniMax/YuE2) 카드 분리 여부 판단. 원본 workflows/*.json 참고.
 5. (완료) `@` 칩·자동완성, 에셋 선택창에서 프로젝트 저장/삭제.
 6. (일부 완료) 후처리 카드 '원본 프레임레이트' 고급 옵션 추가, 프롬프트 입력 중 `@` 자동완성 완료. 후처리 카드 '처음 N프레임만 테스트' 옵션 추가. fps 자동 인식(브라우저에서 프레임 간격 측정, 기본 0=자동, 실패 시 24) 추가. 실제 mp4 로 정확도 검증은 안 됨.
@@ -43,16 +43,10 @@
 - 사용자 결정: 아직 라이선스를 정하지 않았으므로 **GPL-3.0-only 채택** (LICENSE, NOTICE.md, package.json `license`). STUDIO_ONE/LTX Director 가 GPL-3.0 이라 그 코드를 읽고 포팅해도 된다(고지 유지).
 - freavy(MIT)는 개념만 참고, 코드 복사 안 함(ContextMenu 등은 직접 작성).
 
-## 오프라인 인계: LTX Director 오디오·모션 트랙 (미구현, 사용자가 오프라인 세션으로 넘기기로 함)
-- 목표: `ltx-director` 카드(src/engine/more.ts, src/backend/ltx.ts `LtxJob.timeline`)에 오디오 트랙·모션(영상 가이드) 트랙 추가.
-- 원본(GPL, 이제 읽어도 됨): /home/user/ref/ComfyUI-TJ_NODE_STUDIO_ONE/web/ltx25/director/ltx_director.js (14k줄). 데이터 형식은 `parseInitial()`(약 L823~985):
-  - timeline_data JSON 최상위: `segments, motionSegments, audioSegments, global_prompt, mainTrackEnabled, audioTrackEnabled, motionTrackEnabled, overrideAudio, inpaint_audio, disable_prompt_relay, reference_mode, msr_prefix_frames, chunk_*`, `retakeMode/retakeStart/retakeLength/retakePrompt/retakeStrength/retakeVideo`, `characters[3]`.
-  - audioSegments 항목: `{id, start, length, trimStart(기본 0), audioFile(...)}` (+ `_blobUrl` 등 `_`로 시작하는 건 런타임 전용이라 저장 금지).
-  - motionSegments 항목: `{id, start, length, trimStart, type:'motion_video', videoFile|imageFile, videoStrength, videoAttentionStrength}` (L1675, L3608~3700 참고).
-  - 노드 입력: `use_custom_audio`, `use_custom_motion`, `override_audio`, `inpaint_audio`, `guide_strength`(이미지 세그먼트 순서), `local_prompts`, `segment_lengths`.
-  - 파일은 ComfyUI input 폴더 상대경로(`imageFile`처럼). 업로드 경로/라우트는 `ltx25_studio_backend/director/` (`/ltx25_one/director/*`) 확인.
-- 해야 할 일: (1) audioFile/videoFile 필드명·단위(프레임 vs 초) 확인, (2) `src/backend/ltx.ts`의 `timeline` 에 audio/motion 추가 → `tl.audioSegments`/`tl.motionSegments` 채우고 `use_custom_audio/motion` true, (3) 카드에 `audio`(오디오) / `motion`(영상) 입력 포트 + 시작초 파라미터 추가, (4) mock 테스트 + 실기 확인.
-- ITDA 3레인 타임라인 편집기는 이번 범위에서 **제외**(사용자 결정).
+## LTX Director 오디오·모션 트랙 (구현 완료, mock 미실행·실기 미검증)
+- `ltx-director` 카드에 `audio`/`video(모션 가이드)` 선택 입력 + 시작초/모션 강도 파라미터. `LtxJob.timeline.audio/motion` → `audioSegments`/`motionSegments`(프레임 단위, audioFile/videoFile) + `use_custom_audio/motion`.
+- 원본 참고: Comfy-Dasktop/ComfyUI/custom_nodes/WhatDreamsCost-ComfyUI/{ltx_director.py,js/ltx_director.js}. 실기에서 소리 반영·모션 가이드 확인 필요.
+- 음악 생성은 카드 하나(Music Generate)로 유지 결정(모드 분리 안 함).
 
 ## ITDA(타임라인 편집기) 상태
 - Video Stitch / Add Audio to Video(오디오 교체) 카드로 핵심 일부 대체. Scene Detect / Beat Detect 카드 추가(src/backend/itda.ts, mock 통과). Transition Bridge(클립 사이 전환) 카드 추가. 미구현: 3레인 타임라인 편집 UI, ffmpeg export.

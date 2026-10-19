@@ -336,9 +336,10 @@ export const REGISTRY: NodeDef[] = [
   })(),
 
   { id: 'ltx-director', title: 'LTX Director (timeline)', category: 'Video', kind: 'generate',
-    inputs: [P.textIn('prompt', 'Overall prompt', false), P.imgIn('image', 'Images (in time order)', true, true), P.loraIn(), P.seedIn()], outputs: [{ id: 'video', label: 'Video', type: 'video' }],
+    inputs: [P.textIn('prompt', 'Overall prompt', false), P.imgIn('image', 'Images (in time order)', true, true), { id: 'audio', label: 'Audio (custom track)', type: 'audio', optional: true }, { id: 'video', label: 'Motion video (guide)', type: 'video', optional: true }, P.loraIn(), P.seedIn()], outputs: [{ id: 'video', label: 'Video', type: 'video' }],
     params: [
       text('beats', 'Beats — one per line:  start-end: prompt  (seconds)', '', true), text('image_times', 'Image times (s), in the order connected', '0'), toggle('last_at_end', 'Pin the last image to the end', false),
+      num('audio_start', 'Audio starts at (s)', 0, {}, 0, 60, 0.1), num('motion_start', 'Motion video starts at (s)', 0, {}, 0, 60, 0.1), slider('motion_strength', 'Motion strength', 0, 1, 0.05, 1),
       sel('aspect', 'Aspect ratio', [...ASPECTS, 'auto'], '16:9'), megapixels(1), slider('seconds', 'Length (s)', 2, 20, 1, 8),
       slider('steps', 'Steps', 1, 40, 1, 12, { advanced: true }), slider('cfg', 'Guidance', 0, 10, 0.1, 1, { advanced: true }), dyn('sampler', 'Sampler', 'samplers', 'euler_ancestral', { advanced: true }), dyn('scheduler', 'Scheduler', 'schedulers', 'linear_quadratic', { advanced: true }), text('stage2', 'Stage-2 sigmas', '0.85, 0.7250, 0.4219, 0.0', false, { advanced: true }), seed,
     ], description: 'LTX 2.5 with a timeline: a different prompt for each moment, and images pinned at chosen times.' },
