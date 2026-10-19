@@ -183,3 +183,6 @@ kbd { background: var(--bg3); border: 1px solid var(--line2); border-radius: 4px
 .react-flow__edge:hover path.react-flow__edge-path { stroke-width: 3.5; filter: brightness(1.4); } .react-flow__edge.selected path.react-flow__edge-path { stroke-width: 3.5; stroke-dasharray: 6 4; }
 
 .mention-wrap { position: relative; width: 100%; } .mention-pop { position: absolute; left: 6px; bottom: -4px; transform: translateY(100%); z-index: 40; background: var(--bg2); border: 1px solid var(--line2); border-radius: 8px; padding: 4px; display: flex; flex-direction: column; min-width: 140px; box-shadow: 0 8px 22px rgba(0,0,0,.5); } .mention-pop button { text-align: left; background: none; border: 0; padding: 5px 8px; border-radius: 5px; } .mention-pop button.on, .mention-pop button:hover { background: var(--bg3); color: var(--acc); }
+
+/* resize lines on the left/right edge sit on top of the ports and block wiring; corners and top/bottom still resize */
+.react-flow__resize-control.line.left, .react-flow__resize-control.line.right { pointer-events: none !important; }
