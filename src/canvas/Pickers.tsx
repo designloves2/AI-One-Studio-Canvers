@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useGraph } from '../store/graph';
 import { useUpstream } from './helpers';
 import { useT } from '../i18n';
-import { deleteAsset, libThumb, listAssets, listProjects, registerAsset, type LibAsset, type LibProject } from '../backend/assetlib';
+import { deleteProject, saveProject, deleteAsset, libThumb, listAssets, listProjects, registerAsset, type LibAsset, type LibProject } from '../backend/assetlib';
 import { scanFaces, type FaceShot } from '../backend/faceRefine';
 import { ensureInput } from '../backend/comfy';
 import { byId } from '../registry';
@@ -39,6 +39,8 @@ export function AssetPicker() {
         <input placeholder={T('Search')} value={q} onChange={(e) => setQ(e.target.value)} />
         <select value={cat} onChange={(e) => setCat(e.target.value)}><option value="">{T('All categories')}</option>{cats.map((c) => <option key={c}>{c}</option>)}</select>
         <select value={project} onChange={(e) => { setProject(e.target.value); if (e.target.value) setSel([]); }}><option value="">{T('— pick assets below —')}</option>{projects.map((p) => <option key={p.id} value={p.id}>{T('Project')}: {p.name}</option>)}</select>
+        <button className="btn" disabled={!sel.length} title={T('Save the chosen assets as a project')} onClick={() => { const n = prompt(T('Project name')); if (n?.trim()) void saveProject(n.trim(), sel).then((r) => { if (!r.ok) setErr(r.detail ?? r.code ?? 'save failed'); else void load(); }).catch((e) => setErr(String(e))); }}>{T('Save as project')}</button>
+        {project && <button className="btn" onClick={() => { if (confirm(T('Delete this project?'))) void deleteProject(project).then(() => { setProject(''); void load(); }).catch((e) => setErr(String(e))); }}>{T('Delete project')}</button>}
         <span className="spacer" />
         <input ref={file} type="file" multiple hidden accept="image/*,video/*,audio/*" onChange={(e) => { void upload(e.target.files); e.target.value = ''; }} />
         <input className="narrow" value={newCat} onChange={(e) => setNewCat(e.target.value)} title={T('Category for new assets')} />

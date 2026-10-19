@@ -39,3 +39,6 @@ export function mentionNames(): Promise<string[]> {
   return (namesCache ??= listAssets().then((a) => [...new Set(a.filter((x) => x.kind !== 'audio').map((x) => x.name).filter((n) => /^[A-Za-z0-9_\u3131-\uD79D]+$/.test(n)))]).catch(() => { setTimeout(() => { namesCache = null; }, 60000); return [] as string[]; }));
 }
 export const resetMentionNames = () => { namesCache = null; };
+
+export const saveProject = (name: string, ids: string[]) => postJson<{ ok: boolean; project?: LibProject; code?: string; detail?: string }>(`${BASE}/projects`, { name, items: ids.map((id, i) => ({ asset_id: Number(id), order: i })) });
+export const deleteProject = (id: string) => postJson(`${BASE}/projects/${id}/delete`, {});
