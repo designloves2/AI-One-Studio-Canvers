@@ -26,7 +26,7 @@
 1. (완료) 회귀 재실행.
 2. (완료) H3 Image Generator 카드 `h3-image` — src/backend/h3Image.ts, mock 통과. 실기 미검증.
 3. (완료·간이) LTX Director 카드 `ltx-director`: 구간별 프롬프트(beats: `0-3: 문장`) + 이미지 시간 고정. 오디오/모션 트랙은 미구현. (원본 director UI 는 GPL, 열람·복사 금지 — W1 규칙)
-4. (진행) 이미지 모드 점검: Z-Image ControlNet / Face Redraw 카드 추가 완료(mock 통과). Camera Angle(Qwen) 카드도 추가. Krea2 depth/canny 컨트롤 카드도 추가(mock 통과). Krea2 Identity Edit·Anima LLLite(any/depth/inpaint) 카드도 추가(mock 통과). 이미지 쪽 STUDIO_ONE 모드는 대부분 카드화됨. 남음: 음악: Music Writer(LLM) 카드 추가(가사·스타일 캡션·커버 프롬프트·제목, /music_one/llm/prompts 사용). 남음: 음악 생성 모드별(Ace-Step/MiniMax/YuE2) 카드 분리 여부 판단. 원본 workflows/*.json 참고.
+4. (진행) 이미지 모드 점검: Z-Image ControlNet / Face Redraw 카드 추가 완료(mock 통과). Camera Angle(Qwen) 카드도 추가. Krea2 depth/canny 컨트롤 카드도 추가(mock 통과). Krea2 Identity Edit·Anima LLLite(any/depth/inpaint) 카드도 추가(mock 통과). Image Upscale 카드에 SeedVR2 엔진 추가. 이미지 쪽 STUDIO_ONE 모드는 대부분 카드화됨. 남음: 음악: Music Writer(LLM) 카드 추가(가사·스타일 캡션·커버 프롬프트·제목, /music_one/llm/prompts 사용). 남음: 음악 생성 모드별(Ace-Step/MiniMax/YuE2) 카드 분리 여부 판단. 원본 workflows/*.json 참고.
 5. (일부 완료) 프롬프트 카드에 라이브러리 `@이름` 칩(클릭 추가). 남음: 입력 중 `@` 자동완성 드롭다운, 프로젝트 편집 UI.
 6. Postprocess 미리보기, fps 자동 인식.
 7. 카드 디자인 다듬기, README/ARCHITECTURE 카드 방식으로 갱신.

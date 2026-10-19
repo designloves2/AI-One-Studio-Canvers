@@ -346,6 +346,17 @@ const RUNNERS: Record<string, Runner> = {
   'remove-bg': imageRunner(() => 'removebg'),
   upscale: async (c) => {
     const src = need(c.inputs('image')[0], 'Image');
+    if (c.engineId === 'seedvr2') {
+      const p = c.p; if (!str(p.sv_dit) || p.sv_dit === 'none' || !str(p.sv_vae) || p.sv_vae === 'none') throw new Error('Pick the SeedVR2 DiT and VAE models on the card');
+      const off = str(p.sv_offload, 'cpu'); const file = await ensureInput(src); const sub = useSettings.getState().saveSubfolder; const si = c.inputs('seed_in')[0];
+      return runGraph(c, {
+        'UP:dit': { class_type: 'SeedVR2LoadDiTModel', inputs: { model: str(p.sv_dit), device: 'cuda:0', blocks_to_swap: num(p.sv_swap, 0), swap_io_components: false, offload_device: off, cache_model: off !== 'none', attention_mode: str(p.sv_attn, 'sdpa') } },
+        'UP:vae': { class_type: 'SeedVR2LoadVAEModel', inputs: { model: str(p.sv_vae), device: 'cuda:0', encode_tiled: true, encode_tile_size: 1024, encode_tile_overlap: 128, decode_tiled: true, decode_tile_size: 1024, decode_tile_overlap: 128, tile_debug: 'false', offload_device: off, cache_model: false } },
+        'UP:load': { class_type: 'LoadImage', inputs: { image: file } },
+        'UP:run': { class_type: 'SeedVR2VideoUpscaler', inputs: { image: ['UP:load', 0], dit: ['UP:dit', 0], vae: ['UP:vae', 0], seed: (si ? num(si.text, 42) : num(p.seed, 42)) % 4294967295, resolution: num(p.sv_res, 2048), max_resolution: num(p.sv_max, 4096), batch_size: 1, uniform_batch_size: false, color_correction: str(p.sv_color, 'lab'), temporal_overlap: 0, prepend_frames: 0, input_noise_scale: 0, latent_noise_scale: 0, offload_device: off, enable_debug: false } },
+        'UP:save': { class_type: 'SaveImage', inputs: { images: ['UP:run', 0], filename_prefix: `${sub}/seedvr2` } },
+      });
+    }
     let model = str(c.p.upscale_model);
     if (!model || model === 'none') model = (await loadOptions('upscalers')).find((x) => x !== 'none') ?? '';
     if (!model) throw new Error('No upscale model found in ComfyUI/models/upscale_models');
