@@ -1,0 +1,6 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "app", "runtimeExecutable": "node", "runtimeArgs": ["node_modules/vite/bin/vite.js", "--port", "5930"], "port": 5930 }
+  ]
+}

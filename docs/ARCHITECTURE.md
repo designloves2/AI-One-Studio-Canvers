@@ -35,7 +35,7 @@ ComfyUI :8188  ── 표준 API: /prompt /ws /upload/image /view /history /obje
 | `backend/comfy.ts` | ComfyUI 표준 API (업로드, 큐, WebSocket 진행률, 히스토리 폴백) |
 | `backend/imageGen.ts` | 모델 계열별 ComfyUI 그래프 생성 (Klein=템플릿 패치, 나머지=직접 구성) |
 | `backend/llm.ts` | LLM 4방식 클라이언트 + 서버 설정 동기화 |
-| `backend/ltx.ts`, `backend/h3.ts`, `backend/music.ts`, `backend/workflow.ts`, `backend/catalog.ts` | LTX 2.5·MiniMax H3 비디오, Ace-Step/MiniMax/YuE2 음악, 모델 카탈로그, 임의 API 워크플로우 |
+| `backend/ltx.ts` (LTX 2.5 + Director 타임라인: 구간 프롬프트·이미지 고정·오디오/모션 트랙), `backend/h3.ts`, `backend/music.ts`, `backend/workflow.ts`, `backend/catalog.ts` | LTX 2.5·MiniMax H3 비디오, Ace-Step/MiniMax/YuE2 음악, 모델 카탈로그, 임의 API 워크플로우 |
 | `mcp/server.ts` | MCP 서버 (`npm run build:mcp` 로 `mcp/server.mjs` 생성) |
 | `backend/studio.ts` | STUDIO_ONE 라우트 래퍼, 모델 자동 선택 |
 | `editing/ops.ts` | 브라우저(Canvas 2D) 이미지 연산 |
@@ -69,3 +69,21 @@ ComfyUI :8188  ── 표준 API: /prompt /ws /upload/image /view /history /obje
 - Postprocess = one card per step (`src/backend/post.ts`), Face Refine (`faceRefine.ts`), Character Sheet (`charSheet.ts`), LTX refine (`ltxRefine.ts`), H3 still image (`h3Image.ts`).
 - Canvas UX: wire-drop menu, auto-connect on add, right-click menu, Decks (`src/decks.ts`).
 - The v2.0 "Studio Host" (`src/host/*`, original panels loaded at runtime) is kept only as an optional legacy mode (Settings).
+
+## 카드 목록 (v2.6, 카테고리별)
+- **입력/출력**: Load Image / Video / Audio, Result Viewer, Preview, Export
+- **옵션 카드** (선으로 생성 카드에 연결): LoRA, H3 Turbo·7+1, H3 Speed & Attention, H3 Audio Lock, Asset Library
+- **이미지**: Image Generate / Edit / Inpaint / Upscale (SeedVR2 포함), H3 Image, Z-Image ControlNet, Face Redraw, Camera Angle (Qwen), Krea2 Control / Identity Edit, Anima LLLite, Character Sheet
+- **비디오**: Video Generate (H3 / H3 Reference / LTX 2.5), LTX Director (타임라인 + 오디오 트랙 + 모션 가이드), Video Edit (LTX refine), Video Stitch, Add Audio to Video, Transition Bridge
+- **후처리**: Deblur, Denoise, Video Upscale, Skin Retouch, Film Grain, Interpolation, Resize, Face Refine
+- **오디오**: Music Generate (엔진 선택: Ace-Step / MiniMax / YuE2 — 카드 하나로 유지), Music Writer (LLM)
+- **분석(ITDA)**: Scene Detect, Beat Detect
+
+## LTX Director 데이터 흐름
+`ltx-director` 러너(`engine/more.ts`) → `buildLtxGraph`(`backend/ltx.ts`) → `LTXDirectorTJ25` 노드의 `timeline_data` JSON.
+- 단위는 프레임(24fps). `segments`(텍스트/이미지), `audioSegments`(`audioFile`), `motionSegments`(`videoFile`, `videoStrength`) 를 채우고 `use_custom_audio` / `use_custom_motion` 을 켠다.
+- 파일은 ComfyUI input 폴더에 업로드(`ensureInput`)한 상대 경로.
+
+## 테스트 / 개발
+- 로컬 실제 ComfyUI(8188)에 바로 붙여 테스트한다: `npx vite --port 5930` (mock 서버는 쓰지 않음).
+- 릴리스 전 매번 `npm run build:mcp`.

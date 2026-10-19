@@ -5,6 +5,7 @@ export const KO_CARDS: Record<string, string> = {
   'Select cards on the canvas first': '캔버스에서 카드를 먼저 선택하세요', 'Select some cards on the canvas and save them as a deck.': '캔버스에서 카드 몇 장을 선택해 덱으로 저장하세요.',
   'Legacy: load original STUDIO_ONE panels': '레거시: 원본 STUDIO_ONE 패널 불러오기', 'Adds the old all-in-one panels as extra nodes (reload needed). Off = card nodes only.': '예전 통짜 패널을 추가 노드로 불러옵니다(새로고침 필요). 꺼짐 = 카드 노드만.',
   // cards
+  'Audio (custom track)': '오디오 (커스텀 트랙)', 'Motion video (guide)': '모션 영상 (가이드)', 'Audio starts at (s)': '오디오 시작 (초)', 'Motion video starts at (s)': '모션 영상 시작 (초)', 'Motion strength': '모션 강도',
   LoRA: 'LoRA', 'H3 Turbo · 7+1': 'H3 터보 · 7+1', 'H3 Speed & Attention': 'H3 속도 · 어텐션', 'H3 Audio Lock': 'H3 오디오 잠금', 'Asset Library': '에셋 라이브러리',
   'Load Image': '이미지 불러오기', 'Load Video': '영상 불러오기', 'Import Audio': '오디오 불러오기', 'Result Viewer': '결과 보기',
   // postprocess + video

@@ -31,13 +31,17 @@ const availability = () => (availCache ??= getJson<{ available?: Record<string, 
 const real = (a?: string[]) => (a ?? []).filter((x) => x && x !== 'none');
 export async function resolveLtxModels(user: Record<string, string>) {
   const l = await ltxModelLists();
-  const pick = (k: string, list: string[] | undefined, re: RegExp) => user[k] || real(list).find((x) => re.test(x)) || '';
+  const pick = (k: string, list: string[] | undefined, re: RegExp, not?: RegExp) => {
+    if (user[k]) return user[k];
+    const c = real(list).filter((x) => re.test(x) && !(not && not.test(x)));
+    return c.find((x) => /2[._]?5/.test(x)) ?? c[0] ?? '';
+  };
   return {
     unet: pick('ltx_unet', l.diffusion_models, /ltx/i),
-    clip: pick('ltx_clip', l.text_encoders_all ?? l.text_encoders, /gemma|ltx/i),
-    vaeVideo: pick('ltx_vae_video', l.vaes, /ltx.*video|ltx2?.*vae|video.*vae/i),
+    clip: pick('ltx_clip', l.text_encoders_all ?? l.text_encoders, /gemma|ltx/i, /t5gemma|stable_audio/i),
+    vaeVideo: pick('ltx_vae_video', l.vaes, /ltx/i, /audio/i),
     vaeAudio: pick('ltx_vae_audio', l.vaes, /ltx.*audio|audio.*vae/i),
-    upscaler: pick('ltx_upscaler', l.latent_upscale_models, /ltx|upscal/i),
+    upscaler: pick('ltx_upscaler', l.latent_upscale_models, /spatial|upscal/i, /temporal|duration/i),
   };
 }
 

@@ -186,3 +186,22 @@ kbd { background: var(--bg3); border: 1px solid var(--line2); border-radius: 4px
 
 /* resize lines on the left/right edge sit on top of the ports and block wiring; corners and top/bottom still resize */
 .react-flow__resize-control.line.left, .react-flow__resize-control.line.right { pointer-events: none !important; }
+
+/* ---- card polish (v2.6) */
+.cnode { transition: box-shadow .15s, border-color .15s; box-shadow: 0 4px 18px rgba(0,0,0,.32); }
+.cnode:hover { border-color: color-mix(in srgb, var(--k) 45%, var(--line2)); }
+.cnode.sel { box-shadow: 0 0 0 1px var(--k), 0 8px 28px rgba(0,0,0,.45); }
+.cnode-head { background: linear-gradient(180deg, color-mix(in srgb, var(--k) 14%, var(--bg3)), var(--bg2)); border-bottom: 1px solid color-mix(in srgb, var(--k) 25%, var(--line)); box-shadow: inset 0 2px 0 var(--k); padding-top: 9px; border-radius: var(--r) var(--r) 0 0; }
+.cnode-head .title { flex: 1; min-width: 0; max-width: none; letter-spacing: -.1px; white-space: normal; line-height: 1.25; word-break: keep-all; }
+.cnode-head .dot { box-shadow: 0 0 8px color-mix(in srgb, var(--k) 70%, transparent); }
+.ports { padding: 8px 0 6px; border-bottom: 1px solid var(--line); }
+.port-row { height: 24px; } .port { min-width: 0; font-size: 11.5px; } .port span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.port-row:hover .port { color: var(--fg); }
+.params { gap: 9px; padding: 10px 10px 8px; }
+.field { grid-template-columns: 104px 1fr; }
+.field-label { line-height: 1.25; }
+.field input:not([type=range]):not([type=checkbox]), .field select, .field textarea { background: var(--bg); border: 1px solid var(--line2); border-radius: 6px; padding: 4px 7px; outline: none; min-width: 0; width: 100%; }
+.field input:focus, .field select:focus, .field textarea:focus { border-color: var(--acc); }
+.field textarea { min-height: 60px; }
+.adv-toggle { width: 100%; text-align: left; border-top: 1px dashed var(--line); padding: 6px 10px; } .adv-toggle:hover { color: var(--fg); }
+.run { transition: filter .12s; } .run:hover { filter: brightness(1.15); }

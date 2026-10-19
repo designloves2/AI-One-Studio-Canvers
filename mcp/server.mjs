@@ -3189,12 +3189,15 @@ var REGISTRY = [
     title: "LTX Director (timeline)",
     category: "Video",
     kind: "generate",
-    inputs: [P.textIn("prompt", "Overall prompt", false), P.imgIn("image", "Images (in time order)", true, true), P.loraIn(), P.seedIn()],
+    inputs: [P.textIn("prompt", "Overall prompt", false), P.imgIn("image", "Images (in time order)", true, true), { id: "audio", label: "Audio (custom track)", type: "audio", optional: true }, { id: "video", label: "Motion video (guide)", type: "video", optional: true }, P.loraIn(), P.seedIn()],
     outputs: [{ id: "video", label: "Video", type: "video" }],
     params: [
       text("beats", "Beats \u2014 one per line:  start-end: prompt  (seconds)", "", true),
       text("image_times", "Image times (s), in the order connected", "0"),
       toggle("last_at_end", "Pin the last image to the end", false),
+      num("audio_start", "Audio starts at (s)", 0, {}, 0, 60, 0.1),
+      num("motion_start", "Motion video starts at (s)", 0, {}, 0, 60, 0.1),
+      slider("motion_strength", "Motion strength", 0, 1, 0.05, 1),
       sel("aspect", "Aspect ratio", [...ASPECTS, "auto"], "16:9"),
       megapixels(1),
       slider("seconds", "Length (s)", 2, 20, 1, 8),
@@ -4207,13 +4210,17 @@ var availability = () => availCache ??= getJson("/ltx25_one/node_availability").
 var real2 = (a) => (a ?? []).filter((x) => x && x !== "none");
 async function resolveLtxModels(user) {
   const l = await ltxModelLists();
-  const pick = (k, list, re) => user[k] || real2(list).find((x) => re.test(x)) || "";
+  const pick = (k, list, re, not) => {
+    if (user[k]) return user[k];
+    const c = real2(list).filter((x) => re.test(x) && !(not && not.test(x)));
+    return c.find((x) => /2[._]?5/.test(x)) ?? c[0] ?? "";
+  };
   return {
     unet: pick("ltx_unet", l.diffusion_models, /ltx/i),
-    clip: pick("ltx_clip", l.text_encoders_all ?? l.text_encoders, /gemma|ltx/i),
-    vaeVideo: pick("ltx_vae_video", l.vaes, /ltx.*video|ltx2?.*vae|video.*vae/i),
+    clip: pick("ltx_clip", l.text_encoders_all ?? l.text_encoders, /gemma|ltx/i, /t5gemma|stable_audio/i),
+    vaeVideo: pick("ltx_vae_video", l.vaes, /ltx/i, /audio/i),
     vaeAudio: pick("ltx_vae_audio", l.vaes, /ltx.*audio|audio.*vae/i),
-    upscaler: pick("ltx_upscaler", l.latent_upscale_models, /ltx|upscal/i)
+    upscaler: pick("ltx_upscaler", l.latent_upscale_models, /spatial|upscal/i, /temporal|duration/i)
   };
 }
 var alignFrames = (n2) => Math.max(9, 8 * Math.round((n2 - 1) / 8) + 1);
@@ -4288,7 +4295,7 @@ async function buildLtxGraph(job) {
   const seg = (file, last, i) => ({ id: `cv-${i}`, start: last ? Math.max(0, frames - ANCHOR) : 0, length: ANCHOR, prompt: "", type: "image", isAnchor: false, imageFile: file, imageB64: "", isEndFrame: last });
   if (job.first) tl.segments.push(seg(job.first, false, 0));
   if (job.last) tl.segments.push(seg(job.last, true, 1));
-  let localPrompts = "", segLens = "", guideStrength = "";
+  let localPrompts = "", segLens = "", guideStrength = "", useAudio = false, useMotion = false;
   if (job.timeline) {
     const T = job.timeline;
     const fr = (sec) => Math.max(0, Math.min(frames - 1, Math.round(sec * FPS)));
@@ -4304,6 +4311,18 @@ async function buildLtxGraph(job) {
       tl.disable_prompt_relay = false;
       localPrompts = texts.map((t) => t.prompt).join(" | ");
       segLens = tl.segments.filter((x) => x.type === "text").map((x) => x.length).join(",");
+    }
+    if (T.audio) {
+      const st = fr(T.audio.startSec);
+      const len = Math.max(1, Math.min(frames - st, Math.round((T.audio.lengthSec ?? secs - T.audio.startSec) * FPS)));
+      tl.audioSegments.push({ id: "cva-0", start: st, length: len, trimStart: 0, audioFile: T.audio.file });
+      useAudio = true;
+    }
+    if (T.motion) {
+      const st = fr(T.motion.startSec);
+      const len = Math.max(1, Math.min(frames - st, Math.round((T.motion.lengthSec ?? secs - T.motion.startSec) * FPS)));
+      tl.motionSegments.push({ id: "cvm-0", type: "motion_video", start: st, length: len, trimStart: 0, videoDurationFrames: len, videoFile: T.motion.file, fileName: T.motion.file, videoStrength: T.motion.strength ?? 1, videoAttentionStrength: T.motion.attention ?? 0.65, resampleMode: "nearest" });
+      useMotion = true;
     }
     if (imgs.some((i) => i.strength !== void 0)) guideStrength = imgs.map((i) => (i.strength ?? 1).toFixed(2)).join(",");
   }
@@ -4324,8 +4343,8 @@ async function buildLtxGraph(job) {
     epsilon: 1e-3,
     guide_strength: guideStrength,
     global_prompt: job.prompt,
-    use_custom_audio: false,
-    use_custom_motion: false,
+    use_custom_audio: useAudio,
+    use_custom_motion: useMotion,
     inpaint_audio: true,
     frame_rate: FPS,
     display_mode: "seconds",
@@ -5712,6 +5731,9 @@ var EXTRA_RUNNERS = {
       size = ltxSize(`${bm.width}:${bm.height}`, num2(p.megapixels, 1));
     }
     const seconds = num2(p.seconds, 8);
+    const aud = c.inputs("audio")[0], mot = c.inputs("video")[0];
+    const audio = aud ? { file: await ensureInput(aud), startSec: num2(p.audio_start, 0) } : void 0;
+    const motion = mot ? { file: await ensureInput(mot), startSec: num2(p.motion_start, 0), strength: num2(p.motion_strength, 1) } : void 0;
     const graph = await buildLtxGraph({
       prompt: c.text("prompt"),
       seconds,
@@ -5727,7 +5749,7 @@ var EXTRA_RUNNERS = {
       models: s.video,
       saveSubfolder: s.saveSubfolder,
       size,
-      timeline: { texts: beats, images: files.map((file, i) => ({ file, startSec: i === files.length - 1 && p.last_at_end ? seconds : times[i] ?? 0, end: i === files.length - 1 && !!p.last_at_end })) }
+      timeline: { texts: beats, images: files.map((file, i) => ({ file, startSec: i === files.length - 1 && p.last_at_end ? seconds : times[i] ?? 0, end: i === files.length - 1 && !!p.last_at_end })), audio, motion }
     });
     const res = await runPrompt(graph, { onProgress: c.progress, signal: c.signal });
     const f = res.videos[0] ?? res.images[0];
