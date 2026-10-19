@@ -101,3 +101,6 @@ npm run mock       # GPU 없이 UI 시험용 가짜 ComfyUI (:8188)
 자세한 진행 상황과 남은 작업은 `HANDOFF.md` 참고. (원본 패널 불러오기는 Settings 의 Legacy 옵션)
 
 > 업데이트(git pull) 후에는 실행 중인 서버를 끄고 `start.bat`(또는 `start.sh`)을 다시 실행하세요. 시작할 때마다 git pull + 화면 빌드를 자동으로 합니다. (`dist/` 는 git 에 포함되지 않습니다.)
+
+## 라이선스
+GPL-3.0 (LICENSE, NOTICE.md 참고).
