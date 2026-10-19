@@ -100,4 +100,4 @@ npm run mock       # GPU 없이 UI 시험용 가짜 ComfyUI (:8188)
 - 선을 빈 곳에 놓으면 연결 가능한 카드 메뉴가 뜹니다 / 우클릭 메뉴 / 카드 선택 후 추가하면 자동 연결
 자세한 진행 상황과 남은 작업은 `HANDOFF.md` 참고. (원본 패널 불러오기는 Settings 의 Legacy 옵션)
 
-> 업데이트(git pull) 후에는 실행 중인 서버를 끄고 `start.bat`(또는 `start.sh`)을 다시 실행하세요. 시작할 때마다 화면을 새로 빌드합니다. (`dist/` 는 git 에 포함되지 않습니다.)
+> 업데이트(git pull) 후에는 실행 중인 서버를 끄고 `start.bat`(또는 `start.sh`)을 다시 실행하세요. 시작할 때마다 git pull + 화면 빌드를 자동으로 합니다. (`dist/` 는 git 에 포함되지 않습니다.)
