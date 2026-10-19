@@ -172,6 +172,8 @@ function imageRunner(mode: (c: Ctx) => ImageMode): Runner {
       loras: [lora('lora1', 'lora1_strength'), lora('lora2', 'lora2_strength'), ...cardLoras(c)],
       models: settings.models[family], saveSubfolder: settings.saveSubfolder,
       bgModel: str(p.bg_model),
+      control: { preprocessor: str(p.cn_pre, 'DepthAnythingPreprocessor'), resolution: num(p.cn_res, 1024), strength: num(p.cn_strength, 1), patch: str(p.cn_patch, 'none') },
+      face: { detector: str(p.fr_detector, 'none'), threshold: num(p.fr_threshold, 0.5), dilation: num(p.fr_dilation, 4), context: num(p.fr_context, 1.8), size: num(p.fr_size, 1024) },
     };
     if ((m === 't2i' || m === 'edit' || m === 'i2i' || m === 'inpaint' || m === 'outpaint') && !job.prompt && m !== 'outpaint') throw new Error('Prompt is empty');
     const built = await buildImageGraph(job);
@@ -312,6 +314,8 @@ const RUNNERS: Record<string, Runner> = {
 
   // ---- image generation
   'image-generate': imageRunner(() => 't2i'),
+  controlnet: imageRunner(() => 'controlnet'),
+  'face-redraw': imageRunner(() => 'facedraw'),
   'image-edit': imageRunner((c) => (c.engineId === 'klein-edit' || c.engineId === 'qwen-edit' || c.engineId === 'qwen21-edit' || !c.engineId ? 'edit' : 'i2i')),
   inpaint: imageRunner(() => 'inpaint'),
   outpaint: imageRunner(() => 'outpaint'),

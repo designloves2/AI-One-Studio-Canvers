@@ -21,6 +21,9 @@ async function load(source: string): Promise<string[]> {
     const lists = await Promise.all([...Object.keys(FAMILIES).map((f) => getModels(f as Family).then((m) => m.loras ?? []).catch(() => [] as string[])), getJson<{ loras: string[] }>('/minimax_h3_one/models').then((l) => l.loras ?? []).catch(() => [] as string[])]);
     return ['none', ...new Set(lists.flat().filter((x) => x && x !== 'none'))];
   }
+  if (source === 'preprocessors') { const i = await objectInfo('AIO_Preprocessor'); return i?.AIO_Preprocessor?.input?.required?.preprocessor?.[0] ?? ['DepthAnythingPreprocessor']; }
+  if (source === 'modelpatches') { const i = await objectInfo('ModelPatchLoader'); return ['none', ...(i?.ModelPatchLoader?.input?.required?.name?.[0] ?? [])]; }
+  if (source === 'bboxdetectors') { const i = await objectInfo('UltralyticsDetectorProvider'); return ['none', ...(i?.UltralyticsDetectorProvider?.input?.required?.model_name?.[0] ?? [])]; }
   if (source === 'facedetectors') {
     const l = await getJson<{ face_detectors?: string[] }>('/minimax_h3_one/models');
     return ['none', ...(l.face_detectors ?? []).filter((x) => x && x !== 'none')];

@@ -11,6 +11,7 @@ export const KO_CARDS: Record<string, string> = {
   'Deblur (RTX)': '디블러 (RTX)', 'Denoise (RTX)': '디노이즈 (RTX)', 'Video Upscale': '영상 업스케일', 'Skin Retouch': '피부 보정', 'Film Grain': '필름 그레인',
   'Frame Interpolation': '프레임 보간', 'Video Resize': '영상 리사이즈', 'Face Refine (H3)': '얼굴 리파인 (H3)', 'Character Sheet': '캐릭터 시트',
   'Video Edit (LTX 2.5 refine)': '영상 수정 (LTX 2.5)', 'Video Stitch': '영상 스티치', 'LTX Director (timeline)': 'LTX 디렉터 (타임라인)', 'Image Generate (H3)': '이미지 생성 (H3)',
+  'ControlNet Generate (Z-Image)': '컨트롤넷 생성 (Z-Image)', 'Face Redraw (Z-Image)': '얼굴 다시 그리기 (Z-Image)', 'Control image': '컨트롤 이미지', Portrait: '인물 사진', 'ControlNet model': '컨트롤넷 모델', Preprocessor: '전처리기', 'Control strength': '컨트롤 강도', 'Preprocess resolution': '전처리 해상도', 'Detect threshold': '검출 임계값', 'Mask dilation': '마스크 확장', 'Context around the face': '얼굴 주변 범위', 'Working size px': '작업 크기 px',
   // ports
   'LoRA cards': 'LoRA 카드', 'H3 option cards': 'H3 옵션 카드', 'Option cards': '옵션 카드', Video: '영상', Videos: '영상들', 'Videos (in order)': '영상 (연결 순서)',
   'Face references': '얼굴 레퍼런스', 'Character reference': '캐릭터 레퍼런스', 'Prompt (optional)': '프롬프트 (선택)', 'Overall prompt': '전체 프롬프트', 'Images (in time order)': '이미지 (시간순)',

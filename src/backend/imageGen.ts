@@ -2,7 +2,7 @@
 // Klein graphs start from the templates STUDIO_ONE serves; Z-Image graphs are assembled from core nodes.
 import { getWorkflow, pickModels, type Family } from './studio';
 
-export type ImageMode = 't2i' | 'i2i' | 'edit' | 'inpaint' | 'outpaint' | 'faceswap' | 'removebg';
+export type ImageMode = 't2i' | 'i2i' | 'edit' | 'inpaint' | 'outpaint' | 'faceswap' | 'removebg' | 'controlnet' | 'facedraw';
 
 export interface Lora { name: string; strength: number }
 
@@ -29,6 +29,10 @@ export interface ImageJob {
   saveSubfolder: string;
   /** background removal model file name (removebg) */
   bgModel?: string;
+  /** Z-Image Fun ControlNet (controlnet / facedraw modes) */
+  control?: { preprocessor: string; resolution: number; strength: number; patch: string };
+  /** face redraw: detector + crop settings */
+  face?: { detector: string; threshold: number; dilation: number; context: number; size: number };
 }
 
 export interface Built { graph: Record<string, any>; hint: string }
@@ -238,6 +242,44 @@ function buildZImage(job: ImageJob, m: { model: string; textEncoder: string; vae
     g['Z:noise'] = { class_type: 'SetLatentNoiseMask', inputs: { samples: ['Z:enc', 0], mask: ['Z:pad', 1] } };
     g['Z:sampler'] = zSampler(job, modelOut, ['Z:noise', 0], 1);
     return { graph: finish(g, ['Z:sampler', 0]), hint: 'Z-Image Outpaint' };
+  }
+  if (job.mode === 'controlnet' || job.mode === 'facedraw') {
+    const c = job.control; if (!c || !c.patch || c.patch === 'none') throw new Error('Pick the Z-Image ControlNet model patch (ModelPatchLoader) on the card');
+    if (!job.images[0]) throw new Error('Source image is required');
+    const { g } = zBase(job, m);
+    // the ControlNet patch replaces the plain AuraFlow sampling chain; it patches the LoRA'd model
+    const modelIn = g['Z:sampling'].inputs.model as [string, number];
+    delete g['Z:sampling'];
+    g['Z:load'] = { class_type: 'LoadImage', inputs: { image: job.images[0] } };
+    let src: [string, number] = ['Z:load', 0];
+    let crop = false;
+    if (job.mode === 'facedraw') {
+      const f = job.face!; if (!f.detector || f.detector === 'none') throw new Error('Pick a face detector on the card');
+      g['Z:bbox'] = { class_type: 'UltralyticsDetectorProvider', inputs: { model_name: f.detector } };
+      g['Z:faceMask'] = { class_type: 'BboxDetectorCombined_v2', inputs: { bbox_detector: ['Z:bbox', 0], image: src, threshold: f.threshold, dilation: f.dilation } };
+      g['Z:crop'] = { class_type: 'InpaintCropImproved', inputs: { image: src, mask: ['Z:faceMask', 0], downscale_algorithm: 'bilinear', upscale_algorithm: 'bicubic', preresize: false, preresize_mode: 'ensure minimum resolution', preresize_min_width: 1024, preresize_min_height: 1024, preresize_max_width: 16384, preresize_max_height: 16384, mask_fill_holes: true, mask_expand_pixels: 0, mask_invert: false, mask_blend_pixels: 32, mask_hipass_filter: 0.1, extend_for_outpainting: false, extend_up_factor: 1, extend_down_factor: 1, extend_left_factor: 1, extend_right_factor: 1, context_from_mask_extend_factor: f.context, output_resize_to_target_size: true, output_target_width: f.size, output_target_height: f.size, output_padding: '32', device_mode: 'gpu (much faster)' } };
+      src = ['Z:crop', 1]; crop = true;
+    }
+    g['Z:pre'] = { class_type: 'AIO_Preprocessor', inputs: { image: src, preprocessor: c.preprocessor, resolution: c.resolution } };
+    g['Z:patch'] = { class_type: 'ModelPatchLoader', inputs: { name: c.patch } };
+    g['Z:cn'] = { class_type: 'ZImageFunControlnet', inputs: { model: modelIn, model_patch: ['Z:patch', 0], vae: ['Z:vae', 0], positive: ['Z:pos', 0], negative: ['Z:neg', 0], strength: c.strength, image: ['Z:pre', 0] } };
+    g['Z:sampling'] = { class_type: 'ModelSamplingAuraFlow', inputs: { model: ['Z:cn', 0], shift: 3 } };
+    let latent: [string, number];
+    if (crop) {
+      g['Z:enc'] = { class_type: 'VAEEncode', inputs: { pixels: ['Z:crop', 1], vae: ['Z:vae', 0] } };
+      g['Z:noise'] = { class_type: 'SetLatentNoiseMask', inputs: { samples: ['Z:enc', 0], mask: ['Z:crop', 2] } };
+      latent = ['Z:noise', 0];
+    } else {
+      g['Z:size'] = { class_type: 'GetImageSize', inputs: { image: ['Z:pre', 0] } };
+      g['Z:latent'] = { class_type: 'EmptySD3LatentImage', inputs: { width: ['Z:size', 0], height: ['Z:size', 1], batch_size: job.batch } };
+      latent = ['Z:latent', 0];
+    }
+    g['Z:sampler'] = { class_type: 'KSampler', inputs: { model: ['Z:sampling', 0], positive: ['Z:cn', 1], negative: ['Z:cn', 2], latent_image: latent, seed: job.seed, steps: job.steps, cfg: job.cfg, sampler_name: job.sampler, scheduler: job.scheduler, denoise: crop ? job.denoise : 1 } };
+    g['Z:decode'] = { class_type: 'VAEDecode', inputs: { samples: ['Z:sampler', 0], vae: ['Z:vae', 0] } };
+    let out: [string, number] = ['Z:decode', 0];
+    if (crop) { g['Z:stitch'] = { class_type: 'InpaintStitchImproved', inputs: { stitcher: ['Z:crop', 0], inpainted_image: out } }; out = ['Z:stitch', 0]; }
+    g['Z:save'] = saveNode(job, out, 'ZIT');
+    return { graph: g, hint: crop ? 'Z-Image Face Redraw' : 'Z-Image ControlNet' };
   }
   throw new Error(`Z-Image Turbo has no "${job.mode}" mode`);
 }
