@@ -2608,6 +2608,36 @@ var sdxl = (id, label, extra = [], size = false) => ({
   family: "sdxl",
   params: [...sizeParams(size), ...extra, ...sampler(20, 7, "euler_ancestral", "karras"), { ...negative, default: "low quality, blurry, deformed, watermark" }, ...loras("sdxl"), num("batch", "Batch", 1, { advanced: true }, 1, 4, 1), seed]
 });
+var h3Params = (ref) => [
+  sel("aspect", "Aspect ratio", [...ASPECTS, "auto"], "16:9"),
+  megapixels(0.9),
+  slider("seconds", "Clip length (s)", 5.2, 15, 0.5, 8),
+  ...ref ? [] : [sel("continuity", "Several clips (separate prompts with ---)", ["none", "lastframe", "onetake"], "lastframe"), toggle("stitch", "Stitch clips into one video", true)],
+  slider("steps", "Steps (no turbo)", 1, 60, 1, 20, { advanced: true }),
+  dyn("sampler", "Sampler", "samplers", "er_sde", { advanced: true }),
+  dyn("scheduler", "Scheduler", "schedulers", "simple", { advanced: true }),
+  sel("turbo", "Turbo", ["none", "larryvrh", "pdd", "lightx2v"], "none", { advanced: true }),
+  dyn("turbo_lora", "Turbo LoRA", "loras:h3", "none", { advanced: true, when: (p) => p.turbo !== "none" }),
+  slider("turbo_strength", "Turbo strength", 0, 2, 0.05, 1, { advanced: true, when: (p) => p.turbo !== "none" }),
+  slider("turbo_steps", "Turbo steps", 1, 16, 1, 8, { advanced: true, when: (p) => p.turbo !== "none" }),
+  toggle("hires", "7+1 hi-res finish (Turbo LoRA Basic = pdd)", false, { advanced: true, when: (p) => p.turbo === "pdd" }),
+  slider("hires_start_mp", "Start MP", 0.2, 1, 0.05, 0.5, { advanced: true, when: (p) => p.turbo === "pdd" && !!p.hires }),
+  slider("hires_final_mp", "Final MP", 0.4, 3, 0.05, 0.9, { advanced: true, when: (p) => p.turbo === "pdd" && !!p.hires }),
+  sel("attn_backend", "Attention backend", ["none", "ck", "sage", "solattn_kijai", "sla"], "none", { advanced: true }),
+  sel("attn_forward", "Attention forward patch", ["none", "memeff_sage", "solattn_sag"], "none", { advanced: true }),
+  sel("optimizer", "H3 optimizer", ["none", "memory", "memory_sparse"], "none", { advanced: true }),
+  sel("block_cache", "Block cache", ["none", "fbcache"], "none", { advanced: true }),
+  toggle("spectrum", "Spectrum", false, { advanced: true }),
+  toggle("fused_mod", "Fused modulation", false, { advanced: true }),
+  slider("shift_video", "Shift (video)", 1, 20, 0.5, 12, { advanced: true }),
+  slider("shift_audio", "Shift (audio)", 1, 10, 0.5, 3, { advanced: true }),
+  text("lock_mode", "Audio lock mode", "lock", false, { advanced: true }),
+  slider("lock_strength", "Audio lock strength", 0, 1, 0.05, 0.5, { advanced: true }),
+  text("lock_fit", "Audio lock fit", "pad_silence", false, { advanced: true }),
+  dyn("upscale_model", "Upscale model", "upscalers", "none", { advanced: true }),
+  ...loras("h3"),
+  seed
+];
 var klein = (id, label, extra = [], size = false) => ({
   id,
   label,
@@ -2791,7 +2821,7 @@ var REGISTRY = [
     title: "Music Generate",
     category: "Audio",
     kind: "generate",
-    inputs: [P.textIn("prompt", "Style", false), P.textIn("lyrics", "Lyrics", true), { id: "cover", label: "Cover source", type: "audio", optional: true }, P.seedIn()],
+    inputs: [P.textIn("prompt", "Style", false), P.textIn("lyrics", "Lyrics", true), { id: "cover", label: "Cover source", type: "audio", optional: true }, P.textIn("melody", "Melody (ABC)", true), P.seedIn()],
     outputs: [{ id: "audio", label: "Audio", type: "audio" }],
     params: [],
     engines: [
@@ -2800,6 +2830,16 @@ var REGISTRY = [
       { id: "minimax", label: "MiniMax Music 3 (local)", family: "music", params: [slider("seconds", "Length (s)", 5, 300, 1, 60), sel("format", "Format", ["flac", "mp3", "opus"], "flac", { advanced: true }), slider("steps1", "Steps", 1, 80, 1, 30, { advanced: true }), slider("cfg", "Guidance", 0, 10, 0.1, 1.7, { advanced: true }), seed] }
     ],
     description: "Songs and instrumentals. Style prompt (+ optional lyrics) in, audio out. Models: Settings \u2192 Music models."
+  },
+  {
+    id: "melody-editor",
+    title: "Melody Editor",
+    category: "Audio",
+    kind: "source",
+    inputs: [],
+    outputs: [P.textOut("abc", "Melody (ABC)")],
+    params: [text("melody", "melody", "", false, { advanced: true }), text("abc", "abc", "", false, { advanced: true })],
+    description: "Draw a melody on a piano roll, or record it from a MIDI keyboard. Wire it into YuE2 (Melody) \u2014 YuE2 then sings and arranges around your tune."
   },
   {
     id: "comfy-workflow",
@@ -2816,12 +2856,12 @@ var REGISTRY = [
     title: "Video Generate",
     category: "Video",
     kind: "generate",
-    inputs: [P.textIn("prompt", "Prompt", false), P.imgIn("image", "First frame / references", true, true), P.imgIn("last", "Last frame", true), P.seedIn()],
+    inputs: [P.textIn("prompt", "Prompt", false), P.imgIn("image", "First frame / references", true, true), P.imgIn("last", "Last frame", true), { id: "audio", label: "Lock audio", type: "audio", optional: true }, P.seedIn()],
     outputs: [{ id: "video", label: "Video", type: "video" }],
     params: [],
     engines: [
-      { id: "h3", label: "MiniMax H3 \u2014 text / first-last frame (local)", family: "h3", default: true, params: [sel("aspect", "Aspect ratio", [...ASPECTS, "auto"], "16:9"), megapixels(0.9), slider("seconds", "Length (s)", 5.2, 15, 0.5, 8), slider("steps", "Steps (lower with a Turbo LoRA)", 1, 60, 1, 20, { advanced: true }), dyn("sampler", "Sampler", "samplers", "er_sde", { advanced: true }), dyn("scheduler", "Scheduler", "schedulers", "simple", { advanced: true }), dyn("turbo_lora", "Turbo LoRA", "loras:h3", "none", { advanced: true }), ...loras("h3"), seed] },
-      { id: "h3-ref", label: "MiniMax H3 \u2014 multi-reference (local)", family: "h3", params: [sel("aspect", "Aspect ratio", [...ASPECTS, "auto"], "16:9"), megapixels(0.9), slider("seconds", "Length (s)", 5.2, 15, 0.5, 8), slider("steps", "Steps (lower with a Turbo LoRA)", 1, 60, 1, 20, { advanced: true }), dyn("sampler", "Sampler", "samplers", "er_sde", { advanced: true }), dyn("scheduler", "Scheduler", "schedulers", "simple", { advanced: true }), dyn("turbo_lora", "Turbo LoRA", "loras:h3", "none", { advanced: true }), ...loras("h3"), seed] },
+      { id: "h3", label: "MiniMax H3 \u2014 text / first-last frame (local)", family: "h3", default: true, params: h3Params(false) },
+      { id: "h3-ref", label: "MiniMax H3 \u2014 multi-reference (local)", family: "h3", params: h3Params(true) },
       { id: "ltx25", label: "LTX 2.5 (local, with audio)", family: "ltx25", params: [sel("aspect", "Aspect ratio", [...ASPECTS, "auto"], "16:9"), megapixels(1), slider("seconds", "Length (s)", 2, 20, 1, 5), slider("steps", "Steps", 1, 40, 1, 12, { advanced: true }), slider("cfg", "Guidance", 0, 10, 0.1, 1, { advanced: true }), dyn("sampler", "Sampler", "samplers", "euler_ancestral", { advanced: true }), dyn("scheduler", "Scheduler", "schedulers", "linear_quadratic", { advanced: true }), text("stage2", "Stage-2 sigmas", "0.85, 0.7250, 0.4219, 0.0", false, { advanced: true }), ...loras("ltx25"), seed] }
     ],
     description: "Text \u2192 video, or first/last frame \u2192 video (LTX 2.5). LTX 2.5 or MiniMax H3. Other models: ComfyUI Workflow node."
@@ -3589,6 +3629,9 @@ async function buildMusicGraph(job) {
       g["Y:abc"] = { class_type: "SheetSage2AudioToABC", inputs: { mode: "melody", audio_encoder: ["Y:enc", 0], audio: ["Y:load", 0] } };
       gen.abc = ["Y:abc", 0];
       gen.mode = "melody";
+    } else if (job.melodyAbc) {
+      gen.abc = job.melodyAbc;
+      gen.mode = "melody";
     } else {
       g["Y:abc"] = { class_type: "YuE2GenerateABC", inputs: { style: job.caption, lyrics: job.lyrics, seed: job.seed, clip: clip2, mode: "full", max_abc_tokens: 8192, temperature: 0.7, top_p: 0.9, top_k: 30, repetition_penalty: 1.005, penalty_window: 100 } };
       gen.abc = ["Y:abc", 0];
@@ -3838,13 +3881,32 @@ async function buildLtxGraph(job) {
 
 // src/backend/h3.ts
 init_http();
+var DEFAULT_OPT = {
+  attnBackend: "none",
+  attnForward: "none",
+  optimizer: "none",
+  blockCache: "none",
+  spectrum: false,
+  fusedModulation: false,
+  turbo: "none",
+  turboLora: "none",
+  turboStrength: 1,
+  turboSteps: 8,
+  hires: false,
+  hiresStartMp: 0.5,
+  hiresFinalMp: 0.9,
+  shiftVideo: 12,
+  shiftAudio: 3
+};
+var ONE_TAKE_OVERLAP_FRAMES = 39;
+var TAIL_CANDIDATES = 8;
 var cache4 = null;
 var h3ModelLists = () => cache4 ??= getJson("/minimax_h3_one/models").catch((e) => {
   cache4 = null;
   throw e;
 });
 var availCache2 = null;
-var availability2 = () => availCache2 ??= getJson("/minimax_h3_one/node_availability").then((r) => r.available ?? r).catch(() => ({}));
+var h3Availability = () => availCache2 ??= getJson("/minimax_h3_one/node_availability").then((r) => r.available ?? r).catch(() => ({}));
 var real3 = (a) => (a ?? []).filter((x) => x && x !== "none");
 async function resolveH3Models(user, mode) {
   const l = await h3ModelLists();
@@ -3869,70 +3931,208 @@ function h3Size(aspect2, mp) {
   return { width: snap(w), height: snap(h) };
 }
 async function buildH3Graph(job) {
+  const o = job.opt;
   const m = await resolveH3Models(job.models, job.mode);
   const miss = [["H3 diffusion model", m.unet], ["text encoder", m.clip], ["video VAE", m.vaeVideo], ["audio VAE", m.vaeAudio]].filter(([, v]) => !v).map(([k]) => k);
   if (miss.length) throw new Error(`Pick the MiniMax H3 ${miss.join(", ")} in Settings \u2192 Video models.`);
   if (!job.prompt.trim()) throw new Error("Prompt is empty");
   if (job.mode === "reference" && !job.refs.length) throw new Error("Connect at least one reference image");
-  const avail = await availability2();
+  const avail = await h3Availability();
   const has = (n2) => !!avail[n2];
+  const needNode = (n2, why) => {
+    if (!has(n2)) throw new Error(`${why} needs the ${n2} node \u2014 install the ComfyUI pack that provides it, or switch the option off.`);
+  };
   const frames = h3Frames(job.seconds);
-  const { width, height } = job.size ?? h3Size(job.aspect, job.megapixels);
+  const turbo = o.turbo === "larryvrh" && (!has("MiniMaxH3TurboLoRA") || !o.turboLora || o.turboLora === "none") ? "none" : o.turbo === "lightx2v" && (!has("H3SLAAttention") || !o.turboLora || o.turboLora === "none") ? "none" : o.turbo === "pdd" && (!o.turboLora || o.turboLora === "none") ? "none" : o.turbo;
+  const hires = o.hires && turbo === "pdd";
+  const final = job.size ?? h3Size(job.aspect, hires ? o.hiresFinalMp : job.megapixels);
+  const start = hires ? h3Size(job.aspect, o.hiresStartMp) : final;
+  const steps = hires ? 8 : turbo === "none" ? Math.max(1, Math.round(job.steps)) : Math.max(1, Math.round(o.turboSteps));
   const g = {};
   g.unet = m.unet.toLowerCase().endsWith(".gguf") ? { class_type: "UnetLoaderGGUF", inputs: { unet_name: m.unet } } : { class_type: "UNETLoader", inputs: { unet_name: m.unet, weight_dtype: "default" } };
   let model = ["unet", 0];
-  g.shift = { class_type: "MiniMaxH3SigmaShift", inputs: { model, shift_video: 12, shift_audio: 3 } };
+  if (o.attnBackend === "ck" && has("ModelAttentionBackend")) {
+    g.ck = { class_type: "ModelAttentionBackend", inputs: { model, attention: "comfy kitchen attention" } };
+    model = ["ck", 0];
+  } else if (o.attnBackend === "sage" && has("PathchSageAttentionKJ")) {
+    g.sage = { class_type: "PathchSageAttentionKJ", inputs: { model, sage_attention: "auto" } };
+    model = ["sage", 0];
+  } else if (o.attnBackend === "solattn_kijai" && has("SolAttnPatch")) {
+    g.sol = { class_type: "SolAttnPatch", inputs: { model, tau: 1.3, start_percent: 0.2, end_percent: 0.9, min_tokens: 4096, int8_qk: true, sink_conditioning: "exact_kv_and_rows", morton: false, morton_curve: "2d_frame", int8_pv: true, verbose: false, use_tma: false, dense_blocks: "" } };
+    model = ["sol", 0];
+  }
+  if ((o.attnForward === "memeff_sage" || o.attnForward === "solattn_sag") && has("MiniMaxH3MemoryEfficientSageAttentionPatch")) {
+    g.memSage = { class_type: "MiniMaxH3MemoryEfficientSageAttentionPatch", inputs: { model } };
+    model = ["memSage", 0];
+  }
+  if (o.attnForward === "solattn_sag" && has("MiniMaxH3ScheduledSolAttentionPatch")) {
+    g.solSag = { class_type: "MiniMaxH3ScheduledSolAttentionPatch", inputs: { model, enabled: true, tau_start: 1.3, tau_end: 0.8, curve: "linear", min_tokens: 4096, strict: false, dense_percent: 0, thresh_type: "diag", int8_qk: false, int8_pv: false, sink_conditioning: "exact_kv", dense_blocks: "" } };
+    model = ["solSag", 0];
+  }
+  g.shift = { class_type: "MiniMaxH3SigmaShift", inputs: { model, shift_video: turbo === "pdd" ? 12 : o.shiftVideo, shift_audio: turbo === "pdd" ? 3 : o.shiftAudio } };
   model = ["shift", 0];
-  [...job.loras, ...job.turbo ? [job.turbo] : []].forEach((l, i) => {
+  job.loras.forEach((l, i) => {
     if (!l.name || l.name === "none" || !(l.strength > 0)) return;
     g[`lora${i}`] = { class_type: "LoraLoaderModelOnly", inputs: { model, lora_name: l.name, strength_model: l.strength } };
     model = [`lora${i}`, 0];
   });
+  if (turbo === "larryvrh") {
+    g.turbo = { class_type: "MiniMaxH3TurboLoRA", inputs: { model, lora_name: o.turboLora, strength: o.turboStrength, low_vram: false } };
+    model = ["turbo", 0];
+  } else if (turbo === "lightx2v" || turbo === "pdd") {
+    g.turbo = { class_type: "LoraLoaderModelOnly", inputs: { model, lora_name: o.turboLora, strength_model: o.turboStrength } };
+    model = ["turbo", 0];
+  }
+  if (o.blockCache === "fbcache" && turbo === "none" && has("ApplyMiniMaxH3FirstBlockCache")) {
+    g.fbc = { class_type: "ApplyMiniMaxH3FirstBlockCache", inputs: { model, mode: "H3 Fast \u2014 0.10 / max 2", threshold: 0.1, start_percent: 0.1, end_percent: 0.95, max_consecutive_hits: 2, temporal_guard: false } };
+    model = ["fbc", 0];
+  }
+  if ((o.optimizer === "memory" || o.optimizer === "memory_sparse") && has("H3MemoryOptimization")) {
+    g.h3mem = { class_type: "H3MemoryOptimization", inputs: { model, fused_qkv: "auto", preserve_precision: true, embedding_memory_mode: "Auto", mlp_memory: "auto", chunk_rows: 4096, precision_mode: "Auto", qkv_streaming_mode: "Auto", kitchen_v_memory_mode: "Standard" } };
+    model = ["h3mem", 0];
+  }
+  if (o.optimizer === "memory_sparse" && turbo === "none" && has("H3SparseAttention")) {
+    g.h3sparse = { class_type: "H3SparseAttention", inputs: { model, video_budget: 0.15, denser_early_late_steps: true, layer_video_budgets: "" } };
+    model = ["h3sparse", 0];
+  }
+  if (o.spectrum && has("SpectrumApplyMiniMaxH3")) {
+    g.spec = { class_type: "SpectrumApplyMiniMaxH3", inputs: { model, enabled: true, blend_weight: 0.5, degree: 1, ridge_lambda: 0.1, window_size: 2, flex_window: 0.75, warmup_steps: 1, tail_actual_steps: 1, max_history: 8, debug: false, history_storage: "system_ram", bootstrap_first_forecast: true } };
+    model = ["spec", 0];
+  }
+  if (o.fusedModulation && has("MiniMaxH3FusedModulation")) {
+    g.fused = { class_type: "MiniMaxH3FusedModulation", inputs: { model, enabled: true } };
+    model = ["fused", 0];
+  }
+  if ((o.attnBackend === "sla" || turbo === "lightx2v") && has("H3SLAAttention")) {
+    g.sla = { class_type: "H3SLAAttention", inputs: { model, sparsity_ratio: 0.9, block_size: "64", min_seq_len: 8192, dense_last_steps: 0, protect_audio: true, enabled: true } };
+    model = ["sla", 0];
+  }
   g.clip = { class_type: "CLIPLoader", inputs: { clip_name: m.clip, type: "minimax", device: "default" } };
   g.vaeV = { class_type: "VAELoader", inputs: { vae_name: m.vaeVideo } };
   g.vaeA = { class_type: "VAELoader", inputs: { vae_name: m.vaeAudio } };
-  if (job.mode === "reference") {
-    const inputs = { clip: ["clip", 0], vae: ["vaeV", 0], audio_vae: ["vaeA", 0], prompt: job.prompt, width, height, length: frames, ref_image_size: "match" };
-    job.refs.slice(0, 9).forEach((f, i) => {
-      g[`ref${i}`] = { class_type: "LoadImage", inputs: { image: f } };
-      inputs[`ref_images.ref_image_${i}`] = [`ref${i}`, 0];
-    });
-    g.cond = { class_type: "MiniMaxH3ReferenceToVideo", inputs };
-  } else {
-    const inputs = { clip: ["clip", 0], vae: ["vaeV", 0], prompt: job.prompt, width, height, length: frames };
-    if (job.mode === "firstlast") {
-      if (job.first) {
-        g.first = { class_type: "LoadImage", inputs: { image: job.first } };
-        inputs.first_frame = ["first", 0];
+  const cond = (key, w, h) => {
+    if (job.mode === "reference") {
+      const inputs = { clip: ["clip", 0], vae: ["vaeV", 0], audio_vae: ["vaeA", 0], prompt: job.prompt, width: w, height: h, length: frames, ref_image_size: "match" };
+      job.refs.slice(0, 9).forEach((f, i) => {
+        g[`ref${i}`] ??= { class_type: "LoadImage", inputs: { image: f } };
+        inputs[`ref_images.ref_image_${i}`] = [`ref${i}`, 0];
+      });
+      g[key] = { class_type: "MiniMaxH3ReferenceToVideo", inputs };
+    } else {
+      const inputs = { clip: ["clip", 0], vae: ["vaeV", 0], prompt: job.prompt, width: w, height: h, length: frames };
+      if (job.mode === "firstlast") {
+        if (job.first) {
+          g.first ??= { class_type: "LoadImage", inputs: { image: job.first } };
+          inputs.first_frame = ["first", 0];
+        }
+        if (job.last) {
+          g.last ??= { class_type: "LoadImage", inputs: { image: job.last } };
+          inputs.last_frame = ["last", 0];
+        }
       }
-      if (job.last) {
-        g.last = { class_type: "LoadImage", inputs: { image: job.last } };
-        inputs.last_frame = ["last", 0];
-      }
+      g[key] = { class_type: "MiniMaxH3ImageToVideo", inputs };
     }
-    g.cond = { class_type: "MiniMaxH3ImageToVideo", inputs };
-  }
+  };
+  cond("cond", start.width, start.height);
+  const imageCond = job.mode === "reference" || job.mode === "firstlast" && (job.first || job.last);
+  const hrCond = hires && imageCond;
+  if (hrCond) cond("hrCond", final.width, final.height);
   g.noise = { class_type: "RandomNoise", inputs: { noise_seed: job.seed } };
-  g.sel = { class_type: "KSamplerSelect", inputs: { sampler_name: job.sampler } };
-  g.sched = { class_type: "BasicScheduler", inputs: { model, scheduler: job.scheduler, steps: Math.max(1, Math.round(job.steps)), denoise: 1 } };
-  let cond = ["cond", 0];
+  g.sel = turbo === "larryvrh" && has("MiniMaxH3TurboSampler") ? { class_type: "MiniMaxH3TurboSampler", inputs: {} } : { class_type: "KSamplerSelect", inputs: { sampler_name: turbo === "pdd" ? "euler" : job.sampler } };
+  g.sched = { class_type: "BasicScheduler", inputs: { model, scheduler: job.scheduler, steps, denoise: 1 } };
+  let condLink = ["cond", 0], hrCondLink = hrCond ? ["hrCond", 0] : condLink;
   if (has("TJ_FreeTextEncoderVRAM")) {
-    g.free = { class_type: "TJ_FreeTextEncoderVRAM", inputs: { clip: ["clip", 0], trigger: cond } };
-    cond = ["free", 0];
+    g.free = { class_type: "TJ_FreeTextEncoderVRAM", inputs: { clip: ["clip", 0], trigger: hrCond ? hrCondLink : condLink } };
+    if (hrCond) hrCondLink = ["free", 0];
+    else condLink = hrCondLink = ["free", 0];
   }
-  g.guider = { class_type: "BasicGuider", inputs: { model, conditioning: cond } };
-  g.samp = { class_type: "SamplerCustomAdvanced", inputs: { noise: ["noise", 0], guider: ["guider", 0], sampler: ["sel", 0], sigmas: ["sched", 0], latent_image: ["cond", 1] } };
-  g.dec = { class_type: "VAEDecode", inputs: { samples: ["samp", 0], vae: ["vaeV", 0] } };
-  g.decA = { class_type: "VAEDecodeAudio", inputs: { samples: ["samp", 0], vae: ["vaeA", 0] } };
-  const prefix = `${job.saveSubfolder}/MMH3`;
-  if (has("VHS_VideoCombine")) {
-    g.save = { class_type: "VHS_VideoCombine", inputs: { images: ["dec", 0], audio: ["decA", 0], frame_rate: FPS, loop_count: 0, filename_prefix: prefix, format: "video/nvenc_h264-mp4", pingpong: false, save_output: true } };
-  } else {
-    g.video = { class_type: "CreateVideo", inputs: { images: ["dec", 0], fps: FPS, audio: ["decA", 0] } };
+  g.guider = { class_type: "BasicGuider", inputs: { model, conditioning: condLink } };
+  let latent = ["cond", 1];
+  let locked = false;
+  if (o.audioLock) {
+    needNode("TJ_H3_AudioLock", "Audio lock");
+    g.lockAud = { class_type: "LoadAudio", inputs: { audio: o.audioLock.file } };
+    let aud = ["lockAud", 0];
+    if (has("TrimAudioDuration")) {
+      g.lockTrim = { class_type: "TrimAudioDuration", inputs: { audio: aud, start_index: o.audioLock.startSec, duration: frames / FPS } };
+      aud = ["lockTrim", 0];
+    }
+    g.audioLock = { class_type: "TJ_H3_AudioLock", inputs: { av_latent: latent, audio: aud, audio_vae: ["vaeA", 0], mode: o.audioLock.mode, strength: o.audioLock.strength, fit: o.audioLock.fit, get_name_av_latent: "(none)", get_name_audio: "(none)", get_name_audio_vae: "(none)", auto_set: false } };
+    latent = ["audioLock", 0];
+    locked = true;
+  }
+  if (job.checkpoint !== void 0 || job.prevCheckpoint) {
+    needNode("TJ_H3_LatentContinuation", "One-Take");
+    if (job.clipIndex > 0 && job.prevCheckpoint) {
+      needNode("TJ_H3_LoadLatentCheckpoint", "One-Take");
+      g.chkLoad = { class_type: "TJ_H3_LoadLatentCheckpoint", inputs: { checkpoint_name: job.prevCheckpoint, strict: true } };
+      g.cont = { class_type: "TJ_H3_LatentContinuation", inputs: { overlap_frames: ONE_TAKE_OVERLAP_FRAMES, lock_audio: false, prev_latent: ["chkLoad", 0], target_latent: latent } };
+      latent = ["cont", 0];
+    }
+  }
+  let sigmas = ["sched", 0];
+  if (hires) {
+    g.split = { class_type: "SplitSigmas", inputs: { sigmas, step: 7 } };
+    sigmas = ["split", 0];
+  }
+  g.samp = { class_type: "SamplerCustomAdvanced", inputs: { noise: ["noise", 0], guider: ["guider", 0], sampler: ["sel", 0], sigmas, latent_image: latent } };
+  if (job.checkpoint && has("TJ_H3_SaveLatentCheckpoint")) g.chkSave = { class_type: "TJ_H3_SaveLatentCheckpoint", inputs: { latent: hires ? ["samp", 1] : ["samp", 0], checkpoint_name: job.checkpoint } };
+  let samples = ["samp", 0];
+  if (hires) {
+    for (const n2 of ["MinimaxH3LatentUpscaler3D", "H3MemoryOptimization", "BlockSparseAttention"]) needNode(n2, "7+1 hi-res finish");
+    g.hrSep = { class_type: "LTXVSeparateAVLatent", inputs: { av_latent: ["samp", 1] } };
+    g.hrUp = { class_type: "MinimaxH3LatentUpscaler3D", inputs: { latent: ["hrSep", 0], model_name: "minimax_h3_latent_upscaler_3d_bf16.safetensors", mode: "target dimensions", "mode.width": final.width, "mode.height": final.height, align: 32, enable_temporal_chunking: true, force_unload: true, device: "cuda", precision: "fp16" } };
+    g.hrCat = { class_type: "LTXVConcatAVLatent", inputs: { video_latent: ["hrUp", 0], audio_latent: ["hrSep", 1] } };
+    let hl = ["hrCat", 0];
+    if (locked) {
+      g.hrLock = { class_type: "TJ_H3_AudioLock", inputs: { ...g.audioLock.inputs, av_latent: hl } };
+      hl = ["hrLock", 0];
+    }
+    let hm = ["unet", 0];
+    job.loras.forEach((l, i) => {
+      if (!l.name || l.name === "none" || !(l.strength > 0)) return;
+      g[`hrLora${i}`] = { class_type: "LoraLoaderModelOnly", inputs: { model: hm, lora_name: l.name, strength_model: l.strength } };
+      hm = [`hrLora${i}`, 0];
+    });
+    g.hrPdd = { class_type: "LoraLoaderModelOnly", inputs: { model: hm, lora_name: o.turboLora, strength_model: o.turboStrength } };
+    g.hrShift = { class_type: "MiniMaxH3SigmaShift", inputs: { model: ["hrPdd", 0], shift_video: 12, shift_audio: 3 } };
+    g.hrMem = { class_type: "H3MemoryOptimization", inputs: { model: ["hrShift", 0], fused_qkv: "auto", preserve_precision: true, embedding_memory_mode: "Auto", mlp_memory: "auto", chunk_rows: 2048, precision_mode: "Preserve native", qkv_streaming_mode: "Forced", kitchen_v_memory_mode: "Lower VRAM (slower)" } };
+    g.hrSparse = { class_type: "BlockSparseAttention", inputs: { model: ["hrMem", 0], selection: "sol-attn", "selection.tau": 1.3, start_percent: 0.2, end_percent: 1, dense_blocks: "", min_tokens: 12288, extra_tokens: 256, sink_conditioning: "exact_kv_and_rows", verbose: false } };
+    g.hrGuider = { class_type: "BasicGuider", inputs: { model: ["hrSparse", 0], conditioning: hrCondLink } };
+    g.hrSamp = { class_type: "SamplerCustomAdvanced", inputs: { noise: ["noise", 0], guider: ["hrGuider", 0], sampler: ["sel", 0], sigmas: ["split", 1], latent_image: hl } };
+    samples = ["hrSamp", 0];
+  }
+  g.dec = { class_type: "VAEDecode", inputs: { samples, vae: ["vaeV", 0] } };
+  g.decA = { class_type: "VAEDecodeAudio", inputs: { samples, vae: ["vaeA", 0] } };
+  let images = ["dec", 0];
+  if (job.upscaleModel && job.upscaleModel !== "none") {
+    g.upModel = { class_type: "UpscaleModelLoader", inputs: { model_name: job.upscaleModel } };
+    g.upApply = { class_type: "ImageUpscaleWithModel", inputs: { upscale_model: ["upModel", 0], image: images } };
+    images = ["upApply", 0];
+  }
+  const audio = locked ? ["audioLock", 1] : ["decA", 0];
+  const tag = String(job.clipIndex + 1).padStart(3, "0");
+  const prefix = `${job.saveSubfolder}/${job.stem}_clip${tag}`;
+  if (has("VHS_VideoCombine")) g.save = { class_type: "VHS_VideoCombine", inputs: { images, audio, frame_rate: FPS, loop_count: 0, filename_prefix: prefix, format: "video/nvenc_h264-mp4", pingpong: false, save_output: true } };
+  else {
+    g.video = { class_type: "CreateVideo", inputs: { images, fps: FPS, audio } };
     g.save = { class_type: "SaveVideo", inputs: { video: ["video", 0], filename_prefix: prefix, format: "auto", codec: "auto" } };
   }
-  return g;
+  const out = { graph: g, videoNode: "save", checkpoint: job.checkpoint };
+  if (job.saveLastFrame) {
+    g.lastF = { class_type: "ImageFromBatch", inputs: { image: images, batch_index: Math.max(0, frames - 1), length: 1 } };
+    g.saveLF = { class_type: "SaveImage", inputs: { images: ["lastF", 0], filename_prefix: `${job.saveSubfolder}/frames/${job.stem}_clip${tag}_last` } };
+    const tail = Math.min(TAIL_CANDIDATES, frames);
+    g.tailF = { class_type: "ImageFromBatch", inputs: { image: images, batch_index: Math.max(0, frames - tail), length: tail } };
+    g.tailPrev = { class_type: "PreviewImage", inputs: { images: ["tailF", 0] } };
+    out.lastFrameNode = "saveLF";
+    out.tailNode = "tailPrev";
+  }
+  return out;
 }
+var pickChainFrame = (images) => postJson("/minimax_h3_one/pick_chain_frame", { images });
+var copyToInput = (f) => postJson("/minimax_h3_one/copy_to_input", f);
+var stitchClips = (clips, filenamePrefix, overlapSeconds) => postJson("/minimax_h3_one/stitch", { clips, filename_prefix: filenamePrefix, ...overlapSeconds ? { overlap_seconds: overlapSeconds } : {} });
 
 // src/backend/workflow.ts
 function parseWorkflow(src) {
@@ -4422,44 +4622,117 @@ var TASKS = {
 };
 async function runH3(c) {
   const p = c.p;
+  const ref = c.engineId === "h3-ref";
   const si = c.inputs("seed_in")[0];
   const sv = si ? num2(si.text, -1) : num2(p.seed, -1);
-  const imgs = c.inputs("image"), lastA = c.inputs("last")[0];
-  const ref = c.engineId === "h3-ref";
+  const seed0 = sv < 0 ? Math.floor(Math.random() * 2 ** 40) : sv;
+  const settings = useSettings.getState();
+  const prompts = c.text("prompt").split(/\n\s*-{3,}\s*\n/).map((x) => x.trim()).filter(Boolean);
+  if (!prompts.length) throw new Error("Prompt is empty");
+  const imgs = c.inputs("image"), lastA = c.inputs("last")[0], lockA = c.inputs("audio")[0];
   let size;
   if (str(p.aspect) === "auto" && imgs[0]) {
     const bm = await loadBitmap(imgs[0]);
     size = h3Size(`${bm.width}:${bm.height}`, num2(p.megapixels, 0.9));
   }
+  const refFiles = [];
+  if (ref) for (const a of imgs.slice(0, 9)) refFiles.push(await ensureInput(a));
+  let first = !ref && imgs[0] ? await ensureInput(imgs[0]) : void 0;
+  const lastFile = !ref && lastA ? await ensureInput(lastA) : void 0;
+  const lockFile = lockA ? await ensureInput(lockA) : void 0;
+  const continuity = ref ? "none" : str(p.continuity, "lastframe");
   const lora = (n2, s2) => ({ name: str(p[n2], "none"), strength: num2(p[s2], 1) });
-  const files = [];
-  for (const a of ref ? imgs.slice(0, 9) : imgs.slice(0, 1)) files.push(await ensureInput(a));
-  const graph = await buildH3Graph({
-    mode: ref ? "reference" : imgs.length || lastA ? "firstlast" : "t2v",
-    prompt: c.text("prompt"),
-    seconds: num2(p.seconds, 8),
-    aspect: str(p.aspect, "16:9"),
-    megapixels: num2(p.megapixels, 0.9),
-    first: ref ? void 0 : files[0],
-    last: lastA && !ref ? await ensureInput(lastA) : void 0,
-    refs: ref ? files : [],
-    seed: sv < 0 ? Math.floor(Math.random() * 2 ** 40) : sv,
-    steps: num2(p.steps, 20),
-    sampler: str(p.sampler, "er_sde"),
-    scheduler: str(p.scheduler, "simple"),
-    loras: [lora("lora1", "lora1_strength"), lora("lora2", "lora2_strength")],
-    turbo: str(p.turbo_lora, "none") !== "none" ? { name: str(p.turbo_lora), strength: 1 } : void 0,
-    models: useSettings.getState().video,
-    saveSubfolder: useSettings.getState().saveSubfolder,
-    size
-  });
-  return runGraph(c, graph);
+  const seconds = num2(p.seconds, 8);
+  const runId = uid("ot").slice(0, 10);
+  const turbo = str(p.turbo, "none");
+  const opt = {
+    ...DEFAULT_OPT,
+    attnBackend: str(p.attn_backend, "none"),
+    attnForward: str(p.attn_forward, "none"),
+    optimizer: str(p.optimizer, "none"),
+    blockCache: str(p.block_cache, "none"),
+    spectrum: !!p.spectrum,
+    fusedModulation: !!p.fused_mod,
+    turbo,
+    turboLora: str(p.turbo_lora, "none"),
+    turboStrength: num2(p.turbo_strength, 1),
+    turboSteps: num2(p.turbo_steps, 8),
+    hires: !!p.hires,
+    hiresStartMp: num2(p.hires_start_mp, 0.5),
+    hiresFinalMp: num2(p.hires_final_mp, 0.9),
+    shiftVideo: num2(p.shift_video, 12),
+    shiftAudio: num2(p.shift_audio, 3)
+  };
+  const clips = [];
+  let prevCheckpoint;
+  for (let i = 0; i < prompts.length; i++) {
+    if (c.signal?.aborted) throw new Error("cancelled");
+    const checkpoint = continuity === "onetake" ? `canvers_${runId}_${i}` : void 0;
+    const mode = ref ? "reference" : first || i === prompts.length - 1 && lastFile ? "firstlast" : "t2v";
+    const built = await buildH3Graph({
+      mode,
+      prompt: prompts[i],
+      seconds,
+      aspect: str(p.aspect, "16:9"),
+      megapixels: num2(p.megapixels, 0.9),
+      first,
+      last: i === prompts.length - 1 ? lastFile : void 0,
+      refs: refFiles,
+      seed: seed0 + i,
+      steps: num2(p.steps, 20),
+      sampler: str(p.sampler, "er_sde"),
+      scheduler: str(p.scheduler, "simple"),
+      loras: [lora("lora1", "lora1_strength"), lora("lora2", "lora2_strength")],
+      opt: { ...opt, audioLock: lockFile ? { file: lockFile, startSec: i * (h3Frames(seconds) / 24), mode: str(p.lock_mode, "lock"), strength: num2(p.lock_strength, 0.5), fit: str(p.lock_fit, "pad_silence") } : void 0 },
+      models: settings.video,
+      saveSubfolder: settings.saveSubfolder,
+      size,
+      upscaleModel: str(p.upscale_model, "none"),
+      clipIndex: i,
+      prevCheckpoint,
+      checkpoint,
+      saveLastFrame: continuity === "lastframe" && i < prompts.length - 1,
+      stem: "MMH3"
+    });
+    const base2 = i / prompts.length;
+    const res = await runPrompt(built.graph, { onProgress: (pct, label) => c.progress(Math.round((base2 + pct / 100 / prompts.length) * 100), `clip ${i + 1}/${prompts.length} ${label ?? ""}`), signal: c.signal });
+    const vout = res.raw[built.videoNode];
+    const vf = (vout?.gifs ?? vout?.images ?? vout?.videos ?? [])[0];
+    if (!vf) throw new Error(`clip ${i + 1}: ComfyUI returned no video`);
+    clips.push({ filename: vf.filename, subfolder: vf.subfolder ?? "" });
+    prevCheckpoint = checkpoint;
+    if (built.lastFrameNode && i < prompts.length - 1) {
+      const lf = (res.raw[built.lastFrameNode]?.images ?? [])[0];
+      const tail = res.raw[built.tailNode ?? ""]?.images ?? [];
+      let pick = lf ? { filename: lf.filename, subfolder: lf.subfolder ?? "", type: lf.type ?? "output" } : void 0;
+      try {
+        const r = await pickChainFrame(tail.map((t) => ({ filename: t.filename, subfolder: t.subfolder ?? "", type: t.type ?? "temp" })));
+        if (r.ok && r.picked) pick = r.picked;
+      } catch {
+      }
+      if (!pick) throw new Error("could not find a frame to continue from");
+      first = (await copyToInput(pick)).filename;
+    }
+  }
+  const assets = clips.map((f) => assetFromFile({ filename: f.filename, subfolder: f.subfolder, type: "output" }, "video", "video"));
+  if (clips.length > 1 && p.stitch !== false) {
+    c.progress(98, "stitching\u2026");
+    const st = await stitchClips(clips, `${settings.saveSubfolder}/MMH3_full`, continuity === "onetake" ? (ONE_TAKE_OVERLAP_FRAMES + 4) / 24 : void 0);
+    if (!st.ok || !st.filename) throw new Error(`stitch failed: ${st.error ?? "unknown"}`);
+    return [assetFromFile({ filename: st.filename, subfolder: st.subfolder ?? "", type: "output" }, "video", "video"), ...assets];
+  }
+  return assets;
 }
 var RUNNERS = {
   // ---- sources / data
   prompt: async (c) => {
     const extra = c.inputs("vars").map((a) => a.text ?? "").filter(Boolean);
     return [textAsset([str(c.p.text), ...extra].filter(Boolean).join("\n"))];
+  },
+  "melody-editor": async (c) => {
+    const abc = str(c.p.abc);
+    if (!abc.trim()) throw new Error("Open the editor (double-click the node) and play or draw a melody first");
+    return [textAsset(abc, "abc")];
   },
   "text-data": async (c) => [textAsset(str(c.p.text))],
   concat: async (c) => [textAsset(c.inputs("texts").map((a) => a.text ?? "").filter(Boolean).join(str(c.p.separator, ", ")))],
@@ -4522,6 +4795,7 @@ var RUNNERS = {
     const stages = c.engineId === "minimax" || c.engineId === "yue2" ? [num2(p.steps1, 30)] : [num2(p.steps1, 30), num2(p.steps2, 20), num2(p.steps3, 15)];
     const graph = await buildMusicGraph({
       engine: c.engineId === "minimax" ? "minimax" : c.engineId === "yue2" ? "yue2" : "acestep",
+      melodyAbc: c.text("melody") || void 0,
       coverAudio: c.inputs("cover")[0] ? await ensureInput(c.inputs("cover")[0]) : void 0,
       temperature: num2(p.temperature, 1),
       topP: num2(p.top_p, 0.95),
@@ -4779,7 +5053,7 @@ var send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 async function handle(msg) {
   const { id, method, params } = msg;
   try {
-    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "1.0.0" } } });
+    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "1.1.0" } } });
     if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS.map(({ run: _r, ...t }) => t) } });
     if (method === "tools/call") {
       const tool = TOOLS.find((t) => t.name === params?.name);

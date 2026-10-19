@@ -145,6 +145,18 @@ function WorkflowBody({ id }: { id: string }) {
   );
 }
 
+function MelodyBody({ id }: { id: string }) {
+  const T = useT();
+  const node = useGraph((s) => s.nodes.find((n) => n.id === id))!;
+  const info = useMemo(() => { try { const j = JSON.parse(String(node.params.melody || '{}')); return j.notes ? `${j.notes.length} ${T('notes')} · ${j.bpm} BPM · ${j.key}` : ''; } catch { return ''; } }, [node.params.melody]);
+  return (
+    <div className="import-body">
+      <button className="btn nodrag" onClick={() => useGraph.getState().openMelody(id)}>🎹 {T('Open melody editor')}</button>
+      <span className="muted">{info || T('empty — open the editor')}</span>
+    </div>
+  );
+}
+
 function DisplayBody({ id, defId }: { id: string; defId: string }) {
   const a = useUpstream(id, defId === 'compare' ? 'a' : 'image');
   const b = useUpstream(id, 'b');
@@ -190,7 +202,7 @@ export const CanvasNode = memo(function CanvasNode({ id, selected }: NodeProps) 
 
   const color = KIND_COLOR[def.kind] ?? '#888';
   const params = paramsFor(def, node.engineId);
-  const shown = params.filter((p) => (adv || !p.advanced) && (!p.when || p.when(node.params)) && !(def.id === 'comfy-workflow' && /target$|^workflow$/.test(p.id)));
+  const shown = params.filter((p) => (adv || !p.advanced) && (!p.when || p.when(node.params)) && !(def.id === 'comfy-workflow' && /target$|^workflow$/.test(p.id)) && !(def.id === 'melody-editor'));
   const hasAdv = params.some((p) => p.advanced);
   const rows = Math.max(def.inputs.length, def.outputs.length);
   const running = rt?.status === 'running';
@@ -242,6 +254,7 @@ export const CanvasNode = memo(function CanvasNode({ id, selected }: NodeProps) 
       {def.id === 'prompt' && <EnhanceButton id={id} />}
       {hasAdv && <button className="adv-toggle nodrag" onClick={() => setAdv((v) => !v)}>{adv ? '▾' : '▸'} {T('Advanced')}</button>}
 
+      {def.id === 'melody-editor' && <MelodyBody id={id} />}
       {def.id === 'painter' && <button className="btn nodrag open-painter" onClick={() => openPainter(id)}>{T('Open painter')}</button>}
 
       {running && <div className="bar"><b style={{ width: `${Math.max(4, rt!.pct)}%` }} /><em>{rt!.label ?? `${rt!.pct}%`}</em></div>}

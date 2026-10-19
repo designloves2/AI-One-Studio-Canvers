@@ -5,6 +5,8 @@ export interface MusicJob {
   engine: 'acestep' | 'minimax' | 'yue2';
   /** ComfyUI input filename of a recording to cover (YuE2 Cover Music) */
   coverAudio?: string;
+  /** ABC melody (from the Melody Editor) — YuE2 then follows your tune */
+  melodyAbc?: string;
   temperature?: number; topP?: number; topK?: number; repetition?: number;
   caption: string; lyrics: string; seconds: number; seed: number;
   bpm: number; keyscale: string; timesignature: string; language: string;
@@ -73,6 +75,8 @@ export async function buildMusicGraph(job: MusicJob): Promise<Record<string, any
       g['Y:enc'] = { class_type: 'AudioEncoderLoader', inputs: { audio_encoder_name: 'sheetsage2_bf16.safetensors' } };
       g['Y:abc'] = { class_type: 'SheetSage2AudioToABC', inputs: { mode: 'melody', audio_encoder: ['Y:enc', 0], audio: ['Y:load', 0] } };
       gen.abc = ['Y:abc', 0]; gen.mode = 'melody';
+    } else if (job.melodyAbc) {
+      gen.abc = job.melodyAbc; gen.mode = 'melody';
     } else {
       g['Y:abc'] = { class_type: 'YuE2GenerateABC', inputs: { style: job.caption, lyrics: job.lyrics, seed: job.seed, clip, mode: 'full', max_abc_tokens: 8192, temperature: 0.7, top_p: 0.9, top_k: 30, repetition_penalty: 1.005, penalty_window: 100 } };
       gen.abc = ['Y:abc', 0];

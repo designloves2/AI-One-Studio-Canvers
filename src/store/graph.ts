@@ -37,6 +37,7 @@ interface State {
   panel: PanelId;
   viewer: { nodeId: string } | null;
   painter: string | null;
+  melody: string | null;
   fitTick: number;
   composerRuns: ComposerRun[];
 
@@ -67,6 +68,7 @@ interface State {
   ungroup(id: string): void;
   openViewer(nodeId: string | null): void;
   openPainter(nodeId: string | null): void;
+  openMelody(nodeId: string | null): void;
   toProject(): Project;
   loadProject(p: Project): void;
   newProject(): void;
@@ -87,7 +89,7 @@ export const useGraph = create<State>((set, get) => ({
   projectId: uid('p'),
   projectName: 'untitled',
   nodes: [], edges: [], runtime: {}, selected: [], past: [], future: [],
-  mode: readMode(), panel: null, viewer: null, painter: null, fitTick: 0,
+  mode: readMode(), panel: null, viewer: null, painter: null, melody: null, fitTick: 0,
   composerRuns: readRuns(),
 
   setMode: (mode) => { try { localStorage.setItem(MODE_KEY, mode); } catch { /* ignore */ } set({ mode }); },
@@ -195,6 +197,7 @@ export const useGraph = create<State>((set, get) => ({
 
   openViewer: (nodeId) => set({ viewer: nodeId ? { nodeId } : null }),
   openPainter: (nodeId) => set({ painter: nodeId }),
+  openMelody: (nodeId) => set({ melody: nodeId }),
 
   toProject: () => ({ app: 'ai-one-studio-canvers', version: 1, id: get().projectId, name: get().projectName, nodes: get().nodes, edges: get().edges, updatedAt: new Date().toISOString() }),
   loadProject: (p) => set({ projectId: p.id ?? uid('p'), projectName: p.name || 'untitled', nodes: p.nodes ?? [], edges: p.edges ?? [], runtime: {}, selected: [], past: [], future: [], fitTick: get().fitTick + 1 }),

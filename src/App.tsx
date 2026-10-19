@@ -5,6 +5,7 @@ import { Flow } from './canvas/Flow';
 import { NodeMenu } from './canvas/NodeMenu';
 import { Viewer } from './canvas/Viewer';
 import { Painter } from './canvas/Painter';
+import { MelodyEditor } from './canvas/MelodyEditor';
 import { NodesPanel } from './panels/NodesPanel';
 import { AssetsPanel } from './panels/AssetsPanel';
 import { SettingsPanel } from './panels/SettingsPanel';
@@ -168,6 +169,7 @@ export function App() {
       {menu && <NodeMenu at={menu} flow={menu.flow} onClose={() => setMenu(null)} />}
       <Viewer />
       <Painter />
+      <MelodyEditor />
     </div>
   );
 }

@@ -50,6 +50,8 @@ const KO: Record<string, string> = {
   'Music models': '음악 모델', 'Music Generate': '음악 생성', Audio: '오디오', 'Length (s)': '길이 (초)', Key: '키', Lyrics: '가사', Style: '스타일',
   'Video models': '비디오 모델', 'First frame': '첫 프레임', 'Last frame': '마지막 프레임', 'Stage-2 sigmas': '2단계 시그마',
   'Model downloads': '모델 다운로드', 'Start the server with COMFY_DIR=<ComfyUI folder> to download here. Links below open in your browser.': '서버를 COMFY_DIR=<ComfyUI 폴더> 로 실행하면 여기서 바로 내려받습니다. 지금은 링크가 브라우저에서 열립니다.',
+  'Open melody editor': '멜로디 에디터 열기', 'empty — open the editor': '비어 있음 — 에디터를 여세요', Play: '재생', Record: '녹음', notes: '음표', bars: '마디', Bars: '마디', 'overlapping notes dropped': '겹친 음 제외', 'Melody Editor': '멜로디 에디터', 'Melody (ABC)': '멜로디 (ABC)',
+  'Click = add note · drag = move · drag right edge (or Shift+drag) = length · double-click / right-click = delete · Space = play': '클릭 = 음 추가 · 드래그 = 이동 · 오른쪽 끝 드래그(또는 Shift+드래그) = 길이 · 더블클릭/우클릭 = 삭제 · 스페이스 = 재생',
   // messages
   'Nothing here yet.': '아직 아무것도 없습니다.', 'Connect an input first.': '먼저 입력을 연결하세요.',
 };

@@ -59,6 +59,22 @@ const sdxl = (id: string, label: string, extra: ParamDef[] = [], size = false): 
   params: [...sizeParams(size), ...extra, ...sampler(20, 7, 'euler_ancestral', 'karras'), { ...negative, default: 'low quality, blurry, deformed, watermark' }, ...loras('sdxl'), num('batch', 'Batch', 1, { advanced: true }, 1, 4, 1), seed],
 });
 
+const h3Params = (ref: boolean): ParamDef[] => [
+  sel('aspect', 'Aspect ratio', [...ASPECTS, 'auto'], '16:9'), megapixels(0.9), slider('seconds', 'Clip length (s)', 5.2, 15, 0.5, 8),
+  ...(ref ? [] : [sel('continuity', 'Several clips (separate prompts with ---)', ['none', 'lastframe', 'onetake'], 'lastframe'), toggle('stitch', 'Stitch clips into one video', true)]),
+  slider('steps', 'Steps (no turbo)', 1, 60, 1, 20, { advanced: true }), dyn('sampler', 'Sampler', 'samplers', 'er_sde', { advanced: true }), dyn('scheduler', 'Scheduler', 'schedulers', 'simple', { advanced: true }),
+  sel('turbo', 'Turbo', ['none', 'larryvrh', 'pdd', 'lightx2v'], 'none', { advanced: true }), dyn('turbo_lora', 'Turbo LoRA', 'loras:h3', 'none', { advanced: true, when: (p) => p.turbo !== 'none' }),
+  slider('turbo_strength', 'Turbo strength', 0, 2, 0.05, 1, { advanced: true, when: (p) => p.turbo !== 'none' }), slider('turbo_steps', 'Turbo steps', 1, 16, 1, 8, { advanced: true, when: (p) => p.turbo !== 'none' }),
+  toggle('hires', '7+1 hi-res finish (Turbo LoRA Basic = pdd)', false, { advanced: true, when: (p) => p.turbo === 'pdd' }), slider('hires_start_mp', 'Start MP', 0.2, 1, 0.05, 0.5, { advanced: true, when: (p) => p.turbo === 'pdd' && !!p.hires }), slider('hires_final_mp', 'Final MP', 0.4, 3, 0.05, 0.9, { advanced: true, when: (p) => p.turbo === 'pdd' && !!p.hires }),
+  sel('attn_backend', 'Attention backend', ['none', 'ck', 'sage', 'solattn_kijai', 'sla'], 'none', { advanced: true }), sel('attn_forward', 'Attention forward patch', ['none', 'memeff_sage', 'solattn_sag'], 'none', { advanced: true }),
+  sel('optimizer', 'H3 optimizer', ['none', 'memory', 'memory_sparse'], 'none', { advanced: true }), sel('block_cache', 'Block cache', ['none', 'fbcache'], 'none', { advanced: true }),
+  toggle('spectrum', 'Spectrum', false, { advanced: true }), toggle('fused_mod', 'Fused modulation', false, { advanced: true }),
+  slider('shift_video', 'Shift (video)', 1, 20, 0.5, 12, { advanced: true }), slider('shift_audio', 'Shift (audio)', 1, 10, 0.5, 3, { advanced: true }),
+  text('lock_mode', 'Audio lock mode', 'lock', false, { advanced: true }), slider('lock_strength', 'Audio lock strength', 0, 1, 0.05, 0.5, { advanced: true }), text('lock_fit', 'Audio lock fit', 'pad_silence', false, { advanced: true }),
+  dyn('upscale_model', 'Upscale model', 'upscalers', 'none', { advanced: true }),
+  ...loras('h3'), seed,
+];
+
 const klein = (id: string, label: string, extra: ParamDef[] = [], size = false): EngineDef => ({
   id, label, family: 'klein',
   params: [...sizeParams(size), ...extra, ...sampler(4, 1, 'euler'), negative, ...loras('klein'), num('batch', 'Batch', 1, { advanced: true }, 1, 4, 1), seed],
@@ -153,22 +169,24 @@ export const REGISTRY: NodeDef[] = [
     engines: [{ id: 'esrgan', label: 'Upscale model (ComfyUI core)', family: 'core', default: true, params: [dyn('upscale_model', 'Model', 'upscalers', 'none'), slider('scale_by', 'Final scale', 0.25, 4, 0.25, 1, { advanced: true })] }],
     description: 'Enlarge with an ESRGAN-type model from ComfyUI/models/upscale_models.' },
   { id: 'music-generate', title: 'Music Generate', category: 'Audio', kind: 'generate',
-    inputs: [P.textIn('prompt', 'Style', false), P.textIn('lyrics', 'Lyrics', true), { id: 'cover', label: 'Cover source', type: 'audio', optional: true }, P.seedIn()], outputs: [{ id: 'audio', label: 'Audio', type: 'audio' }],
+    inputs: [P.textIn('prompt', 'Style', false), P.textIn('lyrics', 'Lyrics', true), { id: 'cover', label: 'Cover source', type: 'audio', optional: true }, P.textIn('melody', 'Melody (ABC)', true), P.seedIn()], outputs: [{ id: 'audio', label: 'Audio', type: 'audio' }],
     params: [], engines: [
       { id: 'acestep', label: 'Ace-Step 1.5 (local)', family: 'music', default: true, params: [slider('seconds', 'Length (s)', 5, 300, 1, 60), num('bpm', 'BPM', 120, {}, 40, 240, 1), text('keyscale', 'Key', 'A minor'), sel('timesignature', 'Time signature', ['2', '3', '4', '6'], '4', { advanced: true }), sel('language', 'Language', ['en', 'ko', 'ja', 'zh', 'es', 'fr', 'de'], 'en', { advanced: true }), sel('format', 'Format', ['flac', 'mp3', 'opus'], 'flac', { advanced: true }), slider('steps1', 'Stage 1 steps', 1, 60, 1, 30, { advanced: true }), slider('steps2', 'Stage 2 steps (0 = off)', 0, 60, 1, 20, { advanced: true }), slider('steps3', 'Stage 3 steps (0 = off)', 0, 60, 1, 15, { advanced: true }), slider('cfg', 'Guidance', 0, 10, 0.1, 1, { advanced: true }), seed] },
       { id: 'yue2', label: 'YuE2 — text / cover music (local)', family: 'music', params: [slider('seconds', 'Length (s)', 10, 300, 1, 60), sel('format', 'Format', ['flac', 'mp3', 'opus'], 'flac', { advanced: true }), slider('temperature', 'Temperature', 0.1, 2, 0.05, 1, { advanced: true }), slider('top_p', 'Top-p', 0.1, 1, 0.01, 0.95, { advanced: true }), num('top_k', 'Top-k', 100, { advanced: true }, 1, 500, 1), slider('repetition', 'Repetition penalty', 1, 2, 0.01, 1.2, { advanced: true }), seed] },
       { id: 'minimax', label: 'MiniMax Music 3 (local)', family: 'music', params: [slider('seconds', 'Length (s)', 5, 300, 1, 60), sel('format', 'Format', ['flac', 'mp3', 'opus'], 'flac', { advanced: true }), slider('steps1', 'Steps', 1, 80, 1, 30, { advanced: true }), slider('cfg', 'Guidance', 0, 10, 0.1, 1.7, { advanced: true }), seed] },
     ], description: 'Songs and instrumentals. Style prompt (+ optional lyrics) in, audio out. Models: Settings → Music models.' },
+  { id: 'melody-editor', title: 'Melody Editor', category: 'Audio', kind: 'source', inputs: [], outputs: [P.textOut('abc', 'Melody (ABC)')],
+    params: [text('melody', 'melody', '', false, { advanced: true }), text('abc', 'abc', '', false, { advanced: true })], description: 'Draw a melody on a piano roll, or record it from a MIDI keyboard. Wire it into YuE2 (Melody) — YuE2 then sings and arranges around your tune.' },
   { id: 'comfy-workflow', title: 'ComfyUI Workflow', category: 'Workflow', kind: 'generate',
     inputs: [P.textIn('prompt', 'Prompt', true), P.imgIn('image', 'Images', true, true), { id: 'video', label: 'Video', type: 'video', optional: true }, P.seedIn()],
     outputs: [P.imgOut('image', 'Image'), { id: 'video', label: 'Video', type: 'video' }],
     params: [text('workflow', 'Workflow JSON', '', true, { advanced: true }), text('prompt_target', 'Prompt field', '', false, { advanced: true }), text('image_target', 'Image 1 field', '', false, { advanced: true }), text('image2_target', 'Image 2 field', '', false, { advanced: true }), text('video_target', 'Video field', '', false, { advanced: true }), text('seed_target', 'Seed field', '', false, { advanced: true }), { id: 'seed', label: 'Seed', control: { kind: 'seed' }, default: -1, advanced: true }],
     description: 'Run any API-format ComfyUI workflow (video, LTX, H3, Wan…). Load the JSON, pick which fields take the prompt / images / seed.' },
   { id: 'video-generate', title: 'Video Generate', category: 'Video', kind: 'generate',
-    inputs: [P.textIn('prompt', 'Prompt', false), P.imgIn('image', 'First frame / references', true, true), P.imgIn('last', 'Last frame', true), P.seedIn()], outputs: [{ id: 'video', label: 'Video', type: 'video' }], params: [],
+    inputs: [P.textIn('prompt', 'Prompt', false), P.imgIn('image', 'First frame / references', true, true), P.imgIn('last', 'Last frame', true), { id: 'audio', label: 'Lock audio', type: 'audio', optional: true }, P.seedIn()], outputs: [{ id: 'video', label: 'Video', type: 'video' }], params: [],
     engines: [
-      { id: 'h3', label: 'MiniMax H3 — text / first-last frame (local)', family: 'h3', default: true, params: [sel('aspect', 'Aspect ratio', [...ASPECTS, 'auto'], '16:9'), megapixels(0.9), slider('seconds', 'Length (s)', 5.2, 15, 0.5, 8), slider('steps', 'Steps (lower with a Turbo LoRA)', 1, 60, 1, 20, { advanced: true }), dyn('sampler', 'Sampler', 'samplers', 'er_sde', { advanced: true }), dyn('scheduler', 'Scheduler', 'schedulers', 'simple', { advanced: true }), dyn('turbo_lora', 'Turbo LoRA', 'loras:h3', 'none', { advanced: true }), ...loras('h3'), seed] },
-      { id: 'h3-ref', label: 'MiniMax H3 — multi-reference (local)', family: 'h3', params: [sel('aspect', 'Aspect ratio', [...ASPECTS, 'auto'], '16:9'), megapixels(0.9), slider('seconds', 'Length (s)', 5.2, 15, 0.5, 8), slider('steps', 'Steps (lower with a Turbo LoRA)', 1, 60, 1, 20, { advanced: true }), dyn('sampler', 'Sampler', 'samplers', 'er_sde', { advanced: true }), dyn('scheduler', 'Scheduler', 'schedulers', 'simple', { advanced: true }), dyn('turbo_lora', 'Turbo LoRA', 'loras:h3', 'none', { advanced: true }), ...loras('h3'), seed] },
+      { id: 'h3', label: 'MiniMax H3 — text / first-last frame (local)', family: 'h3', default: true, params: h3Params(false) },
+      { id: 'h3-ref', label: 'MiniMax H3 — multi-reference (local)', family: 'h3', params: h3Params(true) },
       { id: 'ltx25', label: 'LTX 2.5 (local, with audio)', family: 'ltx25', params: [sel('aspect', 'Aspect ratio', [...ASPECTS, 'auto'], '16:9'), megapixels(1), slider('seconds', 'Length (s)', 2, 20, 1, 5), slider('steps', 'Steps', 1, 40, 1, 12, { advanced: true }), slider('cfg', 'Guidance', 0, 10, 0.1, 1, { advanced: true }), dyn('sampler', 'Sampler', 'samplers', 'euler_ancestral', { advanced: true }), dyn('scheduler', 'Scheduler', 'schedulers', 'linear_quadratic', { advanced: true }), text('stage2', 'Stage-2 sigmas', '0.85, 0.7250, 0.4219, 0.0', false, { advanced: true }), ...loras('ltx25'), seed] }],
     description: 'Text → video, or first/last frame → video (LTX 2.5). LTX 2.5 or MiniMax H3. Other models: ComfyUI Workflow node.' },
 
