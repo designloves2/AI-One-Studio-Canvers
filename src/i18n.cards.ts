@@ -5,6 +5,10 @@ export const KO_CARDS: Record<string, string> = {
   'Select cards on the canvas first': '캔버스에서 카드를 먼저 선택하세요', 'Select some cards on the canvas and save them as a deck.': '캔버스에서 카드 몇 장을 선택해 덱으로 저장하세요.',
   'Legacy: load original STUDIO_ONE panels': '레거시: 원본 STUDIO_ONE 패널 불러오기', 'Adds the old all-in-one panels as extra nodes (reload needed). Off = card nodes only.': '예전 통짜 패널을 추가 노드로 불러옵니다(새로고침 필요). 꺼짐 = 카드 노드만.',
   // cards
+  'Connect one video generate card to each prompt': '프롬프트마다 영상 생성 카드를 하나씩 만들어 연결해줘', 'Tidy up the cards by their wires': '카드들을 연결 흐름대로 보기 좋게 정렬해줘', 'Group the same kind of cards together': '같은 종류의 카드끼리 모아서 정렬해줘',
+  'Uses the Live Canvas LLM from Settings': '설정의 라이브 캔버스 전용 LLM을 사용합니다',
+  'Live Canvas LLM': '라이브 캔버스 LLM', 'Use the main LLM': '메인 LLM 과 같은 설정 사용', 'Live Canvas follows the LLM above. Untick to pick another backend / model for it (a stronger model writes better plans).': '라이브 캔버스는 위의 LLM 을 그대로 씁니다. 체크를 풀면 라이브 캔버스만 다른 백엔드/모델을 고를 수 있어요 (성능 좋은 모델일수록 계획을 잘 짭니다).',
+  'Live Canvas': '라이브 캔버스', 'Tell me what to build and I will lay the cards out on the canvas.': '만들고 싶은 걸 말하면 캔버스에 카드를 배치해 드려요.', 'Make a 30-second ad: 4 shot prompts and the reference image prompts': '30초 광고(한식 도시락) — 4샷 H3 프롬프트 카드와 레퍼런스 이미지 프롬프트 카드를 만들어줘', 'Make a 3-shot teaser prompt row for a fantasy film': '판타지 영화 티저 3샷 프롬프트 카드를 만들어줘', 'Uses the LLM chosen in Settings': '설정에서 고른 LLM을 사용합니다', 'Describe what to put on the canvas…': '캔버스에 만들 것을 설명하세요… (Enter 전송, Shift/Ctrl+Enter 줄바꿈)', 'Undo the last change on the canvas': '캔버스의 마지막 변경 되돌리기', 'Clear chat': '대화 지우기', Send: '보내기', 'thinking…': '생각 중…', 'looking at': '보는 중', 'placing cards…': '카드 배치 중…', 'fixing the reply…': '응답 고치는 중…',
   'Could not load this file': '파일을 불러오지 못했어요', Retry: '다시 시도',
   'Click to enlarge': '클릭하면 크게 봅니다',
   Deleted: '삭제됨',

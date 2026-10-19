@@ -4,7 +4,7 @@ import { byId, compatible, defaultParams, engineFor } from '../registry';
 import { uid } from '../backend/comfy';
 
 export type AppMode = 'canvas' | 'simple';
-export type PanelId = null | 'nodes' | 'decks' | 'assets' | 'library' | 'settings' | 'models';
+export type PanelId = null | 'nodes' | 'decks' | 'assets' | 'library' | 'live' | 'settings' | 'models';
 
 export interface ComposerRun {
   id: string;
@@ -72,6 +72,10 @@ interface State {
   setRuntime(id: string, rt: Partial<NodeRuntime>): void;
   select(ids: string[]): void;
   group(ids: string[]): void;
+  /** re-size a group frame around its members (uses the measured card sizes) */
+  fitGroup(id: string): void;
+  /** after a card was dropped: leave the group whose frame it left, join the one it was dropped into */
+  reassignMembership(ids: string[]): void;
   ungroup(id: string): void;
   openViewer(nodeId: string | null): void;
   openPainter(nodeId: string | null): void;
@@ -88,6 +92,12 @@ interface State {
 }
 
 const MODE_KEY = 'canvers.mode';
+/** size of a card on screen (CSS px) when it is drawn, else its stored / estimated size */
+function measure(n: GraphNode): { w: number; h: number } {
+  const el = typeof document !== 'undefined' ? (document.querySelector(`.react-flow__node[data-id="${n.id}"]`) as HTMLElement | null) : null;
+  return { w: n.w ?? (el?.offsetWidth || 300), h: n.h ?? (el?.offsetHeight || 260) };
+}
+
 const RUNS_KEY = 'canvers.runs.v1';
 
 const readMode = (): AppMode => { try { return localStorage.getItem(MODE_KEY) === 'simple' ? 'simple' : 'canvas'; } catch { return 'canvas'; } };
@@ -209,11 +219,39 @@ export const useGraph = create<State>((set, get) => ({
     const members = get().nodes.filter((n) => ids.includes(n.id) && !n.members);
     if (members.length < 1) return;
     get().snapshot();
-    const pad = 40;
-    const x = Math.min(...members.map((n) => n.x)) - pad, y = Math.min(...members.map((n) => n.y)) - pad - 20;
-    const x2 = Math.max(...members.map((n) => n.x + (n.w ?? 300))) + pad, y2 = Math.max(...members.map((n) => n.y + (n.h ?? 260))) + pad;
-    const g: GraphNode = { id: uid('g'), defId: 'group', x, y, w: x2 - x, h: y2 - y, params: {}, results: [], activeResult: 0, title: 'Group', members: members.map((m) => m.id) };
-    set({ nodes: [g, ...get().nodes], selected: [g.id] });
+    const g: GraphNode = { id: uid('g'), defId: 'group', x: 0, y: 0, w: 240, h: 160, params: {}, results: [], activeResult: 0, title: 'Group', members: members.map((m) => m.id) };
+    // a card can belong to one group only: take the members out of any other group
+    const taken = new Set(g.members);
+    // the group frame goes first in the list so it is always drawn under every card
+    set({ nodes: [g, ...get().nodes.map((n) => (n.members ? { ...n, members: n.members.filter((m) => !taken.has(m)) } : n))], selected: [g.id] });
+    get().fitGroup(g.id);
+    // the cards may not be measured yet (just added): fit again after they were drawn
+    if (typeof requestAnimationFrame !== 'undefined') requestAnimationFrame(() => requestAnimationFrame(() => get().fitGroup(g.id)));
+  },
+  fitGroup: (id) => {
+    const grp = get().nodes.find((n) => n.id === id && n.members); if (!grp) return;
+    const mem = get().nodes.filter((n) => grp.members!.includes(n.id));
+    if (!mem.length) return;
+    const pad = 40, top = 64;
+    const rects = mem.map((m) => { const s = measure(m); return { x: m.x, y: m.y, w: s.w, h: s.h }; });
+    const x = Math.min(...rects.map((r) => r.x)) - pad, y = Math.min(...rects.map((r) => r.y)) - top;
+    const x2 = Math.max(...rects.map((r) => r.x + r.w)) + pad, y2 = Math.max(...rects.map((r) => r.y + r.h)) + pad;
+    set({ nodes: get().nodes.map((n) => (n.id === id ? { ...n, x, y, w: x2 - x, h: y2 - y } : n)) });
+  },
+  reassignMembership: (ids) => {
+    const st = get(); const groups = st.nodes.filter((n) => n.members);
+    if (!groups.length) return;
+    let changed = false; let nodes = st.nodes;
+    for (const id of ids) {
+      const c = nodes.find((n) => n.id === id); if (!c || c.members) continue;
+      const s = measure(c), cx = c.x + s.w / 2, cy = c.y + s.h / 2;
+      const inside = groups.find((gr) => { const cur = nodes.find((n) => n.id === gr.id)!; return cx >= cur.x && cx <= cur.x + (cur.w ?? 0) && cy >= cur.y && cy <= cur.y + (cur.h ?? 0); });
+      const was = nodes.find((n) => n.members?.includes(id));
+      if (was?.id === inside?.id) continue;
+      nodes = nodes.map((n) => (n.id === was?.id ? { ...n, members: n.members!.filter((m) => m !== id) } : n.id === inside?.id ? { ...n, members: [...n.members!, id] } : n));
+      changed = true;
+    }
+    if (changed) set({ nodes });
   },
   ungroup: (id) => { get().snapshot(); set({ nodes: get().nodes.filter((n) => n.id !== id), selected: [] }); },
 

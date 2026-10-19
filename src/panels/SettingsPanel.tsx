@@ -89,11 +89,16 @@ function ImageModels() {
 }
 
 // ------------------------------------------------------------------ LLM (the four TJ backends)
-function Llm() {
+function Llm({ target = 'main' }: { target?: 'main' | 'live' }) {
   const T = useT();
-  const llm = useSettings((s) => s.llm);
+  const live = target === 'live';
+  const mainLlm = useSettings((s) => s.llm);
+  const liveSet = useSettings((s) => s.live);
+  const llm = live ? liveSet.llm : mainLlm;
   const keys = useSettings((s) => s.keys);
-  const setLlm = useSettings((s) => s.setLlm);
+  const setMainLlm = useSettings((s) => s.setLlm);
+  const setLiveLlm = useSettings((s) => s.setLiveLlm);
+  const setLlm = live ? setLiveLlm : setMainLlm;
   const setKey = useSettings((s) => s.setKey);
   const [cat, setCat] = useState<LlmCatalog | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -108,7 +113,7 @@ function Llm() {
   };
 
   const connect = () => wrap(async () => {
-    const r = await connectCustom('img_enhance'); await connectCustom('img_i2p');
+    const r = await connectCustom('img_enhance', live ? llm : undefined); await connectCustom('img_i2p', live ? llm : undefined);
     if (!r.ok) throw new Error(r.error || 'failed');
     setModels(r.models ?? []);
     const found = r.modelFound === false ? ' — model id not in the list' : '';
@@ -122,14 +127,18 @@ function Llm() {
   const test = () => wrap(async () => {
     if (llm.backend === 'openrouter') await saveOpenRouter(keys.openrouter || undefined);
     const t0 = performance.now();
-    const out = await runLlm({ system: 'Reply with the single word OK.', prompt: 'ping', max_tokens: 20 });
+    const out = await runLlm({ system: 'Reply with the single word OK.', prompt: 'ping', max_tokens: 400, ...(live ? { llm } : {}) });
     return `“${out.slice(0, 60)}” · ${Math.round(performance.now() - t0)} ms`;
   });
-  const saveAll = () => wrap(async () => { await saveServerSettings(); if (llm.backend === 'openrouter') await saveOpenRouter(keys.openrouter || undefined); return T('Saved'); });
+  const saveAll = () => wrap(async () => { if (!live) await saveServerSettings(); if (llm.backend === 'openrouter') await saveOpenRouter(keys.openrouter || undefined); return T('Saved'); });
 
   return (
     <section>
-      <h3>{T('LLM backend')}</h3>
+      <h3>{T(live ? 'Live Canvas LLM' : 'LLM backend')}</h3>
+      {live && (
+        <label className="srow"><span className="field-label">{T('Use the main LLM')}</span><input type="checkbox" checked={liveSet.same} onChange={(e) => useSettings.getState().setLive({ same: e.target.checked })} /></label>
+      )}
+      {live && liveSet.same ? <p className="muted">{T('Live Canvas follows the LLM above. Untick to pick another backend / model for it (a stronger model writes better plans).')}</p> : <>
       <div className="backends">
         {BACKENDS.map((b) => (
           <button key={b.id} className={`bk ${llm.backend === b.id ? 'on' : ''}`} onClick={() => setLlm({ backend: b.id as LlmBackend })} title={b.hint}>
@@ -177,6 +186,7 @@ function Llm() {
         <button className="btn primary" disabled={busy} onClick={() => void saveAll()}>{T('Save LLM settings')}</button>
       </div>
       {msg && <p className={`status ${msg.ok ? 'ok' : 'bad'}`}>{msg.text}</p>}
+      </>}
     </section>
   );
 }
@@ -226,5 +236,5 @@ function VideoModels() {
 }
 
 export function SettingsPanel() {
-  return <div className="panel-body settings"><Connection /><Llm /><ImageModels /><VideoModels /><MusicModels /></div>;
+  return <div className="panel-body settings"><Connection /><Llm /><Llm target="live" /><ImageModels /><VideoModels /><MusicModels /></div>;
 }

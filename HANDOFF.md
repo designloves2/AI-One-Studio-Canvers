@@ -1,4 +1,4 @@
-# HANDOFF — AI ONE Studio Canvers (v2.6.0, 카드 덱 방식)
+# HANDOFF — AI ONE Studio Canvers (v2.7.0, 카드 덱 방식)
 
 이어서 작업하는 쪽은 이 문서만 읽으면 됩니다. (작업 중 계속 갱신됨)
 
@@ -45,6 +45,9 @@
 - 심플 모드 화면: 가운데 정렬 대화 영역(최대 860px, 입력창도 같은 폭). 내 프롬프트는 오른쪽 말풍선(보라), 결과(엔진명·진행률·이미지/영상·버튼)는 왼쪽 말풍선.
 - 심플 모드 결과(이미지·영상) 클릭 → 큰 화면 뷰어(src/ui/Lightbox.tsx; 영상은 컨트롤+자동재생, Esc/바깥 클릭으로 닫기, 다운로드).
 - 파일 로드: AssetView 는 서버가 404 일 때만 '삭제됨', 그 외 실패는 '불러오지 못했어요 · 다시 시도'. (2026-10-20 ComfyUI /view 가 응답을 안 줘서 영상·이미지가 안 뜬 적 있음 → Manager reboot API 로 재시작해 해결. 재시작 방법은 사용자 규칙: POST /api/manager/reboot, 사용자 OK 후, 프로세스 강제 종료 금지.)
+- 라이브 캔버스(src/backend/liveCanvas.ts, src/panels/LivePanel.tsx): LLM 이 {say,cards,links,set,remove} JSON 을 돌려주면 applyPlan 이 새 카드를 기존 카드 아래 빈 공간에 row/col 격자로 배치. 카드 카탈로그는 REGISTRY 에서 자동 생성. 실기 통과(OpenRouter gemini-2.5-flash, 4샷+레퍼런스 2장). 주의: 2026-10-20 ComfyUI 재시작 후 'comfy'·'local' LLM 백엔드가 서버 500(PromptServer has no attribute last_prompt_id)을 냄 → 서버(TJ_STUDIO_ONE) 쪽 확인 필요. 라이브 캔버스는 설정 '라이브 캔버스 LLM'(settings.live: same / llm)으로 메인과 다른 LLM 선택 가능(runLlm 의 req.llm 오버라이드). 명령 전체: cards(near/place·row/col)·links·unlink·set·duplicate·remove·move·arrange(flow/grid/row/column/group-by-type)·align·distribute·group/ungroup·clear_results·select·run/stop·fit. 상태 전달은 canvasState(), 배치는 findFree(겹침 회피)·flowLayout(행 기준)·readingKey(샷 번호 순서). 실기 통과: '프롬프트 1~4에 영상 생성 카드 연결', '흐름대로 정렬', '색+가로 정렬+그룹' 복합 명령. 이후 개선 거리: 생성 카드까지 자동 연결, 카드 수정 요청, 스트리밍.
+- 그룹 규칙(src/store/graph.ts group/fitGroup/reassignMembership, Flow.tsx): 틀은 zIndex -10 + elevateNodesOnSelect=false 로 항상 카드 아래, 틀 크기는 DOM 실측(measure). 그룹 이동=멤버 동반, 카드 단독 이동=그룹 고정, 드롭 시 틀 밖→소속 해제 / 틀 안→소속, 한 카드 한 그룹. 실기 확인(마우스 드래그).
+- LLM 백엔드 5종 모두 라이브 캔버스로 시험 통과(2026-10-20). ComfyUI 재시작 직후 'comfy'/'local' 백엔드의 last_prompt_id 오류는 앱이 더미 작업으로 자동 우회(llm.ts warmUpServer). 생각(reasoning) 모델은 max_tokens 를 넉넉히(Test=400).
 - 알려진 제한: 소리 트랙이 없는 mp4 는 VHS 로더가 실패한다(후처리/Face Refine/Video Edit). 안내 문구만 추가함(comfy.ts friendlyError). 자동 무음 삽입은 미구현.
 - 미검증: Face Refine 다인 체인, Anima inpaint 모드.
 - 테스트 팁: vite HMR 후에는 모듈 URL 에 ?t= 가 붙어 콘솔 import 가 다른 인스턴스가 된다 → performance 리소스 목록의 정확한 URL 로 import.

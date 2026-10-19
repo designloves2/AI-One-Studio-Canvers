@@ -68,8 +68,8 @@ const ROLES = { text: 'img_enhance', vision: 'img_i2p' } as const;
 
 export interface ConnectResult { ok: boolean; error?: string; models?: string[]; modelFound?: boolean | null; ms?: number; keyStored?: boolean; note?: string }
 
-export async function connectCustom(role: string = ROLES.text): Promise<ConnectResult> {
-  const { llm, keys } = useSettings.getState();
+export async function connectCustom(role: string = ROLES.text, which?: LlmSettings): Promise<ConnectResult> {
+  const { keys } = useSettings.getState(); const llm = which ?? useSettings.getState().llm;
   const res = await postJson<ConnectResult>('/tj_shared/custom_llm/connect', {
     role, base_url: llm.custom_base, api_key: keys.custom, model: llm.custom_model,
   });
@@ -77,11 +77,11 @@ export async function connectCustom(role: string = ROLES.text): Promise<ConnectR
   return res;
 }
 
-async function ensureCustomKeys(roles: string[]): Promise<void> {
-  const { llm, keys } = useSettings.getState();
+async function ensureCustomKeys(roles: string[], which?: LlmSettings): Promise<void> {
+  const { keys } = useSettings.getState(); const llm = which ?? useSettings.getState().llm;
   if (!keys.custom) return; // gateway without a key (or key already on the server)
   for (const r of roles) {
-    if (sentKeys.get(r) !== `${llm.custom_base}|${keys.custom}`) await connectCustom(r);
+    if (sentKeys.get(r) !== `${llm.custom_base}|${keys.custom}`) await connectCustom(r, which);
   }
 }
 
@@ -98,6 +98,8 @@ export interface LlmRequest {
   /** override a few sampler knobs per call */
   temperature?: number;
   max_tokens?: number;
+  /** use these LLM settings instead of the main ones (Live Canvas has its own) */
+  llm?: LlmSettings;
 }
 
 const toDataUrl = (b: Blob) => new Promise<string>((res, rej) => {
@@ -134,14 +136,26 @@ function common(l: LlmSettings, req: LlmRequest) {
   };
 }
 
-export async function runLlm(req: LlmRequest): Promise<string> {
-  const l = useSettings.getState().llm;
+/** ComfyUI's progress hook reads `PromptServer.last_prompt_id`, which only exists after the first queued prompt since the server started.
+ *  The ComfyUI-TextGenerate / local GGUF backends run the sampler outside a prompt, so right after a restart they fail with
+ *  "'PromptServer' object has no attribute 'last_prompt_id'". One tiny no-op prompt sets it. */
+let warmed = false;
+async function warmUpServer(): Promise<void> {
+  if (warmed) return; warmed = true;
+  try {
+    await postJson('/prompt', { prompt: { 1: { class_type: 'EmptyImage', inputs: { width: 64, height: 64, batch_size: 1, color: 0 } }, 2: { class_type: 'PreviewImage', inputs: { images: ['1', 0] } } } });
+    await new Promise((r) => setTimeout(r, 2500));
+  } catch { /* the retry below reports the real error */ }
+}
+
+export async function runLlm(req: LlmRequest, retried = false): Promise<string> {
+  const l = req.llm ?? useSettings.getState().llm;
   const images = req.images ?? [];
 
   if (l.backend === 'custom') {
     if (!l.custom_base.trim()) throw new Error('Connect Custom: set the base URL in Settings → LLM');
     if (!l.custom_model.trim()) throw new Error('Connect Custom: pick a model in Settings → LLM');
-    await ensureCustomKeys(images.length ? [ROLES.text, ROLES.vision] : [ROLES.text]);
+    await ensureCustomKeys(images.length ? [ROLES.text, ROLES.vision] : [ROLES.text], req.llm);
   }
 
   let res: { ok: boolean; result?: string; error?: string };
@@ -165,6 +179,7 @@ export async function runLlm(req: LlmRequest): Promise<string> {
       prompt: req.prompt,
     });
   }
+  if (!res.ok && !retried && /last_prompt_id/.test(res.error ?? '')) { await warmUpServer(); return runLlm(req, true); }
   if (!res.ok) throw new Error(res.error || 'LLM request failed');
   return (res.result ?? '').trim();
 }
@@ -174,3 +189,6 @@ export async function connectOpenRouterKey(key: string) {
   useSettings.getState().setKey('openrouter', '');
   return r;
 }
+
+/** LLM settings for the Live Canvas chat: its own when chosen in Settings, otherwise undefined (= the main LLM). */
+export const liveLlmSettings = (): LlmSettings | undefined => { const { live } = useSettings.getState(); return live.same ? undefined : live.llm; };

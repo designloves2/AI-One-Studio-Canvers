@@ -2288,15 +2288,16 @@ var init_settings = __esm({
     useSettings = create((set2, get) => {
       const saved = load();
       const persist = () => {
-        const { comfyUrl, llm, models, saveSubfolder, music, video, hostPanels } = get();
+        const { comfyUrl, llm, live, models, saveSubfolder, music, video, hostPanels } = get();
         try {
-          localStorage.setItem(KEY, JSON.stringify({ comfyUrl, llm, models, saveSubfolder, music, video, hostPanels }));
+          localStorage.setItem(KEY, JSON.stringify({ comfyUrl, llm, live, models, saveSubfolder, music, video, hostPanels }));
         } catch {
         }
       };
       return {
         comfyUrl: saved.comfyUrl ?? "",
         llm: { ...DEFAULT_LLM, ...saved.llm ?? {} },
+        live: { same: saved.live?.same ?? true, llm: { ...DEFAULT_LLM, temperature: 0.5, max_tokens: 3500, ...saved.live?.llm ?? {} } },
         keys: { custom: "", openrouter: "" },
         models: saved.models ?? {},
         saveSubfolder: saved.saveSubfolder ?? "ai-one-canvers",
@@ -2317,6 +2318,14 @@ var init_settings = __esm({
         },
         setLlm: (patch) => {
           set2({ llm: { ...get().llm, ...patch } });
+          persist();
+        },
+        setLive: (patch) => {
+          set2({ live: { ...get().live, ...patch } });
+          persist();
+        },
+        setLiveLlm: (patch) => {
+          set2({ live: { ...get().live, llm: { ...get().live.llm, ...patch } } });
           persist();
         },
         setKey: (which, v) => set2({ keys: { ...get().keys, [which]: v } }),
@@ -3923,8 +3932,9 @@ async function loadServerSettings() {
 }
 var sentKeys = /* @__PURE__ */ new Map();
 var ROLES = { text: "img_enhance", vision: "img_i2p" };
-async function connectCustom(role = ROLES.text) {
-  const { llm, keys } = useSettings.getState();
+async function connectCustom(role = ROLES.text, which) {
+  const { keys } = useSettings.getState();
+  const llm = which ?? useSettings.getState().llm;
   const res = await postJson("/tj_shared/custom_llm/connect", {
     role,
     base_url: llm.custom_base,
@@ -3934,11 +3944,12 @@ async function connectCustom(role = ROLES.text) {
   if (res.ok && keys.custom) sentKeys.set(role, `${llm.custom_base}|${keys.custom}`);
   return res;
 }
-async function ensureCustomKeys(roles) {
-  const { llm, keys } = useSettings.getState();
+async function ensureCustomKeys(roles, which) {
+  const { keys } = useSettings.getState();
+  const llm = which ?? useSettings.getState().llm;
   if (!keys.custom) return;
   for (const r of roles) {
-    if (sentKeys.get(r) !== `${llm.custom_base}|${keys.custom}`) await connectCustom(r);
+    if (sentKeys.get(r) !== `${llm.custom_base}|${keys.custom}`) await connectCustom(r, which);
   }
 }
 var toDataUrl = (b) => new Promise((res, rej) => {
@@ -3978,13 +3989,23 @@ function common(l, req) {
     custom_ctx: l.custom_ctx || void 0
   };
 }
-async function runLlm(req) {
-  const l = useSettings.getState().llm;
+var warmed = false;
+async function warmUpServer() {
+  if (warmed) return;
+  warmed = true;
+  try {
+    await postJson("/prompt", { prompt: { 1: { class_type: "EmptyImage", inputs: { width: 64, height: 64, batch_size: 1, color: 0 } }, 2: { class_type: "PreviewImage", inputs: { images: ["1", 0] } } } });
+    await new Promise((r) => setTimeout(r, 2500));
+  } catch {
+  }
+}
+async function runLlm(req, retried = false) {
+  const l = req.llm ?? useSettings.getState().llm;
   const images = req.images ?? [];
   if (l.backend === "custom") {
     if (!l.custom_base.trim()) throw new Error("Connect Custom: set the base URL in Settings \u2192 LLM");
     if (!l.custom_model.trim()) throw new Error("Connect Custom: pick a model in Settings \u2192 LLM");
-    await ensureCustomKeys(images.length ? [ROLES.text, ROLES.vision] : [ROLES.text]);
+    await ensureCustomKeys(images.length ? [ROLES.text, ROLES.vision] : [ROLES.text], req.llm);
   }
   let res;
   if (images.length) {
@@ -4005,6 +4026,10 @@ async function runLlm(req) {
       prompt: req.prompt
     });
   }
+  if (!res.ok && !retried && /last_prompt_id/.test(res.error ?? "")) {
+    await warmUpServer();
+    return runLlm(req, true);
+  }
   if (!res.ok) throw new Error(res.error || "LLM request failed");
   return (res.result ?? "").trim();
 }
@@ -4016,6 +4041,10 @@ init_http();
 init_esm();
 init_comfy();
 var MODE_KEY = "canvers.mode";
+function measure(n2) {
+  const el = typeof document !== "undefined" ? document.querySelector(`.react-flow__node[data-id="${n2.id}"]`) : null;
+  return { w: n2.w ?? (el?.offsetWidth || 300), h: n2.h ?? (el?.offsetHeight || 260) };
+}
 var RUNS_KEY = "canvers.runs.v1";
 var readMode = () => {
   try {
@@ -4194,11 +4223,46 @@ var useGraph = create((set2, get) => ({
     const members = get().nodes.filter((n2) => ids.includes(n2.id) && !n2.members);
     if (members.length < 1) return;
     get().snapshot();
-    const pad = 40;
-    const x = Math.min(...members.map((n2) => n2.x)) - pad, y = Math.min(...members.map((n2) => n2.y)) - pad - 20;
-    const x2 = Math.max(...members.map((n2) => n2.x + (n2.w ?? 300))) + pad, y2 = Math.max(...members.map((n2) => n2.y + (n2.h ?? 260))) + pad;
-    const g = { id: uid("g"), defId: "group", x, y, w: x2 - x, h: y2 - y, params: {}, results: [], activeResult: 0, title: "Group", members: members.map((m) => m.id) };
-    set2({ nodes: [g, ...get().nodes], selected: [g.id] });
+    const g = { id: uid("g"), defId: "group", x: 0, y: 0, w: 240, h: 160, params: {}, results: [], activeResult: 0, title: "Group", members: members.map((m) => m.id) };
+    const taken = new Set(g.members);
+    set2({ nodes: [g, ...get().nodes.map((n2) => n2.members ? { ...n2, members: n2.members.filter((m) => !taken.has(m)) } : n2)], selected: [g.id] });
+    get().fitGroup(g.id);
+    if (typeof requestAnimationFrame !== "undefined") requestAnimationFrame(() => requestAnimationFrame(() => get().fitGroup(g.id)));
+  },
+  fitGroup: (id) => {
+    const grp = get().nodes.find((n2) => n2.id === id && n2.members);
+    if (!grp) return;
+    const mem = get().nodes.filter((n2) => grp.members.includes(n2.id));
+    if (!mem.length) return;
+    const pad = 40, top = 64;
+    const rects = mem.map((m) => {
+      const s = measure(m);
+      return { x: m.x, y: m.y, w: s.w, h: s.h };
+    });
+    const x = Math.min(...rects.map((r) => r.x)) - pad, y = Math.min(...rects.map((r) => r.y)) - top;
+    const x2 = Math.max(...rects.map((r) => r.x + r.w)) + pad, y2 = Math.max(...rects.map((r) => r.y + r.h)) + pad;
+    set2({ nodes: get().nodes.map((n2) => n2.id === id ? { ...n2, x, y, w: x2 - x, h: y2 - y } : n2) });
+  },
+  reassignMembership: (ids) => {
+    const st = get();
+    const groups = st.nodes.filter((n2) => n2.members);
+    if (!groups.length) return;
+    let changed = false;
+    let nodes = st.nodes;
+    for (const id of ids) {
+      const c = nodes.find((n2) => n2.id === id);
+      if (!c || c.members) continue;
+      const s = measure(c), cx = c.x + s.w / 2, cy = c.y + s.h / 2;
+      const inside = groups.find((gr) => {
+        const cur = nodes.find((n2) => n2.id === gr.id);
+        return cx >= cur.x && cx <= cur.x + (cur.w ?? 0) && cy >= cur.y && cy <= cur.y + (cur.h ?? 0);
+      });
+      const was = nodes.find((n2) => n2.members?.includes(id));
+      if (was?.id === inside?.id) continue;
+      nodes = nodes.map((n2) => n2.id === was?.id ? { ...n2, members: n2.members.filter((m) => m !== id) } : n2.id === inside?.id ? { ...n2, members: [...n2.members, id] } : n2);
+      changed = true;
+    }
+    if (changed) set2({ nodes });
   },
   ungroup: (id) => {
     get().snapshot();
@@ -6908,7 +6972,7 @@ var send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 async function handle(msg) {
   const { id, method, params } = msg;
   try {
-    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.6.0" } } });
+    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.7.0" } } });
     if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS.map(({ run: _r, ...t }) => t) } });
     if (method === "tools/call") {
       const tool = TOOLS.find((t) => t.name === params?.name);

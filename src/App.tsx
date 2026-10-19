@@ -22,6 +22,7 @@ import { RefineHost } from './ui/refine';
 import { ColorPopupHost } from './ui/ColorPopup';
 import { LightboxHost } from './ui/Lightbox';
 import { LibraryPanel } from './panels/LibraryPanel';
+import { LivePanel } from './panels/LivePanel';
 import { useSettings } from './store/settings';
 import { loadStudio, serializeHost, syncLinks, wireHostStore } from './host';
 import { setHostSerializer } from './store/graph';
@@ -31,6 +32,7 @@ const ICONS = {
   nodes: 'M4 6h6v6H4zM14 12h6v6h-6zM10 9h4v6',
   assets: 'M4 5h16v14H4zM4 15l5-5 4 4 3-3 4 4M9 9.5h.01',
   status: 'M4 13l4 4L20 6',
+  live: 'M4 5h16v10H9l-5 4zM8 9h8M8 12h5',
   library: 'M5 4h4v16H5zM11 4h4v16h-4zM17.5 5l3.2 1-3.6 14-3.2-1z',
   settings: 'M12 15a3 3 0 100-6 3 3 0 000 6zM19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z',
 };
@@ -69,9 +71,9 @@ function Rail() {
   const mode = useGraph((s) => s.mode);
   const panel = useGraph((s) => s.panel);
   const setPanel = useGraph((s) => s.setPanel);
-  const items: [Exclude<PanelId, null>, string, string][] = [['decks', 'Decks', ICONS.nodes], ['nodes', 'Nodes', ICONS.nodes], ['assets', 'Gallery', ICONS.assets], ['library', 'Asset Library', ICONS.library], ['models', 'Models', ICONS.status], ['settings', 'Settings', ICONS.settings]];
+  const items: [Exclude<PanelId, null>, string, string][] = [['live', 'Live Canvas', ICONS.live], ['decks', 'Decks', ICONS.nodes], ['nodes', 'Nodes', ICONS.nodes], ['assets', 'Gallery', ICONS.assets], ['library', 'Asset Library', ICONS.library], ['models', 'Models', ICONS.status], ['settings', 'Settings', ICONS.settings]];
   // decks / nodes only make sense on the canvas, so the simple mode hides them
-  const visible = mode === 'simple' ? items.filter(([id]) => id !== 'decks' && id !== 'nodes') : items;
+  const visible = mode === 'simple' ? items.filter(([id]) => id !== 'decks' && id !== 'nodes' && id !== 'live') : items;
   return (
     <div className="rail">
       {visible.map(([id, label, d]) => (
@@ -182,11 +184,12 @@ export function App() {
         <Rail />
         {panel && (mode === 'canvas' || panel === 'assets' || panel === 'library' || panel === 'settings' || panel === 'models') ? (
           <aside className="panel" style={{ width: panelW }}>
-            <header><b>{T(({ decks: 'Decks', nodes: 'Nodes', assets: 'Gallery', settings: 'Settings', models: 'Models', library: 'Asset Library' } as const)[panel!])}</b><button onClick={() => useGraph.getState().setPanel(null)}>✕</button></header>
+            <header><b>{T(({ decks: 'Decks', nodes: 'Nodes', assets: 'Gallery', settings: 'Settings', models: 'Models', library: 'Asset Library', live: 'Live Canvas' } as const)[panel!])}</b><button onClick={() => useGraph.getState().setPanel(null)}>✕</button></header>
             {panel === 'decks' && <DecksPanel />}
             {panel === 'nodes' && <NodesPanel />}
             {panel === 'assets' && <AssetsPanel />}
             {panel === 'library' && <LibraryPanel />}
+            {panel === 'live' && <LivePanel />}
             {panel === 'settings' && <SettingsPanel />}
             {panel === 'models' && <StatusPanel />}
             <div className="panel-resize" title={T('Drag to resize')} onPointerDown={startResize} onDoubleClick={() => { setPanelW(340); try { localStorage.setItem('canvers_panel_w', '340'); } catch { /* ignore */ } }} />

@@ -39,6 +39,8 @@ export interface Settings {
   /** '' = same origin (dev/prod proxy). Otherwise e.g. http://127.0.0.1:8188 (needs --enable-cors-header) */
   comfyUrl: string;
   llm: LlmSettings;
+  /** Live Canvas chat LLM: same = follow the main LLM above, otherwise use `llm` here */
+  live: { same: boolean; llm: LlmSettings };
   /** API keys live in memory only; they are sent to the backend once (never persisted here). */
   keys: { custom: string; openrouter: string };
   /** per image family overrides picked in Settings → Image models (blank = backend default) */
@@ -54,6 +56,8 @@ export interface Settings {
   setMusic: (k: string, v: string) => void;
   set: (patch: Partial<Pick<Settings, 'comfyUrl' | 'saveSubfolder' | 'hostPanels'>>) => void;
   setLlm: (patch: Partial<LlmSettings>) => void;
+  setLive: (patch: Partial<{ same: boolean }>) => void;
+  setLiveLlm: (patch: Partial<LlmSettings>) => void;
   setKey: (which: 'custom' | 'openrouter', v: string) => void;
   setModel: (family: string, patch: Partial<ModelChoice>) => void;
 }
@@ -67,12 +71,13 @@ function load(): Partial<Settings> {
 export const useSettings = create<Settings>((set, get) => {
   const saved = load();
   const persist = () => {
-    const { comfyUrl, llm, models, saveSubfolder, music, video, hostPanels } = get();
-    try { localStorage.setItem(KEY, JSON.stringify({ comfyUrl, llm, models, saveSubfolder, music, video, hostPanels })); } catch { /* ignore */ }
+    const { comfyUrl, llm, live, models, saveSubfolder, music, video, hostPanels } = get();
+    try { localStorage.setItem(KEY, JSON.stringify({ comfyUrl, llm, live, models, saveSubfolder, music, video, hostPanels })); } catch { /* ignore */ }
   };
   return {
     comfyUrl: saved.comfyUrl ?? '',
     llm: { ...DEFAULT_LLM, ...(saved.llm ?? {}) },
+    live: { same: saved.live?.same ?? true, llm: { ...DEFAULT_LLM, temperature: 0.5, max_tokens: 3500, ...(saved.live?.llm ?? {}) } },
     keys: { custom: '', openrouter: '' },
     models: saved.models ?? {},
     saveSubfolder: saved.saveSubfolder ?? 'ai-one-canvers',
@@ -83,6 +88,8 @@ export const useSettings = create<Settings>((set, get) => {
     setMusic: (k, v) => { set({ music: { ...get().music, [k]: v } }); persist(); },
     set: (patch) => { set(patch); persist(); },
     setLlm: (patch) => { set({ llm: { ...get().llm, ...patch } }); persist(); },
+    setLive: (patch) => { set({ live: { ...get().live, ...patch } }); persist(); },
+    setLiveLlm: (patch) => { set({ live: { ...get().live, llm: { ...get().live.llm, ...patch } } }); persist(); },
     setKey: (which, v) => set({ keys: { ...get().keys, [which]: v } }),
     setModel: (family, patch) => {
       const cur = get().models[family] ?? { model: '', textEncoder: '', vae: '' };

@@ -32,7 +32,7 @@ export function Flow({ tool, onMenu }: { tool: 'select' | 'hand'; onMenu(at: { x
     return {
       id: n.id, type: isGroup ? 'group' : 'card', position: { x: n.x, y: n.y }, data: {},
       selected: selected.includes(n.id), draggable: !n.locked, deletable: !n.locked,
-      zIndex: isGroup ? -1 : 0,
+      zIndex: isGroup ? -10 : 0,
       ...(resizable ? { style: { width: n.w ?? 240, height: n.h ?? 160 } } : {}),
     };
   }), [nodes, selected]);
@@ -141,10 +141,11 @@ export function Flow({ tool, onMenu }: { tool: 'select' | 'hand'; onMenu(at: { x
         onSelectionContextMenu={(e, ns) => { e.preventDefault(); setCtx({ x: e.clientX, y: e.clientY, ids: ns.map((n) => n.id) }); }}
         onPaneContextMenu={(e) => { e.preventDefault(); setCtx({ x: e.clientX, y: e.clientY, ids: [] }); }}
         onNodeDragStart={() => useGraph.getState().snapshot()}
+        onNodeDragStop={(_, __, dragged) => useGraph.getState().reassignMembership(dragged.map((n) => n.id))}
         onPaneClick={() => { useGraph.getState().select([]); setCtx(null); }}
         onDoubleClick={(e) => { if ((e.target as HTMLElement).classList.contains('react-flow__pane')) onMenu({ x: e.clientX, y: e.clientY, flow: rf.screenToFlowPosition({ x: e.clientX, y: e.clientY }) }); }}
         panOnDrag={[0, 1, 2]} selectionOnDrag={false} selectionKeyCode={['Control', 'Meta']} multiSelectionKeyCode={['Shift', 'Control', 'Meta']} selectionMode={SelectionMode.Partial}
-        zoomOnDoubleClick={false} minZoom={0.1} maxZoom={2.5} fitView={false} deleteKeyCode={['Backspace', 'Delete']}
+        elevateNodesOnSelect={false} zoomOnDoubleClick={false} minZoom={0.1} maxZoom={2.5} fitView={false} deleteKeyCode={['Backspace', 'Delete']}
         proOptions={{ hideAttribution: true }} colorMode="dark" snapToGrid snapGrid={[10, 10]}
       >
         <Background variant={BackgroundVariant.Dots} gap={22} size={1.2} color="#2a2e38" />
