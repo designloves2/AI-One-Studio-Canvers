@@ -3061,8 +3061,10 @@ var REGISTRY = [
   },
   // ---------------------------------------------------------------- post-processing (one card per step, video in → video out)
   ...(() => {
+    const fpsParam = num("fps", "Source frame rate (fps)", 24, { advanced: true }, 1, 240, 1);
+    const previewParam = num("preview_frames", "Test on the first N frames (0 = whole video)", 0, { advanced: true }, 0, 600, 1);
     const vin = [{ id: "video", label: "Video", type: "video" }], vout = [{ id: "video", label: "Video", type: "video" }];
-    const pp = (id, title, params, description, engines) => ({ id, title, category: "Postprocess", kind: "generate", inputs: vin, outputs: vout, params, engines, description });
+    const pp = (id, title, params, description, engines) => ({ id, title, category: "Postprocess", kind: "generate", inputs: vin, outputs: vout, params: engines ? params : [...params, fpsParam, previewParam], engines: engines?.map((e) => ({ ...e, params: [...e.params ?? [], fpsParam, previewParam] })), description });
     const rtxP = (pre, whenOk = () => true) => [
       sel(`${pre}mode`, "Size by", ["scale", "short", "long", "wh"], "scale", { when: whenOk }),
       slider(`${pre}scale`, "Scale", 1, 4, 0.25, 2, { when: (p) => whenOk(p) && p[`${pre}mode`] === "scale" }),
@@ -3244,6 +3246,16 @@ var REGISTRY = [
     outputs: [P.textOut()],
     params: [],
     description: "Find the tempo and beat times of a song or video (ITDA ONE STUDIO). Needs librosa on the server."
+  },
+  {
+    id: "video-bridge",
+    title: "Transition Bridge",
+    category: "Video",
+    kind: "generate",
+    inputs: [{ id: "a", label: "Clip A (before)", type: "video" }, { id: "b", label: "Clip B (after)", type: "video" }],
+    outputs: [{ id: "video", label: "Bridge clip", type: "video" }],
+    params: [sel("mode", "Transition", ["interpolate", "crossfade"], "interpolate"), slider("frames", "Length (frames)", 2, 48, 1, 8)],
+    description: "A short clip that blends the last frame of A into the first frame of B. Put it between A and B in Video Stitch (ITDA ONE STUDIO)."
   },
   {
     id: "video-stitch",
@@ -4784,7 +4796,7 @@ async function buildPostGraph(job) {
   const g = {};
   await addVideoLoad(g, job.file, "P:load", job.skip ?? 0, job.cap ?? 0);
   let images = ["P:load", 0];
-  let fps = FPS;
+  let fps = job.fps && job.fps > 0 ? job.fps : FPS;
   const s = job.step;
   let label = s.kind;
   if (s.kind === "deblur") {
@@ -5328,6 +5340,13 @@ async function itdaUpload(a) {
 }
 var sceneDetect = (path2, threshold, fps = 24) => postJson("/itda_studio_one/api/scene_detect", { project: PROJECT, path: path2, fps, threshold });
 var beatDetect = (path2, fps = 24) => postJson("/itda_studio_one/api/beat_detect", { project: PROJECT, path: path2, fps });
+var itdaProbe = (path2) => postJson("/itda_studio_one/api/probe", { project: PROJECT, path: path2 });
+var itdaFileUrl = (path2) => url(`/itda_studio_one/api/file?project=${PROJECT}&path=${encodeURIComponent(path2)}`);
+async function bridgeClip(pathA, pathB, mode, numFrames) {
+  const meta = (await itdaProbe(pathA)).meta;
+  const frameA = Math.max(0, (meta?.total_frames ?? 1) - 1);
+  return postJson("/itda_studio_one/api/stitch_bridge", { project: PROJECT, path_a: pathA, path_b: pathB, frame_a: frameA, frame_b: 0, fps: meta?.fps ?? 24, mode, num_frames: numFrames });
+}
 
 // src/backend/ltxRefine.ts
 async function buildRefineGraph(j) {
@@ -5551,7 +5570,7 @@ function post(stepOf) {
     const file = await ensureInput(v);
     const size = await videoSize(v.url);
     const step = stepOf(c, size);
-    const g = await buildPostGraph({ file, step, folder: useSettings.getState().saveSubfolder, stem: "canvers" });
+    const g = await buildPostGraph({ fps: num2(c.p.fps, 24), cap: Math.max(0, Math.round(num2(c.p.preview_frames, 0))), file, step, folder: useSettings.getState().saveSubfolder, stem: "canvers" });
     const res = await runPrompt(g.graph, { onProgress: c.progress, signal: c.signal });
     return [assetFromFile(outFile(res.raw, g.save), "video", "video")];
   };
@@ -5734,6 +5753,17 @@ frames: ${(r.frames ?? []).join(", ")}` : "no cuts found")];
     const secs = (r.frames ?? []).map((f) => +(f / 24).toFixed(2));
     return [textAsset(`BPM ${r.bpm ?? "?"}
 beats at (s): ${secs.join(", ")}`)];
+  },
+  "video-bridge": async (c) => {
+    const a = need(c.inputs("a")[0], "Clip A (before)");
+    const b = need(c.inputs("b")[0], "Clip B (after)");
+    c.progress(10, "uploading\u2026");
+    const pa = await itdaUpload(a);
+    const pb = await itdaUpload(b);
+    c.progress(50, "building the transition\u2026");
+    const r = await bridgeClip(pa, pb, str(c.p.mode, "interpolate"), num2(c.p.frames, 8));
+    if (!r.ok || !r.path) throw new Error(r.error ?? "could not build the transition");
+    return [{ id: uid(), type: "video", url: itdaFileUrl(r.path), port: "video" }];
   },
   // ---------------- Face Refine
   "face-refine": async (c) => {
@@ -6470,7 +6500,7 @@ var send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 async function handle(msg) {
   const { id, method, params } = msg;
   try {
-    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.3.0" } } });
+    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.4.0" } } });
     if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS.map(({ run: _r, ...t }) => t) } });
     if (method === "tools/call") {
       const tool = TOOLS.find((t) => t.name === params?.name);
