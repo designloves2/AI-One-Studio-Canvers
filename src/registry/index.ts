@@ -231,7 +231,7 @@ export const REGISTRY: NodeDef[] = [
 ];
 
 export const byId = new Map(REGISTRY.map((n) => [n.id, n]));
-export const CATEGORIES = ['Text / LLM', 'Image', 'Video', 'Audio', 'Workflow', 'Edit', 'Utility', 'Data'];
+export const CATEGORIES = ['STUDIO ONE', 'TJ NODE', 'Text / LLM', 'Image', 'Video', 'Audio', 'Workflow', 'Edit', 'Utility', 'Data'];
 
 /** the params a node shows: the engine's own set when it has one, else the node's. */
 export function paramsFor(def: NodeDef, engineId?: string): ParamDef[] {
@@ -250,7 +250,12 @@ export function defaultParams(def: NodeDef, engineId?: string): Record<string, s
 
 /** Can an output of type `a` feed an input of type `b`? */
 export function compatible(a: string, b: string): boolean {
-  if (a === b) return true;
+  if (a === b || a === 'any' || b === 'any') return true;
   const imageLike = (t: string) => t === 'image' || t === 'mask';
   return imageLike(a) && imageLike(b);
+}
+
+/** called by the host once the STUDIO_ONE node panels are loaded: adds one catalogue entry per ONE STUDIO node */
+export function registerHostDefs(defs: NodeDef[]) {
+  for (const d of defs) { if (!byId.has(d.id)) { REGISTRY.push(d); byId.set(d.id, d); } }
 }

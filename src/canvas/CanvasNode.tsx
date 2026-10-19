@@ -12,6 +12,7 @@ import { importFile, enhanceInstruction } from '../engine/run';
 import { runLlm } from '../backend/llm';
 import { useSettings } from '../store/settings';
 import { t, useT } from '../i18n';
+import { HostCard } from '../host/HostCard';
 
 const KIND_COLOR: Record<string, string> = { source: '#8b7bff', edit: '#4f8dff', generate: '#34c98e', llm: '#c08bff', output: '#ff9d3d', note: '#e6c34a' };
 
@@ -185,7 +186,12 @@ function DisplayBody({ id, defId }: { id: string; defId: string }) {
   );
 }
 
-export const CanvasNode = memo(function CanvasNode({ id, selected }: NodeProps) {
+export const CanvasNode = memo(function CanvasNode(props: NodeProps) {
+  const isHost = useGraph((s) => s.nodes.find((n) => n.id === props.id)?.defId.startsWith('host:') ?? false);
+  return isHost ? <HostCard id={props.id} selected={props.selected} /> : <PlainNode {...props} />;
+});
+
+const PlainNode = memo(function PlainNode({ id, selected }: NodeProps) {
   const node = useGraph((s) => s.nodes.find((n) => n.id === id));
   const rt = useGraph((s) => s.runtime[id]);
   const setParam = useGraph((s) => s.setParam);

@@ -154,3 +154,7 @@ kbd { background: var(--bg3); border: 1px solid var(--line2); border-radius: 4px
 .roll .grid { position: relative; cursor: crosshair; background-image: linear-gradient(90deg, rgba(255,255,255,.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.16) 1px, transparent 1px), linear-gradient(0deg, rgba(255,255,255,.05) 1px, transparent 1px); touch-action: none; }
 .blkrow { position: absolute; left: 0; right: 0; background: rgba(0,0,0,.28); pointer-events: none; } .note { position: absolute; background: var(--acc); border-radius: 3px; border: 1px solid #fff5; cursor: grab; } .playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--acc2); pointer-events: none; }
 .melody-foot { padding: 6px 14px; background: var(--bg2); border-top: 1px solid var(--line); font-size: 11px; } .btn.rec { background: #5a1620; border-color: var(--bad); color: #fff; }
+
+.cnode.host { overflow: visible; } .host-body { overflow: visible; padding: 0 0 6px; } .cnode.host .cnode-head { cursor: grab; }
+
+.cnode.host .cnode-head .title { max-width: none; overflow: visible; }

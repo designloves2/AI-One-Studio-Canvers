@@ -85,6 +85,10 @@ const readMode = (): AppMode => { try { return localStorage.getItem(MODE_KEY) ==
 const readRuns = (): ComposerRun[] => { try { return JSON.parse(localStorage.getItem(RUNS_KEY) ?? '[]'); } catch { return []; } };
 const writeRuns = (r: ComposerRun[]) => { try { localStorage.setItem(RUNS_KEY, JSON.stringify(r.slice(0, 150).map((x) => (x.status === 'running' ? { ...x, status: 'error', error: 'interrupted' } : x)))); } catch { /* full */ } };
 
+/** set by the host so ONE STUDIO nodes save their own panel state into the project */
+let hostSerializer: ((n: GraphNode) => GraphNode) | null = null;
+export const setHostSerializer = (f: (n: GraphNode) => GraphNode) => { hostSerializer = f; };
+
 export const useGraph = create<State>((set, get) => ({
   projectId: uid('p'),
   projectName: 'untitled',
@@ -199,7 +203,7 @@ export const useGraph = create<State>((set, get) => ({
   openPainter: (nodeId) => set({ painter: nodeId }),
   openMelody: (nodeId) => set({ melody: nodeId }),
 
-  toProject: () => ({ app: 'ai-one-studio-canvers', version: 1, id: get().projectId, name: get().projectName, nodes: get().nodes, edges: get().edges, updatedAt: new Date().toISOString() }),
+  toProject: () => ({ app: 'ai-one-studio-canvers', version: 1, id: get().projectId, name: get().projectName, nodes: hostSerializer ? get().nodes.map(hostSerializer) : get().nodes, edges: get().edges, updatedAt: new Date().toISOString() }),
   loadProject: (p) => set({ projectId: p.id ?? uid('p'), projectName: p.name || 'untitled', nodes: p.nodes ?? [], edges: p.edges ?? [], runtime: {}, selected: [], past: [], future: [], fitTick: get().fitTick + 1 }),
   newProject: () => set({ projectId: uid('p'), projectName: 'untitled', nodes: [], edges: [], runtime: {}, selected: [], past: [], future: [] }),
   requestFit: () => set({ fitTick: get().fitTick + 1 }),

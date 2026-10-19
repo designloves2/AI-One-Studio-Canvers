@@ -61,3 +61,8 @@ ComfyUI :8188  ── 표준 API: /prompt /ws /upload/image /view /history /obje
 1. `backend/studio.ts` 의 `FAMILIES` 에 라우트 접두사 추가
 2. `backend/imageGen.ts` 에 그래프 빌더 추가
 3. `registry/index.ts` 의 해당 노드 `engines` 에 항목 추가
+
+## Studio Host (v2.0)
+`src/host/` : LiteGraph 호환 shim(HostNode/HostGraph), `/scripts/app.js`·`api.js` shim, `window.app/api/comfyAPI/LiteGraph`.
+`loadStudio()`가 ComfyUI `/extensions/*STUDIO_ONE*` 전체를 동적 import → `/object_info`로 노드 클래스 생성 → DOM 위젯을 React 카드에 마운트.
+상태는 `serialize()` → `GraphNode.params.__host` 로 프로젝트에 저장. 실행은 `exec.ts`(/prompt).

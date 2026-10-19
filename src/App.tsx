@@ -15,6 +15,8 @@ import { addImports, openProjectFile, runAll, saveProjectFile, stopAll } from '.
 import { systemStats } from './backend/comfy';
 import { loadServerSettings } from './backend/llm';
 import { useT } from './i18n';
+import { loadStudio, serializeHost, syncLinks, wireHostStore } from './host';
+import { setHostSerializer } from './store/graph';
 
 const Icon = ({ d }: { d: string }) => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d={d} /></svg>;
 const ICONS = {
@@ -115,7 +117,14 @@ export function App() {
   const { screenToFlowPosition } = useReactFlow();
   const T = useT();
 
-  useEffect(() => { restoreAutosave(); startAutosave(); void loadServerSettings(); }, []);
+  useEffect(() => {
+    setHostSerializer(serializeHost); wireHostStore();
+    // ONE STUDIO panels need their extensions loaded before a saved canvas that uses them is restored
+    void loadStudio().catch(() => undefined).finally(() => { restoreAutosave(); startAutosave(); syncLinks(); });
+    void loadServerSettings();
+    const t = setInterval(() => { const g = useGraph.getState(); if (g.nodes.some((n) => n.defId.startsWith('host:'))) { try { localStorage.setItem('canvers.autosave.v1', JSON.stringify(g.toProject())); } catch { /* quota */ } } }, 4000);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

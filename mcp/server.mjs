@@ -2428,8 +2428,20 @@ function openSocket() {
       ws = null;
       opening = null;
     };
+    s.binaryType = "blob";
     s.onmessage = (ev) => {
-      if (typeof ev.data !== "string") return;
+      if (typeof ev.data !== "string") {
+        void ev.data.arrayBuffer().then((buf2) => {
+          const v = new DataView(buf2);
+          const kind = v.getUint32(0);
+          if (kind === 1 || kind === 4) {
+            const fmt = v.getUint32(4);
+            const blob = new Blob([buf2.slice(kind === 4 ? 8 + v.getUint32(4) : 8)], { type: fmt === 2 ? "image/png" : "image/jpeg" });
+            for (const l of listeners) l({ type: "b_preview", data: blob });
+          }
+        });
+        return;
+      }
       try {
         const m = JSON.parse(ev.data);
         for (const l of listeners) l(m);
@@ -5053,7 +5065,7 @@ var send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 async function handle(msg) {
   const { id, method, params } = msg;
   try {
-    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "1.1.0" } } });
+    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.0.0" } } });
     if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS.map(({ run: _r, ...t }) => t) } });
     if (method === "tools/call") {
       const tool = TOOLS.find((t) => t.name === params?.name);

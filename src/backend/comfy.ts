@@ -68,8 +68,15 @@ function openSocket(): Promise<void> {
     s.onopen = () => { opening = null; resolve(); };
     s.onerror = () => { opening = null; resolve(); }; // fall back to polling /history
     s.onclose = () => { ws = null; opening = null; };
+    s.binaryType = 'blob';
     s.onmessage = (ev) => {
-      if (typeof ev.data !== 'string') return; // binary = live preview frames
+      if (typeof ev.data !== 'string') { // binary = live preview frames: [u32 type][u32 format][image bytes]
+        void (ev.data as Blob).arrayBuffer().then((buf) => {
+          const v = new DataView(buf); const kind = v.getUint32(0);
+          if (kind === 1 || kind === 4) { const fmt = v.getUint32(4); const blob = new Blob([buf.slice(kind === 4 ? 8 + v.getUint32(4) : 8)], { type: fmt === 2 ? 'image/png' : 'image/jpeg' }); for (const l of listeners) l({ type: 'b_preview', data: blob }); }
+        });
+        return;
+      }
       try { const m = JSON.parse(ev.data); for (const l of listeners) l(m); } catch { /* ignore */ }
     };
   });

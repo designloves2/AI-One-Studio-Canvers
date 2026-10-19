@@ -1,5 +1,5 @@
-export type PortType = 'text' | 'image' | 'video' | 'mask' | 'number' | 'boolean' | 'audio';
-export type NodeKind = 'source' | 'edit' | 'generate' | 'llm' | 'output' | 'note';
+export type PortType = 'text' | 'image' | 'video' | 'mask' | 'number' | 'boolean' | 'audio' | 'pipe' | 'any';
+export type NodeKind = 'source' | 'edit' | 'generate' | 'llm' | 'output' | 'note' | 'host';
 
 export interface PortDef {
   id: string;
@@ -57,6 +57,8 @@ export interface NodeDef {
   description?: string;
   /** true for catalogue entries whose engine is not wired yet */
   planned?: boolean;
+  /** hosted ComfyUI node that is executed through /prompt (has a Run button) */
+  runnable?: boolean;
 }
 
 export interface FileRef {
@@ -126,4 +128,6 @@ export const PORT_COLORS: Record<PortType, string> = {
   number: '#e8a33d',
   boolean: '#e8a33d',
   audio: '#4fd1e8',
+  pipe: '#e86bb0',
+  any: '#9aa3b5',
 };

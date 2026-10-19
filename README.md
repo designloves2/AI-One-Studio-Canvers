@@ -88,3 +88,10 @@ npm run mock       # GPU 없이 UI 시험용 가짜 ComfyUI (:8188)
 - *Several clips*: `lastframe`(앞 클립의 마지막 장면에서 이어서) · `onetake`(latent 그대로 이어서, TJ_NODE 필요) · `none`
 - *Stitch*: 끝나면 ffmpeg로 하나의 영상으로 합칩니다 (STUDIO_ONE 의 stitch 라우트 사용).
 - **Lock audio** 포트에 오디오(음악 노드 결과·가져온 파일)를 연결하면 그 소리에 맞춰 생성합니다.
+
+## v2.0 — Studio Host (STUDIO ONE 100% 기능)
+
+STUDIO ONE의 모든 패널(H3 고급옵션·One-Take·AudioLock, LTX Director, Music/YuE2 멜로디 에디터, ITDA 등)과
+LLM(TJ)·PromptDB 노드는 **원본 UI를 그대로** 캔버스 노드로 불러옵니다.
+설치된 ComfyUI의 `/extensions`에서 런타임에 로드하므로 STUDIO_ONE / TJ_NODE 가 ComfyUI에 설치되어 있어야 합니다.
+(STUDIO_ONE은 GPL-3 — 번들하지 않고 런타임에 불러옵니다.) 기존 네이티브 노드는 "빠른 노드"로 유지됩니다.
