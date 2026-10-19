@@ -27,7 +27,7 @@
 2. (완료) H3 Image Generator 카드 `h3-image` — src/backend/h3Image.ts, mock 통과. 실기 미검증.
 3. (완료·간이) LTX Director 카드 `ltx-director`: 구간별 프롬프트(beats: `0-3: 문장`) + 이미지 시간 고정. 오디오/모션 트랙은 미구현. (원본 director UI 는 GPL, 열람·복사 금지 — W1 규칙)
 4. Music/이미지 모드 카드 세분화 점검.
-5. Asset Library `@` 자동완성, 등록/프로젝트 편집.
+5. (일부 완료) 프롬프트 카드에 라이브러리 `@이름` 칩(클릭 추가). 남음: 입력 중 `@` 자동완성 드롭다운, 프로젝트 편집 UI.
 6. Postprocess 미리보기, fps 자동 인식.
 7. 카드 디자인 다듬기, README/ARCHITECTURE 카드 방식으로 갱신.
 8. 릴리스: build:mcp → 커밋 → release/AI-One-Studio-Canvers_v2.x.zip.

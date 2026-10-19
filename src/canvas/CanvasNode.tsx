@@ -1,4 +1,4 @@
-import { memo, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { parseWorkflow, candidates } from '../backend/workflow';
 import { Handle, Position, NodeResizer, type NodeProps } from '@xyflow/react';
 import { useGraph } from '../store/graph';
@@ -82,6 +82,16 @@ async function replaceImport(id: string, f: File) {
   g.setRuntime(id, { status: 'running', pct: 30, label: 'uploading…' });
   try { g.setResults(id, [await importFile(f)]); g.setRuntime(id, { status: 'idle', pct: 100 }); }
   catch (e) { g.setRuntime(id, { status: 'error', error: (e as Error).message }); }
+}
+
+/** Asset Library names as clickable chips: a click appends @name to the prompt. */
+function MentionBar({ id }: { id: string }) {
+  const T = useT();
+  const [names, setNames] = useState<string[]>([]);
+  useEffect(() => { let live = true; void import('../backend/assetlib').then((m) => m.listAssets()).then((a) => { if (live) setNames(a.filter((x) => x.kind !== 'audio').map((x) => x.name).filter((n) => /^[A-Za-z0-9_\u3131-\uD79D]+$/.test(n)).slice(0, 12)); }).catch(() => undefined); return () => { live = false; }; }, []);
+  if (!names.length) return null;
+  const add = (n: string) => { const g = useGraph.getState(); const cur = String(g.nodes.find((x) => x.id === id)?.params.text ?? ''); g.setParam(id, 'text', `${cur}${cur && !/\s$/.test(cur) ? ' ' : ''}@${n} `); };
+  return <div className="mentions nodrag" title={T('Asset Library names — click to add')}>{names.map((n) => <button key={n} className="chip" onClick={() => add(n)}>@{n}</button>)}</div>;
 }
 
 function EnhanceButton({ id }: { id: string }) {
@@ -281,6 +291,7 @@ const PlainNode = memo(function PlainNode({ id, selected }: NodeProps) {
           {shown.map((p) => <Field key={p.id} def={p} value={node.params[p.id] ?? p.default} onChange={(v) => setParam(id, p.id, v)} />)}
         </div>
       )}
+      {def.id === 'prompt' && <MentionBar id={id} />}
       {def.id === 'prompt' && <EnhanceButton id={id} />}
       {hasAdv && <button className="adv-toggle nodrag" onClick={() => setAdv((v) => !v)}>{adv ? '▾' : '▸'} {T('Advanced')}</button>}
 
