@@ -3061,7 +3061,7 @@ var REGISTRY = [
   },
   // ---------------------------------------------------------------- post-processing (one card per step, video in → video out)
   ...(() => {
-    const fpsParam = num("fps", "Source frame rate (fps)", 24, { advanced: true }, 1, 240, 1);
+    const fpsParam = num("fps", "Source frame rate (fps, 0 = detect)", 0, { advanced: true }, 0, 240, 1);
     const previewParam = num("preview_frames", "Test on the first N frames (0 = whole video)", 0, { advanced: true }, 0, 600, 1);
     const vin = [{ id: "video", label: "Video", type: "video" }], vout = [{ id: "video", label: "Video", type: "video" }];
     const pp = (id, title, params, description, engines) => ({ id, title, category: "Postprocess", kind: "generate", inputs: vin, outputs: vout, params: engines ? params : [...params, fpsParam, previewParam], engines: engines?.map((e) => ({ ...e, params: [...e.params ?? [], fpsParam, previewParam] })), description });
@@ -5547,6 +5547,42 @@ async function videoSize(url2) {
     v.src = url2;
   });
 }
+async function videoFps(url2) {
+  return new Promise((resolve) => {
+    const v = document.createElement("video");
+    if (!v.requestVideoFrameCallback) return resolve(null);
+    const times = [];
+    let ended = false;
+    const finish = () => {
+      if (ended) return;
+      ended = true;
+      v.pause();
+      v.removeAttribute("src");
+      const d = times.slice(1).map((t, i) => t - times[i]).filter((x) => x > 1e-3);
+      if (d.length < 3) return resolve(null);
+      d.sort((a, b) => a - b);
+      const med = d[Math.floor(d.length / 2)];
+      const fps = 1 / med;
+      const common2 = [8, 12, 15, 16, 20, 24, 25, 30, 48, 50, 60];
+      const near = common2.find((c) => Math.abs(c - fps) < 0.6);
+      resolve(near ?? Math.round(fps * 100) / 100);
+    };
+    const tick = (_, m) => {
+      times.push(m.mediaTime);
+      if (times.length >= 14) finish();
+      else v.requestVideoFrameCallback(tick);
+    };
+    v.muted = true;
+    v.playsInline = true;
+    v.onerror = () => finish();
+    v.onloadeddata = () => {
+      v.requestVideoFrameCallback(tick);
+      void v.play().catch(finish);
+    };
+    setTimeout(finish, 5e3);
+    v.src = url2;
+  });
+}
 var outFile = (raw, node) => {
   const o = raw[node] ?? {};
   const f = (o.gifs ?? o.images ?? o.videos ?? [])[0];
@@ -5570,7 +5606,8 @@ function post(stepOf) {
     const file = await ensureInput(v);
     const size = await videoSize(v.url);
     const step = stepOf(c, size);
-    const g = await buildPostGraph({ fps: num2(c.p.fps, 24), cap: Math.max(0, Math.round(num2(c.p.preview_frames, 0))), file, step, folder: useSettings.getState().saveSubfolder, stem: "canvers" });
+    const fps = num2(c.p.fps, 0) > 0 ? num2(c.p.fps, 24) : await videoFps(v.url) ?? 24;
+    const g = await buildPostGraph({ fps, cap: Math.max(0, Math.round(num2(c.p.preview_frames, 0))), file, step, folder: useSettings.getState().saveSubfolder, stem: "canvers" });
     const res = await runPrompt(g.graph, { onProgress: c.progress, signal: c.signal });
     return [assetFromFile(outFile(res.raw, g.save), "video", "video")];
   };
@@ -6500,7 +6537,7 @@ var send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 async function handle(msg) {
   const { id, method, params } = msg;
   try {
-    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.4.0" } } });
+    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.5.0" } } });
     if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS.map(({ run: _r, ...t }) => t) } });
     if (method === "tools/call") {
       const tool = TOOLS.find((t) => t.name === params?.name);
