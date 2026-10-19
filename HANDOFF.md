@@ -19,10 +19,11 @@
 
 ## 미검증
 - 신규 카드는 mock 으로만 검증. 실제 GPU 품질/노드 입력명은 실기 확인 필요(Face Refine, Character Sheet, FlashVSR/RTX 2-pass, TJ_H3Reference, /h3_facerefine/scan).
-- 옛 e2e2~e2e13 회귀는 변경 후 재실행 전(파라미터명 변경: H3 고급옵션→카드, import→Load Image).
+- 옛 e2e2~e2e13 회귀: 재실행 완료, 모두 통과(e2e5 는 'Import'→'이미지 불러오기' 이름 변경에 맞춰 테스트 locator 수정). 신규 e2e14(카드/덱/후처리/Asset/FaceRefine/CharSheet) 통과.
+- 한국어 번역: src/i18n.cards.ts (새 카드 라벨).
 
 ## 남은 작업 (우선순위)
-1. e2e2~e2e13 회귀 재실행/수정.
+1. (완료) 회귀 재실행.
 2. (완료) H3 Image Generator 카드 `h3-image` — src/backend/h3Image.ts, mock 통과. 실기 미검증.
 3. (완료·간이) LTX Director 카드 `ltx-director`: 구간별 프롬프트(beats: `0-3: 문장`) + 이미지 시간 고정. 오디오/모션 트랙은 미구현. (원본 director UI 는 GPL, 열람·복사 금지 — W1 규칙)
 4. Music/이미지 모드 카드 세분화 점검.

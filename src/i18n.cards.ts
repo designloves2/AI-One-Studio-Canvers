@@ -1,0 +1,48 @@
+// Korean labels for the card nodes (kept apart from the main table; merged in i18n.ts).
+export const KO_CARDS: Record<string, string> = {
+  // categories / panels
+  Cards: '카드', Postprocess: '후처리', Decks: '덱', 'My decks': '내 덱', 'Starter decks': '스타터 덱', 'Deck name': '덱 이름', 'Save selection': '선택 저장',
+  'Select cards on the canvas first': '캔버스에서 카드를 먼저 선택하세요', 'Select some cards on the canvas and save them as a deck.': '캔버스에서 카드 몇 장을 선택해 덱으로 저장하세요.',
+  'Legacy: load original STUDIO_ONE panels': '레거시: 원본 STUDIO_ONE 패널 불러오기', 'Adds the old all-in-one panels as extra nodes (reload needed). Off = card nodes only.': '예전 통짜 패널을 추가 노드로 불러옵니다(새로고침 필요). 꺼짐 = 카드 노드만.',
+  // cards
+  LoRA: 'LoRA', 'H3 Turbo · 7+1': 'H3 터보 · 7+1', 'H3 Speed & Attention': 'H3 속도 · 어텐션', 'H3 Audio Lock': 'H3 오디오 잠금', 'Asset Library': '에셋 라이브러리',
+  'Load Image': '이미지 불러오기', 'Load Video': '영상 불러오기', 'Import Audio': '오디오 불러오기', 'Result Viewer': '결과 보기',
+  // postprocess + video
+  'Deblur (RTX)': '디블러 (RTX)', 'Denoise (RTX)': '디노이즈 (RTX)', 'Video Upscale': '영상 업스케일', 'Skin Retouch': '피부 보정', 'Film Grain': '필름 그레인',
+  'Frame Interpolation': '프레임 보간', 'Video Resize': '영상 리사이즈', 'Face Refine (H3)': '얼굴 리파인 (H3)', 'Character Sheet': '캐릭터 시트',
+  'Video Edit (LTX 2.5 refine)': '영상 수정 (LTX 2.5)', 'Video Stitch': '영상 스티치', 'LTX Director (timeline)': 'LTX 디렉터 (타임라인)', 'Image Generate (H3)': '이미지 생성 (H3)',
+  // ports
+  'LoRA cards': 'LoRA 카드', 'H3 option cards': 'H3 옵션 카드', 'Option cards': '옵션 카드', Video: '영상', Videos: '영상들', 'Videos (in order)': '영상 (연결 순서)',
+  'Face references': '얼굴 레퍼런스', 'Character reference': '캐릭터 레퍼런스', 'Prompt (optional)': '프롬프트 (선택)', 'Overall prompt': '전체 프롬프트', 'Images (in time order)': '이미지 (시간순)',
+  'Reference images (optional)': '레퍼런스 이미지 (선택)', 'Pass through': '그대로 통과', 'Image / video / audio / text': '이미지 / 영상 / 오디오 / 텍스트', 'More LoRAs': '더 많은 LoRA',
+  Sheet: '시트', 'Turnaround video': '턴어라운드 영상', '@names': '@이름', 'For H3': 'H3용', Images: '이미지', 'Lock audio': '잠금 오디오',
+  // params
+  Strength: '강도', Turbo: '터보', 'Turbo LoRA': '터보 LoRA', 'Turbo strength': '터보 강도', 'Turbo steps': '터보 스텝', 'Start size (MP)': '시작 크기 (MP)', 'Final size (MP)': '최종 크기 (MP)',
+  '7+1 hi-res finish (7 steps small → upscale → 1 step big)': '7+1 하이레즈 마무리 (작게 7스텝 → 업스케일 → 크게 1스텝)',
+  'Attention backend': '어텐션 백엔드', 'Attention forward patch': '어텐션 포워드 패치', 'H3 optimizer': 'H3 옵티마이저', 'Block cache': '블록 캐시', 'Fused modulation': '퓨즈드 모듈레이션',
+  'Shift (video)': '시프트 (영상)', 'Shift (audio)': '시프트 (오디오)', Mode: '모드', 'Strength (remix)': '강도 (리믹스)', 'If the audio is shorter': '오디오가 짧을 때',
+  'Project id': '프로젝트 ID', 'Asset ids': '에셋 ID', 'Choose from library…': '라이브러리에서 선택…', 'nothing chosen yet': '아직 선택 안 함', assets: '개', Project: '프로젝트', project: '프로젝트',
+  'Size by': '크기 기준', Scale: '배율', 'Short edge px': '짧은 변 px', 'Long edge px': '긴 변 px', Width: '가로', Height: '세로', 'Crop anchor': '자르기 기준', Quality: '품질',
+  Model: '모델', 'Colour fix': '색 보정', 'Tile size': '타일 크기', 'Tile overlap': '타일 겹침', '2nd pass with RTX VSR': 'RTX VSR 2차 패스',
+  Evenness: '균일화', Smoothing: '스무딩', Redness: '붉은기', Shine: '번들거림', 'Blemish fix': '잡티 제거', 'Keep moles / scars': '점·흉터 유지', 'Micro-texture': '미세 질감',
+  Amount: '양', Size: '크기', 'Colour grain': '컬러 그레인', 'Shadow bias': '그림자 편향', Noise: '노이즈', 'Target FPS': '목표 FPS', 'Flow scale': '플로우 배율', 'RIFE model': 'RIFE 모델', 'Batch size': '배치 크기',
+  'Target px': '목표 px', 'Ratio W': '비율 W', 'Ratio H': '비율 H', Megapixels: '메가픽셀', Fit: '맞춤', Resampling: '리샘플링',
+  'Face detector': '얼굴 검출기', 'Fallback detector': '보조 검출기', 'Which face': '대상 얼굴', 'Redraw strength': '다시 그리기 강도', 'Detect confidence': '검출 신뢰도', 'Crop factor': '크롭 배율',
+  Canvas: '캔버스', 'Smooth window': '스무딩 창', 'Detect scene cuts': '장면 전환 감지', 'Follow the same person': '같은 사람 추적', 'Identity threshold': '동일인 임계값', 'Identity model': '동일인 모델',
+  'Small face ×': '작은 얼굴 ×', 'Large face ×': '큰 얼굴 ×', 'Small face px': '작은 얼굴 px', 'Large face px': '큰 얼굴 px', 'Paste back': '합성 영역', Feather: '페더', 'Colour match': '색 맞춤', Blend: '블렌드', 'Frames without a face': '얼굴 없는 프레임',
+  'Pick faces': '얼굴 선택', 'Scan video': '영상 스캔', 'Click faces in the order to refine': '리파인할 순서대로 얼굴을 클릭하세요', 'Click a face per shot': '장면마다 얼굴을 클릭하세요', 'not in this shot': '이 장면엔 없음', 'no face found': '얼굴 없음',
+  'Frames for the 8 cells': '8칸에 쓸 프레임', 'Also save each frame': '각 프레임도 저장', 'Cheap first pass + latent upscale': '가벼운 1차 + 래턴트 업스케일', 'First pass size (MP)': '1차 크기 (MP)', 'Second pass steps': '2차 스텝', 'RTX Deblur': 'RTX 디블러',
+  'Scale back down (supersample)': '다시 축소 (슈퍼샘플)', 'Reference size': '레퍼런스 크기', 'Sheet max size px': '시트 최대 px',
+  'High quality 2nd pass (latent upscale)': '고품질 2차 패스 (래턴트 업스케일)', '2nd pass steps': '2차 스텝', 'Fizgig single-frame latent': 'Fizgig 단일 프레임 래턴트',
+  'Change amount': '변경 정도', 'Trim overlap (s)': '겹침 자르기 (초)', 'Beats — one per line:  start-end: prompt  (seconds)': '비트 — 한 줄에 하나:  시작-끝: 프롬프트 (초)', 'Image times (s), in the order connected': '이미지 시간 (초), 연결한 순서대로', 'Pin the last image to the end': '마지막 이미지를 끝에 고정',
+  // asset library
+  'Search': '검색', 'All categories': '모든 카테고리', '— pick assets below —': '— 아래에서 에셋 선택 —', 'Category for new assets': '새 에셋 카테고리', 'Register files…': '파일 등록…', Use: '사용', 'No assets yet — register some files.': '아직 에셋이 없습니다 — 파일을 등록하세요.',
+  'Connect a video first': '먼저 영상을 연결하세요', 'Scanning… (nothing else should be rendering)': '스캔 중… (다른 렌더가 없어야 합니다)', 'none picked': '선택 없음',
+  // context menu
+  'Run this card': '이 카드 실행', 'Run everything': '전체 실행', 'Group selection': '선택 그룹화', 'Save selection as deck': '선택을 덱으로 저장',
+  // decks (names + notes)
+  'Prompt → Image → Prompt → Video': '프롬프트 → 이미지 → 프롬프트 → 영상', 'Make an image, look at it, then animate it.': '이미지를 만들고 확인한 뒤 영상으로 만듭니다.',
+  'Z-Image → Krea 2 (i2i) → H3 7+1 + LoRA': 'Z-Image → Krea 2 (i2i) → H3 7+1 + LoRA', 'Reference images → Video → Upscale → Interpolate': '레퍼런스 이미지 → 영상 → 업스케일 → 보간',
+  'Upscale / Deblur → Stitch': '업스케일 / 디블러 → 스티치', 'Load Video → Prompt → Video Edit': '영상 불러오기 → 프롬프트 → 영상 수정', 'Load Video → Face Refine → View → Upscale → View': '영상 → 얼굴 리파인 → 확인 → 업스케일 → 확인',
+  'Asset Library → H3 reference video (@names)': '에셋 라이브러리 → H3 레퍼런스 영상 (@이름)', 'Prompt → Music → Listen': '프롬프트 → 음악 → 듣기',
+};

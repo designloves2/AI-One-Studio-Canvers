@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { KO_CARDS } from './i18n.cards';
 
 export type Lang = 'ko' | 'en';
 
@@ -55,6 +56,7 @@ const KO: Record<string, string> = {
   // messages
   'Nothing here yet.': '아직 아무것도 없습니다.', 'Connect an input first.': '먼저 입력을 연결하세요.',
 };
+for (const [k, v] of Object.entries(KO_CARDS)) if (!(k in KO)) KO[k] = v;
 
 interface LangState { lang: Lang; setLang: (l: Lang) => void }
 
