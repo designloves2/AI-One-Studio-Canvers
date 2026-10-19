@@ -32,3 +32,10 @@ export async function registerAsset(file: File, category: string, name?: string)
   return j.asset as LibAsset;
 }
 export const deleteAsset = (id: number) => postJson(`${BASE}/assets/${id}/delete`, { force: false });
+
+let namesCache: Promise<string[]> | null = null;
+/** library names that can be written as @name (cached; empty when the library is not installed) */
+export function mentionNames(): Promise<string[]> {
+  return (namesCache ??= listAssets().then((a) => [...new Set(a.filter((x) => x.kind !== 'audio').map((x) => x.name).filter((n) => /^[A-Za-z0-9_\u3131-\uD79D]+$/.test(n)))]).catch(() => { setTimeout(() => { namesCache = null; }, 60000); return [] as string[]; }));
+}
+export const resetMentionNames = () => { namesCache = null; };

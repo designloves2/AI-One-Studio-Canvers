@@ -8,12 +8,42 @@ interface Props { def: ParamDef; value: Primitive; onChange(v: Primitive): void;
 /** textarea that grows with its content and stops canvas shortcuts while typing */
 export function AutoText({ value, onChange, placeholder, rows = 3 }: { value: string; onChange(v: string): void; placeholder?: string; rows?: number }) {
   const ref = useRef<HTMLTextAreaElement>(null);
+  const [names, setNames] = useState<string[]>([]);
+  const [sug, setSug] = useState<{ list: string[]; at: number; idx: number } | null>(null);
   useEffect(() => {
     const el = ref.current; if (!el) return;
     el.style.height = 'auto'; el.style.height = `${Math.min(360, Math.max(el.scrollHeight, rows * 18))}px`;
   }, [value, rows]);
-  return <textarea ref={ref} className="nodrag nowheel" rows={rows} value={value} placeholder={placeholder} spellCheck={false}
-    onChange={(e) => onChange(e.target.value)} onKeyDown={(e) => e.stopPropagation()} />;
+  useEffect(() => { let live = true; void import('../backend/assetlib').then((m) => m.mentionNames()).then((n) => { if (live) setNames(n); }); return () => { live = false; }; }, []);
+  // typing @ opens the Asset Library names
+  const look = (text: string, caret: number) => {
+    const m = /(^|\s)@([\w\u3131-\uD79D]*)$/.exec(text.slice(0, caret));
+    if (!m || !names.length) { setSug(null); return; }
+    const q = m[2].toLowerCase(); const list = names.filter((n) => n.toLowerCase().startsWith(q) && n.toLowerCase() !== q).slice(0, 8);
+    setSug(list.length ? { list, at: caret - m[2].length - 1, idx: 0 } : null);
+  };
+  const pick = (name: string) => {
+    const el = ref.current; if (!el || !sug) return;
+    const caret = el.selectionStart; const next = `${value.slice(0, sug.at)}@${name} ${value.slice(caret)}`;
+    onChange(next); setSug(null);
+    requestAnimationFrame(() => { const pos = sug.at + name.length + 2; el.setSelectionRange(pos, pos); el.focus(); });
+  };
+  return (
+    <div className="mention-wrap">
+      <textarea ref={ref} className="nodrag nowheel" rows={rows} value={value} placeholder={placeholder} spellCheck={false}
+        onChange={(e) => { onChange(e.target.value); look(e.target.value, e.target.selectionStart); }}
+        onBlur={() => setTimeout(() => setSug(null), 150)}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (!sug) return;
+          if (e.key === 'ArrowDown') { e.preventDefault(); setSug({ ...sug, idx: (sug.idx + 1) % sug.list.length }); }
+          else if (e.key === 'ArrowUp') { e.preventDefault(); setSug({ ...sug, idx: (sug.idx + sug.list.length - 1) % sug.list.length }); }
+          else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pick(sug.list[sug.idx]); }
+          else if (e.key === 'Escape') setSug(null);
+        }} />
+      {sug && <div className="mention-pop nodrag">{sug.list.map((n, i) => <button key={n} className={i === sug.idx ? 'on' : ''} onMouseDown={(e) => { e.preventDefault(); pick(n); }}>@{n}</button>)}</div>}
+    </div>
+  );
 }
 
 function SelectControl({ def, value, onChange }: Props) {

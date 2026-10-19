@@ -21,6 +21,7 @@ export const KO_CARDS: Record<string, string> = {
   'Scene Detect': '장면 감지', 'Beat Detect': '비트 감지', 'Sensitivity (lower = more cuts)': '민감도 (낮을수록 더 많이 자름)', 'Audio / video': '오디오 / 영상',
   Disconnect: '연결 끊기', 'Card colour': '카드 색상',
   'Describe your video…': '만들고 싶은 영상을 설명하세요…', 'Turbo (faster)': '터보 (빠르게)', '7+1 hi-res finish': '7+1 하이레즈 마무리',
+  'Source frame rate (fps)': '원본 프레임레이트 (fps)',
   // ports
   'LoRA cards': 'LoRA 카드', 'H3 option cards': 'H3 옵션 카드', 'Option cards': '옵션 카드', Video: '영상', Videos: '영상들', 'Videos (in order)': '영상 (연결 순서)',
   'Face references': '얼굴 레퍼런스', 'Character reference': '캐릭터 레퍼런스', 'Prompt (optional)': '프롬프트 (선택)', 'Overall prompt': '전체 프롬프트', 'Images (in time order)': '이미지 (시간순)',

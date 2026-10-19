@@ -87,7 +87,7 @@ void main(){
 }
 `;
 
-export interface PostJob { file: string; step: PostStep; folder: string; stem: string; skip?: number; cap?: number }
+export interface PostJob { fps?: number; file: string; step: PostStep; folder: string; stem: string; skip?: number; cap?: number }
 export interface PostGraph { graph: Record<string, any>; save: string; label: string }
 
 /** Add the save-video node (NVENC through VHS when present, core CreateVideo+SaveVideo otherwise). */
@@ -110,7 +110,7 @@ export async function buildPostGraph(job: PostJob): Promise<PostGraph> {
   const g: Record<string, any> = {};
   await addVideoLoad(g, job.file, 'P:load', job.skip ?? 0, job.cap ?? 0);
   let images: L = ['P:load', 0];
-  let fps = FPS;
+  let fps = job.fps && job.fps > 0 ? job.fps : FPS;
   const s = job.step;
   let label: string = s.kind;
 

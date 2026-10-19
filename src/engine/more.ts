@@ -88,7 +88,7 @@ function post(stepOf: (c: Ctx, size: { w: number; h: number }) => PostStep): Run
     const file = await ensureInput(v);
     const size = await videoSize(v.url);
     const step = stepOf(c, size);
-    const g = await buildPostGraph({ file, step, folder: useSettings.getState().saveSubfolder, stem: 'canvers' });
+    const g = await buildPostGraph({ fps: num(c.p.fps, 24), file, step, folder: useSettings.getState().saveSubfolder, stem: 'canvers' });
     const res = await runPrompt(g.graph, { onProgress: c.progress, signal: c.signal });
     return [assetFromFile(outFile(res.raw, g.save), 'video', 'video')];
   };
