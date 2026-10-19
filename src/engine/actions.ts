@@ -1,7 +1,7 @@
 import type { Asset, GraphEdge, GraphNode, Project } from '../types';
 import { useGraph, type ComposerRun } from '../store/graph';
 import { executeGraph, importFile } from './run';
-import { byId, engineFor } from '../registry';
+import { byId, defaultParams, engineFor } from '../registry';
 import { interrupt, uid } from '../backend/comfy';
 
 const controllers = new Map<string, AbortController>();
@@ -84,6 +84,8 @@ export async function addImports(files: File[], at: { x: number; y: number }) {
 // ------------------------------------------------------------------ Simple mode
 export interface ComposerInput {
   defId: string; engineId: string; prompt: string; params: Record<string, string | number | boolean>; refs: Asset[];
+  /** option cards (e.g. H3 Turbo) wired into the throw-away graph */
+  cards?: { def: string; params: Record<string, string | number | boolean> }[];
 }
 
 /** Simple mode runs a throw-away graph (prompt → generator) without touching the canvas. */
@@ -105,6 +107,11 @@ export async function runComposer(input: ComposerInput): Promise<void> {
     if (!imgPort) return;
     nodes.push({ id: `ref${i}`, defId: 'import', x: 0, y: 0, params: {}, results: [a], activeResult: 0 });
     edges.push({ id: `er${i}`, source: `ref${i}`, sourceHandle: 'image', target: 'target', targetHandle: imgPort });
+  });
+  (input.cards ?? []).forEach((cd, i) => {
+    const cdef = byId.get(cd.def); const port = def.inputs.find((p) => p.type === 'pipe')?.id; if (!cdef || !port) return;
+    nodes.push({ id: `card${i}`, defId: cd.def, x: 0, y: 0, params: { ...defaultParams(cdef), ...cd.params }, results: [], activeResult: 0 });
+    edges.push({ id: `ec${i}`, source: `card${i}`, sourceHandle: cdef.outputs[0].id, target: 'target', targetHandle: port });
   });
   try {
     await executeGraph({ nodes, edges }, 'target', {

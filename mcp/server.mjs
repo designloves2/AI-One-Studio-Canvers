@@ -6470,7 +6470,7 @@ var send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 async function handle(msg) {
   const { id, method, params } = msg;
   try {
-    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.2.0" } } });
+    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.3.0" } } });
     if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS.map(({ run: _r, ...t }) => t) } });
     if (method === "tools/call") {
       const tool = TOOLS.find((t) => t.name === params?.name);

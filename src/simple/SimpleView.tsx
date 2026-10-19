@@ -8,8 +8,9 @@ import { importFile } from '../engine/run';
 import type { Asset, Primitive } from '../types';
 import { runLlm } from '../backend/llm';
 import { useT } from '../i18n';
+import { useOptions } from '../backend/options';
 
-const MODELS = ['image-generate', 'image-edit', 'outpaint', 'inpaint'].filter((id) => id !== 'inpaint');
+const MODELS = ['image-generate', 'image-edit', 'outpaint', 'video-generate'];
 
 /** Simple mode: a Higgsfield-style composer on top of a feed. Runs a throw-away graph behind the scenes. */
 export function SimpleView() {
@@ -37,7 +38,14 @@ export function SimpleView() {
       setPrompt(await runLlm({ system: 'Rewrite the idea as a rich, detailed image-generation prompt in English. Output only the prompt.', prompt }));
     } catch (e) { setNote((e as Error).message); } finally { setBusy(false); }
   };
-  const go = () => { void runComposer({ defId, engineId, prompt, params, refs }); };
+  // H3 speed-up (Turbo LoRA + optional 7+1 hi-res finish) rides along as an option card
+  const [turbo, setTurbo] = useState({ on: false, lora: 'none', hires: true });
+  const loras = useOptions('loras:h3', ['none']);
+  const isH3 = defId === 'video-generate' && engineId !== 'ltx25';
+  const go = () => {
+    const cards = isH3 && turbo.on ? [{ def: 'h3-turbo', params: { turbo: 'pdd', turbo_lora: turbo.lora, hires: turbo.hires } }] : [];
+    void runComposer({ defId, engineId, prompt, params, refs, cards });
+  };
 
   return (
     <div className="simple">
@@ -67,7 +75,7 @@ export function SimpleView() {
 
       <div className="composer">
         {refs.length > 0 && <div className="refs">{refs.map((a, i) => <figure key={a.id}><img src={a.url} alt="" /><button onClick={() => setRefs(refs.filter((_, j) => j !== i))}>✕</button></figure>)}</div>}
-        <textarea value={prompt} placeholder={T('Describe your image…')} onChange={(e) => setPrompt(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) go(); }} rows={2} />
+        <textarea value={prompt} placeholder={defId === 'video-generate' ? T('Describe your video…') : T('Describe your image…')} onChange={(e) => setPrompt(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) go(); }} rows={2} />
         <div className="composer-bar">
           <select value={defId} onChange={(e) => pickNode(e.target.value)}>{MODELS.map((id) => <option key={id} value={id}>{T(byId.get(id)!.title)}</option>)}</select>
           {def.engines && <select value={engineId} onChange={(e) => pickEngine(e.target.value)}>{def.engines.map((e) => <option key={e.id} value={e.id}>{e.label}</option>)}</select>}
@@ -79,6 +87,13 @@ export function SimpleView() {
           {note && <span className="error-inline">{note}</span>}
           <button className="btn primary big" disabled={!prompt.trim() && !needsImage} onClick={go}>{T('Generate')}</button>
         </div>
+        {open && isH3 && (
+          <div className="composer-opts turbo-opts">
+            <label className="field"><span className="field-label">{T('Turbo (faster)')}</span><input type="checkbox" checked={turbo.on} onChange={(e) => setTurbo({ ...turbo, on: e.target.checked })} /></label>
+            {turbo.on && <label className="field"><span className="field-label">{T('Turbo LoRA')}</span><select className="nodrag" value={turbo.lora} onChange={(e) => setTurbo({ ...turbo, lora: e.target.value })}>{loras.map((o) => <option key={o}>{o}</option>)}</select></label>}
+            {turbo.on && <label className="field"><span className="field-label">{T('7+1 hi-res finish')}</span><input type="checkbox" checked={turbo.hires} onChange={(e) => setTurbo({ ...turbo, hires: e.target.checked })} /></label>}
+          </div>
+        )}
         {open && <div className="composer-opts">{shown.map((p) => <Field key={p.id} def={p} value={params[p.id] ?? p.default} onChange={(v) => setParams({ ...params, [p.id]: v })} />)}</div>}
       </div>
     </div>
