@@ -158,7 +158,7 @@ function imageRunner(mode: (c: Ctx) => ImageMode): Runner {
     const maskA = c.inputs('mask')[0];
     const maskFile = maskA ? await ensureInput(maskA) : undefined;
 
-    const { w, h } = typeof p.aspect === 'string' && (m === 't2i' || m === 'krea2control') ? sizeFrom(String(p.aspect), num(p.megapixels, 1)) : { w: 0, h: 0 };
+    const { w, h } = typeof p.aspect === 'string' && (m === 't2i' || m === 'krea2control' || m === 'identity' || m === 'animactrl') ? sizeFrom(String(p.aspect), num(p.megapixels, 1)) : { w: 0, h: 0 };
     const lora = (n: string, s: string) => ({ name: str(p[n], 'none'), strength: num(p[s], 1) });
 
     const job: ImageJob = {
@@ -175,6 +175,8 @@ function imageRunner(mode: (c: Ctx) => ImageMode): Runner {
       bgModel: str(p.bg_model),
       control: { preprocessor: str(p.cn_pre, 'DepthAnythingPreprocessor'), resolution: num(p.cn_res, 1024), strength: num(p.cn_strength, 1), patch: str(p.cn_patch, 'none') },
       kcontrol: { type: str(p.kc_type, 'depth') as 'depth', lora: str(p.kc_lora, 'none'), strength: num(p.kc_strength, 1), resolution: num(p.kc_res, 512), depthCkpt: '', cannyLow: num(p.canny_low, 100), cannyHigh: num(p.canny_high, 200) },
+      identity: { lora: str(p.id_lora, 'none'), strength: num(p.id_strength, 1), fit: str(p.id_fit, 'fit'), refBoost: num(p.id_boost, 1), groundingPx: num(p.id_ground, 768), width: w || 1024, height: h || 1024 },
+      anima: { type: str(p.an_type, 'anycontrol') as 'anycontrol', patch: str(p.an_patch, 'none'), strength: num(p.an_strength, 1), start: num(p.an_start, 0), end: num(p.an_end, 1), depthCkpt: '', resolution: num(p.an_res, 512) },
       face: { detector: str(p.fr_detector, 'none'), threshold: num(p.fr_threshold, 0.5), dilation: num(p.fr_dilation, 4), context: num(p.fr_context, 1.8), size: num(p.fr_size, 1024) },
     };
     if ((m === 't2i' || m === 'edit' || m === 'i2i' || m === 'inpaint' || m === 'outpaint') && !job.prompt && m !== 'outpaint') throw new Error('Prompt is empty');
@@ -334,6 +336,8 @@ const RUNNERS: Record<string, Runner> = {
   },
   controlnet: imageRunner(() => 'controlnet'),
   'krea2-control': imageRunner(() => 'krea2control'),
+  'krea2-identity': imageRunner(() => 'identity'),
+  'anima-control': imageRunner(() => 'animactrl'),
   'face-redraw': imageRunner(() => 'facedraw'),
   'image-edit': imageRunner((c) => (c.engineId === 'klein-edit' || c.engineId === 'qwen-edit' || c.engineId === 'qwen21-edit' || !c.engineId ? 'edit' : 'i2i')),
   inpaint: imageRunner(() => 'inpaint'),

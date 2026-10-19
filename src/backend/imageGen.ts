@@ -2,7 +2,7 @@
 // Klein graphs start from the templates STUDIO_ONE serves; Z-Image graphs are assembled from core nodes.
 import { getWorkflow, pickModels, type Family } from './studio';
 
-export type ImageMode = 't2i' | 'i2i' | 'edit' | 'inpaint' | 'outpaint' | 'faceswap' | 'removebg' | 'controlnet' | 'facedraw' | 'krea2control';
+export type ImageMode = 't2i' | 'i2i' | 'edit' | 'inpaint' | 'outpaint' | 'faceswap' | 'removebg' | 'controlnet' | 'facedraw' | 'krea2control' | 'identity' | 'animactrl';
 
 export interface Lora { name: string; strength: number }
 
@@ -34,6 +34,10 @@ export interface ImageJob {
   /** face redraw: detector + crop settings */
   /** Krea 2 control (depth = Control LoRA, canny = NK2E in-context edit) */
   kcontrol?: { type: 'depth' | 'canny'; lora: string; strength: number; resolution: number; depthCkpt: string; cannyLow: number; cannyHigh: number };
+  /** Krea 2 identity edit (Krea2EditModelPatch + identity LoRA) */
+  identity?: { lora: string; strength: number; fit: string; refBoost: number; groundingPx: number; width: number; height: number };
+  /** Anima LLLite control: any | depth | inpaint */
+  anima?: { type: 'anycontrol' | 'depthcontrol' | 'inpaint'; patch: string; strength: number; start: number; end: number; depthCkpt: string; resolution: number };
   face?: { detector: string; threshold: number; dilation: number; context: number; size: number };
 }
 
@@ -289,7 +293,7 @@ function buildZImage(job: ImageJob, m: { model: string; textEncoder: string; vae
 // ------------------------------------------------------------------------- Krea 2
 function buildKrea2(job: ImageJob, m: { model: string; textEncoder: string; vae: string }, anima = false): Built {
   const label = anima ? 'Anima' : 'Krea 2';
-  if (job.mode !== 't2i' && job.mode !== 'i2i' && job.mode !== 'edit' && !(job.mode === 'krea2control' && !anima)) throw new Error(`${label} has no "${job.mode}" mode`);
+  if (job.mode !== 't2i' && job.mode !== 'i2i' && job.mode !== 'edit' && !(job.mode === 'krea2control' && !anima) && !(job.mode === 'identity' && !anima) && !(job.mode === 'animactrl' && anima)) throw new Error(`${label} has no "${job.mode}" mode`);
   const g: G = {};
   g['K:unet'] = isGguf(m.model) && !anima ? { class_type: 'TJ_NODE_Krea2UnetLoaderGGUF', inputs: { unet_name: m.model } } : unet(m.model);
   g['K:clip'] = isGguf(m.textEncoder) && !anima ? { class_type: 'TJ_NODE_Krea2ClipLoaderGGUF', inputs: { clip_name: m.textEncoder } } : clip(m.textEncoder, anima ? 'stable_diffusion' : 'krea2');
@@ -299,9 +303,51 @@ function buildKrea2(job: ImageJob, m: { model: string; textEncoder: string; vae:
   g['K:neg'] = job.negative.trim()
     ? { class_type: 'CLIPTextEncode', inputs: { clip: ['K:clip', 0], text: job.negative } }
     : { class_type: 'ConditioningZeroOut', inputs: { conditioning: ['K:pos', 0] } };
+  if (job.mode === 'identity') {
+    const c = job.identity!; if (!c.lora || c.lora === 'none') throw new Error('Pick the Krea 2 identity-edit LoRA on the card');
+    if (!job.images[0]) throw new Error('Source image is required');
+    if (!job.prompt.trim()) throw new Error('Write an edit instruction (for example: recolor the car to matte black)');
+    // identity LoRA first, then the user LoRAs on top
+    const gi: G = { 'K:unet': g['K:unet'], 'K:clip': g['K:clip'], 'K:vae': g['K:vae'] };
+    gi['ID:lora'] = { class_type: 'LoraLoaderModelOnly', inputs: { model: ['K:unet', 0], lora_name: c.lora, strength_model: c.strength } };
+    const m2 = loraChain(gi, ['ID:lora', 0], job.loras, 'ID:');
+    gi['ID:load'] = { class_type: 'LoadImage', inputs: { image: job.images[0] } };
+    gi['ID:enc'] = { class_type: 'VAEEncode', inputs: { pixels: ['ID:load', 0], vae: ['K:vae', 0] } };
+    const patch: Record<string, any> = { model: m2, source_latent: ['ID:enc', 0], vae: ['K:vae', 0], source_image: ['ID:load', 0], fit_mode: c.fit, ref_boost: c.refBoost };
+    const posEnc: Record<string, any> = { clip: ['K:clip', 0], prompt: job.prompt, image: ['ID:load', 0], grounding_px: c.groundingPx };
+    const negEnc: Record<string, any> = { clip: ['K:clip', 0], prompt: '', image: ['ID:load', 0], grounding_px: c.groundingPx };
+    if (job.images[1]) {
+      gi['ID:loadB'] = { class_type: 'LoadImage', inputs: { image: job.images[1] } };
+      gi['ID:encB'] = { class_type: 'VAEEncode', inputs: { pixels: ['ID:loadB', 0], vae: ['K:vae', 0] } };
+      patch.source_latent_b = ['ID:encB', 0]; patch.source_image_b = ['ID:loadB', 0]; posEnc.image_b = ['ID:loadB', 0]; negEnc.image_b = ['ID:loadB', 0];
+    }
+    gi['ID:patch'] = { class_type: 'Krea2EditModelPatch', inputs: patch };
+    gi['ID:pos'] = { class_type: 'Krea2EditGroundedEncode', inputs: posEnc };
+    gi['ID:neg'] = { class_type: 'Krea2EditGroundedEncode', inputs: negEnc };
+    gi['ID:latent'] = { class_type: 'EmptySD3LatentImage', inputs: { width: c.width || 1024, height: c.height || 1024, batch_size: 1 } };
+    gi['ID:sampler'] = { class_type: 'KSampler', inputs: { model: ['ID:patch', 0], positive: ['ID:pos', 0], negative: ['ID:neg', 0], latent_image: ['ID:latent', 0], seed: job.seed, steps: job.steps, cfg: job.cfg, sampler_name: job.sampler, scheduler: job.scheduler, denoise: 1 } };
+    gi['ID:decode'] = { class_type: 'VAEDecode', inputs: { samples: ['ID:sampler', 0], vae: ['K:vae', 0] } };
+    gi['ID:save'] = saveNode(job, ['ID:decode', 0], 'K2ID');
+    return { graph: gi, hint: 'Krea 2 Identity Edit' };
+  }
   let latent: [string, number];
   let denoise = 1;
   let modelOut: [string, number] = model;
+  if (job.mode === 'animactrl') {
+    const a = job.anima!; if (!job.images[0]) throw new Error('Source image is required');
+    if (a.type === 'inpaint' && !job.mask) throw new Error('A mask is required for Anima inpainting');
+    g['K:src'] = { class_type: 'LoadImage', inputs: { image: job.images[0] } };
+    if (job.mask) { g['K:msrc'] = { class_type: 'LoadImage', inputs: { image: job.mask } }; g['K:mask'] = { class_type: 'ImageToMask', inputs: { image: ['K:msrc', 0], channel: 'red' } }; }
+    else g['K:mask'] = { class_type: 'SolidMask', inputs: { value: 1.0, width: job.width || 1024, height: job.height || 1024 } };
+    let ctrl: [string, number] = ['K:src', 0];
+    if (a.type === 'depthcontrol') { g['K:depth'] = { class_type: 'DepthAnythingV2Preprocessor', inputs: { image: ctrl, ckpt_name: a.depthCkpt || 'depth_anything_v2_vitl.pth', resolution: a.resolution } }; ctrl = ['K:depth', 0]; }
+    if (!a.patch || a.patch === 'none') throw new Error('Pick the Anima LLLite model (ModelPatchLoader) on the card');
+    g['K:patch'] = { class_type: 'ModelPatchLoader', inputs: { name: a.patch } };
+    g['K:lllite'] = { class_type: 'AnimaLLLiteApply', inputs: { model, model_patch: ['K:patch', 0], image: ctrl, mask: ['K:mask', 0], strength: a.strength, start_percent: a.start, end_percent: a.end } };
+    modelOut = ['K:lllite', 0];
+    g['K:latent'] = { class_type: 'EmptyLatentImage', inputs: { width: job.width || 1024, height: job.height || 1024, batch_size: 1 } };
+    latent = ['K:latent', 0];
+  } else
   if (job.mode === 'krea2control') {
     const c = job.kcontrol!; if (!c.lora || c.lora === 'none') throw new Error('Pick the control LoRA on the card (depth or canny)');
     if (!job.images[0]) throw new Error('Control image is required');
