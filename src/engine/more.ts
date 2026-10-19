@@ -5,6 +5,7 @@ import type { Ctx } from './run';
 import { assetFromFile, ensureInput, runPrompt } from '../backend/comfy';
 import { DEFAULT_OPT, copyToInput, type H3Options } from '../backend/h3';
 import { buildPostGraph, type PostStep, type RtxSize } from '../backend/post';
+import { buildH3ImageGraph } from '../backend/h3Image';
 import { buildRefineGraph } from '../backend/ltxRefine';
 import { stitchClips } from '../backend/h3';
 import { addVideoLoad, addVideoSave } from '../backend/post';
@@ -124,6 +125,19 @@ export const EXTRA_RUNNERS: Record<string, Runner> = {
   'pp-grain': post((c) => ({ kind: 'grain', amount: num(c.p.amount, 0.25), size: num(c.p.size, 1), color: num(c.p.color), lumBias: num(c.p.lum_bias), noise: str(c.p.noise, 'smooth') as 'smooth' })),
   'pp-interpolate': post((c) => ({ kind: 'interpolate', targetFps: num(c.p.target_fps, 48), scale: num(c.p.scale, 1), modelName: str(c.p.model_name, 'flownet.pkl'), batchSize: num(c.p.batch, 8), fp16: c.p.fp16 !== false })),
   'pp-resize': post((c) => ({ kind: 'resize', mode: str(c.p.mode, 'Long side'), method: str(c.p.method, 'lanczos'), targetPx: num(c.p.target_px, 1920), ratioW: num(c.p.ratio_w, 16), ratioH: num(c.p.ratio_h, 9), megapixels: num(c.p.megapixels, 1), width: num(c.p.width, 1280), height: num(c.p.height, 720), crop: str(c.p.crop, 'crop') })),
+
+  // ---------------- H3 still image
+  'h3-image': async (c) => {
+    const p = c.p; const s = useSettings.getState();
+    const refs: string[] = []; for (const a of c.inputs('image').slice(0, 9)) refs.push(await ensureInput(a));
+    const g = await buildH3ImageGraph({
+      refs, prompt: c.text('prompt'), aspect: str(p.aspect, '1:1'), previewMp: num(p.preview_mp, 0.5), finalMp: num(p.final_mp, 1.5), final: p.final !== false,
+      steps: num(p.steps, 20), secondPassSteps: num(p.pass2, 3), fizgig: !!p.fizgig, refImageSize: str(p.ref_size, 'max'),
+      opt: optFromCards(h3Cards(c)), loras: cardLoras(c), seed: withLegacySeed(c), models: s.video, saveSubfolder: s.saveSubfolder, stem: 'MMH3',
+    });
+    const res = await runPrompt(g.graph, { onProgress: c.progress, signal: c.signal });
+    return [assetFromFile(outFile(res.raw, g.save), 'image', 'image')];
+  },
 
   // ---------------- Video edit (LTX 2.5 refine) and stitch
   'video-refine': async (c) => {

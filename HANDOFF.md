@@ -23,7 +23,7 @@
 
 ## 남은 작업 (우선순위)
 1. e2e2~e2e13 회귀 재실행/수정.
-2. H3 Image Generator 카드(T2I/Ref2I, 2-pass, Fizgig) — 원본 graph_builder_minimax.js buildImageGenGraph 참고.
+2. (완료) H3 Image Generator 카드 `h3-image` — src/backend/h3Image.ts, mock 통과. 실기 미검증.
 3. LTX Director 카드(타임라인).
 4. Music/이미지 모드 카드 세분화 점검.
 5. Asset Library `@` 자동완성, 등록/프로젝트 편집.

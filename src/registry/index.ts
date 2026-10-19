@@ -284,7 +284,14 @@ export const REGISTRY: NodeDef[] = [
           sel('paste', 'Paste back', ['face_only', 'face_ellipse', 'full_crop'], 'face_only', { advanced: true }), slider('feather', 'Feather', 0, 64, 1, 6, { advanced: true }), slider('colour', 'Colour match', 0, 1, 0.05, 1, { advanced: true }), slider('blend', 'Blend', 0, 1, 0.05, 1, { advanced: true }),
           sel('undetected', 'Frames without a face', ['fade_out', 'skip', 'composite_anyway'], 'fade_out', { advanced: true }), seed,
         ], description: 'Redraw small faces in a finished H3 clip: track → crop → H3 redraw → stitch back. Needs ComfyUI-H3-FaceRefine.' },
-      { id: 'character-sheet', title: 'Character Sheet', category: 'Image', kind: 'generate',
+      { id: 'h3-image', title: 'Image Generate (H3)', category: 'Image', kind: 'generate',
+    inputs: [P.textIn(), P.imgIn('image', 'Reference images (optional)', true, true), P.cardIn('H3 option cards'), P.loraIn(), P.seedIn()], outputs: [P.imgOut()],
+    params: [
+      sel('aspect', 'Aspect ratio', ASPECTS, '1:1'), slider('final_mp', 'Final size (MP)', 0.25, 4, 0.25, 1.5), toggle('final', 'High quality 2nd pass (latent upscale)', true),
+      slider('preview_mp', 'First pass size (MP)', 0.1, 1.5, 0.05, 0.5, { advanced: true }), slider('steps', 'Steps (no turbo)', 1, 60, 1, 20, { advanced: true }), slider('pass2', '2nd pass steps', 3, 5, 1, 3, { advanced: true, when: (p) => !!p.final }),
+      toggle('fizgig', 'Fizgig single-frame latent', false, { advanced: true }), sel('ref_size', 'Reference size', ['max', 'match'], 'max', { advanced: true }), seed,
+    ], description: 'A still image from the MiniMax H3 model — text to image, or add reference images (up to 9).' },
+  { id: 'character-sheet', title: 'Character Sheet', category: 'Image', kind: 'generate',
         inputs: [P.imgIn('image', 'Character reference', false, true), P.textIn('prompt', 'Prompt (optional)', true), P.loraIn(), P.seedIn()],
         outputs: [P.imgOut('image', 'Sheet'), { id: 'video', label: 'Turnaround video', type: 'video' }],
         params: [
