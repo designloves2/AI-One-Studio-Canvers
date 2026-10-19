@@ -8,6 +8,7 @@ import { buildPostGraph, type PostStep, type RtxSize } from '../backend/post';
 import { buildH3ImageGraph } from '../backend/h3Image';
 import { buildLtxGraph, ltxSize } from '../backend/ltx';
 import { loadBitmap } from '../editing/ops';
+import { beatDetect, itdaUpload, sceneDetect } from '../backend/itda';
 import { buildRefineGraph } from '../backend/ltxRefine';
 import { stitchClips } from '../backend/h3';
 import { addVideoLoad, addVideoSave } from '../backend/post';
@@ -204,6 +205,22 @@ export const EXTRA_RUNNERS: Record<string, Runner> = {
     const st = await stitchClips([clip], `${s.saveSubfolder}/withaudio`, undefined, { filename: audioFile, type: 'input', start: num(c.p.start, 0) });
     if (!st.ok || !st.filename) throw new Error(`could not add the audio: ${st.error ?? 'unknown'}`);
     return [assetFromFile({ filename: st.filename, subfolder: st.subfolder ?? '', type: 'output' }, 'video', 'video')];
+  },
+
+  // ---------------- ITDA analysis
+  'scene-detect': async (c) => {
+    const v = need(c.inputs('video')[0], 'Video'); c.progress(10, 'uploading…');
+    const r = await sceneDetect(await itdaUpload(v), num(c.p.threshold, 0.3));
+    if (!r.ok) throw new Error(r.error ?? 'scene detection failed');
+    const secs = (r.frames ?? []).map((f) => +(f / 24).toFixed(2));
+    return [textAsset(secs.length ? `cuts at (s): ${secs.join(', ')}\nframes: ${(r.frames ?? []).join(', ')}` : 'no cuts found')];
+  },
+  'beat-detect': async (c) => {
+    const a = c.inputs('media')[0]; if (!a) throw new Error('Media is not connected'); c.progress(10, 'uploading…');
+    const r = await beatDetect(await itdaUpload(a));
+    if (!r.ok) throw new Error(r.error ?? 'beat detection failed');
+    const secs = (r.frames ?? []).map((f) => +(f / 24).toFixed(2));
+    return [textAsset(`BPM ${r.bpm ?? '?'}\nbeats at (s): ${secs.join(', ')}`)];
   },
 
   // ---------------- Face Refine

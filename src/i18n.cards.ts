@@ -18,6 +18,7 @@ export const KO_CARDS: Record<string, string> = {
   'Identity Edit (Krea 2)': '아이덴티티 편집 (Krea 2)', 'Control / Inpaint (Anima)': '컨트롤 / 인페인트 (Anima)', 'Edit instruction': '편집 지시문', 'Image (+ optional 2nd)': '이미지 (+ 선택 2번째)', 'Mask (inpaint)': '마스크 (인페인트)', 'Identity-edit LoRA': '아이덴티티 편집 LoRA', 'LoRA strength': 'LoRA 강도', 'Reference boost': '레퍼런스 강조', 'Grounding px': '그라운딩 px', 'LLLite model': 'LLLite 모델', Start: '시작', End: '끝', 'Depth preprocess resolution': '뎁스 전처리 해상도',
   'DiT model': 'DiT 모델', 'VAE model': 'VAE 모델', 'Target resolution (short edge)': '목표 해상도 (짧은 변)', 'Max resolution': '최대 해상도', 'Colour correction': '색 보정', 'Offload device': '오프로드 장치', 'Blocks to swap': '스왑 블록 수',
   'Add Audio to Video': '영상에 오디오 넣기', 'Start the audio at (s)': '오디오 시작 위치 (초)',
+  'Scene Detect': '장면 감지', 'Beat Detect': '비트 감지', 'Sensitivity (lower = more cuts)': '민감도 (낮을수록 더 많이 자름)', 'Audio / video': '오디오 / 영상',
   // ports
   'LoRA cards': 'LoRA 카드', 'H3 option cards': 'H3 옵션 카드', 'Option cards': '옵션 카드', Video: '영상', Videos: '영상들', 'Videos (in order)': '영상 (연결 순서)',
   'Face references': '얼굴 레퍼런스', 'Character reference': '캐릭터 레퍼런스', 'Prompt (optional)': '프롬프트 (선택)', 'Overall prompt': '전체 프롬프트', 'Images (in time order)': '이미지 (시간순)',

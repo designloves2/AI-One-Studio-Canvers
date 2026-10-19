@@ -154,6 +154,9 @@ const server = http.createServer(async (req, res) => {
   if (p === '/minimax_h3_one/pick_chain_frame') { const b = await readJson(req); const im = (b.images ?? []).slice(-1)[0]; return send(res, 200, im ? { ok: true, picked: im } : { ok: false, error: 'none' }); }
   if (p === '/minimax_h3_one/copy_to_input') { const b = await readJson(req); const src = files.get(`${b.type}/${b.subfolder}/${b.filename}`); const nm = `mmh3_${b.filename}`; if (src) files.set(`input//${nm}`, src); return send(res, 200, { ok: !!src, filename: nm }); }
   if (p === '/minimax_h3_one/stitch') { const b = await readJson(req); stitchLog.push(b); const nm = 'MMH3_full_00001_.mp4'; files.set(`output/ai-one-canvers/${nm}`, png(64, 64, 3)); return send(res, 200, { ok: true, filename: nm, subfolder: 'ai-one-canvers' }); }
+  if (p === '/itda_studio_one/api/media/upload' && req.method === 'POST') { await readBody(req); return send(res, 200, { ok: true, items: ['/mock/itda/x.mp4'] }); }
+  if (p === '/itda_studio_one/api/scene_detect' && req.method === 'POST') return send(res, 200, { ok: true, frames: [48, 120], threshold: 0.3 });
+  if (p === '/itda_studio_one/api/beat_detect' && req.method === 'POST') return send(res, 200, { ok: true, frames: [12, 24, 36], bpm: 120 });
   if (p === '/__stitchlog') return send(res, 200, stitchLog);
   if (p === '/tj_shared/llm_settings' && req.method === 'POST') { Object.assign(llmSettings, (await readJson(req)).settings ?? {}); return send(res, 200, { ok: true }); }
   if (p === '/tj_studio_one/llm/config') { const b = await readJson(req); if (b.openrouter_key) orKey = b.openrouter_key; return send(res, 200, { ok: true, openrouter_key_set: !!orKey, openrouter_key_hint: orKey ? '…' + orKey.slice(-4) : '', or_model_text: b.or_model_text, or_model_vision: b.or_model_vision }); }
