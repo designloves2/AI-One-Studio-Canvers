@@ -273,9 +273,10 @@ export const REGISTRY: NodeDef[] = [
   // ---------------------------------------------------------------- post-processing (one card per step, video in → video out)
   ...((): NodeDef[] => {
     const fpsParam = num('fps', 'Source frame rate (fps)', 24, { advanced: true }, 1, 240, 1);
+    const previewParam = num('preview_frames', 'Test on the first N frames (0 = whole video)', 0, { advanced: true }, 0, 600, 1);
     const vin = [{ id: 'video', label: 'Video', type: 'video' as const }], vout = [{ id: 'video', label: 'Video', type: 'video' as const }];
     const pp = (id: string, title: string, params: ParamDef[], description: string, engines?: EngineDef[]): NodeDef =>
-      ({ id, title, category: 'Postprocess', kind: 'generate', inputs: vin, outputs: vout, params: engines ? params : [...params, fpsParam], engines: engines?.map((e) => ({ ...e, params: [...(e.params ?? []), fpsParam] })), description });
+      ({ id, title, category: 'Postprocess', kind: 'generate', inputs: vin, outputs: vout, params: engines ? params : [...params, fpsParam, previewParam], engines: engines?.map((e) => ({ ...e, params: [...(e.params ?? []), fpsParam, previewParam] })), description });
     const rtxP = (pre: string, whenOk: (p: Record<string, any>) => boolean = () => true): ParamDef[] => [
       sel(`${pre}mode`, 'Size by', ['scale', 'short', 'long', 'wh'], 'scale', { when: whenOk }),
       slider(`${pre}scale`, 'Scale', 1, 4, 0.25, 2, { when: (p) => whenOk(p) && p[`${pre}mode`] === 'scale' }),
