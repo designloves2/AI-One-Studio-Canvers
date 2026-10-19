@@ -145,6 +145,10 @@ export const REGISTRY: NodeDef[] = [
     inputs: [P.textIn(), P.imgIn('image', 'Portrait'), P.loraIn(), P.seedIn()], outputs: [P.imgOut()], params: [],
     engines: [{ ...zimage('zimage-fr', 'Z-Image Turbo — face redraw (local)', [dyn('fr_detector', 'Face detector', 'bboxdetectors', 'none'), dyn('cn_patch', 'ControlNet model', 'modelpatches', 'none'), dyn('cn_pre', 'Preprocessor', 'preprocessors', 'DepthAnythingPreprocessor'), slider('cn_strength', 'Control strength', 0, 2, 0.05, 1), slider('denoise', 'Redraw strength', 0.05, 1, 0.05, 0.55), slider('fr_threshold', 'Detect threshold', 0.1, 1, 0.05, 0.5, { advanced: true }), num('fr_dilation', 'Mask dilation', 4, { advanced: true }, 0, 64, 1), slider('fr_context', 'Context around the face', 1, 4, 0.1, 1.8, { advanced: true }), num('fr_size', 'Working size px', 1024, { advanced: true }, 512, 2048, 64), num('cn_res', 'Preprocess resolution', 1024, { advanced: true }, 256, 2048, 64)]), default: true }],
     description: 'Detect the face in an image and redraw only that area (with your face LoRA) using ControlNet depth, then paste it back.' },
+  { id: 'camera-angle', title: 'Camera Angle (Qwen)', category: 'Image', kind: 'generate',
+    inputs: [P.imgIn('image', 'Image'), P.textIn('prompt', 'Extra prompt (optional)', true), P.loraIn(), P.seedIn()], outputs: [P.imgOut()], params: [],
+    engines: [{ ...qwen('qwen-angle', 'Qwen Image Edit 2511 — multi-angle (local)', [slider('angle_h', 'Horizontal angle (°)', 0, 359, 1, 0), slider('angle_v', 'Vertical angle (°)', -30, 60, 1, 0), slider('angle_zoom', 'Distance (close 0 … wide 10)', 0, 10, 0.5, 4), dyn('angle_lora', 'Angle LoRA', 'loras:qwen', 'none'), slider('angle_strength', 'Angle LoRA strength', 0, 2, 0.05, 1)]), default: true }],
+    description: 'View the same subject from another camera angle (needs a multi-angle LoRA).' },
   { id: 'inpaint', title: 'Inpaint', category: 'Image', kind: 'generate',
     inputs: [P.textIn(), P.imgIn(), P.maskIn(), P.loraIn(), P.seedIn()], outputs: [P.imgOut()], params: [],
     engines: [

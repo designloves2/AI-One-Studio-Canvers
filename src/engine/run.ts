@@ -314,6 +314,13 @@ const RUNNERS: Record<string, Runner> = {
 
   // ---- image generation
   'image-generate': imageRunner(() => 't2i'),
+  'camera-angle': (c) => {
+    const h = num(c.p.angle_h), v = num(c.p.angle_v), z = num(c.p.angle_zoom, 4); const ha = ((h % 360) + 360) % 360;
+    const hDir = ha < 22.5 || ha >= 337.5 ? 'front view' : ha < 67.5 ? 'front-right quarter view' : ha < 112.5 ? 'right side view' : ha < 157.5 ? 'back-right quarter view' : ha < 202.5 ? 'back view' : ha < 247.5 ? 'back-left quarter view' : ha < 292.5 ? 'left side view' : 'front-left quarter view';
+    const angle = `<sks> ${hDir} ${v < -15 ? 'high-angle shot' : v < 15 ? 'eye-level shot' : v < 45 ? 'elevated shot' : 'low-angle shot'} ${z < 4 ? 'close-up' : z < 7 ? 'medium shot' : 'wide shot'}`;
+    const extra = c.text('prompt');
+    return imageRunner(() => 'edit')({ ...c, p: { ...c.p, lora2: c.p.angle_lora, lora2_strength: c.p.angle_strength }, text: (hd: string) => (hd === 'prompt' ? [angle, extra].filter(Boolean).join(', ') : c.text(hd)) });
+  },
   controlnet: imageRunner(() => 'controlnet'),
   'face-redraw': imageRunner(() => 'facedraw'),
   'image-edit': imageRunner((c) => (c.engineId === 'klein-edit' || c.engineId === 'qwen-edit' || c.engineId === 'qwen21-edit' || !c.engineId ? 'edit' : 'i2i')),
