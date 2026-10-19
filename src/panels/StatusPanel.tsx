@@ -4,10 +4,55 @@ import { objectInfo, systemStats } from '../backend/comfy';
 import { FAMILIES, getModels, pickModels, type Family } from '../backend/studio';
 import { fetchCatalog } from '../backend/llm';
 import { useT } from '../i18n';
+import { CATALOG } from '../backend/catalog';
 
 interface Check { label: string; ok: boolean | null; detail?: string; hint?: string }
 
 /** Is everything the canvas needs actually present on the ComfyUI side? */
+function Downloads() {
+  const T = useT();
+  const [cap, setCap] = useState<boolean | null>(null);
+  const [installed, setInstalled] = useState<Record<string, string[]>>({});
+  const [jobs, setJobs] = useState<Record<string, { pct: number; done?: boolean; error?: string }>>({});
+  const refresh = async () => {
+    try {
+      const c = await getJson<{ download: boolean }>('/__canvers/capabilities'); setCap(c.download);
+      if (c.download) { setInstalled(await getJson('/__canvers/installed')); setJobs(await getJson('/__canvers/downloads')); }
+    } catch { setCap(false); }
+  };
+  useEffect(() => { void refresh(); const i = setInterval(() => { void refresh(); }, 2500); return () => clearInterval(i); }, []);
+  const has = (folder: string, file: string) => (installed[folder] ?? []).some((x) => x === file || x.endsWith('/' + file) || x.endsWith('\\' + file));
+  const get = async (folder: string, file: string, url: string) => {
+    try { await fetch('/__canvers/download', { method: 'POST', body: JSON.stringify({ folder, file, url }) }); } catch { /* shown via jobs */ }
+    void refresh();
+  };
+  return (
+    <div className="dl-section">
+      <div className="panel-row"><b>{T('Model downloads')}</b></div>
+      {cap === false && <p className="muted">{T('Start the server with COMFY_DIR=<ComfyUI folder> to download here. Links below open in your browser.')}</p>}
+      {CATALOG.map((g) => (
+        <div key={g.id} className="dl-group">
+          <h4>{g.label}</h4>
+          {g.note && <small className="muted">{g.note}</small>}
+          {g.files.map((f) => {
+            const j = jobs[`${f.folder}/${f.file}`]; const ok = has(f.folder, f.file) || j?.done;
+            return (
+              <div key={f.file} className="dl-file">
+                <span className={ok ? 'ok' : ''}>{ok ? '●' : '○'}</span>
+                <div><b title={f.url}>{f.file}</b><small>models/{f.folder}</small>
+                  {j && !j.done && !j.error && <div className="bar"><b style={{ width: `${Math.max(3, j.pct)}%` }} /><em>{j.pct}%</em></div>}
+                  {j?.error && <small className="bad">{j.error}</small>}</div>
+                {!ok && (cap ? <button className="btn" disabled={!!j && !j.done && !j.error} onClick={() => void get(f.folder, f.file, f.url)}>⭳</button> : <a className="btn" href={f.url} target="_blank" rel="noreferrer">↗</a>)}
+              </div>
+            );
+          })}
+        </div>
+      ))}
+      <Downloads />
+    </div>
+  );
+}
+
 export function StatusPanel() {
   const T = useT();
   const [checks, setChecks] = useState<Check[]>([]);

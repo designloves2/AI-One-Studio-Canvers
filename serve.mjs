@@ -5,6 +5,7 @@ import net from 'node:net';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { handleDownloads } from './server-lib/downloads.mjs';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), 'dist');
 const target = new URL(process.env.COMFY_URL ?? 'http://127.0.0.1:8188');
@@ -17,8 +18,9 @@ const isProxied = (p) => PROXIED.some((x) => p === x || p.startsWith(x + '/') ||
 
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.json': 'application/json', '.png': 'image/png', '.ico': 'image/x-icon', '.woff2': 'font/woff2' };
 
-const server = http.createServer((req, res) => {
+const server = http.createServer(async (req, res) => {
   const p = new URL(req.url, 'http://x').pathname;
+  if (await handleDownloads(req, res)) return;
   if (isProxied(p)) {
     const up = http.request({ host: target.hostname, port: target.port || 80, path: req.url, method: req.method, headers: { ...req.headers, host: target.host, ...(req.headers.origin ? { origin: target.origin } : {}) } }, (r) => {
       res.writeHead(r.statusCode ?? 502, r.headers); r.pipe(res);

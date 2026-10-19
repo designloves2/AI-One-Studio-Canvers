@@ -69,7 +69,7 @@ function ImportBody({ id }: { id: string }) {
   const T = useT();
   return (
     <div className="import-body">
-      <input ref={ref} type="file" accept="image/*,video/*" multiple hidden onChange={(e) => { void addImports([...(e.target.files ?? [])].slice(1), { x: node.x + 340, y: node.y }); const f = e.target.files?.[0]; if (f) void replaceImport(id, f); e.target.value = ''; }} />
+      <input ref={ref} type="file" accept={node.defId === 'import-audio' ? 'audio/*' : 'image/*,video/*'} multiple hidden onChange={(e) => { void addImports([...(e.target.files ?? [])].slice(1), { x: node.x + 340, y: node.y }); const f = e.target.files?.[0]; if (f) void replaceImport(id, f); e.target.value = ''; }} />
       <button className="btn nodrag" onClick={() => ref.current?.click()}>{node.results.length ? T('Replace…') : T('Choose file…')}</button>
       <span className="muted">{T('or drop a file on the canvas')}</span>
     </div>
@@ -230,7 +230,7 @@ export const CanvasNode = memo(function CanvasNode({ id, selected }: NodeProps) 
 
       {rows > 0 && <div className="ports">{Array.from({ length: rows }, (_, i) => <PortRow key={i} nodeId={id} inp={def.inputs[i]} out={def.outputs[i]} />)}</div>}
 
-      {def.id === 'import' && <ImportBody id={id} />}
+      {(def.id === 'import' || def.id === 'import-audio') && <ImportBody id={id} />}
       {(def.id === 'export' || def.id === 'preview' || def.id === 'compare') && <DisplayBody id={id} defId={def.id} />}
 
       {def.id === 'comfy-workflow' && <WorkflowBody id={id} />}
@@ -247,7 +247,7 @@ export const CanvasNode = memo(function CanvasNode({ id, selected }: NodeProps) 
       {running && <div className="bar"><b style={{ width: `${Math.max(4, rt!.pct)}%` }} /><em>{rt!.label ?? `${rt!.pct}%`}</em></div>}
       {rt?.status === 'error' && <div className="error">{rt.error}</div>}
 
-      {def.kind !== 'output' && (def.kind !== 'source' || def.id === 'import') && <Results id={id} />}
+      {def.kind !== 'output' && (def.kind !== 'source' || def.id === 'import' || def.id === 'import-audio') && <Results id={id} />}
       <NodeResizer minWidth={240} maxWidth={720} isVisible={selected} handleStyle={{ width: 8, height: 8 }} lineStyle={{ opacity: 0 }} onResizeEnd={(_, p) => useGraph.getState().setSize(id, p.width, p.height)} keepAspectRatio={false} />
     </div>
   );

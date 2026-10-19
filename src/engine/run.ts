@@ -9,6 +9,7 @@ import { runLlm } from '../backend/llm';
 import { loadOptions } from '../backend/options';
 import { buildMusicGraph } from '../backend/music';
 import { buildLtxGraph, ltxSize } from '../backend/ltx';
+import { buildH3Graph, h3Size } from '../backend/h3';
 import { parseWorkflow, setField, VIDEO_EXT } from '../backend/workflow';
 import { useSettings } from '../store/settings';
 import { applyOp, blendOp, canvasToAsset, channelOp, invertMask, loadBitmap, maskGrow, palette, videoFrame } from '../editing/ops';
@@ -77,7 +78,7 @@ export async function executeGraph(g: GraphLike, targetId: string, hooks: Hooks,
       const heavy = def.kind === 'generate' || def.kind === 'llm';
 
       if (heavy && !isTarget && node.results.length) { local.set(node.id, node.results); continue; }
-      if (def.id === 'import') { local.set(node.id, node.results); continue; }
+      if (def.id === 'import' || def.id === 'import-audio') { local.set(node.id, node.results); continue; }
 
       const inputs = (handle: string): Asset[] => {
         const out: Asset[] = [];
@@ -208,6 +209,24 @@ const TASKS: Record<string, string> = {
   'Pose & anatomy': 'Describe the pose, body position and anatomy of the subject in detail.',
 };
 
+async function runH3(c: Ctx): Promise<Asset[]> {
+  const p = c.p; const si = c.inputs('seed_in')[0]; const sv = si ? num(si.text, -1) : num(p.seed, -1);
+  const imgs = c.inputs('image'), lastA = c.inputs('last')[0];
+  const ref = c.engineId === 'h3-ref';
+  let size: { width: number; height: number } | undefined;
+  if (str(p.aspect) === 'auto' && imgs[0]) { const bm = await loadBitmap(imgs[0]); size = h3Size(`${bm.width}:${bm.height}`, num(p.megapixels, 0.9)); }
+  const lora = (n: string, s2: string) => ({ name: str(p[n], 'none'), strength: num(p[s2], 1) });
+  const files: string[] = []; for (const a of ref ? imgs.slice(0, 9) : imgs.slice(0, 1)) files.push(await ensureInput(a));
+  const graph = await buildH3Graph({
+    mode: ref ? 'reference' : imgs.length || lastA ? 'firstlast' : 't2v', prompt: c.text('prompt'), seconds: num(p.seconds, 8), aspect: str(p.aspect, '16:9'), megapixels: num(p.megapixels, 0.9),
+    first: ref ? undefined : files[0], last: lastA && !ref ? await ensureInput(lastA) : undefined, refs: ref ? files : [],
+    seed: sv < 0 ? Math.floor(Math.random() * 2 ** 40) : sv, steps: num(p.steps, 20), sampler: str(p.sampler, 'er_sde'), scheduler: str(p.scheduler, 'simple'),
+    loras: [lora('lora1', 'lora1_strength'), lora('lora2', 'lora2_strength')], turbo: str(p.turbo_lora, 'none') !== 'none' ? { name: str(p.turbo_lora), strength: 1 } : undefined,
+    models: useSettings.getState().video, saveSubfolder: useSettings.getState().saveSubfolder, size,
+  });
+  return runGraph(c, graph);
+}
+
 const RUNNERS: Record<string, Runner> = {
   // ---- sources / data
   prompt: async (c) => {
@@ -269,9 +288,10 @@ const RUNNERS: Record<string, Runner> = {
   },
   'music-generate': async (c) => {
     const p = c.p; const si = c.inputs('seed_in')[0]; const sv = si ? num(si.text, -1) : num(p.seed, -1);
-    const stages = c.engineId === 'minimax' ? [num(p.steps1, 30)] : [num(p.steps1, 30), num(p.steps2, 20), num(p.steps3, 15)];
+    const stages = c.engineId === 'minimax' || c.engineId === 'yue2' ? [num(p.steps1, 30)] : [num(p.steps1, 30), num(p.steps2, 20), num(p.steps3, 15)];
     const graph = await buildMusicGraph({
-      engine: c.engineId === 'minimax' ? 'minimax' : 'acestep', caption: c.text('prompt'), lyrics: c.text('lyrics'),
+      engine: (c.engineId === 'minimax' ? 'minimax' : c.engineId === 'yue2' ? 'yue2' : 'acestep') as 'minimax',
+      coverAudio: c.inputs('cover')[0] ? await ensureInput(c.inputs('cover')[0]) : undefined, temperature: num(p.temperature, 1), topP: num(p.top_p, 0.95), topK: num(p.top_k, 100), repetition: num(p.repetition, 1.2), caption: c.text('prompt'), lyrics: c.text('lyrics'),
       seconds: num(p.seconds, 60), seed: sv < 0 ? Math.floor(Math.random() * 2 ** 40) : sv, bpm: num(p.bpm, 120), keyscale: str(p.keyscale, 'A minor'),
       timesignature: str(p.timesignature, '4'), language: str(p.language, 'en'), format: str(p.format, 'flac') as 'flac', stageSteps: stages, cfg: num(p.cfg, 1),
       models: useSettings.getState().music, saveSubfolder: useSettings.getState().saveSubfolder,
@@ -297,6 +317,7 @@ const RUNNERS: Record<string, Runner> = {
     return runGraph(c, g);
   },
   'video-generate': async (c) => {
+    if (c.engineId === 'h3' || c.engineId === 'h3-ref') return runH3(c);
     const p = c.p; const si = c.inputs('seed_in')[0]; const sv = si ? num(si.text, -1) : num(p.seed, -1);
     const first = c.inputs('image')[0], last = c.inputs('last')[0];
     let size: { width: number; height: number } | undefined;
@@ -362,6 +383,9 @@ function opRunner(op: string): Runner {
 
 export async function importFile(file: File): Promise<Asset> {
   const isVideo = file.type.startsWith('video/');
+  if (file.type.startsWith('audio/') || /\.(flac|mp3|wav|ogg|opus|m4a)$/i.test(file.name)) {
+    return assetFromFile(await uploadToInput(file, `canvers_${uid('')}_${file.name.replace(/[^\w.\-]+/g, '_')}`), 'audio', 'audio');
+  }
   const ref = await uploadToInput(file, `canvers_${uid('')}_${file.name.replace(/[^\w.\-]+/g, '_')}`);
   return assetFromFile(ref, isVideo ? 'video' : 'image');
 }

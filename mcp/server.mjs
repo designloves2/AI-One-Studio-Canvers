@@ -2791,11 +2791,12 @@ var REGISTRY = [
     title: "Music Generate",
     category: "Audio",
     kind: "generate",
-    inputs: [P.textIn("prompt", "Style", false), P.textIn("lyrics", "Lyrics", true), P.seedIn()],
+    inputs: [P.textIn("prompt", "Style", false), P.textIn("lyrics", "Lyrics", true), { id: "cover", label: "Cover source", type: "audio", optional: true }, P.seedIn()],
     outputs: [{ id: "audio", label: "Audio", type: "audio" }],
     params: [],
     engines: [
       { id: "acestep", label: "Ace-Step 1.5 (local)", family: "music", default: true, params: [slider("seconds", "Length (s)", 5, 300, 1, 60), num("bpm", "BPM", 120, {}, 40, 240, 1), text("keyscale", "Key", "A minor"), sel("timesignature", "Time signature", ["2", "3", "4", "6"], "4", { advanced: true }), sel("language", "Language", ["en", "ko", "ja", "zh", "es", "fr", "de"], "en", { advanced: true }), sel("format", "Format", ["flac", "mp3", "opus"], "flac", { advanced: true }), slider("steps1", "Stage 1 steps", 1, 60, 1, 30, { advanced: true }), slider("steps2", "Stage 2 steps (0 = off)", 0, 60, 1, 20, { advanced: true }), slider("steps3", "Stage 3 steps (0 = off)", 0, 60, 1, 15, { advanced: true }), slider("cfg", "Guidance", 0, 10, 0.1, 1, { advanced: true }), seed] },
+      { id: "yue2", label: "YuE2 \u2014 text / cover music (local)", family: "music", params: [slider("seconds", "Length (s)", 10, 300, 1, 60), sel("format", "Format", ["flac", "mp3", "opus"], "flac", { advanced: true }), slider("temperature", "Temperature", 0.1, 2, 0.05, 1, { advanced: true }), slider("top_p", "Top-p", 0.1, 1, 0.01, 0.95, { advanced: true }), num("top_k", "Top-k", 100, { advanced: true }, 1, 500, 1), slider("repetition", "Repetition penalty", 1, 2, 0.01, 1.2, { advanced: true }), seed] },
       { id: "minimax", label: "MiniMax Music 3 (local)", family: "music", params: [slider("seconds", "Length (s)", 5, 300, 1, 60), sel("format", "Format", ["flac", "mp3", "opus"], "flac", { advanced: true }), slider("steps1", "Steps", 1, 80, 1, 30, { advanced: true }), slider("cfg", "Guidance", 0, 10, 0.1, 1.7, { advanced: true }), seed] }
     ],
     description: "Songs and instrumentals. Style prompt (+ optional lyrics) in, audio out. Models: Settings \u2192 Music models."
@@ -2815,11 +2816,15 @@ var REGISTRY = [
     title: "Video Generate",
     category: "Video",
     kind: "generate",
-    inputs: [P.textIn("prompt", "Prompt", false), P.imgIn("image", "First frame", true), P.imgIn("last", "Last frame", true), P.seedIn()],
+    inputs: [P.textIn("prompt", "Prompt", false), P.imgIn("image", "First frame / references", true, true), P.imgIn("last", "Last frame", true), P.seedIn()],
     outputs: [{ id: "video", label: "Video", type: "video" }],
     params: [],
-    engines: [{ id: "ltx25", label: "LTX 2.5 (local, with audio)", family: "ltx25", default: true, params: [sel("aspect", "Aspect ratio", [...ASPECTS, "auto"], "16:9"), megapixels(1), slider("seconds", "Length (s)", 2, 20, 1, 5), slider("steps", "Steps", 1, 40, 1, 12, { advanced: true }), slider("cfg", "Guidance", 0, 10, 0.1, 1, { advanced: true }), dyn("sampler", "Sampler", "samplers", "euler_ancestral", { advanced: true }), dyn("scheduler", "Scheduler", "schedulers", "linear_quadratic", { advanced: true }), text("stage2", "Stage-2 sigmas", "0.85, 0.7250, 0.4219, 0.0", false, { advanced: true }), ...loras("ltx25"), seed] }],
-    description: "Text \u2192 video, or first/last frame \u2192 video (LTX 2.5). For MiniMax H3 and others use the ComfyUI Workflow node."
+    engines: [
+      { id: "h3", label: "MiniMax H3 \u2014 text / first-last frame (local)", family: "h3", default: true, params: [sel("aspect", "Aspect ratio", [...ASPECTS, "auto"], "16:9"), megapixels(0.9), slider("seconds", "Length (s)", 5.2, 15, 0.5, 8), slider("steps", "Steps (lower with a Turbo LoRA)", 1, 60, 1, 20, { advanced: true }), dyn("sampler", "Sampler", "samplers", "er_sde", { advanced: true }), dyn("scheduler", "Scheduler", "schedulers", "simple", { advanced: true }), dyn("turbo_lora", "Turbo LoRA", "loras:h3", "none", { advanced: true }), ...loras("h3"), seed] },
+      { id: "h3-ref", label: "MiniMax H3 \u2014 multi-reference (local)", family: "h3", params: [sel("aspect", "Aspect ratio", [...ASPECTS, "auto"], "16:9"), megapixels(0.9), slider("seconds", "Length (s)", 5.2, 15, 0.5, 8), slider("steps", "Steps (lower with a Turbo LoRA)", 1, 60, 1, 20, { advanced: true }), dyn("sampler", "Sampler", "samplers", "er_sde", { advanced: true }), dyn("scheduler", "Scheduler", "schedulers", "simple", { advanced: true }), dyn("turbo_lora", "Turbo LoRA", "loras:h3", "none", { advanced: true }), ...loras("h3"), seed] },
+      { id: "ltx25", label: "LTX 2.5 (local, with audio)", family: "ltx25", params: [sel("aspect", "Aspect ratio", [...ASPECTS, "auto"], "16:9"), megapixels(1), slider("seconds", "Length (s)", 2, 20, 1, 5), slider("steps", "Steps", 1, 40, 1, 12, { advanced: true }), slider("cfg", "Guidance", 0, 10, 0.1, 1, { advanced: true }), dyn("sampler", "Sampler", "samplers", "euler_ancestral", { advanced: true }), dyn("scheduler", "Scheduler", "schedulers", "linear_quadratic", { advanced: true }), text("stage2", "Stage-2 sigmas", "0.85, 0.7250, 0.4219, 0.0", false, { advanced: true }), ...loras("ltx25"), seed] }
+    ],
+    description: "Text \u2192 video, or first/last frame \u2192 video (LTX 2.5). LTX 2.5 or MiniMax H3. Other models: ComfyUI Workflow node."
   },
   // ============================================================ Edit (runs in the browser)
   edit("crop", "Crop", [num("x", "X %", 0, {}, 0, 100, 1), num("y", "Y %", 0, {}, 0, 100, 1), num("w", "Width %", 100, {}, 1, 100, 1), num("h", "Height %", 100, {}, 1, 100, 1)], "Cut out a rectangle (percent of the image)."),
@@ -2871,6 +2876,7 @@ var REGISTRY = [
     description: "Draw on an image or paint a mask. Double-click the preview to open the editor."
   },
   // ============================================================ Utility
+  { id: "import-audio", title: "Import Audio", category: "Utility", kind: "source", inputs: [], outputs: [{ id: "audio", label: "Audio", type: "audio" }], params: [], description: "Load an audio file (e.g. a recording for YuE2 Cover Music)." },
   { id: "import", title: "Import", category: "Utility", kind: "source", inputs: [], outputs: [{ id: "image", label: "Media", type: "image" }], params: [], description: "Load an image or video from your computer, or drop one on the canvas." },
   { id: "export", title: "Export", category: "Utility", kind: "output", inputs: [P.imgIn("image", "Media")], outputs: [], params: [text("name", "File name", "canvers")], description: "Download the connected result." },
   { id: "preview", title: "Preview", category: "Utility", kind: "output", inputs: [P.imgIn("image", "Media", true)], outputs: [], params: [], description: "Look at any image or text." },
@@ -2926,9 +2932,9 @@ async function getWorkflow(f, name) {
 }
 async function pickModels(f, override) {
   const [lists, cfg] = await Promise.all([getModels(f).catch(() => null), getConfig(f).catch(() => ({}))]);
-  const real3 = (a) => (a ?? []).filter((x) => x && x !== "none");
+  const real4 = (a) => (a ?? []).filter((x) => x && x !== "none");
   const pick = (given, saved, list, re) => {
-    const have = real3(list);
+    const have = real4(list);
     const savedOk = saved && (!have.length || have.includes(saved)) ? saved : "";
     return given || savedOk || (re ? have.find((x) => re.test(x)) : void 0) || have[0] || "";
   };
@@ -3501,7 +3507,11 @@ async function load2(source) {
   }
   if (source.startsWith("loras:")) {
     const fam = source.slice(6);
-    if (!FAMILIES[fam]) return ["none"];
+    if (fam === "h3" || fam === "ltx25") {
+      const l = await getJson("/minimax_h3_one/models");
+      return ["none", ...(l.loras ?? []).filter((x) => x && x !== "none")];
+    }
+    if (!(fam in FAMILIES)) return ["none"];
     const m = await getModels(fam);
     return ["none", ...(m.loras ?? []).filter((x) => x && x !== "none")];
   }
@@ -3551,6 +3561,7 @@ async function resolveMusicModels(user) {
     dit: pick("dit", "dit", models.diffusion_models, /minimax.*music|music/i),
     clip: pick("clip", "clip", models.text_encoders, /minimax|music/i),
     dav: pick("dav", "dav", models.vaes, /audio|music/i),
+    yue2: pick("yue2_ckpt", "yue2_ckpt", models.checkpoints ?? [], /yue/i),
     sampler: cfg.ace_sampler_name || "jkass_quality",
     scheduler: cfg.ace_scheduler || "sgm_uniform",
     shift: Number(cfg.ace_shift ?? 3)
@@ -3566,7 +3577,30 @@ async function buildMusicGraph(job) {
   if (!job.caption.trim()) throw new Error("Style (prompt) is empty");
   const m = await resolveMusicModels(job.models);
   const g = {};
-  const prefix = `${job.saveSubfolder}/${job.engine === "acestep" ? "ACE" : "MMM"}`;
+  const prefix = `${job.saveSubfolder}/${job.engine === "acestep" ? "ACE" : job.engine === "yue2" ? "YUE2" : "MMM"}`;
+  if (job.engine === "yue2") {
+    if (!m.yue2) throw new Error("Pick the YuE2 checkpoint in Settings \u2192 Music models.");
+    g["Y:ckpt"] = { class_type: "CheckpointLoaderSimple", inputs: { ckpt_name: m.yue2 } };
+    const model = ["Y:ckpt", 0], clip2 = ["Y:ckpt", 1], vae = ["Y:ckpt", 2];
+    const gen = { style: job.caption, lyrics: job.lyrics, seed: job.seed, clip: clip2, mode: "full", max_duration: job.seconds, temperature: job.temperature ?? 1, top_p: job.topP ?? 0.95, top_k: Math.max(1, Math.round(job.topK ?? 100)), repetition_penalty: job.repetition ?? 1.2 };
+    if (job.coverAudio) {
+      g["Y:load"] = { class_type: "LoadAudio", inputs: { audio: job.coverAudio } };
+      g["Y:enc"] = { class_type: "AudioEncoderLoader", inputs: { audio_encoder_name: "sheetsage2_bf16.safetensors" } };
+      g["Y:abc"] = { class_type: "SheetSage2AudioToABC", inputs: { mode: "melody", audio_encoder: ["Y:enc", 0], audio: ["Y:load", 0] } };
+      gen.abc = ["Y:abc", 0];
+      gen.mode = "melody";
+    } else {
+      g["Y:abc"] = { class_type: "YuE2GenerateABC", inputs: { style: job.caption, lyrics: job.lyrics, seed: job.seed, clip: clip2, mode: "full", max_abc_tokens: 8192, temperature: 0.7, top_p: 0.9, top_k: 30, repetition_penalty: 1.005, penalty_window: 100 } };
+      gen.abc = ["Y:abc", 0];
+    }
+    g["Y:gen"] = { class_type: "YuE2GenerateMusic", inputs: gen };
+    g["Y:zero"] = { class_type: "ConditioningZeroOut", inputs: { conditioning: ["Y:gen", 0] } };
+    g["Y:lat"] = { class_type: "EmptyYuE2LatentAudio", inputs: { seconds: ["Y:gen", 1], batch_size: 1 } };
+    g["Y:samp"] = { class_type: "KSampler", inputs: { model, positive: ["Y:gen", 0], negative: ["Y:zero", 0], latent_image: ["Y:lat", 0], seed: job.seed, steps: 32, cfg: 1, sampler_name: "dpm_2", scheduler: "sgm_uniform", denoise: 1 } };
+    g["Y:dec"] = { class_type: "VAEDecodeAudio", inputs: { samples: ["Y:samp", 0], vae } };
+    g["Y:save"] = saveAudio(["Y:dec", 0], prefix, job.format);
+    return g;
+  }
   if (job.engine === "minimax") {
     if (!m.dit || !m.clip || !m.dav) throw new Error("Pick the MiniMax Music models (DiT / text encoder / audio VAE) in Settings \u2192 Music models.");
     g["M:clip"] = { class_type: "CLIPLoader", inputs: { clip_name: m.clip, type: "minimax", device: "default" } };
@@ -3793,6 +3827,104 @@ async function buildLtxGraph(job) {
   g.dec = { class_type: "VAEDecode", inputs: { samples: ["crop2", 2], vae: ["vaeV", 0] } };
   g.decA = { class_type: "LTXVAudioVAEDecode", inputs: { samples: ["sep1", 1], audio_vae: ["vaeA", 0] } };
   const prefix = `${job.saveSubfolder}/LTX25`;
+  if (has("VHS_VideoCombine")) {
+    g.save = { class_type: "VHS_VideoCombine", inputs: { images: ["dec", 0], audio: ["decA", 0], frame_rate: FPS, loop_count: 0, filename_prefix: prefix, format: "video/nvenc_h264-mp4", pingpong: false, save_output: true } };
+  } else {
+    g.video = { class_type: "CreateVideo", inputs: { images: ["dec", 0], fps: FPS, audio: ["decA", 0] } };
+    g.save = { class_type: "SaveVideo", inputs: { video: ["video", 0], filename_prefix: prefix, format: "auto", codec: "auto" } };
+  }
+  return g;
+}
+
+// src/backend/h3.ts
+init_http();
+var cache4 = null;
+var h3ModelLists = () => cache4 ??= getJson("/minimax_h3_one/models").catch((e) => {
+  cache4 = null;
+  throw e;
+});
+var availCache2 = null;
+var availability2 = () => availCache2 ??= getJson("/minimax_h3_one/node_availability").then((r) => r.available ?? r).catch(() => ({}));
+var real3 = (a) => (a ?? []).filter((x) => x && x !== "none");
+async function resolveH3Models(user, mode) {
+  const l = await h3ModelLists();
+  const pick = (k, list, re) => user[k] || real3(list).find((x) => re.test(x)) || "";
+  return {
+    unet: mode === "reference" ? pick("h3_unet_ref", l.diffusion_models, /h3.*ref/i) : pick("h3_unet_fl", l.diffusion_models, /h3.*(fl2va|first|fl)/i),
+    clip: pick("h3_clip", l.text_encoders_all ?? l.text_encoders, /h3|minimax/i),
+    vaeVideo: pick("h3_vae_video", l.vaes, /h3.*video/i),
+    vaeAudio: pick("h3_vae_audio", l.vaes, /h3.*audio/i)
+  };
+}
+function h3Frames(seconds) {
+  let n2 = Math.min(362, Math.max(124, Math.round(seconds * FPS)));
+  while (n2 % 17 !== 5) n2++;
+  return n2;
+}
+function h3Size(aspect2, mp) {
+  const [a, b] = aspect2.split(":").map(Number);
+  const ratio = a && b ? a / b : 16 / 9;
+  const t = Math.max(0.1, mp) * 1e6, h = Math.sqrt(t / ratio), w = h * ratio;
+  const snap = (v) => Math.max(32, Math.round(v / 32) * 32);
+  return { width: snap(w), height: snap(h) };
+}
+async function buildH3Graph(job) {
+  const m = await resolveH3Models(job.models, job.mode);
+  const miss = [["H3 diffusion model", m.unet], ["text encoder", m.clip], ["video VAE", m.vaeVideo], ["audio VAE", m.vaeAudio]].filter(([, v]) => !v).map(([k]) => k);
+  if (miss.length) throw new Error(`Pick the MiniMax H3 ${miss.join(", ")} in Settings \u2192 Video models.`);
+  if (!job.prompt.trim()) throw new Error("Prompt is empty");
+  if (job.mode === "reference" && !job.refs.length) throw new Error("Connect at least one reference image");
+  const avail = await availability2();
+  const has = (n2) => !!avail[n2];
+  const frames = h3Frames(job.seconds);
+  const { width, height } = job.size ?? h3Size(job.aspect, job.megapixels);
+  const g = {};
+  g.unet = m.unet.toLowerCase().endsWith(".gguf") ? { class_type: "UnetLoaderGGUF", inputs: { unet_name: m.unet } } : { class_type: "UNETLoader", inputs: { unet_name: m.unet, weight_dtype: "default" } };
+  let model = ["unet", 0];
+  g.shift = { class_type: "MiniMaxH3SigmaShift", inputs: { model, shift_video: 12, shift_audio: 3 } };
+  model = ["shift", 0];
+  [...job.loras, ...job.turbo ? [job.turbo] : []].forEach((l, i) => {
+    if (!l.name || l.name === "none" || !(l.strength > 0)) return;
+    g[`lora${i}`] = { class_type: "LoraLoaderModelOnly", inputs: { model, lora_name: l.name, strength_model: l.strength } };
+    model = [`lora${i}`, 0];
+  });
+  g.clip = { class_type: "CLIPLoader", inputs: { clip_name: m.clip, type: "minimax", device: "default" } };
+  g.vaeV = { class_type: "VAELoader", inputs: { vae_name: m.vaeVideo } };
+  g.vaeA = { class_type: "VAELoader", inputs: { vae_name: m.vaeAudio } };
+  if (job.mode === "reference") {
+    const inputs = { clip: ["clip", 0], vae: ["vaeV", 0], audio_vae: ["vaeA", 0], prompt: job.prompt, width, height, length: frames, ref_image_size: "match" };
+    job.refs.slice(0, 9).forEach((f, i) => {
+      g[`ref${i}`] = { class_type: "LoadImage", inputs: { image: f } };
+      inputs[`ref_images.ref_image_${i}`] = [`ref${i}`, 0];
+    });
+    g.cond = { class_type: "MiniMaxH3ReferenceToVideo", inputs };
+  } else {
+    const inputs = { clip: ["clip", 0], vae: ["vaeV", 0], prompt: job.prompt, width, height, length: frames };
+    if (job.mode === "firstlast") {
+      if (job.first) {
+        g.first = { class_type: "LoadImage", inputs: { image: job.first } };
+        inputs.first_frame = ["first", 0];
+      }
+      if (job.last) {
+        g.last = { class_type: "LoadImage", inputs: { image: job.last } };
+        inputs.last_frame = ["last", 0];
+      }
+    }
+    g.cond = { class_type: "MiniMaxH3ImageToVideo", inputs };
+  }
+  g.noise = { class_type: "RandomNoise", inputs: { noise_seed: job.seed } };
+  g.sel = { class_type: "KSamplerSelect", inputs: { sampler_name: job.sampler } };
+  g.sched = { class_type: "BasicScheduler", inputs: { model, scheduler: job.scheduler, steps: Math.max(1, Math.round(job.steps)), denoise: 1 } };
+  let cond = ["cond", 0];
+  if (has("TJ_FreeTextEncoderVRAM")) {
+    g.free = { class_type: "TJ_FreeTextEncoderVRAM", inputs: { clip: ["clip", 0], trigger: cond } };
+    cond = ["free", 0];
+  }
+  g.guider = { class_type: "BasicGuider", inputs: { model, conditioning: cond } };
+  g.samp = { class_type: "SamplerCustomAdvanced", inputs: { noise: ["noise", 0], guider: ["guider", 0], sampler: ["sel", 0], sigmas: ["sched", 0], latent_image: ["cond", 1] } };
+  g.dec = { class_type: "VAEDecode", inputs: { samples: ["samp", 0], vae: ["vaeV", 0] } };
+  g.decA = { class_type: "VAEDecodeAudio", inputs: { samples: ["samp", 0], vae: ["vaeA", 0] } };
+  const prefix = `${job.saveSubfolder}/MMH3`;
   if (has("VHS_VideoCombine")) {
     g.save = { class_type: "VHS_VideoCombine", inputs: { images: ["dec", 0], audio: ["decA", 0], frame_rate: FPS, loop_count: 0, filename_prefix: prefix, format: "video/nvenc_h264-mp4", pingpong: false, save_output: true } };
   } else {
@@ -4156,7 +4288,7 @@ async function executeGraph(g, targetId, hooks, signal) {
         local.set(node.id, node.results);
         continue;
       }
-      if (def.id === "import") {
+      if (def.id === "import" || def.id === "import-audio") {
         local.set(node.id, node.results);
         continue;
       }
@@ -4288,6 +4420,41 @@ var TASKS = {
   "Booru-style tags": "List comma-separated booru-style tags for this image.",
   "Pose & anatomy": "Describe the pose, body position and anatomy of the subject in detail."
 };
+async function runH3(c) {
+  const p = c.p;
+  const si = c.inputs("seed_in")[0];
+  const sv = si ? num2(si.text, -1) : num2(p.seed, -1);
+  const imgs = c.inputs("image"), lastA = c.inputs("last")[0];
+  const ref = c.engineId === "h3-ref";
+  let size;
+  if (str(p.aspect) === "auto" && imgs[0]) {
+    const bm = await loadBitmap(imgs[0]);
+    size = h3Size(`${bm.width}:${bm.height}`, num2(p.megapixels, 0.9));
+  }
+  const lora = (n2, s2) => ({ name: str(p[n2], "none"), strength: num2(p[s2], 1) });
+  const files = [];
+  for (const a of ref ? imgs.slice(0, 9) : imgs.slice(0, 1)) files.push(await ensureInput(a));
+  const graph = await buildH3Graph({
+    mode: ref ? "reference" : imgs.length || lastA ? "firstlast" : "t2v",
+    prompt: c.text("prompt"),
+    seconds: num2(p.seconds, 8),
+    aspect: str(p.aspect, "16:9"),
+    megapixels: num2(p.megapixels, 0.9),
+    first: ref ? void 0 : files[0],
+    last: lastA && !ref ? await ensureInput(lastA) : void 0,
+    refs: ref ? files : [],
+    seed: sv < 0 ? Math.floor(Math.random() * 2 ** 40) : sv,
+    steps: num2(p.steps, 20),
+    sampler: str(p.sampler, "er_sde"),
+    scheduler: str(p.scheduler, "simple"),
+    loras: [lora("lora1", "lora1_strength"), lora("lora2", "lora2_strength")],
+    turbo: str(p.turbo_lora, "none") !== "none" ? { name: str(p.turbo_lora), strength: 1 } : void 0,
+    models: useSettings.getState().video,
+    saveSubfolder: useSettings.getState().saveSubfolder,
+    size
+  });
+  return runGraph(c, graph);
+}
 var RUNNERS = {
   // ---- sources / data
   prompt: async (c) => {
@@ -4352,9 +4519,14 @@ var RUNNERS = {
     const p = c.p;
     const si = c.inputs("seed_in")[0];
     const sv = si ? num2(si.text, -1) : num2(p.seed, -1);
-    const stages = c.engineId === "minimax" ? [num2(p.steps1, 30)] : [num2(p.steps1, 30), num2(p.steps2, 20), num2(p.steps3, 15)];
+    const stages = c.engineId === "minimax" || c.engineId === "yue2" ? [num2(p.steps1, 30)] : [num2(p.steps1, 30), num2(p.steps2, 20), num2(p.steps3, 15)];
     const graph = await buildMusicGraph({
-      engine: c.engineId === "minimax" ? "minimax" : "acestep",
+      engine: c.engineId === "minimax" ? "minimax" : c.engineId === "yue2" ? "yue2" : "acestep",
+      coverAudio: c.inputs("cover")[0] ? await ensureInput(c.inputs("cover")[0]) : void 0,
+      temperature: num2(p.temperature, 1),
+      topP: num2(p.top_p, 0.95),
+      topK: num2(p.top_k, 100),
+      repetition: num2(p.repetition, 1.2),
       caption: c.text("prompt"),
       lyrics: c.text("lyrics"),
       seconds: num2(p.seconds, 60),
@@ -4391,6 +4563,7 @@ var RUNNERS = {
     return runGraph(c, g);
   },
   "video-generate": async (c) => {
+    if (c.engineId === "h3" || c.engineId === "h3-ref") return runH3(c);
     const p = c.p;
     const si = c.inputs("seed_in")[0];
     const sv = si ? num2(si.text, -1) : num2(p.seed, -1);
@@ -4606,7 +4779,7 @@ var send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 async function handle(msg) {
   const { id, method, params } = msg;
   try {
-    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "0.3.0" } } });
+    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "1.0.0" } } });
     if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS.map(({ run: _r, ...t }) => t) } });
     if (method === "tools/call") {
       const tool = TOOLS.find((t) => t.name === params?.name);

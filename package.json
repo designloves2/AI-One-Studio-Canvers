@@ -1,6 +1,6 @@
 {
   "name": "ai-one-studio-canvers",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "description": "Node-canvas frontend for ComfyUI-TJ_NODE_STUDIO_ONE (backend API)",

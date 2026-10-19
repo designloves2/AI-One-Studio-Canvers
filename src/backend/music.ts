@@ -2,7 +2,10 @@
 import { getJson } from './http';
 
 export interface MusicJob {
-  engine: 'acestep' | 'minimax';
+  engine: 'acestep' | 'minimax' | 'yue2';
+  /** ComfyUI input filename of a recording to cover (YuE2 Cover Music) */
+  coverAudio?: string;
+  temperature?: number; topP?: number; topK?: number; repetition?: number;
   caption: string; lyrics: string; seconds: number; seed: number;
   bpm: number; keyscale: string; timesignature: string; language: string;
   format: 'flac' | 'mp3' | 'opus';
@@ -11,7 +14,7 @@ export interface MusicJob {
   saveSubfolder: string;
 }
 
-export interface MusicModels { diffusion_models: string[]; text_encoders: string[]; vaes: string[]; loras: string[] }
+export interface MusicModels { checkpoints?: string[]; diffusion_models: string[]; text_encoders: string[]; vaes: string[]; loras: string[] }
 let cache: Promise<{ models: MusicModels; cfg: Record<string, any> }> | null = null;
 export function musicBackend() {
   cache ??= Promise.all([getJson<MusicModels>('/music_one/models'), getJson<Record<string, any>>('/music_one/config').catch(() => ({}))])
@@ -40,6 +43,7 @@ export async function resolveMusicModels(user: Record<string, string>) {
     dit: pick('dit', 'dit', models.diffusion_models, /minimax.*music|music/i),
     clip: pick('clip', 'clip', models.text_encoders, /minimax|music/i),
     dav: pick('dav', 'dav', models.vaes, /audio|music/i),
+    yue2: pick('yue2_ckpt', 'yue2_ckpt', models.checkpoints ?? [], /yue/i),
     sampler: (cfg.ace_sampler_name as string) || 'jkass_quality',
     scheduler: (cfg.ace_scheduler as string) || 'sgm_uniform',
     shift: Number(cfg.ace_shift ?? 3),
@@ -57,7 +61,30 @@ export async function buildMusicGraph(job: MusicJob): Promise<Record<string, any
   if (!job.caption.trim()) throw new Error('Style (prompt) is empty');
   const m = await resolveMusicModels(job.models);
   const g: Record<string, any> = {};
-  const prefix = `${job.saveSubfolder}/${job.engine === 'acestep' ? 'ACE' : 'MMM'}`;
+  const prefix = `${job.saveSubfolder}/${job.engine === 'acestep' ? 'ACE' : job.engine === 'yue2' ? 'YUE2' : 'MMM'}`;
+
+  if (job.engine === 'yue2') {
+    if (!m.yue2) throw new Error('Pick the YuE2 checkpoint in Settings → Music models.');
+    g['Y:ckpt'] = { class_type: 'CheckpointLoaderSimple', inputs: { ckpt_name: m.yue2 } };
+    const model: [string, number] = ['Y:ckpt', 0], clip: [string, number] = ['Y:ckpt', 1], vae: [string, number] = ['Y:ckpt', 2];
+    const gen: Record<string, any> = { style: job.caption, lyrics: job.lyrics, seed: job.seed, clip, mode: 'full', max_duration: job.seconds, temperature: job.temperature ?? 1.0, top_p: job.topP ?? 0.95, top_k: Math.max(1, Math.round(job.topK ?? 100)), repetition_penalty: job.repetition ?? 1.2 };
+    if (job.coverAudio) {
+      g['Y:load'] = { class_type: 'LoadAudio', inputs: { audio: job.coverAudio } };
+      g['Y:enc'] = { class_type: 'AudioEncoderLoader', inputs: { audio_encoder_name: 'sheetsage2_bf16.safetensors' } };
+      g['Y:abc'] = { class_type: 'SheetSage2AudioToABC', inputs: { mode: 'melody', audio_encoder: ['Y:enc', 0], audio: ['Y:load', 0] } };
+      gen.abc = ['Y:abc', 0]; gen.mode = 'melody';
+    } else {
+      g['Y:abc'] = { class_type: 'YuE2GenerateABC', inputs: { style: job.caption, lyrics: job.lyrics, seed: job.seed, clip, mode: 'full', max_abc_tokens: 8192, temperature: 0.7, top_p: 0.9, top_k: 30, repetition_penalty: 1.005, penalty_window: 100 } };
+      gen.abc = ['Y:abc', 0];
+    }
+    g['Y:gen'] = { class_type: 'YuE2GenerateMusic', inputs: gen };
+    g['Y:zero'] = { class_type: 'ConditioningZeroOut', inputs: { conditioning: ['Y:gen', 0] } };
+    g['Y:lat'] = { class_type: 'EmptyYuE2LatentAudio', inputs: { seconds: ['Y:gen', 1], batch_size: 1 } };
+    g['Y:samp'] = { class_type: 'KSampler', inputs: { model, positive: ['Y:gen', 0], negative: ['Y:zero', 0], latent_image: ['Y:lat', 0], seed: job.seed, steps: 32, cfg: 1, sampler_name: 'dpm_2', scheduler: 'sgm_uniform', denoise: 1 } };
+    g['Y:dec'] = { class_type: 'VAEDecodeAudio', inputs: { samples: ['Y:samp', 0], vae } };
+    g['Y:save'] = saveAudio(['Y:dec', 0], prefix, job.format);
+    return g;
+  }
 
   if (job.engine === 'minimax') {
     if (!m.dit || !m.clip || !m.dav) throw new Error('Pick the MiniMax Music models (DiT / text encoder / audio VAE) in Settings → Music models.');

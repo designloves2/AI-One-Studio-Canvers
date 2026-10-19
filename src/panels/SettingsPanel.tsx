@@ -183,14 +183,14 @@ function MusicModels() {
   const T = useT();
   const music = useSettings((s) => s.music);
   const setMusic = useSettings((s) => s.setMusic);
-  const [lists, setLists] = useState<{ diffusion_models: string[]; text_encoders: string[]; vaes: string[] } | null>(null);
+  const [lists, setLists] = useState<{ diffusion_models: string[]; text_encoders: string[]; vaes: string[]; checkpoints?: string[] } | null>(null);
   const [auto, setAuto] = useState<Record<string, string | number>>({});
   useEffect(() => {
     void import('../backend/music').then(async (m) => { try { setLists((await m.musicBackend()).models); setAuto(await m.resolveMusicModels({})); } catch { /* backend without MusicMaker */ } });
   }, []);
   const rows: [string, string, string[] | undefined][] = [
     ['ace_unet', 'Ace-Step diffusion', lists?.diffusion_models], ['ace_clip1', 'Ace-Step CLIP 1', lists?.text_encoders], ['ace_clip2', 'Ace-Step CLIP 2', lists?.text_encoders], ['ace_vae', 'Ace-Step VAE', lists?.vaes],
-    ['dit', 'MiniMax Music DiT', lists?.diffusion_models], ['clip', 'MiniMax Music encoder', lists?.text_encoders], ['dav', 'MiniMax Music audio VAE', lists?.vaes],
+    ['yue2_ckpt', 'YuE2 checkpoint', lists?.checkpoints], ['dit', 'MiniMax Music DiT', lists?.diffusion_models], ['clip', 'MiniMax Music encoder', lists?.text_encoders], ['dav', 'MiniMax Music audio VAE', lists?.vaes],
   ];
   return (
     <section>
@@ -207,11 +207,13 @@ function VideoModels() {
   const [lists, setLists] = useState<Awaited<ReturnType<typeof import('../backend/ltx').ltxModelLists>> | null>(null);
   const [auto, setAuto] = useState<Record<string, string>>({});
   useEffect(() => {
-    void import('../backend/ltx').then(async (m) => { try { setLists(await m.ltxModelLists()); const a = await m.resolveLtxModels({}); setAuto({ ltx_unet: a.unet, ltx_clip: a.clip, ltx_vae_video: a.vaeVideo, ltx_vae_audio: a.vaeAudio, ltx_upscaler: a.upscaler }); } catch { /* no LTX routes */ } });
+    void import('../backend/ltx').then(async (m) => { try { setLists(await m.ltxModelLists()); const a = await m.resolveLtxModels({}); const h = await (await import('../backend/h3')).resolveH3Models({}, 't2v'); const hr = await (await import('../backend/h3')).resolveH3Models({}, 'reference'); setAuto({ ltx_unet: a.unet, ltx_clip: a.clip, ltx_vae_video: a.vaeVideo, ltx_vae_audio: a.vaeAudio, ltx_upscaler: a.upscaler, h3_unet_fl: h.unet, h3_unet_ref: hr.unet, h3_clip: h.clip, h3_vae_video: h.vaeVideo, h3_vae_audio: h.vaeAudio }); } catch { /* no LTX routes */ } });
   }, []);
   const rows: [string, string, string[] | undefined][] = [
     ['ltx_unet', 'LTX diffusion', lists?.diffusion_models], ['ltx_clip', 'LTX text encoder', lists?.text_encoders_all ?? lists?.text_encoders], ['ltx_vae_video', 'LTX video VAE', lists?.vaes],
     ['ltx_vae_audio', 'LTX audio VAE', lists?.vaes], ['ltx_upscaler', 'LTX latent upscaler', lists?.latent_upscale_models],
+    ['h3_unet_fl', 'H3 first/last diffusion', lists?.diffusion_models], ['h3_unet_ref', 'H3 reference diffusion', lists?.diffusion_models], ['h3_clip', 'H3 text encoder', lists?.text_encoders_all ?? lists?.text_encoders],
+    ['h3_vae_video', 'H3 video VAE', lists?.vaes], ['h3_vae_audio', 'H3 audio VAE', lists?.vaes],
   ];
   return (
     <section>

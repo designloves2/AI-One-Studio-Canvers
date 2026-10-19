@@ -18,9 +18,10 @@ async function load(source: string): Promise<string[]> {
     return (source === 'samplers' ? req?.sampler_name?.[0] : req?.scheduler?.[0]) ?? FALLBACK[source];
   }
   if (source.startsWith('loras:')) {
-    const fam = source.slice(6) as Family;
-    if (!FAMILIES[fam]) return ['none'];
-    const m = await getModels(fam);
+    const fam = source.slice(6) as string;
+    if (fam === 'h3' || fam === 'ltx25') { const l = await getJson<{ loras: string[] }>('/minimax_h3_one/models'); return ['none', ...(l.loras ?? []).filter((x) => x && x !== 'none')]; }
+    if (!(fam in FAMILIES)) return ['none'];
+    const m = await getModels(fam as Family);
     return ['none', ...(m.loras ?? []).filter((x) => x && x !== 'none')];
   }
   if (source === 'bgmodels') {

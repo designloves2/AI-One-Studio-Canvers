@@ -9,7 +9,7 @@ LLM 4가지 방식은 [ComfyUI-TJ_NODE](https://github.com/designloves2/ComfyUI-
 ## 실행 방법 (3단계)
 
 1. ComfyUI에 `ComfyUI-TJ_NODE_STUDIO_ONE`, `ComfyUI-TJ_NODE` 를 설치하고 ComfyUI를 켭니다 (기본 주소 `127.0.0.1:8188`).
-2. 이 폴더에서 **`start.bat`** (Windows) 또는 `./start.sh` (Mac/Linux) 를 실행합니다.
+2. (모델 다운로드를 쓰려면 `set COMFY_DIR=C:\ComfyUI\ComfyUI` 처럼 ComfyUI 폴더를 지정) 이 폴더에서 **`start.bat`** (Windows) 또는 `./start.sh` (Mac/Linux) 를 실행합니다.
    - 처음 한 번은 Node.js(18 이상)가 필요합니다. 패키지 설치와 빌드는 자동입니다.
    - ComfyUI 주소가 다르면 `COMFY_URL` 환경변수로 지정: `set COMFY_URL=http://192.168.0.10:8188`
 3. 브라우저에서 **http://localhost:5917** 을 엽니다.
@@ -39,22 +39,24 @@ LLM 4가지 방식은 [ComfyUI-TJ_NODE](https://github.com/designloves2/ComfyUI-
 
 설정은 서버에 저장되어 브라우저를 바꿔도 같습니다. `Test` 버튼으로 바로 확인하세요.
 
-## 지원 현황 (v0.3)
+## 지원 현황 (v1.0)
 
 | 구분 | 상태 |
 |---|---|
 | 이미지 생성/편집/인페인트/아웃페인트: Z-Image Turbo, Flux.2 Klein, Krea 2, SDXL, Anima, Qwen Image Edit 2511, Qwen Image 2.1 | ✅ |
 | 얼굴 교체(Klein), 배경 제거, 업스케일(ESRGAN 계열) | ✅ |
 | **비디오: LTX 2.5** (텍스트→영상, 첫/마지막 프레임→영상, 오디오 포함, 2단계 업스케일) | ✅ |
-| **음악: Ace-Step 1.5 / MiniMax Music 3** (스타일+가사 → 오디오) | ✅ |
+| **비디오: MiniMax H3** (텍스트 / 첫·마지막 프레임 / 멀티 레퍼런스, 오디오 포함, Turbo LoRA 선택) | ✅ |
+| **음악: Ace-Step 1.5 / MiniMax Music 3 / YuE2** (스타일+가사 → 오디오, YuE2 커버 음악) | ✅ |
+| **모델 다운로드 관리자** (모델 탭 — `COMFY_DIR` 설정 시 ComfyUI/models 로 직접 내려받기) | ✅ |
 | **ComfyUI Workflow 노드** — API 형식 JSON을 불러와 어떤 워크플로우든 실행 (MiniMax H3, Wan 등 비디오 포함) | ✅ |
 | **MCP 서버** — Claude Code 등에서 생성·캔버스 실행 | ✅ |
 | 브라우저 편집 노드 20종, 페인터(마스크 그리기) | ✅ |
 | LLM 노드 3종 + 4가지 백엔드, 프롬프트 노드 ✨ 강화 버튼 | ✅ |
 | 그룹, 잠금, 실행취소/다시실행, 비교, 메모, 갤러리 | ✅ |
-| MiniMax H3 전용 옵션 화면, YuE2(음악), 모델 자동 다운로드 | 🔜 (H3는 워크플로우 노드로 사용 가능) |
+| freavy 전용: Foley · Image→3D · Alpha Matte · Mask by Text, H3의 고급 옵션(7+1 hi-res, One-Take, Audio Lock 등) | ➖ 미포함 (고급 옵션은 `ComfyUI Workflow` 노드로 가능) |
 
-**H3 등 다른 비디오:** ComfyUI에서 워크플로우를 `Save (API Format)`으로 저장 → `ComfyUI Workflow` 노드에서 불러오기 → 프롬프트·이미지·시드 칸 선택.
+**그 밖의 비디오/고급 H3:** ComfyUI에서 워크플로우를 `Save (API Format)`으로 저장 → `ComfyUI Workflow` 노드에서 불러오기 → 프롬프트·이미지·시드 칸 선택.
 
 **모델 위치 설정:** 설정 탭의 *이미지/비디오/음악 모델*에서 파일을 고르거나 `(auto)`로 두면 STUDIO_ONE에 저장된 선택 또는 파일 이름으로 자동 선택합니다.
 

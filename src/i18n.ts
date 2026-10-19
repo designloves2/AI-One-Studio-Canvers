@@ -49,6 +49,7 @@ const KO: Record<string, string> = {
   'Load workflow (API JSON)…': '워크플로우 불러오기 (API JSON)…', 'Replace workflow…': '워크플로우 바꾸기…', 'ComfyUI Workflow': 'ComfyUI 워크플로우', Workflow: '워크플로우', 'Prompt field': '프롬프트 칸', 'Image 1 field': '이미지 1 칸', 'Image 2 field': '이미지 2 칸', 'Video field': '비디오 칸', 'Seed field': '시드 칸',
   'Music models': '음악 모델', 'Music Generate': '음악 생성', Audio: '오디오', 'Length (s)': '길이 (초)', Key: '키', Lyrics: '가사', Style: '스타일',
   'Video models': '비디오 모델', 'First frame': '첫 프레임', 'Last frame': '마지막 프레임', 'Stage-2 sigmas': '2단계 시그마',
+  'Model downloads': '모델 다운로드', 'Start the server with COMFY_DIR=<ComfyUI folder> to download here. Links below open in your browser.': '서버를 COMFY_DIR=<ComfyUI 폴더> 로 실행하면 여기서 바로 내려받습니다. 지금은 링크가 브라우저에서 열립니다.',
   // messages
   'Nothing here yet.': '아직 아무것도 없습니다.', 'Connect an input first.': '먼저 입력을 연결하세요.',
 };

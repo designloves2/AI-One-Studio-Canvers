@@ -1,5 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+// @ts-ignore plain JS helper shared with serve.mjs
+import { handleDownloads } from './server-lib/downloads.mjs';
 
 // Dev: the browser talks to this server only; ComfyUI (+ the STUDIO_ONE routes) is proxied,
 // so there are no CORS problems. Override the target with COMFY_URL.
@@ -17,7 +19,7 @@ const common = {
 };
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), { name: 'canvers-downloads', configureServer(server) { server.middlewares.use((req, res, next) => { void handleDownloads(req as any, res as any).then((h: boolean) => { if (!h) next(); }); }); } }],
   server: {
     proxy: {
       ...Object.fromEntries(proxied.map((p) => [p, common])),
