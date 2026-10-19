@@ -69,6 +69,27 @@ async function videoSize(url: string): Promise<{ w: number; h: number }> {
   });
 }
 
+/** estimate the frame rate of a video by timing a few decoded frames (browser); null when it cannot be told */
+async function videoFps(url: string): Promise<number | null> {
+  return new Promise((resolve) => {
+    const v = document.createElement('video') as HTMLVideoElement & { requestVideoFrameCallback?: (cb: (now: number, meta: { mediaTime: number }) => void) => void };
+    if (!v.requestVideoFrameCallback) return resolve(null);
+    const times: number[] = []; let ended = false;
+    const finish = () => {
+      if (ended) return; ended = true; v.pause(); v.removeAttribute('src');
+      const d = times.slice(1).map((t, i) => t - times[i]).filter((x) => x > 0.001);
+      if (d.length < 3) return resolve(null);
+      d.sort((a, b) => a - b); const med = d[Math.floor(d.length / 2)];
+      const fps = 1 / med; const common = [8, 12, 15, 16, 20, 24, 25, 30, 48, 50, 60];
+      const near = common.find((c) => Math.abs(c - fps) < 0.6); resolve(near ?? Math.round(fps * 100) / 100);
+    };
+    const tick = (_: number, m: { mediaTime: number }) => { times.push(m.mediaTime); if (times.length >= 14) finish(); else v.requestVideoFrameCallback!(tick); };
+    v.muted = true; v.playsInline = true; v.onerror = () => finish();
+    v.onloadeddata = () => { v.requestVideoFrameCallback!(tick); void v.play().catch(finish); };
+    setTimeout(finish, 5000); v.src = url;
+  });
+}
+
 const outFile = (raw: Record<string, any>, node: string) => {
   const o = raw[node] ?? {};
   const f = (o.gifs ?? o.images ?? o.videos ?? [])[0];
@@ -88,7 +109,8 @@ function post(stepOf: (c: Ctx, size: { w: number; h: number }) => PostStep): Run
     const file = await ensureInput(v);
     const size = await videoSize(v.url);
     const step = stepOf(c, size);
-    const g = await buildPostGraph({ fps: num(c.p.fps, 24), cap: Math.max(0, Math.round(num(c.p.preview_frames, 0))), file, step, folder: useSettings.getState().saveSubfolder, stem: 'canvers' });
+    const fps = num(c.p.fps, 0) > 0 ? num(c.p.fps, 24) : (await videoFps(v.url)) ?? 24;
+    const g = await buildPostGraph({ fps, cap: Math.max(0, Math.round(num(c.p.preview_frames, 0))), file, step, folder: useSettings.getState().saveSubfolder, stem: 'canvers' });
     const res = await runPrompt(g.graph, { onProgress: c.progress, signal: c.signal });
     return [assetFromFile(outFile(res.raw, g.save), 'video', 'video')];
   };

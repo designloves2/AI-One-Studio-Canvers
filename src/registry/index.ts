@@ -272,7 +272,7 @@ export const REGISTRY: NodeDef[] = [
 
   // ---------------------------------------------------------------- post-processing (one card per step, video in → video out)
   ...((): NodeDef[] => {
-    const fpsParam = num('fps', 'Source frame rate (fps)', 24, { advanced: true }, 1, 240, 1);
+    const fpsParam = num('fps', 'Source frame rate (fps, 0 = detect)', 0, { advanced: true }, 0, 240, 1);
     const previewParam = num('preview_frames', 'Test on the first N frames (0 = whole video)', 0, { advanced: true }, 0, 600, 1);
     const vin = [{ id: 'video', label: 'Video', type: 'video' as const }], vout = [{ id: 'video', label: 'Video', type: 'video' as const }];
     const pp = (id: string, title: string, params: ParamDef[], description: string, engines?: EngineDef[]): NodeDef =>

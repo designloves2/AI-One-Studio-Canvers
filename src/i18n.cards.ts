@@ -21,7 +21,7 @@ export const KO_CARDS: Record<string, string> = {
   'Scene Detect': '장면 감지', 'Beat Detect': '비트 감지', 'Sensitivity (lower = more cuts)': '민감도 (낮을수록 더 많이 자름)', 'Audio / video': '오디오 / 영상',
   Disconnect: '연결 끊기', 'Card colour': '카드 색상',
   'Describe your video…': '만들고 싶은 영상을 설명하세요…', 'Turbo (faster)': '터보 (빠르게)', '7+1 hi-res finish': '7+1 하이레즈 마무리',
-  'Source frame rate (fps)': '원본 프레임레이트 (fps)',
+  'Source frame rate (fps, 0 = detect)': '원본 프레임레이트 (fps, 0 = 자동)',
   'Transition Bridge': '전환 브릿지', 'Clip A (before)': '클립 A (앞)', 'Clip B (after)': '클립 B (뒤)', 'Bridge clip': '브릿지 클립', Transition: '전환 방식', 'Length (frames)': '길이 (프레임)',
   'Test on the first N frames (0 = whole video)': '처음 N프레임만 테스트 (0 = 전체)',
   // ports
