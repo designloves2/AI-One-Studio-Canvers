@@ -36,7 +36,12 @@ const loras = (fam: string): ParamDef[] => [
 
 const negative = text('negative', 'Negative prompt', '', true, { advanced: true });
 
-const sizeParams = (on: boolean): ParamDef[] => (on ? [aspect(), megapixels()] : []);
+/** Image size: aspect ratio + megapixels, or an exact width x height (snapped to a multiple of 16 at run time). */
+const sizeParams = (on: boolean): ParamDef[] => (on ? [
+  { id: 'size_mode', label: 'Size', control: { kind: 'select', options: ['mp', 'wh'], labels: { mp: 'Aspect + MP', wh: 'Custom W × H' } }, default: 'mp' },
+  { ...aspect(), when: (p) => p.size_mode !== 'wh' }, { ...megapixels(), when: (p) => p.size_mode !== 'wh' },
+  num('width', 'Width (px)', 1024, { when: (p) => p.size_mode === 'wh' }, 256, 4096, 16), num('height', 'Height (px)', 1024, { when: (p) => p.size_mode === 'wh' }, 256, 4096, 16),
+] : []);
 
 const krea2 = (id: string, label: string, extra: ParamDef[] = [], size = false): EngineDef => ({
   id, label, family: 'krea2',
@@ -121,13 +126,13 @@ export const REGISTRY: NodeDef[] = [
   { id: 'image-generate', title: 'Image Generate', category: 'Image', kind: 'generate',
     inputs: [P.textIn(), P.loraIn(), P.seedIn()], outputs: [P.imgOut()], params: [],
     engines: [
+      krea2('krea2', 'Krea 2 (local)', [], true),
+      qwen21('qwen21', 'Qwen Image 2.1 (local)', [], true),
       { ...zimage('zimage', 'Z-Image Turbo (local)', [], true), default: true },
       klein('klein', 'Flux.2 Klein (local)', [], true),
-      krea2('krea2', 'Krea 2 (local)', [], true),
-      sdxl('sdxl', 'SDXL (local)', [], true),
-      anima('anima', 'Anima (local)', [], true),
       qwen('qwen', 'Qwen Image Edit 2511 (local)', [], true),
-      qwen21('qwen21', 'Qwen Image 2.1 (local)', [], true),
+      anima('anima', 'Anima (local)', [], true),
+      sdxl('sdxl', 'SDXL (local)', [], true),
     ], description: 'Text to image on your own ComfyUI.' },
   { id: 'image-edit', title: 'Image Edit', category: 'Image', kind: 'generate',
     inputs: [P.textIn(), P.imgIn('image', 'Images', false, true), P.loraIn(), P.seedIn()], outputs: [P.imgOut()], params: [],
@@ -249,7 +254,7 @@ export const REGISTRY: NodeDef[] = [
     description: 'One LoRA. Wire it into any image or video node — chain several cards to stack LoRAs.' },
   { id: 'h3-turbo', title: 'H3 Turbo · 7+1', category: 'Cards', kind: 'source', inputs: [], outputs: [{ id: 'card', label: 'Turbo', type: 'pipe' }],
     params: [
-      sel('turbo', 'Turbo', ['pdd', 'larryvrh', 'lightx2v', 'none'], 'pdd'), dyn('turbo_lora', 'Turbo LoRA', 'loras:h3', 'none', { when: (p) => p.turbo !== 'none' }),
+      { id: 'turbo', label: 'Turbo', control: { kind: 'select', options: ['pdd', 'larryvrh', 'lightx2v', 'none'], labels: { pdd: 'Turbo LoRA (Basic)', larryvrh: 'Turbo LoRA (larryvrh)', lightx2v: 'SLA Turbo (lightx2v)', none: 'None' } }, default: 'pdd' }, dyn('turbo_lora', 'Turbo LoRA (first / last frame)', 'loras:h3', 'none', { when: (p) => p.turbo !== 'none' }), dyn('turbo_lora_ref', 'Turbo LoRA (reference)', 'loras:h3', 'none', { when: (p) => p.turbo !== 'none' }),
       slider('turbo_strength', 'Turbo strength', 0, 2, 0.05, 1, { when: (p) => p.turbo !== 'none' }), slider('turbo_steps', 'Turbo steps', 1, 16, 1, 8, { advanced: true, when: (p) => p.turbo !== 'none' }),
       toggle('hires', '7+1 hi-res finish (7 steps small → upscale → 1 step big)', true, { when: (p) => p.turbo === 'pdd' }),
       slider('hires_start_mp', 'Start size (MP)', 0.2, 1, 0.05, 0.5, { when: (p) => p.turbo === 'pdd' && !!p.hires }), slider('hires_final_mp', 'Final size (MP)', 0.4, 3, 0.05, 0.9, { when: (p) => p.turbo === 'pdd' && !!p.hires }),
@@ -364,8 +369,11 @@ export const REGISTRY: NodeDef[] = [
     description: 'A short clip that blends the last frame of A into the first frame of B. Put it between A and B in Video Stitch (ITDA ONE STUDIO).' },
   { id: 'video-stitch', title: 'Video Stitch', category: 'Video', kind: 'generate',
     inputs: [{ id: 'videos', label: 'Videos (in order)', type: 'video', multi: true }], outputs: [{ id: 'video', label: 'Video', type: 'video' }],
-    params: [slider('overlap', 'Trim overlap (s)', 0, 3, 0.05, 0, { advanced: true })],
-    description: 'Join several videos into one, in the order they are connected.' },
+    params: [
+      { id: 'mode', label: 'Join', control: { kind: 'select', options: ['concat', 'onetake'], labels: { concat: 'Join as they are', onetake: 'One-Take (trim the shared 1.625 s)' } }, default: 'concat' },
+      slider('overlap', 'Trim overlap (s)', 0, 3, 0.05, 0, { advanced: true, when: (p) => p.mode !== 'onetake' }),
+    ],
+    description: 'Join several videos into one, in the order they are connected. One-Take: clips made with the One-Take continuity share their first 1.625 s with the previous clip, so that part is trimmed (the clips are re-encoded).' },
   { id: 'import-audio', title: 'Import Audio', category: 'Utility', kind: 'source', inputs: [], outputs: [{ id: 'audio', label: 'Audio', type: 'audio' }], params: [], description: 'Load an audio file (e.g. a recording for YuE2 Cover Music).' },
   { id: 'import', title: 'Load Image', category: 'Utility', kind: 'source', inputs: [], outputs: [{ id: 'image', label: 'Image', type: 'image' }], params: [], description: 'Load an image from your computer, or drop one on the canvas.' },
   { id: 'import-video', title: 'Load Video', category: 'Utility', kind: 'source', inputs: [], outputs: [{ id: 'video', label: 'Video', type: 'video' }], params: [], description: 'Load a video from your computer, or drop one on the canvas.' },

@@ -17,7 +17,7 @@ export type Control =
   | { kind: 'number'; min?: number; max?: number; step?: number }
   | { kind: 'slider'; min: number; max: number; step?: number }
   /** `source` = options fetched at runtime from the backend (see ui/useOptions) */
-  | { kind: 'select'; options: string[]; source?: string }
+  | { kind: 'select'; options: string[]; source?: string; /** display names (the stored value stays the key) */ labels?: Record<string, string> }
   | { kind: 'toggle' }
   | { kind: 'seed' }
   | { kind: 'size' };

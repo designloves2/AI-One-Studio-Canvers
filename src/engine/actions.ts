@@ -1,9 +1,11 @@
 import type { Asset, GraphEdge, GraphNode, Project } from '../types';
-import { notify } from '../ui/dialog';
+import { askConfirm, askText, notify } from '../ui/dialog';
+import { t as tr } from '../i18n';
+import { canvasFileName, listCanvases, loadCanvas, saveCanvas } from '../backend/canvases';
 import { useGraph, type ComposerRun } from '../store/graph';
 import { executeGraph, importFile } from './run';
 import { byId, defaultParams, engineFor } from '../registry';
-import { interrupt, uid } from '../backend/comfy';
+import { cancelPrompt, interrupt, readInflight, recoverPrompt, runContext, forgetInflight, assetFromFile, uid } from '../backend/comfy';
 
 const controllers = new Map<string, AbortController>();
 
@@ -14,7 +16,7 @@ export async function runNode(id: string): Promise<void> {
   s.setRuntime(id, { status: 'running', pct: 0, error: undefined, label: undefined });
   try {
     await executeGraph({ nodes: s.nodes, edges: s.edges }, id, {
-      start: (nid) => useGraph.getState().setRuntime(nid, { status: 'running', pct: 0, error: undefined }),
+      start: (nid) => { runContext.set(ac.signal, { node: nid }); useGraph.getState().setRuntime(nid, { status: 'running', pct: 0, error: undefined }); },
       progress: (nid, pct, label) => useGraph.getState().setRuntime(nid, { status: 'running', pct, label }),
       done: (nid, assets, mode) => { const g = useGraph.getState(); g.setResults(nid, assets, mode); g.setRuntime(nid, { status: 'idle', pct: 100, label: undefined }); },
       error: (nid, message) => useGraph.getState().setRuntime(nid, { status: 'error', error: message === 'cancelled' ? 'cancelled' : message }),
@@ -25,9 +27,40 @@ export async function runNode(id: string): Promise<void> {
   }
 }
 
+/** Stop only this card's job: the aborted run cancels its own prompt (running -> interrupt, waiting -> removed from the queue). */
 export function stopNode(id: string): void {
-  controllers.get(id)?.abort();
-  void interrupt();
+  const ac = controllers.get(id);
+  if (ac) { ac.abort(); return; }
+  // a job resumed after a refresh has no controller here: cancel it by its queue id
+  const j = readInflight()[id];
+  if (j) { void cancelPrompt(j.promptId); forgetInflight(j.promptId); useGraph.getState().setRuntime(id, { status: 'idle', pct: 0, error: 'cancelled' }); }
+}
+
+/** After a refresh: attach the results of jobs that finished while the page was away, and keep following the ones still running. */
+export async function resumeInflight(): Promise<void> {
+  for (const [nodeId, j] of Object.entries(readInflight())) {
+    const g = useGraph.getState();
+    const node = g.nodes.find((n) => n.id === nodeId);
+    const def = node ? byId.get(node.defId) : undefined;
+    if (!node || !def) { forgetInflight(j.promptId); continue; }
+    g.setRuntime(nodeId, { status: 'running', pct: 0, label: 'resuming…' });
+    void (async () => {
+      for (;;) {
+        const r = await recoverPrompt(j.promptId);
+        if (r === 'pending') { await new Promise((res) => setTimeout(res, 3000)); if (!readInflight()[nodeId]) return; continue; }
+        forgetInflight(j.promptId);
+        const st = useGraph.getState();
+        if (r === null || r === 'failed') { st.setRuntime(nodeId, { status: r === 'failed' ? 'error' : 'idle', pct: 0, error: r === 'failed' ? 'failed while the page was closed' : undefined, label: undefined }); return; }
+        const kind = def.outputs[0]?.type;
+        let files = kind === 'video' ? r.videos : kind === 'audio' ? r.audios : kind === 'text' ? [] : r.images;
+        if (kind === 'video' && files.some((f) => /-audio\.\w+$/i.test(f.filename))) files = files.filter((f) => /-audio\.\w+$/i.test(f.filename));
+        const assets = kind === 'text' ? r.texts.map((x) => ({ id: uid('a'), type: 'text' as const, url: '', text: x })) : files.map((f) => assetFromFile(f, (kind === 'video' || kind === 'audio' ? kind : 'image')));
+        if (assets.length) st.setResults(nodeId, assets, 'replace');
+        st.setRuntime(nodeId, { status: 'idle', pct: 100, label: undefined });
+        return;
+      }
+    })();
+  }
 }
 
 export function stopAll(): void {
@@ -48,25 +81,53 @@ export function download(url: string, name: string) {
   const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
 }
 
-export function saveProjectFile() {
+/** Export the open canvas as a .canvers.json file (download). */
+export function exportProjectFile() {
   const p = useGraph.getState().toProject();
   const blob = new Blob([JSON.stringify(p, null, 1)], { type: 'application/json' });
   const u = URL.createObjectURL(blob);
-  download(u, `${(p.name || 'canvas').replace(/[^\w\-]+/g, '_')}.canvers.json`);
+  download(u, `${canvasFileName(p.name || 'canvas')}.canvers.json`);
   setTimeout(() => URL.revokeObjectURL(u), 2000);
 }
 
-export function openProjectFile() {
+/** Import a .canvers.json file: it opens as an unsaved canvas (save it to keep it in the list). */
+export function importProjectFile() {
   const i = document.createElement('input'); i.type = 'file'; i.accept = '.json,application/json';
   i.onchange = async () => {
     const f = i.files?.[0]; if (!f) return;
     try {
       const p = JSON.parse(await f.text()) as Project;
       if (!Array.isArray(p.nodes) || !Array.isArray(p.edges)) throw new Error('not a canvas file');
-      useGraph.getState().loadProject(p);
+      if (useGraph.getState().dirty && useGraph.getState().nodes.length && !(await askConfirm(tr('This canvas has unsaved changes. Open anyway?')))) return;
+      useGraph.getState().loadProject(p, null, true);
     } catch (e) { void notify(`Cannot open: ${(e as Error).message}`); }
   };
   i.click();
+}
+
+/** Save the open canvas into the canvases list (Ctrl+S). Same name as the canvas title; asks before replacing a different canvas. */
+export async function saveCanvasToList(opts: { as?: boolean } = {}): Promise<boolean> {
+  const g = useGraph.getState();
+  let title = g.projectName;
+  if (opts.as) { const t = await askText(tr('Save as')); if (t === null) return false; title = t; }
+  const file = canvasFileName(title);
+  try {
+    if (file !== g.canvasFile) {
+      const exists = (await listCanvases()).some((c) => c.name === file);
+      if (exists && !(await askConfirm(`${file} — ${tr('Replace the saved canvas with this name?')}`))) return false;
+    }
+    if (opts.as || title !== g.projectName) g.setName(title);
+    await saveCanvas(file, useGraph.getState().toProject());
+    useGraph.getState().markSaved(file);
+    return true;
+  } catch (e) { void notify(`${tr('Could not save')}: ${(e as Error).message}`); return false; }
+}
+
+/** Open a saved canvas; asks first when the open one has unsaved changes. */
+export async function openSavedCanvas(name: string): Promise<void> {
+  const g = useGraph.getState();
+  if (g.dirty && g.nodes.length && !(await askConfirm(tr('This canvas has unsaved changes. Open anyway?')))) return;
+  try { useGraph.getState().loadProject(await loadCanvas(name), name, false); } catch (e) { void notify(`${tr('Could not open')}: ${(e as Error).message}`); }
 }
 
 /** drop / paste / pick files → Import nodes */

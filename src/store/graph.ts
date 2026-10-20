@@ -2,9 +2,10 @@ import { create } from 'zustand';
 import type { Asset, GraphEdge, GraphNode, NodeRuntime, Primitive, Project } from '../types';
 import { byId, compatible, defaultParams, engineFor } from '../registry';
 import { uid } from '../backend/comfy';
+import { useSettings } from './settings';
 
 export type AppMode = 'canvas' | 'simple';
-export type PanelId = null | 'nodes' | 'decks' | 'assets' | 'library' | 'live' | 'settings' | 'models';
+export type PanelId = null | 'canvases' | 'nodes' | 'decks' | 'assets' | 'library' | 'live' | 'settings' | 'models';
 
 export interface ComposerRun {
   id: string;
@@ -27,6 +28,11 @@ interface Snapshot { nodes: GraphNode[]; edges: GraphEdge[] }
 interface State {
   projectId: string;
   projectName: string;
+  /** name of the saved canvas (file in the canvases list) this canvas belongs to; null = never saved */
+  canvasFile: string | null;
+  /** edited since it was last saved / opened */
+  dirty: boolean;
+  markSaved(file: string): void;
   nodes: GraphNode[];
   edges: GraphEdge[];
   runtime: Record<string, NodeRuntime>;
@@ -83,7 +89,7 @@ interface State {
   openAssetPicker(nodeId: string | null): void;
   openFacePicker(nodeId: string | null): void;
   toProject(): Project;
-  loadProject(p: Project): void;
+  loadProject(p: Project, file?: string | null, dirty?: boolean): void;
   newProject(): void;
   requestFit(): void;
   addComposerRun(r: ComposerRun): void;
@@ -111,6 +117,8 @@ export const setHostSerializer = (f: (n: GraphNode) => GraphNode) => { hostSeria
 export const useGraph = create<State>((set, get) => ({
   projectId: uid('p'),
   projectName: 'untitled',
+  canvasFile: null,
+  dirty: false,
   nodes: [], edges: [], runtime: {}, selected: [], past: [], future: [],
   mode: readMode(), panel: null, viewer: null, painter: null, melody: null, assetPicker: null, facePicker: null, fitTick: 0,
   composerRuns: readRuns(),
@@ -135,7 +143,7 @@ export const useGraph = create<State>((set, get) => ({
     const engine = engineFor(def);
     const node: GraphNode = {
       id: uid('n'), defId, x, y, results: [], activeResult: 0,
-      engineId: engine?.id, params: defaultParams(def, engine?.id),
+      engineId: engine?.id, params: { ...defaultParams(def, engine?.id), ...(defId === 'h3-turbo' ? rememberedTurbo() : {}) },
       ...(defId === 'note' ? { w: 240, h: 160 } : {}), ...init,
     };
     set({ nodes: [...get().nodes, node], selected: [node.id] });
@@ -162,7 +170,15 @@ export const useGraph = create<State>((set, get) => ({
   moveNode: (id, x, y) => set({ nodes: get().nodes.map((n) => (n.id === id ? { ...n, x, y } : n)) }),
   moveMany: (deltas) => { const m = new Map(deltas.map((d) => [d.id, d])); set({ nodes: get().nodes.map((n) => (m.has(n.id) ? { ...n, x: m.get(n.id)!.x, y: m.get(n.id)!.y } : n)) }); },
   setSize: (id, w, h) => set({ nodes: get().nodes.map((n) => (n.id === id ? { ...n, w, h } : n)) }),
-  setParam: (id, key, v) => set({ nodes: get().nodes.map((n) => (n.id === id ? { ...n, params: { ...n.params, [key]: v } } : n)) }),
+  setParam: (id, key, v) => {
+    set({ nodes: get().nodes.map((n) => (n.id === id ? { ...n, params: { ...n.params, [key]: v } } : n)) });
+    // a 7+1 Turbo LoRA picked once stays the choice until it is changed again
+    if (get().nodes.find((n) => n.id === id)?.defId === 'h3-turbo' && typeof v === 'string' && v !== 'none' && v !== '') {
+      if (key === 'turbo_lora') useSettings.getState().setH3Turbo({ fl: v });
+      else if (key === 'turbo_lora_ref') useSettings.getState().setH3Turbo({ ref: v });
+      const filled = fillTurbo(get().nodes); if (filled !== get().nodes) set({ nodes: filled });
+    }
+  },
   setEngine: (id, engineId) => {
     get().snapshot();
     set({
@@ -262,8 +278,9 @@ export const useGraph = create<State>((set, get) => ({
   openFacePicker: (nodeId) => set({ facePicker: nodeId }),
 
   toProject: () => ({ app: 'ai-one-studio-canvers', version: 1, id: get().projectId, name: get().projectName, nodes: hostSerializer ? get().nodes.map(hostSerializer) : get().nodes, edges: get().edges, updatedAt: new Date().toISOString() }),
-  loadProject: (p) => set({ projectId: p.id ?? uid('p'), projectName: p.name || 'untitled', nodes: p.nodes ?? [], edges: p.edges ?? [], runtime: {}, selected: [], past: [], future: [], fitTick: get().fitTick + 1 }),
-  newProject: () => set({ projectId: uid('p'), projectName: 'untitled', nodes: [], edges: [], runtime: {}, selected: [], past: [], future: [] }),
+  markSaved: (file) => set({ canvasFile: file, dirty: false }),
+  loadProject: (p, file = null, dirty = false) => quietly(() => set({ canvasFile: file, dirty, projectId: p.id ?? uid('p'), projectName: p.name || 'untitled', nodes: fillTurbo(p.nodes ?? []), edges: p.edges ?? [], runtime: {}, selected: [], past: [], future: [], fitTick: get().fitTick + 1 })),
+  newProject: () => quietly(() => set({ canvasFile: null, dirty: false, projectId: uid('p'), projectName: 'untitled', nodes: [], edges: [], runtime: {}, selected: [], past: [], future: [] })),
   requestFit: () => set({ fitTick: get().fitTick + 1 }),
 
   addComposerRun: (r) => { const runs = [r, ...get().composerRuns]; writeRuns(runs); set({ composerRuns: runs }); },
@@ -271,20 +288,55 @@ export const useGraph = create<State>((set, get) => ({
   removeComposerRun: (id) => { const runs = get().composerRuns.filter((r) => r.id !== id); writeRuns(runs); set({ composerRuns: runs }); },
 }));
 
+/** Turbo cards whose LoRA is still empty show (and use) the remembered one; the array is returned untouched when nothing needs filling. */
+function fillTurbo(nodes: GraphNode[]): GraphNode[] {
+  const t = useSettings.getState().h3Turbo; let changed = false;
+  const out = nodes.map((n) => {
+    if (n.defId !== 'h3-turbo') return n;
+    const patch: Record<string, string> = {};
+    if ((!n.params.turbo_lora || n.params.turbo_lora === 'none') && t.fl) patch.turbo_lora = t.fl;
+    if ((!n.params.turbo_lora_ref || n.params.turbo_lora_ref === 'none') && t.ref) patch.turbo_lora_ref = t.ref;
+    if (!Object.keys(patch).length) return n;
+    changed = true; return { ...n, params: { ...n.params, ...patch } };
+  });
+  return changed ? out : nodes;
+}
+
+function rememberedTurbo(): Record<string, string> {
+  const t = useSettings.getState().h3Turbo; const out: Record<string, string> = {};
+  if (t.fl) out.turbo_lora = t.fl; if (t.ref) out.turbo_lora_ref = t.ref;
+  return out;
+}
+
+// loading / clearing a canvas replaces nodes and edges - that must not count as an edit
+let quiet = false;
+function quietly(fn: () => void) { quiet = true; try { fn(); } finally { quiet = false; } }
+
 // autosave the canvas so a refresh never loses work
 const AUTO_KEY = 'canvers.autosave.v1';
 let timer: ReturnType<typeof setTimeout> | undefined;
 export function startAutosave() {
   useGraph.subscribe((s, prev) => {
-    if (s.nodes === prev.nodes && s.edges === prev.edges && s.projectName === prev.projectName) return;
+    const edited = s.nodes !== prev.nodes || s.edges !== prev.edges || s.projectName !== prev.projectName;
+    if (!edited && s.canvasFile === prev.canvasFile && s.dirty === prev.dirty) return;
+    if (edited && !quiet && !s.dirty) { useGraph.setState({ dirty: true }); return; } // the follow-up update below saves the autosave
     clearTimeout(timer);
-    timer = setTimeout(() => { try { localStorage.setItem(AUTO_KEY, JSON.stringify(useGraph.getState().toProject())); } catch { /* quota */ } }, 600);
+    timer = setTimeout(() => { try { const g = useGraph.getState(); localStorage.setItem(AUTO_KEY, JSON.stringify({ ...g.toProject(), savedAs: g.canvasFile, dirty: g.dirty })); } catch { /* quota */ } }, 600);
   });
+}
+/** The last autosave has cards that were never saved to the list (or were changed after the last save). */
+export function hasUnsavedAutosave(): boolean {
+  try {
+    const p = JSON.parse(localStorage.getItem(AUTO_KEY) ?? 'null') as (Project & { savedAs?: string | null; dirty?: boolean }) | null;
+    if (!p || p.app !== 'ai-one-studio-canvers' || !(p.nodes?.length)) return false;
+    return p.dirty ?? !p.savedAs;
+  } catch { return false; }
 }
 export function restoreAutosave(): boolean {
   try {
     const raw = localStorage.getItem(AUTO_KEY); if (!raw) return false;
     const p = JSON.parse(raw) as Project; if (p?.app !== 'ai-one-studio-canvers') return false;
-    useGraph.getState().loadProject(p); return true;
+    const x = p as Project & { savedAs?: string | null; dirty?: boolean };
+    useGraph.getState().loadProject(p, x.savedAs ?? null, x.dirty ?? false); return true;
   } catch { return false; }
 }

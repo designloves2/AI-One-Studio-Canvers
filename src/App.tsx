@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useReactFlow, useViewport } from '@xyflow/react';
-import { useGraph, restoreAutosave, startAutosave, type PanelId } from './store/graph';
+import { useGraph, restoreAutosave, hasUnsavedAutosave, startAutosave, type PanelId } from './store/graph';
 import { Flow } from './canvas/Flow';
 import { NodeMenu } from './canvas/NodeMenu';
 import { Viewer } from './canvas/Viewer';
@@ -13,7 +13,11 @@ import { AssetsPanel } from './panels/AssetsPanel';
 import { SettingsPanel } from './panels/SettingsPanel';
 import { StatusPanel } from './panels/StatusPanel';
 import { SimpleView } from './simple/SimpleView';
-import { addImports, openProjectFile, runAll, saveProjectFile, stopAll } from './engine/actions';
+import { addImports, resumeInflight, runAll, saveCanvasToList, stopAll } from './engine/actions';
+import { clearInflight } from './backend/comfy';
+import { t as tr } from './i18n';
+import { CanvasesPanel } from './panels/CanvasesPanel';
+import { SystemMonitor } from './ui/SystemMonitor';
 import { systemStats } from './backend/comfy';
 import { loadServerSettings } from './backend/llm';
 import { useT } from './i18n';
@@ -34,6 +38,7 @@ const ICONS = {
   assets: 'M4 5h16v14H4zM4 15l5-5 4 4 3-3 4 4M9 9.5h.01',
   status: 'M4 13l4 4L20 6',
   live: 'M4 5h16v10H9l-5 4zM8 9h8M8 12h5',
+  canvases: 'M4 4h16v16H4zM4 9h16M9 9v11',
   library: 'M5 4h4v16H5zM11 4h4v16h-4zM17.5 5l3.2 1-3.6 14-3.2-1z',
   settings: 'M12 15a3 3 0 100-6 3 3 0 000 6zM19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z',
 };
@@ -42,6 +47,7 @@ function TopBar() {
   const T = useT();
   const name = useGraph((s) => s.projectName);
   const setName = useGraph((s) => s.setName);
+  const dirty = useGraph((s) => s.dirty);
   const mode = useGraph((s) => s.mode);
   const setMode = useGraph((s) => s.setMode);
   const [up, setUp] = useState<boolean | null>(null);
@@ -64,16 +70,17 @@ function TopBar() {
     <div className="topbar">
       <div className="brand"><img src="/logo.svg" alt="" /><b>AI ONE Studio</b><em>Canvers</em></div>
       <input className="project-name" value={name} onChange={(e) => setName(e.target.value)} />
+      <button className={`save-state ${dirty ? 'dirty' : 'clean'}`} title={dirty ? `${T('Not saved')} — ${T('Click to save')} (Ctrl+S)` : T('Saved')} onClick={() => { if (dirty) void saveCanvasToList(); }}>{dirty ? '●' : '✓'} {dirty ? T('Not saved') : T('Saved')}</button>
       <div className="file-actions">
         <button title={`${T('New')}`} onClick={async () => { if (!useGraph.getState().nodes.length || await askConfirm(`${T('New')}?`)) useGraph.getState().newProject(); }}>＋</button>
-        <button title={`${T('Open')} (Ctrl+O)`} onClick={openProjectFile}>⤒</button>
-        <button title={`${T('Save')} (Ctrl+S)`} onClick={saveProjectFile}>⤓</button>
+        <button title={`${T('Canvases')} (Ctrl+O)`} onClick={() => useGraph.getState().setPanel('canvases')}>☰</button>
+        <button title={`${T('Save')} (Ctrl+S)`} onClick={() => void saveCanvasToList()}>⤓</button>
       </div>
       <div className="mode-toggle">
         <button className={mode === 'canvas' ? 'active' : ''} onClick={() => setMode('canvas')}>{T('Canvas')}</button>
         <button className={mode === 'simple' ? 'active' : ''} onClick={() => setMode('simple')}>{T('Simple')}</button>
       </div>
-      <div className="topbar-right"><span className={`engine-dot ${up ? 'on' : ''}`} title="ComfyUI + STUDIO_ONE"><i />{restarting ? T('Restarting…') : 'ComfyUI'}</span><button className={`restart-btn${restarting ? ' spin' : ''}`} disabled={restarting} onClick={() => void restart()} title={T('Restart ComfyUI')}>↻</button></div>
+      <div className="topbar-right"><SystemMonitor /><span className={`engine-dot ${up ? 'on' : ''}`} title="ComfyUI + STUDIO_ONE"><i />{restarting ? T('Restarting…') : 'ComfyUI'}</span><button className={`restart-btn${restarting ? ' spin' : ''}`} disabled={restarting} onClick={() => void restart()} title={T('Restart ComfyUI')}>↻</button></div>
     </div>
   );
 }
@@ -83,9 +90,9 @@ function Rail() {
   const mode = useGraph((s) => s.mode);
   const panel = useGraph((s) => s.panel);
   const setPanel = useGraph((s) => s.setPanel);
-  const items: [Exclude<PanelId, null>, string, string][] = [['live', 'Live Canvas', ICONS.live], ['decks', 'Decks', ICONS.nodes], ['nodes', 'Nodes', ICONS.nodes], ['assets', 'Gallery', ICONS.assets], ['library', 'Asset Library', ICONS.library], ['models', 'Models', ICONS.status], ['settings', 'Settings', ICONS.settings]];
+  const items: [Exclude<PanelId, null>, string, string][] = [['canvases', 'Canvases', ICONS.canvases], ['live', 'Live Canvas', ICONS.live], ['decks', 'Decks', ICONS.nodes], ['nodes', 'Nodes', ICONS.nodes], ['assets', 'Gallery', ICONS.assets], ['library', 'Asset Library', ICONS.library], ['models', 'Models', ICONS.status], ['settings', 'Settings', ICONS.settings]];
   // decks / nodes only make sense on the canvas, so the simple mode hides them
-  const visible = mode === 'simple' ? items.filter(([id]) => id !== 'decks' && id !== 'nodes' && id !== 'live') : items;
+  const visible = mode === 'simple' ? items.filter(([id]) => id !== 'decks' && id !== 'nodes' && id !== 'live' && id !== 'canvases') : items;
   return (
     <div className="rail">
       {visible.map(([id, label, d]) => (
@@ -135,6 +142,10 @@ function SelectionBar() {
   );
 }
 
+// opening the app in a fresh tab/window starts on a new canvas; a refresh of the same tab keeps the canvas
+let booted = false;
+const sameSession = (() => { try { const v = sessionStorage.getItem('canvers.session') === '1'; sessionStorage.setItem('canvers.session', '1'); return v; } catch { return false; } })();
+
 export function App() {
   const mode = useGraph((s) => s.mode);
   const panel = useGraph((s) => s.panel);
@@ -154,7 +165,15 @@ export function App() {
   useEffect(() => {
     setHostSerializer(serializeHost); wireHostStore();
     // ONE STUDIO panels need their extensions loaded before a saved canvas that uses them is restored
-    void (useSettings.getState().hostPanels ? loadStudio().catch(() => undefined) : Promise.resolve()).finally(() => { restoreAutosave(); startAutosave(); syncLinks(); });
+    void (useSettings.getState().hostPanels ? loadStudio().catch(() => undefined) : Promise.resolve()).finally(async () => {
+      if (booted) return; booted = true;   // effects can run twice in dev: start up only once
+      // a refresh (same tab) keeps the canvas; opening the app fresh starts on a new one - unsaved work is offered back first
+      let restored = sameSession && restoreAutosave();
+      if (!sameSession && hasUnsavedAutosave() && await askConfirm(tr('There is an unsaved canvas from last time. Restore it?'))) restored = restoreAutosave();
+      if (!restored) clearInflight();
+      startAutosave(); syncLinks();
+      if (restored) void resumeInflight();
+    });
     void loadServerSettings();
     const t = setInterval(() => { const g = useGraph.getState(); if (g.nodes.some((n) => n.defId.startsWith('host:'))) { try { localStorage.setItem('canvers.autosave.v1', JSON.stringify(g.toProject())); } catch { /* quota */ } } }, 4000);
     return () => clearInterval(t);
@@ -165,8 +184,8 @@ export function App() {
       const tag = (e.target as HTMLElement).tagName;
       const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
       const g = useGraph.getState();
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); saveProjectFile(); return; }
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') { e.preventDefault(); openProjectFile(); return; }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); void saveCanvasToList(); return; }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') { e.preventDefault(); g.setPanel('canvases'); return; }
       if (typing || g.mode !== 'canvas') return;
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? g.redo() : g.undo(); return; }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') { e.preventDefault(); if (g.selected.length) g.duplicateNodes(g.selected); return; }
@@ -196,7 +215,8 @@ export function App() {
         <Rail />
         {panel && (mode === 'canvas' || panel === 'assets' || panel === 'library' || panel === 'settings' || panel === 'models') ? (
           <aside className="panel" style={{ width: panelW }}>
-            <header><b>{T(({ decks: 'Decks', nodes: 'Nodes', assets: 'Gallery', settings: 'Settings', models: 'Models', library: 'Asset Library', live: 'Live Canvas' } as const)[panel!])}</b><button onClick={() => useGraph.getState().setPanel(null)}>✕</button></header>
+            <header><b>{T(({ canvases: 'Canvases', decks: 'Decks', nodes: 'Nodes', assets: 'Gallery', settings: 'Settings', models: 'Models', library: 'Asset Library', live: 'Live Canvas' } as const)[panel!])}</b><button onClick={() => useGraph.getState().setPanel(null)}>✕</button></header>
+            {panel === 'canvases' && <CanvasesPanel />}
             {panel === 'decks' && <DecksPanel />}
             {panel === 'nodes' && <NodesPanel />}
             {panel === 'assets' && <AssetsPanel />}

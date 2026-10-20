@@ -10,11 +10,11 @@ import { loadOptions } from '../backend/options';
 import { getJson } from '../backend/http';
 import { buildMusicGraph } from '../backend/music';
 import { buildLtxGraph, ltxSize } from '../backend/ltx';
-import { buildH3Graph, h3Size, h3Frames, pickChainFrame, copyToInput, stitchClips, ONE_TAKE_OVERLAP_FRAMES } from '../backend/h3';
+import { buildH3Graph, h3Size, h3Frames, pickChainFrame, copyToInput, stitchClips, ONE_TAKE_OVERLAP_FRAMES, ONE_TAKE_OVERLAP_SEC } from '../backend/h3';
 import { parseWorkflow, setField, VIDEO_EXT } from '../backend/workflow';
 import { useSettings } from '../store/settings';
 import { textAsset, num, str, need } from './util';
-import { EXTRA_RUNNERS, cardLoras, h3Cards, optFromCards } from './more';
+import { EXTRA_RUNNERS, cardLoras, h3Cards, h3Opt } from './more';
 import { downstreamImages, enhanceWithImages } from '../backend/refEnhance';
 import { styleOf } from '../backend/promptStyle';
 import { applyOp, blendOp, canvasToAsset, channelOp, invertMask, loadBitmap, maskGrow, palette, videoFrame } from '../editing/ops';
@@ -124,6 +124,12 @@ export async function executeGraph(g: GraphLike, targetId: string, hooks: Hooks,
 type Runner = (c: Ctx) => Promise<Asset[]>;
 
 
+/** custom width x height (snapped to multiples of 16, 256..4096) */
+function sizeCustom(w: number, h: number): { w: number; h: number } {
+  const s = (v: number) => Math.max(256, Math.min(4096, Math.round(v / 16) * 16));
+  return { w: s(w), h: s(h) };
+}
+
 function sizeFrom(aspect: string, mp: number): { w: number; h: number } {
   const [a, b] = aspect.split(':').map(Number);
   const r = a && b ? a / b : 1;
@@ -160,7 +166,8 @@ function imageRunner(mode: (c: Ctx) => ImageMode): Runner {
     const maskA = c.inputs('mask')[0];
     const maskFile = maskA ? await ensureInput(maskA) : undefined;
 
-    const { w, h } = typeof p.aspect === 'string' && (m === 't2i' || m === 'krea2control' || m === 'identity' || m === 'animactrl') ? sizeFrom(String(p.aspect), num(p.megapixels, 1)) : { w: 0, h: 0 };
+    const { w, h } = typeof p.aspect === 'string' && (m === 't2i' || m === 'krea2control' || m === 'identity' || m === 'animactrl')
+      ? (p.size_mode === 'wh' ? sizeCustom(num(p.width, 1024), num(p.height, 1024)) : sizeFrom(String(p.aspect), num(p.megapixels, 1))) : { w: 0, h: 0 };
     const lora = (n: string, s: string) => ({ name: str(p[n], 'none'), strength: num(p[s], 1) });
 
     const job: ImageJob = {
@@ -235,7 +242,7 @@ async function runH3(c: Ctx): Promise<Asset[]> {
   const lora = (n: string, s2: string) => ({ name: str(p[n], 'none'), strength: num(p[s2], 1) });
   const seconds = num(p.seconds, 8);
   const runId = uid('ot').slice(0, 10);
-  const opt = optFromCards(cards);
+  const opt = await h3Opt(cards, ref);
   const clips: { filename: string; subfolder: string }[] = [];
   let prevCheckpoint: string | undefined;
   for (let i = 0; i < prompts.length; i++) {
@@ -271,7 +278,7 @@ async function runH3(c: Ctx): Promise<Asset[]> {
   const assets = clips.map((f) => assetFromFile({ filename: f.filename, subfolder: f.subfolder, type: 'output' }, 'video', 'video'));
   if (clips.length > 1 && p.stitch !== false) {
     c.progress(98, 'stitching…');
-    const st = await stitchClips(clips, `${settings.saveSubfolder}/MMH3_full`, continuity === 'onetake' ? (ONE_TAKE_OVERLAP_FRAMES + 4) / 24 : undefined);
+    const st = await stitchClips(clips, `${settings.saveSubfolder}/MMH3_full`, continuity === 'onetake' ? ONE_TAKE_OVERLAP_SEC : undefined);
     if (!st.ok || !st.filename) throw new Error(`stitch failed: ${st.error ?? 'unknown'}`);
     return [assetFromFile({ filename: st.filename, subfolder: st.subfolder ?? '', type: 'output' }, 'video', 'video'), ...assets];
   }

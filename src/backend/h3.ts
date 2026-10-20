@@ -48,6 +48,10 @@ export const DEFAULT_OPT: H3Options = {
 };
 
 export const ONE_TAKE_OVERLAP_FRAMES = 39;
+/** The H3 video latent only takes 17k+5 frame counts (rounded up) - same as One Studio's alignFrameCount. */
+const alignFrameCount = (n: number) => { let f = Math.max(5, Math.round(n)); while (f % 17 !== 5) f++; return f; };
+/** Seconds a One-Take clip shares with the previous one (39 frames at 24 fps = 1.625 s): what a One-Take stitch trims. */
+export const ONE_TAKE_OVERLAP_SEC = alignFrameCount(ONE_TAKE_OVERLAP_FRAMES) / 24;
 export const TAIL_CANDIDATES = 8;
 
 interface Lists { diffusion_models: string[]; text_encoders: string[]; text_encoders_all?: string[]; vaes: string[]; loras: string[]; upscale_models?: string[] }

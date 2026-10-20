@@ -49,6 +49,9 @@ export interface Settings {
   music: Record<string, string>;
   /** LTX 2.5 model files (ltx_unet, ltx_clip, ltx_vae_video, ltx_vae_audio, ltx_upscaler) */
   video: Record<string, string>;
+  /** the 7+1 Turbo LoRAs picked last: `fl` for first/last-frame videos, `ref` for multi-reference videos (kept until changed) */
+  h3Turbo: { fl: string; ref: string };
+  setH3Turbo: (patch: Partial<{ fl: string; ref: string }>) => void;
   setVideo: (k: string, v: string) => void;
   saveSubfolder: string;
   /** load the original STUDIO_ONE panels as extra (legacy) nodes; off = card nodes only */
@@ -71,8 +74,8 @@ function load(): Partial<Settings> {
 export const useSettings = create<Settings>((set, get) => {
   const saved = load();
   const persist = () => {
-    const { comfyUrl, llm, live, models, saveSubfolder, music, video, hostPanels } = get();
-    try { localStorage.setItem(KEY, JSON.stringify({ comfyUrl, llm, live, models, saveSubfolder, music, video, hostPanels })); } catch { /* ignore */ }
+    const { comfyUrl, llm, live, models, saveSubfolder, music, video, hostPanels, h3Turbo } = get();
+    try { localStorage.setItem(KEY, JSON.stringify({ comfyUrl, llm, live, models, saveSubfolder, music, video, hostPanels, h3Turbo })); } catch { /* ignore */ }
   };
   return {
     comfyUrl: saved.comfyUrl ?? '',
@@ -84,6 +87,8 @@ export const useSettings = create<Settings>((set, get) => {
     hostPanels: saved.hostPanels ?? false,
     music: saved.music ?? {},
     video: saved.video ?? {},
+    h3Turbo: { fl: saved.h3Turbo?.fl ?? '', ref: saved.h3Turbo?.ref ?? '' },
+    setH3Turbo: (patch) => { set({ h3Turbo: { ...get().h3Turbo, ...patch } }); persist(); },
     setVideo: (k, v) => { set({ video: { ...get().video, [k]: v } }); persist(); },
     setMusic: (k, v) => { set({ music: { ...get().music, [k]: v } }); persist(); },
     set: (patch) => { set(patch); persist(); },

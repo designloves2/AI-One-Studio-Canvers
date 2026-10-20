@@ -52,7 +52,7 @@ function SelectControl({ def, value, onChange }: Props) {
   const list = opts.includes(String(value)) ? opts : [String(value), ...opts];
   return (
     <select className="nodrag" value={String(value)} onChange={(e) => onChange(e.target.value)}>
-      {list.map((o) => <option key={o} value={o}>{o}</option>)}
+      {list.map((o) => <option key={o} value={o}>{def.control.kind === 'select' && def.control.labels?.[o] || o}</option>)}
     </select>
   );
 }

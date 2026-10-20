@@ -18,6 +18,10 @@ export function AssetsPanel() {
   const [kind, setKind] = useState<'image' | 'video'>('image');
   const [zoom, setZoom] = useState<GalleryItem | null>(null);
   const clickTimer = useRef<number>();
+  // select mode: tick several items and delete them in one go (same flow as the web gallery)
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
 
   const load = async (offset = 0) => {
     setBusy(true); setErr('');
@@ -26,9 +30,23 @@ export function AssetsPanel() {
       setItems((p) => (offset ? [...p, ...r.images] : r.images)); setTotal(r.total);
     } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
   };
-  useEffect(() => { setItems([]); void load(); }, [sub, kind]);
+  useEffect(() => { setItems([]); setSelected(new Set()); void load(); }, [sub, kind]);
   useEffect(() => { void useSensitive.getState().load(); }, []);
   const revealAll = useSensitive((st) => st.revealAll);
+  const itemKey = (it: GalleryItem) => it.key ?? `${it.subfolder}/${it.filename}`;
+  const toggleSelectMode = () => { setSelectMode((m) => !m); setSelected(new Set()); };
+  const toggleSel = (it: GalleryItem) => setSelected((p) => { const n = new Set(p); const k = itemKey(it); if (n.has(k)) n.delete(k); else n.add(k); return n; });
+  const deleteSelected = async () => {
+    const chosen = items.filter((it) => selected.has(itemKey(it)));
+    if (!chosen.length || deleting) return;
+    if (!(await askConfirm(`${chosen.length}${T('Delete selected items?')}`))) return;
+    setDeleting(true);
+    let failed = 0;
+    for (const it of chosen) { try { await deleteOutput('klein', it.filename, it.subfolder); } catch { failed++; } }
+    setDeleting(false); setSelected(new Set());
+    if (failed) setErr(`${failed} ${T('could not be deleted')}`);
+    void load();
+  };
 
   const toCanvas = (it: GalleryItem) => {
     const g = useGraph.getState();
@@ -63,13 +81,13 @@ export function AssetsPanel() {
         </div>
       )}
       <div className="gal-tabs"><button className={kind === 'image' ? 'on' : ''} onClick={() => setKind('image')}>{T('Images')}</button><button className={kind === 'video' ? 'on' : ''} onClick={() => setKind('video')}>{T('Video clips')}</button></div>
-      <div className="panel-row"><b>{sub}</b><span className="muted">{total}</span><span className="spacer" /><button className="btn" title={T(revealAll ? 'Hide the hidden items again' : 'Temporarily show every hidden item')} onClick={() => useSensitive.getState().setRevealAll(!revealAll)}>{revealAll ? '🙈' : '👁'}</button><button className="btn" onClick={() => void load()} disabled={busy}>↻</button></div>
+      <div className="panel-row"><b>{sub}</b><span className="muted">{total}</span><span className="spacer" />{selectMode && selected.size > 0 && <button className="btn danger" onClick={() => void deleteSelected()} disabled={deleting}>{T('Delete')} {selected.size}</button>}<button className={`btn${selectMode ? ' on' : ''}`} onClick={toggleSelectMode}>{selectMode ? `${selected.size} ${T('Selected')}` : T('Select')}</button><button className="btn" title={T(revealAll ? 'Hide the hidden items again' : 'Temporarily show every hidden item')} onClick={() => useSensitive.getState().setRevealAll(!revealAll)}>{revealAll ? '🙈' : '👁'}</button><button className="btn" onClick={() => void load()} disabled={busy}>↻</button></div>
       {err && <p className="status bad">{err}</p>}
       <div className="thumbs">
         {items.map((it) => {
           const f = { filename: it.filename, subfolder: it.subfolder, type: 'output' as const };
           return (
-            <Thumb key={it.key ?? it.filename} video={kind === 'video'} it={it} url={viewUrl(f)} onClick={() => onClick(it)} onDouble={() => onDouble(it)}
+            <Thumb key={it.key ?? it.filename} video={kind === 'video'} it={it} url={viewUrl(f)} selectMode={selectMode} picked={selected.has(itemKey(it))} onPick={() => toggleSel(it)} onClick={() => onClick(it)} onDouble={() => onDouble(it)}
               onDelete={async () => { if (await askConfirm(`${T('Delete')}? ${it.filename}`)) { await deleteOutput('klein', it.filename, it.subfolder); void load(); } }} />
           );
         })}
@@ -80,23 +98,33 @@ export function AssetsPanel() {
   );
 }
 
-function Thumb({ it, url, video, onClick, onDouble, onDelete }: { it: GalleryItem; url: string; video?: boolean; onClick(): void; onDouble(): void; onDelete(): void }) {
+function Thumb({ it, url, video, selectMode, picked, onPick, onClick, onDouble, onDelete }: { it: GalleryItem; url: string; video?: boolean; selectMode?: boolean; picked?: boolean; onPick(): void; onClick(): void; onDouble(): void; onDelete(): void }) {
   const T = useT();
   const key = mediaKey(it.filename, it.subfolder);
   const blurred = useIsBlurred(key);
   const marked = useSensitive((st) => st.items.has(key));
+  // Same as the web gallery: cards are plain <img> (small cached thumbnail / server-made first frame), and a clip is only
+  // streamed while the pointer is on its card, so a big gallery never holds dozens of decoders or /view streams.
+  const [thumbFailed, setThumbFailed] = useState(false);
+  const [hover, setHover] = useState(false);
+  const vidThumb = `/ltx25_one/thumb?filename=${encodeURIComponent(it.filename)}&subfolder=${encodeURIComponent(it.subfolder)}`;
+  const thumbUrl = `/tj_shared/thumb?filename=${encodeURIComponent(it.filename)}&subfolder=${encodeURIComponent(it.subfolder)}&root=output&t=${Math.round(it.mtime || 0)}`;
   return (
-    <figure className={`thumb${blurred ? ' blurred' : ''}`}>
+    <figure className={`thumb${blurred ? ' blurred' : ''}${selectMode && picked ? ' picked' : ''}`}>
       {video
-        ? <video src={`${url}#t=0.1`} muted loop playsInline preload="metadata" onMouseEnter={(e) => { if (!blurred) void e.currentTarget.play().catch(() => undefined); }} onMouseLeave={(e) => { e.currentTarget.pause(); e.currentTarget.currentTime = 0.1; }}
-            onClick={blurred ? undefined : onClick} onDoubleClick={blurred ? undefined : onDouble} title={`${it.filename} — ${T('Click: enlarge · Double-click: add to canvas')}`} />
-        : <img src={url} alt="" loading="lazy" draggable={!blurred} onDragStart={(e) => e.dataTransfer.setData('text/uri-list', url)}
-            onClick={blurred ? undefined : onClick} onDoubleClick={blurred ? undefined : onDouble} title={`${it.filename} — ${T('Click: enlarge · Double-click: add to canvas')}`} />}
+        ? <div className="vthumb" onMouseEnter={() => { if (!blurred && !selectMode) setHover(true); }} onMouseLeave={() => setHover(false)}
+            onClick={selectMode ? onPick : blurred ? undefined : onClick} onDoubleClick={selectMode || blurred ? undefined : onDouble} title={`${it.filename} — ${T('Click: enlarge · Double-click: add to canvas')}`}>
+            <img src={vidThumb} alt="" loading="lazy" draggable={false} />
+            {hover && !selectMode && <video src={url} muted loop autoPlay playsInline />}
+          </div>
+        : <img src={thumbFailed ? url : thumbUrl} onError={() => setThumbFailed(true)} alt="" loading="lazy" draggable={!blurred} onDragStart={(e) => e.dataTransfer.setData('text/uri-list', url)}
+            onClick={selectMode ? onPick : blurred ? undefined : onClick} onDoubleClick={selectMode || blurred ? undefined : onDouble} title={`${it.filename} — ${T('Click: enlarge · Double-click: add to canvas')}`} />}
+      {selectMode && <span className="pick-box" onClick={onPick}>{picked ? '✓' : ''}</span>}
       <button className="eye" title={T(marked ? 'Reveal this item' : 'Hide this item')} onClick={() => useSensitive.getState().toggle(key)}>{marked ? '⊘' : '👁︎'}</button>
-      <figcaption>
+      {!selectMode && <figcaption>
         <button title={T('Download')} onClick={() => download(url, it.filename)}>⭳</button>
         <button title={T('Delete')} onClick={onDelete}>✕</button>
-      </figcaption>
+      </figcaption>}
     </figure>
   );
 }

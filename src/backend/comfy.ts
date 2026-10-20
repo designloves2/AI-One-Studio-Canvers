@@ -24,8 +24,23 @@ function friendlyError(m: string): string {
   return m;
 }
 
-export async function interrupt(): Promise<void> {
-  try { await fetch(url('/interrupt'), { method: 'POST' }); } catch { /* ignore */ }
+export async function interrupt(promptId?: string): Promise<void> {
+  try {
+    await fetch(url('/interrupt'), promptId
+      ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt_id: promptId }) }
+      : { method: 'POST' });
+  } catch { /* ignore */ }
+}
+
+/** Cancel ONE job: stop it when it is running, take it out of the queue when it is still waiting. */
+export async function cancelPrompt(promptId: string): Promise<void> {
+  try {
+    const q = await getJson<{ queue_running?: unknown[][]; queue_pending?: unknown[][] }>('/queue');
+    if ((q.queue_running ?? []).some((j) => j[1] === promptId)) { await interrupt(promptId); return; }
+    if ((q.queue_pending ?? []).some((j) => j[1] === promptId)) {
+      await fetch(url('/queue'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ delete: [promptId] }) });
+    }
+  } catch { /* ignore */ }
 }
 
 /** Upload bytes into ComfyUI's input folder; returns the file reference. */
@@ -97,6 +112,44 @@ export function onSocket(l: Listener): () => void {
 
 export interface RunResult { promptId: string; images: FileRef[]; videos: FileRef[]; audios: FileRef[]; texts: string[]; raw: Record<string, any> }
 
+// ---- jobs that are running when the page is closed or refreshed: remembered per card, picked up again on the next start
+export const runContext = new WeakMap<AbortSignal, { node?: string }>();
+const INFLIGHT_KEY = 'canvers.inflight.v1';
+export type Inflight = Record<string, { promptId: string; t: number }>;
+export function readInflight(): Inflight { try { return JSON.parse(localStorage.getItem(INFLIGHT_KEY) ?? '{}'); } catch { return {}; } }
+function writeInflight(v: Inflight) { try { localStorage.setItem(INFLIGHT_KEY, JSON.stringify(v)); } catch { /* quota */ } }
+export function forgetInflight(promptId: string) {
+  const v = readInflight(); let changed = false;
+  for (const [k, e] of Object.entries(v)) if (e.promptId === promptId) { delete v[k]; changed = true; }
+  if (changed) writeInflight(v);
+}
+export function clearInflight() { try { localStorage.removeItem(INFLIGHT_KEY); } catch { /* ignore */ } }
+
+function collectOutput(out: RunResult, nodeId: string, output: any) {
+  out.raw[nodeId] = output;
+  for (const im of output?.images ?? []) out.images.push({ filename: im.filename, subfolder: im.subfolder ?? '', type: im.type ?? 'output' });
+  for (const v of output?.gifs ?? output?.videos ?? []) out.videos.push({ filename: v.filename, subfolder: v.subfolder ?? '', type: v.type ?? 'output' });
+  for (const a of output?.audio ?? []) out.audios.push({ filename: a.filename, subfolder: a.subfolder ?? '', type: a.type ?? 'output' });
+  for (const tx of output?.text ?? []) out.texts.push(String(tx));
+}
+
+/** What became of a job we started before the page went away: its finished result, 'pending' (still queued / running) or null (gone). */
+export async function recoverPrompt(promptId: string): Promise<RunResult | 'pending' | 'failed' | null> {
+  try {
+    const e = (await getJson<Record<string, any>>(`/history/${promptId}`))[promptId];
+    if (e) {
+      if (e.status?.status_str === 'error') return 'failed';
+      if (!e.status?.completed && !Object.keys(e.outputs ?? {}).length) return 'pending';
+      const out: RunResult = { promptId, images: [], videos: [], audios: [], texts: [], raw: {} };
+      for (const [nid, o] of Object.entries(e.outputs ?? {})) collectOutput(out, nid, o);
+      return out;
+    }
+    const q = await getJson<{ queue_running?: unknown[][]; queue_pending?: unknown[][] }>('/queue');
+    if ([...(q.queue_running ?? []), ...(q.queue_pending ?? [])].some((j) => j[1] === promptId)) return 'pending';
+  } catch { return 'pending'; }
+  return null;
+}
+
 export interface RunOptions {
   onProgress?: (pct: number, label?: string) => void;
   signal?: AbortSignal;
@@ -115,6 +168,8 @@ export async function runPrompt(graph: Record<string, unknown>, opts: RunOptions
     throw new Error([data.error?.message, nodeErr].filter(Boolean).join(' — ') || `queue failed: HTTP ${res.status}`);
   }
   const promptId: string = data.prompt_id;
+  const runNodeId = opts.signal ? runContext.get(opts.signal)?.node : undefined;
+  if (runNodeId) { const v = readInflight(); v[runNodeId] = { promptId, t: Date.now() }; writeInflight(v); }
 
   return new Promise<RunResult>((resolve, reject) => {
     const out: RunResult = { promptId, images: [], videos: [], audios: [], texts: [], raw: {} };
@@ -124,6 +179,7 @@ export async function runPrompt(graph: Record<string, unknown>, opts: RunOptions
     const finish = (err?: Error) => {
       if (settled) return;
       settled = true;
+      forgetInflight(promptId);
       off();
       if (poll) clearInterval(poll);
       opts.signal?.removeEventListener('abort', onAbort);
@@ -158,7 +214,7 @@ export async function runPrompt(graph: Record<string, unknown>, opts: RunOptions
       else if (m.type === 'execution_error') finish(new Error(friendlyError(d.exception_message || 'execution error')));
       else if (m.type === 'execution_interrupted') finish(new Error('cancelled'));
     });
-    const onAbort = () => { void interrupt(); finish(new Error('cancelled')); };
+    const onAbort = () => { void cancelPrompt(promptId); finish(new Error('cancelled')); };
     opts.signal?.addEventListener('abort', onAbort);
 
     // Safety net: if the socket is not delivering (proxy, CORS), poll the history instead.

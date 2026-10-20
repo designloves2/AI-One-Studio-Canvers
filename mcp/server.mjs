@@ -2288,9 +2288,9 @@ var init_settings = __esm({
     useSettings = create((set2, get) => {
       const saved = load();
       const persist = () => {
-        const { comfyUrl, llm, live, models, saveSubfolder, music, video, hostPanels } = get();
+        const { comfyUrl, llm, live, models, saveSubfolder, music, video, hostPanels, h3Turbo } = get();
         try {
-          localStorage.setItem(KEY, JSON.stringify({ comfyUrl, llm, live, models, saveSubfolder, music, video, hostPanels }));
+          localStorage.setItem(KEY, JSON.stringify({ comfyUrl, llm, live, models, saveSubfolder, music, video, hostPanels, h3Turbo }));
         } catch {
         }
       };
@@ -2304,6 +2304,11 @@ var init_settings = __esm({
         hostPanels: saved.hostPanels ?? false,
         music: saved.music ?? {},
         video: saved.video ?? {},
+        h3Turbo: { fl: saved.h3Turbo?.fl ?? "", ref: saved.h3Turbo?.ref ?? "" },
+        setH3Turbo: (patch) => {
+          set2({ h3Turbo: { ...get().h3Turbo, ...patch } });
+          persist();
+        },
         setVideo: (k, v) => {
           set2({ video: { ...get().video, [k]: v } });
           persist();
@@ -2370,13 +2375,19 @@ var init_http = __esm({
 var comfy_exports = {};
 __export(comfy_exports, {
   assetFromFile: () => assetFromFile,
+  cancelPrompt: () => cancelPrompt,
+  clearInflight: () => clearInflight,
   clientId: () => clientId,
   ensureInput: () => ensureInput,
   fetchBlob: () => fetchBlob,
+  forgetInflight: () => forgetInflight,
   freeModels: () => freeModels,
   interrupt: () => interrupt,
   objectInfo: () => objectInfo,
   onSocket: () => onSocket,
+  readInflight: () => readInflight,
+  recoverPrompt: () => recoverPrompt,
+  runContext: () => runContext,
   runPrompt: () => runPrompt,
   systemStats: () => systemStats,
   uid: () => uid,
@@ -2393,9 +2404,22 @@ function friendlyError(m) {
   if (/VHS failed to extract audio/i.test(m)) return "This video has no sound track, and the video loader needs one. Add a sound track first (Add Audio to Video card), or use a clip that was generated here.";
   return m;
 }
-async function interrupt() {
+async function interrupt(promptId) {
   try {
-    await fetch(url("/interrupt"), { method: "POST" });
+    await fetch(url("/interrupt"), promptId ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt_id: promptId }) } : { method: "POST" });
+  } catch {
+  }
+}
+async function cancelPrompt(promptId) {
+  try {
+    const q = await getJson("/queue");
+    if ((q.queue_running ?? []).some((j) => j[1] === promptId)) {
+      await interrupt(promptId);
+      return;
+    }
+    if ((q.queue_pending ?? []).some((j) => j[1] === promptId)) {
+      await fetch(url("/queue"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ delete: [promptId] }) });
+    }
   } catch {
   }
 }
@@ -2470,6 +2494,58 @@ function onSocket(l) {
   void openSocket();
   return () => listeners.delete(l);
 }
+function readInflight() {
+  try {
+    return JSON.parse(localStorage.getItem(INFLIGHT_KEY) ?? "{}");
+  } catch {
+    return {};
+  }
+}
+function writeInflight(v) {
+  try {
+    localStorage.setItem(INFLIGHT_KEY, JSON.stringify(v));
+  } catch {
+  }
+}
+function forgetInflight(promptId) {
+  const v = readInflight();
+  let changed = false;
+  for (const [k, e] of Object.entries(v)) if (e.promptId === promptId) {
+    delete v[k];
+    changed = true;
+  }
+  if (changed) writeInflight(v);
+}
+function clearInflight() {
+  try {
+    localStorage.removeItem(INFLIGHT_KEY);
+  } catch {
+  }
+}
+function collectOutput(out, nodeId, output) {
+  out.raw[nodeId] = output;
+  for (const im of output?.images ?? []) out.images.push({ filename: im.filename, subfolder: im.subfolder ?? "", type: im.type ?? "output" });
+  for (const v of output?.gifs ?? output?.videos ?? []) out.videos.push({ filename: v.filename, subfolder: v.subfolder ?? "", type: v.type ?? "output" });
+  for (const a of output?.audio ?? []) out.audios.push({ filename: a.filename, subfolder: a.subfolder ?? "", type: a.type ?? "output" });
+  for (const tx of output?.text ?? []) out.texts.push(String(tx));
+}
+async function recoverPrompt(promptId) {
+  try {
+    const e = (await getJson(`/history/${promptId}`))[promptId];
+    if (e) {
+      if (e.status?.status_str === "error") return "failed";
+      if (!e.status?.completed && !Object.keys(e.outputs ?? {}).length) return "pending";
+      const out = { promptId, images: [], videos: [], audios: [], texts: [], raw: {} };
+      for (const [nid, o] of Object.entries(e.outputs ?? {})) collectOutput(out, nid, o);
+      return out;
+    }
+    const q = await getJson("/queue");
+    if ([...q.queue_running ?? [], ...q.queue_pending ?? []].some((j) => j[1] === promptId)) return "pending";
+  } catch {
+    return "pending";
+  }
+  return null;
+}
 async function runPrompt(graph, opts = {}) {
   await openSocket();
   const res = await fetch(url("/prompt"), {
@@ -2483,6 +2559,12 @@ async function runPrompt(graph, opts = {}) {
     throw new Error([data.error?.message, nodeErr].filter(Boolean).join(" \u2014 ") || `queue failed: HTTP ${res.status}`);
   }
   const promptId = data.prompt_id;
+  const runNodeId = opts.signal ? runContext.get(opts.signal)?.node : void 0;
+  if (runNodeId) {
+    const v = readInflight();
+    v[runNodeId] = { promptId, t: Date.now() };
+    writeInflight(v);
+  }
   return new Promise((resolve, reject) => {
     const out = { promptId, images: [], videos: [], audios: [], texts: [], raw: {} };
     let settled = false;
@@ -2490,6 +2572,7 @@ async function runPrompt(graph, opts = {}) {
     const finish = (err) => {
       if (settled) return;
       settled = true;
+      forgetInflight(promptId);
       off();
       if (poll) clearInterval(poll);
       opts.signal?.removeEventListener("abort", onAbort);
@@ -2528,7 +2611,7 @@ async function runPrompt(graph, opts = {}) {
       else if (m.type === "execution_interrupted") finish(new Error("cancelled"));
     });
     const onAbort = () => {
-      void interrupt();
+      void cancelPrompt(promptId);
       finish(new Error("cancelled"));
     };
     opts.signal?.addEventListener("abort", onAbort);
@@ -2560,7 +2643,7 @@ async function freeModels() {
   } catch {
   }
 }
-var clientId, viewUrl, uid, ws, listeners, opening;
+var clientId, viewUrl, uid, ws, listeners, opening, runContext, INFLIGHT_KEY;
 var init_comfy = __esm({
   "src/backend/comfy.ts"() {
     "use strict";
@@ -2571,6 +2654,8 @@ var init_comfy = __esm({
     ws = null;
     listeners = /* @__PURE__ */ new Set();
     opening = null;
+    runContext = /* @__PURE__ */ new WeakMap();
+    INFLIGHT_KEY = "canvers.inflight.v1";
   }
 });
 
@@ -2603,7 +2688,13 @@ var loras = (fam) => [
   slider("lora2_strength", "LoRA 2 strength", 0, 2, 0.05, 1, { advanced: true, when: (p) => p.lora2 !== "none" })
 ];
 var negative = text("negative", "Negative prompt", "", true, { advanced: true });
-var sizeParams = (on) => on ? [aspect(), megapixels()] : [];
+var sizeParams = (on) => on ? [
+  { id: "size_mode", label: "Size", control: { kind: "select", options: ["mp", "wh"], labels: { mp: "Aspect + MP", wh: "Custom W \xD7 H" } }, default: "mp" },
+  { ...aspect(), when: (p) => p.size_mode !== "wh" },
+  { ...megapixels(), when: (p) => p.size_mode !== "wh" },
+  num("width", "Width (px)", 1024, { when: (p) => p.size_mode === "wh" }, 256, 4096, 16),
+  num("height", "Height (px)", 1024, { when: (p) => p.size_mode === "wh" }, 256, 4096, 16)
+] : [];
 var krea2 = (id, label, extra = [], size = false) => ({
   id,
   label,
@@ -2741,13 +2832,13 @@ var REGISTRY = [
     outputs: [P.imgOut()],
     params: [],
     engines: [
+      krea2("krea2", "Krea 2 (local)", [], true),
+      qwen21("qwen21", "Qwen Image 2.1 (local)", [], true),
       { ...zimage("zimage", "Z-Image Turbo (local)", [], true), default: true },
       klein("klein", "Flux.2 Klein (local)", [], true),
-      krea2("krea2", "Krea 2 (local)", [], true),
-      sdxl("sdxl", "SDXL (local)", [], true),
-      anima("anima", "Anima (local)", [], true),
       qwen("qwen", "Qwen Image Edit 2511 (local)", [], true),
-      qwen21("qwen21", "Qwen Image 2.1 (local)", [], true)
+      anima("anima", "Anima (local)", [], true),
+      sdxl("sdxl", "SDXL (local)", [], true)
     ],
     description: "Text to image on your own ComfyUI."
   },
@@ -3023,8 +3114,9 @@ var REGISTRY = [
     inputs: [],
     outputs: [{ id: "card", label: "Turbo", type: "pipe" }],
     params: [
-      sel("turbo", "Turbo", ["pdd", "larryvrh", "lightx2v", "none"], "pdd"),
-      dyn("turbo_lora", "Turbo LoRA", "loras:h3", "none", { when: (p) => p.turbo !== "none" }),
+      { id: "turbo", label: "Turbo", control: { kind: "select", options: ["pdd", "larryvrh", "lightx2v", "none"], labels: { pdd: "Turbo LoRA (Basic)", larryvrh: "Turbo LoRA (larryvrh)", lightx2v: "SLA Turbo (lightx2v)", none: "None" } }, default: "pdd" },
+      dyn("turbo_lora", "Turbo LoRA (first / last frame)", "loras:h3", "none", { when: (p) => p.turbo !== "none" }),
+      dyn("turbo_lora_ref", "Turbo LoRA (reference)", "loras:h3", "none", { when: (p) => p.turbo !== "none" }),
       slider("turbo_strength", "Turbo strength", 0, 2, 0.05, 1, { when: (p) => p.turbo !== "none" }),
       slider("turbo_steps", "Turbo steps", 1, 16, 1, 8, { advanced: true, when: (p) => p.turbo !== "none" }),
       toggle("hires", "7+1 hi-res finish (7 steps small \u2192 upscale \u2192 1 step big)", true, { when: (p) => p.turbo === "pdd" }),
@@ -3280,8 +3372,11 @@ var REGISTRY = [
     kind: "generate",
     inputs: [{ id: "videos", label: "Videos (in order)", type: "video", multi: true }],
     outputs: [{ id: "video", label: "Video", type: "video" }],
-    params: [slider("overlap", "Trim overlap (s)", 0, 3, 0.05, 0, { advanced: true })],
-    description: "Join several videos into one, in the order they are connected."
+    params: [
+      { id: "mode", label: "Join", control: { kind: "select", options: ["concat", "onetake"], labels: { concat: "Join as they are", onetake: "One-Take (trim the shared 1.625 s)" } }, default: "concat" },
+      slider("overlap", "Trim overlap (s)", 0, 3, 0.05, 0, { advanced: true, when: (p) => p.mode !== "onetake" })
+    ],
+    description: "Join several videos into one, in the order they are connected. One-Take: clips made with the One-Take continuity share their first 1.625 s with the previous clip, so that part is trimmed (the clips are re-encoded)."
   },
   { id: "import-audio", title: "Import Audio", category: "Utility", kind: "source", inputs: [], outputs: [{ id: "audio", label: "Audio", type: "audio" }], params: [], description: "Load an audio file (e.g. a recording for YuE2 Cover Music)." },
   { id: "import", title: "Load Image", category: "Utility", kind: "source", inputs: [], outputs: [{ id: "image", label: "Image", type: "image" }], params: [], description: "Load an image from your computer, or drop one on the canvas." },
@@ -4040,6 +4135,7 @@ init_http();
 // src/store/graph.ts
 init_esm();
 init_comfy();
+init_settings();
 var MODE_KEY = "canvers.mode";
 function measure(n2) {
   const el = typeof document !== "undefined" ? document.querySelector(`.react-flow__node[data-id="${n2.id}"]`) : null;
@@ -4070,6 +4166,8 @@ var hostSerializer = null;
 var useGraph = create((set2, get) => ({
   projectId: uid("p"),
   projectName: "untitled",
+  canvasFile: null,
+  dirty: false,
   nodes: [],
   edges: [],
   runtime: {},
@@ -4123,7 +4221,7 @@ var useGraph = create((set2, get) => ({
       results: [],
       activeResult: 0,
       engineId: engine?.id,
-      params: defaultParams(def, engine?.id),
+      params: { ...defaultParams(def, engine?.id), ...defId === "h3-turbo" ? rememberedTurbo() : {} },
       ...defId === "note" ? { w: 240, h: 160 } : {},
       ...init
     };
@@ -4157,7 +4255,15 @@ var useGraph = create((set2, get) => ({
     set2({ nodes: get().nodes.map((n2) => m.has(n2.id) ? { ...n2, x: m.get(n2.id).x, y: m.get(n2.id).y } : n2) });
   },
   setSize: (id, w, h) => set2({ nodes: get().nodes.map((n2) => n2.id === id ? { ...n2, w, h } : n2) }),
-  setParam: (id, key, v) => set2({ nodes: get().nodes.map((n2) => n2.id === id ? { ...n2, params: { ...n2.params, [key]: v } } : n2) }),
+  setParam: (id, key, v) => {
+    set2({ nodes: get().nodes.map((n2) => n2.id === id ? { ...n2, params: { ...n2.params, [key]: v } } : n2) });
+    if (get().nodes.find((n2) => n2.id === id)?.defId === "h3-turbo" && typeof v === "string" && v !== "none" && v !== "") {
+      if (key === "turbo_lora") useSettings.getState().setH3Turbo({ fl: v });
+      else if (key === "turbo_lora_ref") useSettings.getState().setH3Turbo({ ref: v });
+      const filled = fillTurbo(get().nodes);
+      if (filled !== get().nodes) set2({ nodes: filled });
+    }
+  },
   setEngine: (id, engineId) => {
     get().snapshot();
     set2({
@@ -4274,8 +4380,9 @@ var useGraph = create((set2, get) => ({
   openAssetPicker: (nodeId) => set2({ assetPicker: nodeId }),
   openFacePicker: (nodeId) => set2({ facePicker: nodeId }),
   toProject: () => ({ app: "ai-one-studio-canvers", version: 1, id: get().projectId, name: get().projectName, nodes: hostSerializer ? get().nodes.map(hostSerializer) : get().nodes, edges: get().edges, updatedAt: (/* @__PURE__ */ new Date()).toISOString() }),
-  loadProject: (p) => set2({ projectId: p.id ?? uid("p"), projectName: p.name || "untitled", nodes: p.nodes ?? [], edges: p.edges ?? [], runtime: {}, selected: [], past: [], future: [], fitTick: get().fitTick + 1 }),
-  newProject: () => set2({ projectId: uid("p"), projectName: "untitled", nodes: [], edges: [], runtime: {}, selected: [], past: [], future: [] }),
+  markSaved: (file) => set2({ canvasFile: file, dirty: false }),
+  loadProject: (p, file = null, dirty = false) => quietly(() => set2({ canvasFile: file, dirty, projectId: p.id ?? uid("p"), projectName: p.name || "untitled", nodes: fillTurbo(p.nodes ?? []), edges: p.edges ?? [], runtime: {}, selected: [], past: [], future: [], fitTick: get().fitTick + 1 })),
+  newProject: () => quietly(() => set2({ canvasFile: null, dirty: false, projectId: uid("p"), projectName: "untitled", nodes: [], edges: [], runtime: {}, selected: [], past: [], future: [] })),
   requestFit: () => set2({ fitTick: get().fitTick + 1 }),
   addComposerRun: (r) => {
     const runs = [r, ...get().composerRuns];
@@ -4293,6 +4400,36 @@ var useGraph = create((set2, get) => ({
     set2({ composerRuns: runs });
   }
 }));
+function fillTurbo(nodes) {
+  const t = useSettings.getState().h3Turbo;
+  let changed = false;
+  const out = nodes.map((n2) => {
+    if (n2.defId !== "h3-turbo") return n2;
+    const patch = {};
+    if ((!n2.params.turbo_lora || n2.params.turbo_lora === "none") && t.fl) patch.turbo_lora = t.fl;
+    if ((!n2.params.turbo_lora_ref || n2.params.turbo_lora_ref === "none") && t.ref) patch.turbo_lora_ref = t.ref;
+    if (!Object.keys(patch).length) return n2;
+    changed = true;
+    return { ...n2, params: { ...n2.params, ...patch } };
+  });
+  return changed ? out : nodes;
+}
+function rememberedTurbo() {
+  const t = useSettings.getState().h3Turbo;
+  const out = {};
+  if (t.fl) out.turbo_lora = t.fl;
+  if (t.ref) out.turbo_lora_ref = t.ref;
+  return out;
+}
+var quiet = false;
+function quietly(fn) {
+  quiet = true;
+  try {
+    fn();
+  } finally {
+    quiet = false;
+  }
+}
 
 // src/backend/promptStyle.ts
 var AUTO = "auto";
@@ -4786,6 +4923,12 @@ var DEFAULT_OPT = {
   shiftAudio: 3
 };
 var ONE_TAKE_OVERLAP_FRAMES = 39;
+var alignFrameCount = (n2) => {
+  let f = Math.max(5, Math.round(n2));
+  while (f % 17 !== 5) f++;
+  return f;
+};
+var ONE_TAKE_OVERLAP_SEC = alignFrameCount(ONE_TAKE_OVERLAP_FRAMES) / 24;
 var TAIL_CANDIDATES = 8;
 var cache4 = null;
 var h3ModelLists = () => cache4 ??= getJson("/minimax_h3_one/models").catch((e) => {
@@ -5082,6 +5225,7 @@ function need(v, what) {
 
 // src/engine/more.ts
 init_comfy();
+init_http();
 
 // src/backend/post.ts
 init_comfy();
@@ -5893,6 +6037,17 @@ function optFromCards(cards) {
     ...t ? { turbo: t.turbo, turboLora: t.turbo_lora, turboStrength: t.turbo_strength, turboSteps: t.turbo_steps, hires: !!t.hires, hiresStartMp: t.hires_start_mp, hiresFinalMp: t.hires_final_mp } : {}
   };
 }
+async function h3Opt(cards, ref = false) {
+  const o = optFromCards(cards);
+  if (!cards.turbo || o.turbo === "none") return o;
+  const own = String((ref ? cards.turbo.turbo_lora_ref : cards.turbo.turbo_lora) ?? "");
+  if (own && own !== "none") return { ...o, turboLora: own };
+  const mem = useSettings.getState().h3Turbo[ref ? "ref" : "fl"];
+  if (o.turbo === "pdd" && mem) return { ...o, turboLora: mem };
+  const cfg = await getJson("/minimax_h3_one/config").catch(() => ({}));
+  const pick = o.turbo === "pdd" ? [ref ? cfg.pdd_file_reference || cfg.pdd_file : cfg.pdd_file, cfg.pdd_lora_strength] : o.turbo === "lightx2v" ? [cfg.sla_turbo_lora, cfg.sla_turbo_strength] : [cfg.turbo_lora, cfg.turbo_lora_strength];
+  return pick[0] ? { ...o, turboLora: String(pick[0]), turboStrength: typeof pick[1] === "number" ? pick[1] : o.turboStrength } : o;
+}
 async function asOutputClip(a, c) {
   if (a.file?.type === "output") return { filename: a.file.filename, subfolder: a.file.subfolder };
   const g = {};
@@ -6127,7 +6282,7 @@ var EXTRA_RUNNERS = {
       clips.push(await asOutputClip(vids[i], c));
     }
     c.progress(60, "stitching\u2026");
-    const ov = num2(c.p.overlap, 0);
+    const ov = str(c.p.mode, "concat") === "onetake" ? ONE_TAKE_OVERLAP_SEC : num2(c.p.overlap, 0);
     const st = await stitchClips(clips, `${s.saveSubfolder}/stitch`, ov > 0 ? ov : void 0);
     if (!st.ok || !st.filename) throw new Error(`stitch failed: ${st.error ?? "unknown"}`);
     return [assetFromFile({ filename: st.filename, subfolder: st.subfolder ?? "", type: "output" }, "video", "video")];
@@ -6223,7 +6378,7 @@ beats at (s): ${secs.join(", ")}`)];
         colour: num2(p.colour, 1),
         blend: num2(p.blend, 1),
         undetected: str(p.undetected, "fade_out"),
-        opt: optFromCards(cards),
+        opt: await h3Opt(cards),
         loras: cardLoras(c),
         models: s.video,
         seed: seed2 + i,
@@ -6418,6 +6573,10 @@ async function executeGraph(g, targetId, hooks, signal) {
     throw err;
   }
 }
+function sizeCustom(w, h) {
+  const s = (v) => Math.max(256, Math.min(4096, Math.round(v / 16) * 16));
+  return { w: s(w), h: s(h) };
+}
 function sizeFrom(aspect2, mp) {
   const [a, b] = aspect2.split(":").map(Number);
   const r = a && b ? a / b : 1;
@@ -6449,7 +6608,7 @@ function imageRunner(mode) {
     for (const a of refs.slice(0, 10)) inputFiles.push(await ensureInput(a));
     const maskA = c.inputs("mask")[0];
     const maskFile = maskA ? await ensureInput(maskA) : void 0;
-    const { w, h } = typeof p.aspect === "string" && (m === "t2i" || m === "krea2control" || m === "identity" || m === "animactrl") ? sizeFrom(String(p.aspect), num2(p.megapixels, 1)) : { w: 0, h: 0 };
+    const { w, h } = typeof p.aspect === "string" && (m === "t2i" || m === "krea2control" || m === "identity" || m === "animactrl") ? p.size_mode === "wh" ? sizeCustom(num2(p.width, 1024), num2(p.height, 1024)) : sizeFrom(String(p.aspect), num2(p.megapixels, 1)) : { w: 0, h: 0 };
     const lora = (n2, s) => ({ name: str(p[n2], "none"), strength: num2(p[s], 1) });
     const job = {
       family,
@@ -6536,7 +6695,7 @@ async function runH3(c) {
   const lora = (n2, s2) => ({ name: str(p[n2], "none"), strength: num2(p[s2], 1) });
   const seconds = num2(p.seconds, 8);
   const runId = uid("ot").slice(0, 10);
-  const opt = optFromCards(cards);
+  const opt = await h3Opt(cards, ref);
   const clips = [];
   let prevCheckpoint;
   for (let i = 0; i < prompts.length; i++) {
@@ -6592,7 +6751,7 @@ async function runH3(c) {
   const assets = clips.map((f) => assetFromFile({ filename: f.filename, subfolder: f.subfolder, type: "output" }, "video", "video"));
   if (clips.length > 1 && p.stitch !== false) {
     c.progress(98, "stitching\u2026");
-    const st = await stitchClips(clips, `${settings.saveSubfolder}/MMH3_full`, continuity === "onetake" ? (ONE_TAKE_OVERLAP_FRAMES + 4) / 24 : void 0);
+    const st = await stitchClips(clips, `${settings.saveSubfolder}/MMH3_full`, continuity === "onetake" ? ONE_TAKE_OVERLAP_SEC : void 0);
     if (!st.ok || !st.filename) throw new Error(`stitch failed: ${st.error ?? "unknown"}`);
     return [assetFromFile({ filename: st.filename, subfolder: st.subfolder ?? "", type: "output" }, "video", "video"), ...assets];
   }
@@ -6972,7 +7131,7 @@ var send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 async function handle(msg) {
   const { id, method, params } = msg;
   try {
-    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.8.2" } } });
+    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.9.0" } } });
     if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS.map(({ run: _r, ...t }) => t) } });
     if (method === "tools/call") {
       const tool = TOOLS.find((t) => t.name === params?.name);

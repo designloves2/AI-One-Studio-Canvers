@@ -41,6 +41,8 @@ kbd { background: var(--bg3); border: 1px solid var(--line2); border-radius: 4px
 .panel-row { display: flex; align-items: center; gap: 8px; }
 .thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 8px; }
 .thumb { margin: 0; position: relative; border-radius: 8px; overflow: hidden; background: var(--bg); aspect-ratio: 1; }
+.thumb .vthumb { position: absolute; inset: 0; }
+.thumb .vthumb video { position: absolute; inset: 0; }
 .thumb img, .thumb video { width: 100%; height: 100%; object-fit: cover; cursor: pointer; display: block; }
 .thumb figcaption { position: absolute; right: 4px; top: 4px; display: none; gap: 4px; } .thumb:hover figcaption { display: flex; }
 .thumb figcaption button { background: rgba(0,0,0,.65); border: 0; border-radius: 5px; width: 24px; height: 24px; }
@@ -230,6 +232,9 @@ body.resizing { cursor: col-resize; user-select: none; }
 .thumb img { transition: filter .15s; }
 .thumb.blurred img { filter: blur(16px); transform: scale(1.12); cursor: default; }
 .thumb.blurred::after { content: ''; position: absolute; inset: 0; background: rgba(12,14,20,.5); pointer-events: none; }
+.thumb .pick-box { position: absolute; left: 4px; top: 4px; z-index: 3; width: 20px; height: 20px; border-radius: 5px; border: 1px solid rgba(255,255,255,.7); background: rgba(0,0,0,.6); color: #fff; font-size: 13px; line-height: 18px; text-align: center; cursor: pointer; }
+.thumb.picked { outline: 2px solid var(--acc); outline-offset: -2px; }
+.thumb.picked .pick-box { background: var(--acc); }
 .thumb .eye { position: absolute; right: 4px; bottom: 4px; z-index: 3; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 5px; background: rgba(0,0,0,.55); color: #fff; font-size: 12px; line-height: 1; }
 .thumb .eye:hover { background: rgba(0,0,0,.8); }
 .thumb figcaption { z-index: 3; }
@@ -275,6 +280,7 @@ body.resizing { cursor: col-resize; user-select: none; }
 .lib-item.open .lib-tile { flex-direction: row; align-items: center; gap: 8px; } .lib-item.open .lib-tile img { width: 64px; }
 .lib-edit { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; } .lib-edit label { display: flex; flex-direction: column; gap: 2px; }
 .btn.danger { color: var(--bad); }
+.panel-row .btn.on { background: var(--acc); color: #fff; }
 
 /* custom card colours: one swatch in the menu, the palette lives in a popup */
 .custom-swatch { background: conic-gradient(#ff5d6c, #ffb84d, #e8e45a, #34c98e, #4f8dff, #8b7bff, #ff5d6c) !important; }
@@ -357,3 +363,26 @@ body.resizing { cursor: col-resize; user-select: none; }
 .restart-btn { width: 24px; height: 24px; padding: 0; border: 1px solid var(--line2); border-radius: 6px; background: var(--bg3); color: var(--muted); font-size: 14px; line-height: 1; } .restart-btn:hover:not(:disabled) { color: var(--fg); border-color: var(--acc); } .restart-btn:disabled { opacity: .6; cursor: default; }
 .restart-btn.spin { animation: runspin .9s linear infinite; }
 .dlg p { white-space: pre-line; }
+
+/* saved canvases */
+.save-state { font-size: 11px; padding: 2px 8px; border-radius: 10px; white-space: nowrap; border: 0; font-family: inherit; }
+button.save-state.dirty { cursor: pointer; } button.save-state.dirty:hover { background: rgba(240,180,41,.28); } button.save-state.clean { cursor: default; }
+.save-state.dirty { color: #f0b429; background: rgba(240,180,41,.12); } .save-state.clean { color: #43c075; background: rgba(67,192,117,.12); }
+.cv-current { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid var(--line2); border-radius: 10px; background: var(--bg2); }
+.cv-title { display: flex; align-items: center; gap: 8px; justify-content: space-between; } .cv-title b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cv-list { display: flex; flex-direction: column; gap: 6px; }
+.cv-item { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg2); cursor: pointer; }
+.cv-item:hover { border-color: var(--acc); } .cv-item.current { border-color: var(--acc); background: var(--bg3); }
+.cv-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; } .cv-main b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; } .cv-main .muted { font-size: 11px; }
+
+/* system monitor (top bar, left of the ComfyUI status) */
+.sysmon { display: flex; align-items: flex-end; gap: 6px; margin-right: 6px; }
+.sysmon-meter { display: flex; flex-direction: column; align-items: center; gap: 1px; }
+.sysmon-label { font-size: 8px; color: var(--muted); line-height: 1; letter-spacing: .03em; }
+.sysmon-box { position: relative; width: 46px; height: 15px; border-radius: 3px; background: var(--bg2); border: 1px solid var(--line2); overflow: hidden; }
+.sysmon-fill { position: absolute; left: 0; top: 0; bottom: 0; transition: width .4s ease, background .4s ease; }
+.sysmon-text { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; color: #fff; text-shadow: 0 0 2px rgba(0,0,0,.9); }
+@media (max-width: 900px) { .sysmon { gap: 4px; } .sysmon-box { width: 43px; } }
+
+/* the stop button sits above the RUNNING overlay so it stays bright and clickable */
+.cnode.running .run.stop { position: relative; z-index: 30; box-shadow: 0 0 0 2px rgba(255,93,108,.35); }

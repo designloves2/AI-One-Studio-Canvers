@@ -3,7 +3,8 @@
 import type { Asset } from '../types';
 import type { Ctx } from './run';
 import { assetFromFile, ensureInput, runPrompt } from '../backend/comfy';
-import { DEFAULT_OPT, copyToInput, type H3Options } from '../backend/h3';
+import { getJson } from '../backend/http';
+import { DEFAULT_OPT, ONE_TAKE_OVERLAP_SEC, copyToInput, type H3Options } from '../backend/h3';
 import { buildPostGraph, type PostStep, type RtxSize } from '../backend/post';
 import { buildH3ImageGraph } from '../backend/h3Image';
 import { buildLtxGraph, ltxSize } from '../backend/ltx';
@@ -45,6 +46,21 @@ export function optFromCards(cards: H3Cards): H3Options {
     ...(s ? { attnBackend: s.attn_backend, attnForward: s.attn_forward, optimizer: s.optimizer, blockCache: s.block_cache, spectrum: !!s.spectrum, fusedModulation: !!s.fused_mod, shiftVideo: s.shift_video, shiftAudio: s.shift_audio } : {}),
     ...(t ? { turbo: t.turbo, turboLora: t.turbo_lora, turboStrength: t.turbo_strength, turboSteps: t.turbo_steps, hires: !!t.hires, hiresStartMp: t.hires_start_mp, hiresFinalMp: t.hires_final_mp } : {}),
   };
+}
+
+/** optFromCards + the turbo LoRA saved in One Studio: a Turbo card whose LoRA is still "none" would silently run the slow full-step path (no 7+1). */
+export async function h3Opt(cards: H3Cards, ref = false): Promise<H3Options> {
+  const o = optFromCards(cards);
+  if (!cards.turbo || o.turbo === 'none') return o;
+  // two LoRA types: first/last-frame videos use `turbo_lora`, multi-reference videos use `turbo_lora_ref`
+  const own = String((ref ? cards.turbo.turbo_lora_ref : cards.turbo.turbo_lora) ?? '');
+  if (own && own !== 'none') return { ...o, turboLora: own };
+  const mem = useSettings.getState().h3Turbo[ref ? 'ref' : 'fl'];
+  if (o.turbo === 'pdd' && mem) return { ...o, turboLora: mem };
+  const cfg = await getJson<Record<string, any>>('/minimax_h3_one/config').catch(() => ({} as Record<string, any>));
+  const pick = o.turbo === 'pdd' ? [ref ? cfg.pdd_file_reference || cfg.pdd_file : cfg.pdd_file, cfg.pdd_lora_strength]
+    : o.turbo === 'lightx2v' ? [cfg.sla_turbo_lora, cfg.sla_turbo_strength] : [cfg.turbo_lora, cfg.turbo_lora_strength];
+  return pick[0] ? { ...o, turboLora: String(pick[0]), turboStrength: typeof pick[1] === 'number' ? pick[1] : o.turboStrength } : o;
 }
 
 // ---- helpers
@@ -215,7 +231,8 @@ export const EXTRA_RUNNERS: Record<string, Runner> = {
     const clips: { filename: string; subfolder: string }[] = [];
     for (let i = 0; i < vids.length; i++) { c.progress(Math.round((i / vids.length) * 40), `preparing clip ${i + 1}…`); clips.push(await asOutputClip(vids[i], c)); }
     c.progress(60, 'stitching…');
-    const ov = num(c.p.overlap, 0);
+    // One-Take: every clip after the first starts with the tail of the one before it - trim exactly that overlap
+    const ov = str(c.p.mode, 'concat') === 'onetake' ? ONE_TAKE_OVERLAP_SEC : num(c.p.overlap, 0);
     const st = await stitchClips(clips, `${s.saveSubfolder}/stitch`, ov > 0 ? ov : undefined);
     if (!st.ok || !st.filename) throw new Error(`stitch failed: ${st.error ?? 'unknown'}`);
     return [assetFromFile({ filename: st.filename, subfolder: st.subfolder ?? '', type: 'output' }, 'video', 'video')];
@@ -279,7 +296,7 @@ export const EXTRA_RUNNERS: Record<string, Runner> = {
         denoise: num(p.denoise, 0.4), mulSmall: num(p.mul_small, 1), mulLarge: num(p.mul_large, 0.35), pxSmall: num(p.px_small, 30), pxLarge: num(p.px_large, 120),
         steps: num(p.steps, 8), sampler: str(p.sampler, 'euler'), scheduler: str(p.scheduler, 'simple'),
         paste: str(p.paste, 'face_only'), feather: num(p.feather, 6), colour: num(p.colour, 1), blend: num(p.blend, 1), undetected: str(p.undetected, 'fade_out'),
-        opt: optFromCards(cards), loras: cardLoras(c), models: s.video, seed: seed + i, saveSubfolder: s.saveSubfolder, stem: 'MMH3',
+        opt: await h3Opt(cards), loras: cardLoras(c), models: s.video, seed: seed + i, saveSubfolder: s.saveSubfolder, stem: 'MMH3',
       });
       const res = await runPrompt(g.graph, { onProgress: (pct, l) => c.progress(Math.round((i + pct / 100) / passes.length * 100), `face ${i + 1}/${passes.length} ${l ?? ''}`), signal: c.signal });
       out = outFile(res.raw, g.save);
