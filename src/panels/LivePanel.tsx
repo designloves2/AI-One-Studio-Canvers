@@ -1,5 +1,6 @@
 // Live Canvas chat (left panel): describe what you want, the LLM reads the canvas and builds / edits / arranges it.
 // Extras: production templates, follow-up suggestions, per-answer undo, attach an image (it becomes a card and is described for the LLM).
+import { cancelWaiting, useLlmNotice } from '../backend/llmGuard';
 import { useEffect, useRef, useState } from 'react';
 import { liveTurn, type LiveMsg } from '../backend/liveCanvas';
 import { liveLlmSettings, runLlm } from '../backend/llm';
@@ -32,6 +33,7 @@ export function LivePanel() {
   const [msgs, setMsgs] = useState<LiveMsg[]>(load);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
+  const waitNote = useLlmNotice((n) => n.live);
   const [status, setStatus] = useState('');
   const [showTpl, setShowTpl] = useState(false);
   const [attached, setAttached] = useState<{ cardId: string; name: string; caption: string }[]>([]);
@@ -67,7 +69,7 @@ export function LivePanel() {
         const id = g.addNode('import', cur.length ? Math.min(...cur.map((n) => n.x)) - 380 : 0, cur.length ? Math.min(...cur.map((n) => n.y)) : 0, { title: f.name } as never);
         g.setResults(id, [a]);
         let caption = '';
-        try { caption = (await runLlm({ system: 'Describe this image in one or two short sentences for a video director: subject, look, colours, mood.', prompt: 'Describe this image.', images: [a], max_tokens: 200, llm: liveLlmSettings() })).slice(0, 240); } catch { /* the backend may not see images */ }
+        try { caption = (await runLlm({ system: 'Describe this image in one or two short sentences for a video director: subject, look, colours, mood.', prompt: 'Describe this image.', images: [a], max_tokens: 200, llm: liveLlmSettings(), where: 'live' })).slice(0, 240); } catch { /* the backend may not see images */ }
         setAttached((x) => [...x, { cardId: id, name: f.name, caption }]);
       } catch { /* upload failed */ }
     }
@@ -97,6 +99,7 @@ export function LivePanel() {
           </div>
         ))}
         {busy && <div className="live-msg assistant"><div className="bubble-txt muted">⏳ {status || T('thinking…')}</div></div>}
+        {waitNote && <div className="live-msg assistant"><div className="bubble-txt llm-wait">⚠ {waitNote} <button className="mini-link" onClick={() => cancelWaiting('live')}>{T('Cancel')}</button></div></div>}
         <div ref={end} />
       </div>
       <div className="live-input">

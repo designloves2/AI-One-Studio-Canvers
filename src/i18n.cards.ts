@@ -17,7 +17,7 @@ export const KO_CARDS: Record<string, string> = {
   'Could not load this file': '파일을 불러오지 못했어요', 'The server is not sending this file (ComfyUI may be stuck)': '서버가 파일을 내려주지 않아요 (ComfyUI가 멈췄을 수 있어요)', Retry: '다시 시도',
   'Click to enlarge': '클릭하면 크게 봅니다',
   Deleted: '삭제됨',
-  Canvases: '캔버스', 'Saved canvases': '저장된 캔버스', 'Not saved': '저장 안 됨', 'Click to save': '클릭해서 저장', 'There is an unsaved canvas from last time. Restore it?': '지난번에 저장하지 않은 캔버스가 있어요. 복구할까요?', Saved: '저장됨', 'Save as': '다른 이름으로 저장', Export: '내보내기', Import: '불러오기',
+  Canvases: '캔버스', 'Saved canvases': '저장된 캔버스', 'Not saved': '저장 안 됨', 'Click to save': '클릭해서 저장', 'Generating now — the local LLM waits until it is done (a local LLM running together with a generation can make it fail and stop ComfyUI). To use the AI right away, switch the LLM to OpenRouter.': '지금 생성 중이라 로컬 LLM은 생성이 끝난 뒤에 실행돼요 (로컬 LLM을 생성과 동시에 돌리면 생성이 실패하고 ComfyUI가 종료될 수 있어요). 바로 쓰려면 LLM을 OpenRouter로 바꾸세요.', 'Cancelled while waiting for the generation to finish': '생성이 끝나길 기다리다 취소했어요', 'A local LLM is running — the generation starts as soon as it is done (they must not run together).': '로컬 LLM이 실행 중이라 생성은 LLM이 끝나는 대로 시작돼요 (둘을 동시에 돌리면 안 돼요).', 'There is an unsaved canvas from last time. Restore it?': '지난번에 저장하지 않은 캔버스가 있어요. 복구할까요?', Saved: '저장됨', 'Save as': '다른 이름으로 저장', Export: '내보내기', Import: '불러오기',
   'New canvas': '새 캔버스', 'No saved canvases yet.': '저장된 캔버스가 없어요.', 'This canvas has unsaved changes. Open anyway?': '저장하지 않은 변경이 있어요. 그래도 열까요?',
   'Replace the saved canvas with this name?': '같은 이름으로 저장된 캔버스가 있어요. 덮어쓸까요?', 'Could not save': '저장하지 못했어요', 'Could not open': '열지 못했어요',
   'Delete this saved canvas?': '저장된 캔버스를 삭제할까요?', 'Export this canvas': '이 캔버스 내보내기', nodes: '카드',

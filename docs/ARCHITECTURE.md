@@ -85,5 +85,5 @@ ComfyUI :8188  ── 표준 API: /prompt /ws /upload/image /view /history /obje
 - 파일은 ComfyUI input 폴더에 업로드(`ensureInput`)한 상대 경로.
 
 ## 테스트 / 개발
-- 로컬 실제 ComfyUI(8188)에 바로 붙여 테스트한다: `npx vite --port 5930` (mock 서버는 쓰지 않음).
+- 로컬 실제 ComfyUI(8188)에 바로 붙여 테스트한다: `npx vite` (포트 8765) (mock 서버는 쓰지 않음).
 - 릴리스 전 매번 `npm run build:mcp`.

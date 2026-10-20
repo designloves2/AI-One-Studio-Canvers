@@ -386,3 +386,10 @@ button.save-state.dirty { cursor: pointer; } button.save-state.dirty:hover { bac
 
 /* the stop button sits above the RUNNING overlay so it stays bright and clickable */
 .cnode.running .run.stop { position: relative; z-index: 30; box-shadow: 0 0 0 2px rgba(255,93,108,.35); }
+
+/* local LLM waits while ComfyUI generates: yellow notice (bottom centre above the toolbar; inside the chat for the Live Canvas) */
+.llm-notice { position: absolute; left: 50%; bottom: 66px; transform: translateX(-50%); z-index: 7; max-width: min(640px, 90%); display: flex; align-items: center; gap: 10px; padding: 7px 12px; border-radius: 10px; background: rgba(30,26,10,.92); border: 1px solid rgba(240,180,41,.5); color: #f0b429; font-size: 12px; line-height: 1.45; text-align: center; box-shadow: 0 6px 22px rgba(0,0,0,.4); }
+.llm-notice.in-simple { bottom: 150px; }
+.llm-notice button { background: transparent; border: 1px solid rgba(240,180,41,.55); color: #f0b429; border-radius: 6px; padding: 2px 8px; font-size: 11px; cursor: pointer; white-space: nowrap; }
+.bubble-txt.llm-wait { color: #f0b429; background: rgba(240,180,41,.09); border: 1px solid rgba(240,180,41,.4); }
+.bubble-txt.llm-wait .mini-link { color: #f0b429; }

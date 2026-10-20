@@ -18,6 +18,7 @@ import { clearInflight } from './backend/comfy';
 import { t as tr } from './i18n';
 import { CanvasesPanel } from './panels/CanvasesPanel';
 import { SystemMonitor } from './ui/SystemMonitor';
+import { LlmNotice } from './ui/LlmNotice';
 import { systemStats } from './backend/comfy';
 import { loadServerSettings } from './backend/llm';
 import { useT } from './i18n';
@@ -235,6 +236,7 @@ export function App() {
               <SelectionBar />
             </>
           ) : <SimpleView />}
+          <LlmNotice mode={mode} />
         </main>
       </div>
       {menu && <NodeMenu at={menu} flow={menu.flow} pending={menu.pending} onClose={() => setMenu(null)} />}

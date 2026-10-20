@@ -71,7 +71,7 @@ var require_react_production_min = __commonJS({
     var p = Symbol.for("react.fragment");
     var q = Symbol.for("react.strict_mode");
     var r = Symbol.for("react.profiler");
-    var t = Symbol.for("react.provider");
+    var t2 = Symbol.for("react.provider");
     var u = Symbol.for("react.context");
     var v = Symbol.for("react.forward_ref");
     var w = Symbol.for("react.suspense");
@@ -255,7 +255,7 @@ var require_react_production_min = __commonJS({
     };
     exports.createContext = function(a) {
       a = { $$typeof: u, _currentValue: a, _currentValue2: a, _threadCount: 0, Provider: null, Consumer: null, _defaultValue: null, _globalName: null };
-      a.Provider = { $$typeof: t, _context: a };
+      a.Provider = { $$typeof: t2, _context: a };
       return a.Consumer = a;
     };
     exports.createElement = M;
@@ -2371,6 +2371,803 @@ var init_http = __esm({
   }
 });
 
+// src/i18n.cards.ts
+var KO_CARDS;
+var init_i18n_cards = __esm({
+  "src/i18n.cards.ts"() {
+    "use strict";
+    KO_CARDS = {
+      // categories / panels
+      Cards: "\uCE74\uB4DC",
+      Postprocess: "\uD6C4\uCC98\uB9AC",
+      Decks: "\uB371",
+      "My decks": "\uB0B4 \uB371",
+      "Starter decks": "\uC2A4\uD0C0\uD130 \uB371",
+      "Deck name": "\uB371 \uC774\uB984",
+      "Save selection": "\uC120\uD0DD \uC800\uC7A5",
+      "Select cards on the canvas first": "\uCE94\uBC84\uC2A4\uC5D0\uC11C \uCE74\uB4DC\uB97C \uBA3C\uC800 \uC120\uD0DD\uD558\uC138\uC694",
+      "Select some cards on the canvas and save them as a deck.": "\uCE94\uBC84\uC2A4\uC5D0\uC11C \uCE74\uB4DC \uBA87 \uC7A5\uC744 \uC120\uD0DD\uD574 \uB371\uC73C\uB85C \uC800\uC7A5\uD558\uC138\uC694.",
+      "Legacy: load original STUDIO_ONE panels": "\uB808\uAC70\uC2DC: \uC6D0\uBCF8 STUDIO_ONE \uD328\uB110 \uBD88\uB7EC\uC624\uAE30",
+      "Adds the old all-in-one panels as extra nodes (reload needed). Off = card nodes only.": "\uC608\uC804 \uD1B5\uC9DC \uD328\uB110\uC744 \uCD94\uAC00 \uB178\uB4DC\uB85C \uBD88\uB7EC\uC635\uB2C8\uB2E4(\uC0C8\uB85C\uACE0\uCE68 \uD544\uC694). \uAEBC\uC9D0 = \uCE74\uB4DC \uB178\uB4DC\uB9CC.",
+      // cards
+      "Restart ComfyUI?": "ComfyUI \uB97C \uC7AC\uC2DC\uC791\uD560\uAE4C\uC694?",
+      "Running / waiting jobs": "\uC2E4\uD589 \uC911 / \uB300\uAE30 \uC911 \uC791\uC5C5",
+      "they will be stopped": "\uC911\uB2E8\uB429\uB2C8\uB2E4",
+      "It takes about a minute. Save unsaved ComfyUI workflows first.": "\uC57D 1\uBD84 \uAC78\uB9BD\uB2C8\uB2E4. ComfyUI \uC5D0\uC11C \uC800\uC7A5 \uC548 \uD55C \uC6CC\uD06C\uD50C\uB85C\uC6B0\uB294 \uBA3C\uC800 \uC800\uC7A5\uD558\uC138\uC694.",
+      "Between 02:00 and 08:00 long batch jobs may be running.": "\uC0C8\uBCBD 02~08\uC2DC\uC5D0\uB294 \uAE34 \uBC30\uCE58 \uC791\uC5C5\uC774 \uB3CC\uACE0 \uC788\uC744 \uC218 \uC788\uC5B4\uC694.",
+      "Restarting\u2026": "\uC7AC\uC2DC\uC791 \uC911\u2026",
+      "Restart ComfyUI": "ComfyUI \uC7AC\uC2DC\uC791",
+      "Live Canvas needs a context of 8192 or more for a local model.": "\uB77C\uC774\uBE0C \uCE94\uBC84\uC2A4\uB294 \uB85C\uCEEC \uBAA8\uB378\uC758 \uCEE8\uD14D\uC2A4\uD2B8 \uD06C\uAE30\uB97C 8192 \uC774\uC0C1\uC73C\uB85C \uAD8C\uC7A5\uD569\uB2C8\uB2E4.",
+      "Start generating now?": "\uC9C0\uAE08 \uC0DD\uC131\uC744 \uC2DC\uC791\uD560\uAE4C\uC694?",
+      "This uses the GPU and can take a while.": "GPU \uB97C \uC4F0\uBA70 \uC2DC\uAC04\uC774 \uAF64 \uAC78\uB9B4 \uC218 \uC788\uC5B4\uC694.",
+      "generator cards": "\uAC1C\uC758 \uC0DD\uC131 \uCE74\uB4DC",
+      videos: "\uAC1C \uC601\uC0C1",
+      total: "\uCD1D",
+      s: "\uCD08",
+      undone: "\uCDE8\uC18C\uB428",
+      "run cancelled": "\uC2E4\uD589 \uCDE8\uC18C\uB428",
+      "Polish note": "\uBA54\uBAA8 \uB2E4\uB4EC\uAE30",
+      "Write a note first.": "\uBA54\uBAA8\uB97C \uBA3C\uC800 \uC801\uC5B4 \uC8FC\uC138\uC694.",
+      "Undo this answer": "\uC774 \uB2F5\uBCC0 \uCDE8\uC18C",
+      "Production templates": "\uC81C\uC791 \uD15C\uD50C\uB9BF",
+      "Attach an image: it becomes a card and the AI looks at it": "\uC774\uBBF8\uC9C0 \uCCA8\uBD80: \uCE74\uB4DC\uAC00 \uB418\uACE0 AI \uAC00 \uBD05\uB2C8\uB2E4",
+      "I plan the whole production myself \u2014 concept, shots, prompts, references, wiring. Just name the project.": "\uAE30\uD68D\uBD80\uD130 \uC0F7 \uAD6C\uC131, \uD504\uB86C\uD504\uD2B8, \uB808\uD37C\uB7F0\uC2A4, \uC5F0\uACB0\uAE4C\uC9C0 \uC81C\uAC00 \uC54C\uC544\uC11C \uC9ED\uB2C8\uB2E4. \uD504\uB85C\uC81D\uD2B8 \uC774\uB984\uB9CC \uC54C\uB824 \uC8FC\uC138\uC694.",
+      "Connect one video generate card to each prompt": "\uD504\uB86C\uD504\uD2B8\uB9C8\uB2E4 \uC601\uC0C1 \uC0DD\uC131 \uCE74\uB4DC\uB97C \uD558\uB098\uC529 \uB9CC\uB4E4\uC5B4 \uC5F0\uACB0\uD574\uC918",
+      "Tidy up the cards by their wires": "\uCE74\uB4DC\uB4E4\uC744 \uC5F0\uACB0 \uD750\uB984\uB300\uB85C \uBCF4\uAE30 \uC88B\uAC8C \uC815\uB82C\uD574\uC918",
+      "Group the same kind of cards together": "\uAC19\uC740 \uC885\uB958\uC758 \uCE74\uB4DC\uB07C\uB9AC \uBAA8\uC544\uC11C \uC815\uB82C\uD574\uC918",
+      "Uses the Live Canvas LLM from Settings": "\uC124\uC815\uC758 \uB77C\uC774\uBE0C \uCE94\uBC84\uC2A4 \uC804\uC6A9 LLM\uC744 \uC0AC\uC6A9\uD569\uB2C8\uB2E4",
+      "Live Canvas LLM": "\uB77C\uC774\uBE0C \uCE94\uBC84\uC2A4 LLM",
+      "Use the main LLM": "\uBA54\uC778 LLM \uACFC \uAC19\uC740 \uC124\uC815 \uC0AC\uC6A9",
+      "Live Canvas follows the LLM above. Untick to pick another backend / model for it (a stronger model writes better plans).": "\uB77C\uC774\uBE0C \uCE94\uBC84\uC2A4\uB294 \uC704\uC758 LLM \uC744 \uADF8\uB300\uB85C \uC501\uB2C8\uB2E4. \uCCB4\uD06C\uB97C \uD480\uBA74 \uB77C\uC774\uBE0C \uCE94\uBC84\uC2A4\uB9CC \uB2E4\uB978 \uBC31\uC5D4\uB4DC/\uBAA8\uB378\uC744 \uACE0\uB97C \uC218 \uC788\uC5B4\uC694 (\uC131\uB2A5 \uC88B\uC740 \uBAA8\uB378\uC77C\uC218\uB85D \uACC4\uD68D\uC744 \uC798 \uC9ED\uB2C8\uB2E4).",
+      "Live Canvas": "\uB77C\uC774\uBE0C \uCE94\uBC84\uC2A4",
+      "Tell me what to build and I will lay the cards out on the canvas.": "\uB9CC\uB4E4\uACE0 \uC2F6\uC740 \uAC78 \uB9D0\uD558\uBA74 \uCE94\uBC84\uC2A4\uC5D0 \uCE74\uB4DC\uB97C \uBC30\uCE58\uD574 \uB4DC\uB824\uC694.",
+      "Make a 30-second ad: 4 shot prompts and the reference image prompts": "30\uCD08 \uAD11\uACE0(\uD55C\uC2DD \uB3C4\uC2DC\uB77D) \u2014 4\uC0F7 H3 \uD504\uB86C\uD504\uD2B8 \uCE74\uB4DC\uC640 \uB808\uD37C\uB7F0\uC2A4 \uC774\uBBF8\uC9C0 \uD504\uB86C\uD504\uD2B8 \uCE74\uB4DC\uB97C \uB9CC\uB4E4\uC5B4\uC918",
+      "Make a 3-shot teaser prompt row for a fantasy film": "\uD310\uD0C0\uC9C0 \uC601\uD654 \uD2F0\uC800 3\uC0F7 \uD504\uB86C\uD504\uD2B8 \uCE74\uB4DC\uB97C \uB9CC\uB4E4\uC5B4\uC918",
+      "Uses the LLM chosen in Settings": "\uC124\uC815\uC5D0\uC11C \uACE0\uB978 LLM\uC744 \uC0AC\uC6A9\uD569\uB2C8\uB2E4",
+      "Describe what to put on the canvas\u2026": "\uCE94\uBC84\uC2A4\uC5D0 \uB9CC\uB4E4 \uAC83\uC744 \uC124\uBA85\uD558\uC138\uC694\u2026 (Enter \uC804\uC1A1, Shift/Ctrl+Enter \uC904\uBC14\uAFC8)",
+      "Undo the last change on the canvas": "\uCE94\uBC84\uC2A4\uC758 \uB9C8\uC9C0\uB9C9 \uBCC0\uACBD \uB418\uB3CC\uB9AC\uAE30",
+      "Clear chat": "\uB300\uD654 \uC9C0\uC6B0\uAE30",
+      Send: "\uBCF4\uB0B4\uAE30",
+      "thinking\u2026": "\uC0DD\uAC01 \uC911\u2026",
+      "looking at": "\uBCF4\uB294 \uC911",
+      "placing cards\u2026": "\uCE74\uB4DC \uBC30\uCE58 \uC911\u2026",
+      "fixing the reply\u2026": "\uC751\uB2F5 \uACE0\uCE58\uB294 \uC911\u2026",
+      "Could not load this file": "\uD30C\uC77C\uC744 \uBD88\uB7EC\uC624\uC9C0 \uBABB\uD588\uC5B4\uC694",
+      "The server is not sending this file (ComfyUI may be stuck)": "\uC11C\uBC84\uAC00 \uD30C\uC77C\uC744 \uB0B4\uB824\uC8FC\uC9C0 \uC54A\uC544\uC694 (ComfyUI\uAC00 \uBA48\uCDC4\uC744 \uC218 \uC788\uC5B4\uC694)",
+      Retry: "\uB2E4\uC2DC \uC2DC\uB3C4",
+      "Click to enlarge": "\uD074\uB9AD\uD558\uBA74 \uD06C\uAC8C \uBD05\uB2C8\uB2E4",
+      Deleted: "\uC0AD\uC81C\uB428",
+      Canvases: "\uCE94\uBC84\uC2A4",
+      "Saved canvases": "\uC800\uC7A5\uB41C \uCE94\uBC84\uC2A4",
+      "Not saved": "\uC800\uC7A5 \uC548 \uB428",
+      "Click to save": "\uD074\uB9AD\uD574\uC11C \uC800\uC7A5",
+      "Generating now \u2014 the local LLM waits until it is done (a local LLM running together with a generation can make it fail and stop ComfyUI). To use the AI right away, switch the LLM to OpenRouter.": "\uC9C0\uAE08 \uC0DD\uC131 \uC911\uC774\uB77C \uB85C\uCEEC LLM\uC740 \uC0DD\uC131\uC774 \uB05D\uB09C \uB4A4\uC5D0 \uC2E4\uD589\uB3FC\uC694 (\uB85C\uCEEC LLM\uC744 \uC0DD\uC131\uACFC \uB3D9\uC2DC\uC5D0 \uB3CC\uB9AC\uBA74 \uC0DD\uC131\uC774 \uC2E4\uD328\uD558\uACE0 ComfyUI\uAC00 \uC885\uB8CC\uB420 \uC218 \uC788\uC5B4\uC694). \uBC14\uB85C \uC4F0\uB824\uBA74 LLM\uC744 OpenRouter\uB85C \uBC14\uAFB8\uC138\uC694.",
+      "Cancelled while waiting for the generation to finish": "\uC0DD\uC131\uC774 \uB05D\uB098\uAE38 \uAE30\uB2E4\uB9AC\uB2E4 \uCDE8\uC18C\uD588\uC5B4\uC694",
+      "A local LLM is running \u2014 the generation starts as soon as it is done (they must not run together).": "\uB85C\uCEEC LLM\uC774 \uC2E4\uD589 \uC911\uC774\uB77C \uC0DD\uC131\uC740 LLM\uC774 \uB05D\uB098\uB294 \uB300\uB85C \uC2DC\uC791\uB3FC\uC694 (\uB458\uC744 \uB3D9\uC2DC\uC5D0 \uB3CC\uB9AC\uBA74 \uC548 \uB3FC\uC694).",
+      "There is an unsaved canvas from last time. Restore it?": "\uC9C0\uB09C\uBC88\uC5D0 \uC800\uC7A5\uD558\uC9C0 \uC54A\uC740 \uCE94\uBC84\uC2A4\uAC00 \uC788\uC5B4\uC694. \uBCF5\uAD6C\uD560\uAE4C\uC694?",
+      Saved: "\uC800\uC7A5\uB428",
+      "Save as": "\uB2E4\uB978 \uC774\uB984\uC73C\uB85C \uC800\uC7A5",
+      Export: "\uB0B4\uBCF4\uB0B4\uAE30",
+      Import: "\uBD88\uB7EC\uC624\uAE30",
+      "New canvas": "\uC0C8 \uCE94\uBC84\uC2A4",
+      "No saved canvases yet.": "\uC800\uC7A5\uB41C \uCE94\uBC84\uC2A4\uAC00 \uC5C6\uC5B4\uC694.",
+      "This canvas has unsaved changes. Open anyway?": "\uC800\uC7A5\uD558\uC9C0 \uC54A\uC740 \uBCC0\uACBD\uC774 \uC788\uC5B4\uC694. \uADF8\uB798\uB3C4 \uC5F4\uAE4C\uC694?",
+      "Replace the saved canvas with this name?": "\uAC19\uC740 \uC774\uB984\uC73C\uB85C \uC800\uC7A5\uB41C \uCE94\uBC84\uC2A4\uAC00 \uC788\uC5B4\uC694. \uB36E\uC5B4\uC4F8\uAE4C\uC694?",
+      "Could not save": "\uC800\uC7A5\uD558\uC9C0 \uBABB\uD588\uC5B4\uC694",
+      "Could not open": "\uC5F4\uC9C0 \uBABB\uD588\uC5B4\uC694",
+      "Delete this saved canvas?": "\uC800\uC7A5\uB41C \uCE94\uBC84\uC2A4\uB97C \uC0AD\uC81C\uD560\uAE4C\uC694?",
+      "Export this canvas": "\uC774 \uCE94\uBC84\uC2A4 \uB0B4\uBCF4\uB0B4\uAE30",
+      nodes: "\uCE74\uB4DC",
+      "Video clips": "\uC601\uC0C1",
+      Select: "\uC120\uD0DD",
+      Selected: "\uC120\uD0DD\uB428",
+      "Delete selected items?": "\uAC1C \uD56D\uBAA9\uC744 \uC0AD\uC81C\uD560\uAE4C\uC694?",
+      "could not be deleted": "\uAC1C\uB97C \uC0AD\uC81C\uD558\uC9C0 \uBABB\uD588\uC5B4\uC694",
+      "File not found \u2014 it was deleted or moved": "\uD30C\uC77C\uC744 \uCC3E\uC744 \uC218 \uC5C6\uC5B4\uC694 \u2014 \uC0AD\uC81C\uB418\uC5C8\uAC70\uB098 \uC774\uB3D9\uB410\uC2B5\uB2C8\uB2E4",
+      Name: "\uC774\uB984",
+      Category: "\uCE74\uD14C\uACE0\uB9AC",
+      Tags: "\uD0DC\uADF8",
+      "Replace file": "\uD30C\uC77C \uAD50\uCCB4",
+      "Register asset": "\uC5D0\uC14B \uB4F1\uB85D",
+      Register: "\uB4F1\uB85D",
+      Upload: "\uC5C5\uB85C\uB4DC",
+      "From gallery": "\uAC24\uB7EC\uB9AC\uC5D0\uC11C",
+      "Pick from gallery": "\uAC24\uB7EC\uB9AC\uC5D0\uC11C \uC120\uD0DD",
+      "Click or drop an image here": "\uD074\uB9AD\uD558\uAC70\uB098 \uC774\uBBF8\uC9C0\uB97C \uB04C\uC5B4\uB2E4 \uB193\uC73C\uC138\uC694",
+      Cancel: "\uCDE8\uC18C",
+      "Background colour": "\uBC30\uACBD \uC0C9\uC0C1",
+      "Text colour": "\uAE00\uC528 \uC0C9\uC0C1",
+      "Save background colour": "\uBC30\uACBD \uC0C9\uC0C1 \uC800\uC7A5",
+      "Save text colour": "\uAE00\uC528 \uC0C9\uC0C1 \uC800\uC7A5",
+      Default: "\uAE30\uBCF8",
+      "Use the theme text colour": "\uAE30\uBCF8 \uAE00\uC528\uC0C9 \uC0AC\uC6A9",
+      "Sample card text": "\uCE74\uB4DC \uAE00\uC528 \uBBF8\uB9AC\uBCF4\uAE30",
+      "Delete this saved colour?": "\uC9C0\uC815\uD55C \uC0C9\uC0C1\uC744 \uC9C0\uC6B8\uAE4C\uC694?",
+      "Save colour": "\uC0C9\uC0C1 \uC800\uC7A5",
+      "Saved colours": "\uC800\uC7A5\uB41C \uC0C9\uC0C1",
+      "right-click to delete": "\uC6B0\uD074\uB9AD: \uC9C0\uC6B0\uAE30",
+      "Nothing saved yet": "\uC800\uC7A5\uB41C \uC0C9\uC0C1\uC774 \uC5C6\uC2B5\uB2C8\uB2E4",
+      "Custom colour": "\uC0AC\uC6A9\uC790 \uC0C9\uC0C1",
+      "Pick a colour": "\uC0C9 \uC120\uD0DD",
+      "Remember this colour": "\uC774 \uC0C9\uC0C1 \uAE30\uC5B5\uD558\uAE30",
+      Remember: "\uAE30\uC5B5",
+      "Remove saved colour": "\uC800\uC7A5\uD55C \uC0C9\uC0C1 \uC9C0\uC6B0\uAE30",
+      "Refine prompt": "\uD504\uB86C\uD504\uD2B8 \uC218\uC815",
+      "What should change?": "\uBB34\uC5C7\uC744 \uBC14\uAFC0\uAE4C\uC694?",
+      "e.g. make it nighttime, change the coat to red": "\uC608: \uBC24\uC73C\uB85C \uBC14\uAFD4\uC918, \uCF54\uD2B8\uB97C \uBE68\uAC04\uC0C9\uC73C\uB85C",
+      Refine: "\uC218\uC815",
+      "Refine again": "\uB2E4\uC2DC \uC218\uC815",
+      Original: "\uC6D0\uBCF8",
+      Revised: "\uC218\uC815\uBCF8",
+      "Prompt options": "\uD504\uB86C\uD504\uD2B8 \uC635\uC158",
+      "Write for": "\uC791\uC131 \uB300\uC0C1 \uBAA8\uB378",
+      Aesthetic: "\uBBF8\uAC10 / \uC2A4\uD0C0\uC77C",
+      "Extra instructions": "\uCD94\uAC00 \uC9C0\uC2DC",
+      "e.g. keep it under 80 words": "\uC608: 80\uB2E8\uC5B4 \uC774\uB0B4\uB85C",
+      Auto: "\uC790\uB3D9",
+      "Order of the connected images \u2014 use @image1, @image2 \u2026 in the prompt": "\uC5F0\uACB0\uB41C \uC774\uBBF8\uC9C0 \uC21C\uC11C \u2014 \uD504\uB86C\uD504\uD2B8\uC5D0\uC11C @image1, @image2 \u2026 \uB85C \uC9C0\uCE6D",
+      "Drag to resize": "\uB4DC\uB798\uADF8\uD574\uC11C \uB108\uBE44 \uC870\uC808 (\uB354\uBE14\uD074\uB9AD: \uAE30\uBCF8\uAC12)",
+      "Hide this item": "\uC774 \uD56D\uBAA9 \uAC00\uB9AC\uAE30",
+      "Reveal this item": "\uAC00\uB9AC\uAE30 \uD574\uC81C",
+      "Hide the hidden items again": "\uAC00\uB9B0 \uD56D\uBAA9 \uB2E4\uC2DC \uAC00\uB9AC\uAE30",
+      "Temporarily show every hidden item": "\uAC00\uB9B0 \uD56D\uBAA9 \uBAA8\uB450 \uC7A0\uAE50 \uBCF4\uAE30",
+      "To canvas": "\uCE94\uBC84\uC2A4\uB85C",
+      "Click: enlarge \xB7 Double-click: add to canvas": "\uD074\uB9AD: \uD655\uB300 \xB7 \uB354\uBE14\uD074\uB9AD: \uCE94\uBC84\uC2A4\uC5D0 \uCE74\uB4DC\uB85C \uCD94\uAC00",
+      // v2.6 simple-mode / engine labels
+      "Clip length (s)": "\uD074\uB9BD \uAE38\uC774 (\uCD08)",
+      "Several clips (separate prompts with ---)": "\uC5EC\uB7EC \uD074\uB9BD (\uD504\uB86C\uD504\uD2B8\uB97C --- \uB85C \uAD6C\uBD84)",
+      "Stitch clips into one video": "\uD074\uB9BD\uC744 \uD55C \uC601\uC0C1\uC73C\uB85C \uC774\uC5B4\uBD99\uC774\uAE30",
+      "Steps (no turbo)": "\uC2A4\uD15D (\uD130\uBCF4 \uB054)",
+      "Upscale model (after render)": "\uC5C5\uC2A4\uCF00\uC77C \uBAA8\uB378 (\uC0DD\uC131 \uD6C4)",
+      "LoRA 1": "LoRA 1",
+      "LoRA 2": "LoRA 2",
+      "Target": "\uB300\uC0C1",
+      "Face source": "\uC5BC\uAD74 \uC18C\uC2A4",
+      "Cover source": "\uCEE4\uBC84 \uC18C\uC2A4",
+      "First frame / references": "\uCCAB \uD504\uB808\uC784 / \uB808\uD37C\uB7F0\uC2A4",
+      "Workflow JSON": "\uC6CC\uD06C\uD50C\uB85C\uC6B0 JSON",
+      "Time signature": "\uBC15\uC790",
+      "Format": "\uD615\uC2DD",
+      "Stage 1 steps": "1\uB2E8\uACC4 \uC2A4\uD15D",
+      "Stage 2 steps (0 = off)": "2\uB2E8\uACC4 \uC2A4\uD15D (0 = \uB054)",
+      "Stage 3 steps (0 = off)": "3\uB2E8\uACC4 \uC2A4\uD15D (0 = \uB054)",
+      "Repetition penalty": "\uBC18\uBCF5 \uD328\uB110\uD2F0",
+      "Width %": "\uAC00\uB85C %",
+      "Height %": "\uC138\uB85C %",
+      "Rotate": "\uD68C\uC804",
+      "Flip horizontal": "\uC88C\uC6B0 \uB4A4\uC9D1\uAE30",
+      "Flip vertical": "\uC0C1\uD558 \uB4A4\uC9D1\uAE30",
+      "Pixels (\u2212 shrink)": "\uD53D\uC140 (\u2212 \uCD95\uC18C)",
+      "Invert Mask": "\uB9C8\uC2A4\uD06C \uBC18\uC804",
+      "Result": "\uACB0\uACFC",
+      "Speed": "\uC18D\uB3C4",
+      "Audio lock": "\uC624\uB514\uC624 \uC7A0\uAE08",
+      "Picked faces (manual)": "\uC120\uD0DD\uD55C \uC5BC\uAD74 (\uC218\uB3D9)",
+      "Pick mode": "\uC120\uD0DD \uBC29\uC2DD",
+      "Canvas W": "\uCE94\uBC84\uC2A4 \uAC00\uB85C",
+      "Canvas H": "\uCE94\uBC84\uC2A4 \uC138\uB85C",
+      "Cut threshold": "\uCEF7 \uAC10\uC9C0 \uC784\uACC4\uAC12",
+      "Upscale model (ESRGAN\u2026)": "\uC5C5\uC2A4\uCF00\uC77C \uBAA8\uB378 (ESRGAN\u2026)",
+      "Upscale model (ComfyUI core)": "\uC5C5\uC2A4\uCF00\uC77C \uBAA8\uB378 (ComfyUI \uAE30\uBCF8)",
+      "Media": "\uBBF8\uB514\uC5B4",
+      "Attention": "\uC5B4\uD150\uC158",
+      "Audio (custom track)": "\uC624\uB514\uC624 (\uCEE4\uC2A4\uD140 \uD2B8\uB799)",
+      "Motion video (guide)": "\uBAA8\uC158 \uC601\uC0C1 (\uAC00\uC774\uB4DC)",
+      "Audio starts at (s)": "\uC624\uB514\uC624 \uC2DC\uC791 (\uCD08)",
+      "Motion video starts at (s)": "\uBAA8\uC158 \uC601\uC0C1 \uC2DC\uC791 (\uCD08)",
+      "Motion strength": "\uBAA8\uC158 \uAC15\uB3C4",
+      LoRA: "LoRA",
+      "H3 Turbo \xB7 7+1": "H3 \uD130\uBCF4 \xB7 7+1",
+      "H3 Speed & Attention": "H3 \uC18D\uB3C4 \xB7 \uC5B4\uD150\uC158",
+      "H3 Audio Lock": "H3 \uC624\uB514\uC624 \uC7A0\uAE08",
+      "Asset Library": "\uC5D0\uC14B \uB77C\uC774\uBE0C\uB7EC\uB9AC",
+      "Load Image": "\uC774\uBBF8\uC9C0 \uBD88\uB7EC\uC624\uAE30",
+      "Load Video": "\uC601\uC0C1 \uBD88\uB7EC\uC624\uAE30",
+      "Import Audio": "\uC624\uB514\uC624 \uBD88\uB7EC\uC624\uAE30",
+      "Result Viewer": "\uACB0\uACFC \uBCF4\uAE30",
+      // postprocess + video
+      "Deblur (RTX)": "\uB514\uBE14\uB7EC (RTX)",
+      "Denoise (RTX)": "\uB514\uB178\uC774\uC988 (RTX)",
+      "Video Upscale": "\uC601\uC0C1 \uC5C5\uC2A4\uCF00\uC77C",
+      "Skin Retouch": "\uD53C\uBD80 \uBCF4\uC815",
+      "Film Grain": "\uD544\uB984 \uADF8\uB808\uC778",
+      "Frame Interpolation": "\uD504\uB808\uC784 \uBCF4\uAC04",
+      "Video Resize": "\uC601\uC0C1 \uB9AC\uC0AC\uC774\uC988",
+      "Face Refine (H3)": "\uC5BC\uAD74 \uB9AC\uD30C\uC778 (H3)",
+      "Character Sheet": "\uCE90\uB9AD\uD130 \uC2DC\uD2B8",
+      "Video Edit (LTX 2.5 refine)": "\uC601\uC0C1 \uC218\uC815 (LTX 2.5)",
+      "Video Stitch": "\uC601\uC0C1 \uC2A4\uD2F0\uCE58",
+      "LTX Director (timeline)": "LTX \uB514\uB809\uD130 (\uD0C0\uC784\uB77C\uC778)",
+      "Image Generate (H3)": "\uC774\uBBF8\uC9C0 \uC0DD\uC131 (H3)",
+      "ControlNet Generate (Z-Image)": "\uCEE8\uD2B8\uB864\uB137 \uC0DD\uC131 (Z-Image)",
+      "Face Redraw (Z-Image)": "\uC5BC\uAD74 \uB2E4\uC2DC \uADF8\uB9AC\uAE30 (Z-Image)",
+      "Control image": "\uCEE8\uD2B8\uB864 \uC774\uBBF8\uC9C0",
+      Portrait: "\uC778\uBB3C \uC0AC\uC9C4",
+      "ControlNet model": "\uCEE8\uD2B8\uB864\uB137 \uBAA8\uB378",
+      Preprocessor: "\uC804\uCC98\uB9AC\uAE30",
+      "Control strength": "\uCEE8\uD2B8\uB864 \uAC15\uB3C4",
+      "Preprocess resolution": "\uC804\uCC98\uB9AC \uD574\uC0C1\uB3C4",
+      "Detect threshold": "\uAC80\uCD9C \uC784\uACC4\uAC12",
+      "Mask dilation": "\uB9C8\uC2A4\uD06C \uD655\uC7A5",
+      "Context around the face": "\uC5BC\uAD74 \uC8FC\uBCC0 \uBC94\uC704",
+      "Working size px": "\uC791\uC5C5 \uD06C\uAE30 px",
+      "Camera Angle (Qwen)": "\uCE74\uBA54\uB77C \uC575\uAE00 (Qwen)",
+      "Extra prompt (optional)": "\uCD94\uAC00 \uD504\uB86C\uD504\uD2B8 (\uC120\uD0DD)",
+      "Horizontal angle (\xB0)": "\uAC00\uB85C \uAC01\uB3C4 (\xB0)",
+      "Vertical angle (\xB0)": "\uC138\uB85C \uAC01\uB3C4 (\xB0)",
+      "Distance (close 0 \u2026 wide 10)": "\uAC70\uB9AC (\uAC00\uAE4C\uC6C0 0 \u2026 \uBA40\uB9AC 10)",
+      "Angle LoRA": "\uC575\uAE00 LoRA",
+      "Angle LoRA strength": "\uC575\uAE00 LoRA \uAC15\uB3C4",
+      "Music Writer (LLM)": "\uC74C\uC545 \uC791\uC0AC\xB7\uC2A4\uD0C0\uC77C (LLM)",
+      "Idea / theme / lyrics": "\uC544\uC774\uB514\uC5B4 / \uC8FC\uC81C / \uAC00\uC0AC",
+      Write: "\uC791\uC131",
+      "ControlNet Generate (Krea 2)": "\uCEE8\uD2B8\uB864\uB137 \uC0DD\uC131 (Krea 2)",
+      "Control type": "\uCEE8\uD2B8\uB864 \uC885\uB958",
+      "Control LoRA": "\uCEE8\uD2B8\uB864 LoRA",
+      "Canny low": "\uCE90\uB2C8 \uD558\uD55C",
+      "Canny high": "\uCE90\uB2C8 \uC0C1\uD55C",
+      "Identity Edit (Krea 2)": "\uC544\uC774\uB374\uD2F0\uD2F0 \uD3B8\uC9D1 (Krea 2)",
+      "Control / Inpaint (Anima)": "\uCEE8\uD2B8\uB864 / \uC778\uD398\uC778\uD2B8 (Anima)",
+      "Edit instruction": "\uD3B8\uC9D1 \uC9C0\uC2DC\uBB38",
+      "Image (+ optional 2nd)": "\uC774\uBBF8\uC9C0 (+ \uC120\uD0DD 2\uBC88\uC9F8)",
+      "Mask (inpaint)": "\uB9C8\uC2A4\uD06C (\uC778\uD398\uC778\uD2B8)",
+      "Identity-edit LoRA": "\uC544\uC774\uB374\uD2F0\uD2F0 \uD3B8\uC9D1 LoRA",
+      "LoRA strength": "LoRA \uAC15\uB3C4",
+      "Reference boost": "\uB808\uD37C\uB7F0\uC2A4 \uAC15\uC870",
+      "Grounding px": "\uADF8\uB77C\uC6B4\uB529 px",
+      "LLLite model": "LLLite \uBAA8\uB378",
+      Start: "\uC2DC\uC791",
+      End: "\uB05D",
+      "Depth preprocess resolution": "\uB381\uC2A4 \uC804\uCC98\uB9AC \uD574\uC0C1\uB3C4",
+      "DiT model": "DiT \uBAA8\uB378",
+      "VAE model": "VAE \uBAA8\uB378",
+      "Target resolution (short edge)": "\uBAA9\uD45C \uD574\uC0C1\uB3C4 (\uC9E7\uC740 \uBCC0)",
+      "Max resolution": "\uCD5C\uB300 \uD574\uC0C1\uB3C4",
+      "Colour correction": "\uC0C9 \uBCF4\uC815",
+      "Offload device": "\uC624\uD504\uB85C\uB4DC \uC7A5\uCE58",
+      "Blocks to swap": "\uC2A4\uC651 \uBE14\uB85D \uC218",
+      "Add Audio to Video": "\uC601\uC0C1\uC5D0 \uC624\uB514\uC624 \uB123\uAE30",
+      "Start the audio at (s)": "\uC624\uB514\uC624 \uC2DC\uC791 \uC704\uCE58 (\uCD08)",
+      "Scene Detect": "\uC7A5\uBA74 \uAC10\uC9C0",
+      "Beat Detect": "\uBE44\uD2B8 \uAC10\uC9C0",
+      "Sensitivity (lower = more cuts)": "\uBBFC\uAC10\uB3C4 (\uB0AE\uC744\uC218\uB85D \uB354 \uB9CE\uC774 \uC790\uB984)",
+      "Audio / video": "\uC624\uB514\uC624 / \uC601\uC0C1",
+      Disconnect: "\uC5F0\uACB0 \uB04A\uAE30",
+      "Card colour": "\uCE74\uB4DC \uC0C9\uC0C1",
+      "Describe your video\u2026": "\uB9CC\uB4E4\uACE0 \uC2F6\uC740 \uC601\uC0C1\uC744 \uC124\uBA85\uD558\uC138\uC694\u2026",
+      "Turbo (faster)": "\uD130\uBCF4 (\uBE60\uB974\uAC8C)",
+      "7+1 hi-res finish": "7+1 \uD558\uC774\uB808\uC988 \uB9C8\uBB34\uB9AC",
+      "Source frame rate (fps, 0 = detect)": "\uC6D0\uBCF8 \uD504\uB808\uC784\uB808\uC774\uD2B8 (fps, 0 = \uC790\uB3D9)",
+      "Transition Bridge": "\uC804\uD658 \uBE0C\uB9BF\uC9C0",
+      "Clip A (before)": "\uD074\uB9BD A (\uC55E)",
+      "Clip B (after)": "\uD074\uB9BD B (\uB4A4)",
+      "Bridge clip": "\uBE0C\uB9BF\uC9C0 \uD074\uB9BD",
+      Transition: "\uC804\uD658 \uBC29\uC2DD",
+      "Length (frames)": "\uAE38\uC774 (\uD504\uB808\uC784)",
+      "Test on the first N frames (0 = whole video)": "\uCC98\uC74C N\uD504\uB808\uC784\uB9CC \uD14C\uC2A4\uD2B8 (0 = \uC804\uCCB4)",
+      "Save as project": "\uD504\uB85C\uC81D\uD2B8\uB85C \uC800\uC7A5",
+      "Delete project": "\uD504\uB85C\uC81D\uD2B8 \uC0AD\uC81C",
+      "Project name": "\uD504\uB85C\uC81D\uD2B8 \uC774\uB984",
+      "Save the chosen assets as a project": "\uC120\uD0DD\uD55C \uC5D0\uC14B\uC744 \uD504\uB85C\uC81D\uD2B8\uB85C \uC800\uC7A5",
+      "Delete this project?": "\uC774 \uD504\uB85C\uC81D\uD2B8\uB97C \uC0AD\uC81C\uD560\uAE4C\uC694?",
+      // ports
+      "LoRA cards": "LoRA \uCE74\uB4DC",
+      "H3 option cards": "H3 \uC635\uC158 \uCE74\uB4DC",
+      "Option cards": "\uC635\uC158 \uCE74\uB4DC",
+      Video: "\uC601\uC0C1",
+      Videos: "\uC601\uC0C1\uB4E4",
+      "Videos (in order)": "\uC601\uC0C1 (\uC5F0\uACB0 \uC21C\uC11C)",
+      "Face references": "\uC5BC\uAD74 \uB808\uD37C\uB7F0\uC2A4",
+      "Character reference": "\uCE90\uB9AD\uD130 \uB808\uD37C\uB7F0\uC2A4",
+      "Prompt (optional)": "\uD504\uB86C\uD504\uD2B8 (\uC120\uD0DD)",
+      "Overall prompt": "\uC804\uCCB4 \uD504\uB86C\uD504\uD2B8",
+      "Images (in time order)": "\uC774\uBBF8\uC9C0 (\uC2DC\uAC04\uC21C)",
+      "Reference images (optional)": "\uB808\uD37C\uB7F0\uC2A4 \uC774\uBBF8\uC9C0 (\uC120\uD0DD)",
+      "Pass through": "\uADF8\uB300\uB85C \uD1B5\uACFC",
+      "Image / video / audio / text": "\uC774\uBBF8\uC9C0 / \uC601\uC0C1 / \uC624\uB514\uC624 / \uD14D\uC2A4\uD2B8",
+      "More LoRAs": "\uB354 \uB9CE\uC740 LoRA",
+      Sheet: "\uC2DC\uD2B8",
+      "Turnaround video": "\uD134\uC5B4\uB77C\uC6B4\uB4DC \uC601\uC0C1",
+      "@names": "@\uC774\uB984",
+      "For H3": "H3\uC6A9",
+      Images: "\uC774\uBBF8\uC9C0",
+      "Lock audio": "\uC7A0\uAE08 \uC624\uB514\uC624",
+      // params
+      Strength: "\uAC15\uB3C4",
+      Turbo: "\uD130\uBCF4",
+      "Turbo LoRA": "\uD130\uBCF4 LoRA",
+      "Turbo strength": "\uD130\uBCF4 \uAC15\uB3C4",
+      "Turbo steps": "\uD130\uBCF4 \uC2A4\uD15D",
+      "Start size (MP)": "\uC2DC\uC791 \uD06C\uAE30 (MP)",
+      "Final size (MP)": "\uCD5C\uC885 \uD06C\uAE30 (MP)",
+      "7+1 hi-res finish (7 steps small \u2192 upscale \u2192 1 step big)": "7+1 \uD558\uC774\uB808\uC988 \uB9C8\uBB34\uB9AC (\uC791\uAC8C 7\uC2A4\uD15D \u2192 \uC5C5\uC2A4\uCF00\uC77C \u2192 \uD06C\uAC8C 1\uC2A4\uD15D)",
+      "Attention backend": "\uC5B4\uD150\uC158 \uBC31\uC5D4\uB4DC",
+      "Attention forward patch": "\uC5B4\uD150\uC158 \uD3EC\uC6CC\uB4DC \uD328\uCE58",
+      "H3 optimizer": "H3 \uC635\uD2F0\uB9C8\uC774\uC800",
+      "Block cache": "\uBE14\uB85D \uCE90\uC2DC",
+      "Fused modulation": "\uD4E8\uC988\uB4DC \uBAA8\uB4C8\uB808\uC774\uC158",
+      "Shift (video)": "\uC2DC\uD504\uD2B8 (\uC601\uC0C1)",
+      "Shift (audio)": "\uC2DC\uD504\uD2B8 (\uC624\uB514\uC624)",
+      Mode: "\uBAA8\uB4DC",
+      "Strength (remix)": "\uAC15\uB3C4 (\uB9AC\uBBF9\uC2A4)",
+      "If the audio is shorter": "\uC624\uB514\uC624\uAC00 \uC9E7\uC744 \uB54C",
+      "Project id": "\uD504\uB85C\uC81D\uD2B8 ID",
+      "Asset ids": "\uC5D0\uC14B ID",
+      "Choose from library\u2026": "\uB77C\uC774\uBE0C\uB7EC\uB9AC\uC5D0\uC11C \uC120\uD0DD\u2026",
+      "nothing chosen yet": "\uC544\uC9C1 \uC120\uD0DD \uC548 \uD568",
+      assets: "\uAC1C",
+      Project: "\uD504\uB85C\uC81D\uD2B8",
+      project: "\uD504\uB85C\uC81D\uD2B8",
+      "Size by": "\uD06C\uAE30 \uAE30\uC900",
+      Scale: "\uBC30\uC728",
+      "Short edge px": "\uC9E7\uC740 \uBCC0 px",
+      "Long edge px": "\uAE34 \uBCC0 px",
+      Width: "\uAC00\uB85C",
+      Height: "\uC138\uB85C",
+      "Crop anchor": "\uC790\uB974\uAE30 \uAE30\uC900",
+      Quality: "\uD488\uC9C8",
+      Model: "\uBAA8\uB378",
+      "Colour fix": "\uC0C9 \uBCF4\uC815",
+      "Tile size": "\uD0C0\uC77C \uD06C\uAE30",
+      "Tile overlap": "\uD0C0\uC77C \uACB9\uCE68",
+      "2nd pass with RTX VSR": "RTX VSR 2\uCC28 \uD328\uC2A4",
+      Evenness: "\uADE0\uC77C\uD654",
+      Smoothing: "\uC2A4\uBB34\uB529",
+      Redness: "\uBD89\uC740\uAE30",
+      Shine: "\uBC88\uB4E4\uAC70\uB9BC",
+      "Blemish fix": "\uC7A1\uD2F0 \uC81C\uAC70",
+      "Keep moles / scars": "\uC810\xB7\uD749\uD130 \uC720\uC9C0",
+      "Micro-texture": "\uBBF8\uC138 \uC9C8\uAC10",
+      Amount: "\uC591",
+      Size: "\uD06C\uAE30",
+      "Colour grain": "\uCEEC\uB7EC \uADF8\uB808\uC778",
+      "Shadow bias": "\uADF8\uB9BC\uC790 \uD3B8\uD5A5",
+      Noise: "\uB178\uC774\uC988",
+      "Target FPS": "\uBAA9\uD45C FPS",
+      "Flow scale": "\uD50C\uB85C\uC6B0 \uBC30\uC728",
+      "RIFE model": "RIFE \uBAA8\uB378",
+      "Batch size": "\uBC30\uCE58 \uD06C\uAE30",
+      "Target px": "\uBAA9\uD45C px",
+      "Ratio W": "\uBE44\uC728 W",
+      "Ratio H": "\uBE44\uC728 H",
+      Megapixels: "\uBA54\uAC00\uD53D\uC140",
+      Fit: "\uB9DE\uCDA4",
+      Resampling: "\uB9AC\uC0D8\uD50C\uB9C1",
+      "Face detector": "\uC5BC\uAD74 \uAC80\uCD9C\uAE30",
+      "Fallback detector": "\uBCF4\uC870 \uAC80\uCD9C\uAE30",
+      "Which face": "\uB300\uC0C1 \uC5BC\uAD74",
+      "Redraw strength": "\uB2E4\uC2DC \uADF8\uB9AC\uAE30 \uAC15\uB3C4",
+      "Detect confidence": "\uAC80\uCD9C \uC2E0\uB8B0\uB3C4",
+      "Crop factor": "\uD06C\uB86D \uBC30\uC728",
+      Canvas: "\uCE94\uBC84\uC2A4",
+      "Smooth window": "\uC2A4\uBB34\uB529 \uCC3D",
+      "Detect scene cuts": "\uC7A5\uBA74 \uC804\uD658 \uAC10\uC9C0",
+      "Follow the same person": "\uAC19\uC740 \uC0AC\uB78C \uCD94\uC801",
+      "Identity threshold": "\uB3D9\uC77C\uC778 \uC784\uACC4\uAC12",
+      "Identity model": "\uB3D9\uC77C\uC778 \uBAA8\uB378",
+      "Small face \xD7": "\uC791\uC740 \uC5BC\uAD74 \xD7",
+      "Large face \xD7": "\uD070 \uC5BC\uAD74 \xD7",
+      "Small face px": "\uC791\uC740 \uC5BC\uAD74 px",
+      "Large face px": "\uD070 \uC5BC\uAD74 px",
+      "Paste back": "\uD569\uC131 \uC601\uC5ED",
+      Feather: "\uD398\uB354",
+      "Colour match": "\uC0C9 \uB9DE\uCDA4",
+      Blend: "\uBE14\uB80C\uB4DC",
+      "Frames without a face": "\uC5BC\uAD74 \uC5C6\uB294 \uD504\uB808\uC784",
+      "Pick faces": "\uC5BC\uAD74 \uC120\uD0DD",
+      "Scan video": "\uC601\uC0C1 \uC2A4\uCE94",
+      "Click faces in the order to refine": "\uB9AC\uD30C\uC778\uD560 \uC21C\uC11C\uB300\uB85C \uC5BC\uAD74\uC744 \uD074\uB9AD\uD558\uC138\uC694",
+      "Click a face per shot": "\uC7A5\uBA74\uB9C8\uB2E4 \uC5BC\uAD74\uC744 \uD074\uB9AD\uD558\uC138\uC694",
+      "not in this shot": "\uC774 \uC7A5\uBA74\uC5D4 \uC5C6\uC74C",
+      "no face found": "\uC5BC\uAD74 \uC5C6\uC74C",
+      "Frames for the 8 cells": "8\uCE78\uC5D0 \uC4F8 \uD504\uB808\uC784",
+      "Also save each frame": "\uAC01 \uD504\uB808\uC784\uB3C4 \uC800\uC7A5",
+      "Cheap first pass + latent upscale": "\uAC00\uBCBC\uC6B4 1\uCC28 + \uB798\uD134\uD2B8 \uC5C5\uC2A4\uCF00\uC77C",
+      "First pass size (MP)": "1\uCC28 \uD06C\uAE30 (MP)",
+      "Second pass steps": "2\uCC28 \uC2A4\uD15D",
+      "RTX Deblur": "RTX \uB514\uBE14\uB7EC",
+      "Scale back down (supersample)": "\uB2E4\uC2DC \uCD95\uC18C (\uC288\uD37C\uC0D8\uD50C)",
+      "Reference size": "\uB808\uD37C\uB7F0\uC2A4 \uD06C\uAE30",
+      "Sheet max size px": "\uC2DC\uD2B8 \uCD5C\uB300 px",
+      "High quality 2nd pass (latent upscale)": "\uACE0\uD488\uC9C8 2\uCC28 \uD328\uC2A4 (\uB798\uD134\uD2B8 \uC5C5\uC2A4\uCF00\uC77C)",
+      "2nd pass steps": "2\uCC28 \uC2A4\uD15D",
+      "Fizgig single-frame latent": "Fizgig \uB2E8\uC77C \uD504\uB808\uC784 \uB798\uD134\uD2B8",
+      "Change amount": "\uBCC0\uACBD \uC815\uB3C4",
+      "Trim overlap (s)": "\uACB9\uCE68 \uC790\uB974\uAE30 (\uCD08)",
+      "Beats \u2014 one per line:  start-end: prompt  (seconds)": "\uBE44\uD2B8 \u2014 \uD55C \uC904\uC5D0 \uD558\uB098:  \uC2DC\uC791-\uB05D: \uD504\uB86C\uD504\uD2B8 (\uCD08)",
+      "Image times (s), in the order connected": "\uC774\uBBF8\uC9C0 \uC2DC\uAC04 (\uCD08), \uC5F0\uACB0\uD55C \uC21C\uC11C\uB300\uB85C",
+      "Pin the last image to the end": "\uB9C8\uC9C0\uB9C9 \uC774\uBBF8\uC9C0\uB97C \uB05D\uC5D0 \uACE0\uC815",
+      // asset library
+      "Search": "\uAC80\uC0C9",
+      "All categories": "\uBAA8\uB4E0 \uCE74\uD14C\uACE0\uB9AC",
+      "\u2014 pick assets below \u2014": "\u2014 \uC544\uB798\uC5D0\uC11C \uC5D0\uC14B \uC120\uD0DD \u2014",
+      "Category for new assets": "\uC0C8 \uC5D0\uC14B \uCE74\uD14C\uACE0\uB9AC",
+      "Register files\u2026": "\uD30C\uC77C \uB4F1\uB85D\u2026",
+      Use: "\uC0AC\uC6A9",
+      "No assets yet \u2014 register some files.": "\uC544\uC9C1 \uC5D0\uC14B\uC774 \uC5C6\uC2B5\uB2C8\uB2E4 \u2014 \uD30C\uC77C\uC744 \uB4F1\uB85D\uD558\uC138\uC694.",
+      "Connect a video first": "\uBA3C\uC800 \uC601\uC0C1\uC744 \uC5F0\uACB0\uD558\uC138\uC694",
+      "Scanning\u2026 (nothing else should be rendering)": "\uC2A4\uCE94 \uC911\u2026 (\uB2E4\uB978 \uB80C\uB354\uAC00 \uC5C6\uC5B4\uC57C \uD569\uB2C8\uB2E4)",
+      "none picked": "\uC120\uD0DD \uC5C6\uC74C",
+      // context menu
+      "Run this card": "\uC774 \uCE74\uB4DC \uC2E4\uD589",
+      "Run everything": "\uC804\uCCB4 \uC2E4\uD589",
+      "Group selection": "\uC120\uD0DD \uADF8\uB8F9\uD654",
+      "Save selection as deck": "\uC120\uD0DD\uC744 \uB371\uC73C\uB85C \uC800\uC7A5",
+      // decks (names + notes)
+      "Prompt \u2192 Image \u2192 Prompt \u2192 Video": "\uD504\uB86C\uD504\uD2B8 \u2192 \uC774\uBBF8\uC9C0 \u2192 \uD504\uB86C\uD504\uD2B8 \u2192 \uC601\uC0C1",
+      "Make an image, look at it, then animate it.": "\uC774\uBBF8\uC9C0\uB97C \uB9CC\uB4E4\uACE0 \uD655\uC778\uD55C \uB4A4 \uC601\uC0C1\uC73C\uB85C \uB9CC\uB4ED\uB2C8\uB2E4.",
+      "Z-Image \u2192 Krea 2 (i2i) \u2192 H3 7+1 + LoRA": "Z-Image \u2192 Krea 2 (i2i) \u2192 H3 7+1 + LoRA",
+      "Reference images \u2192 Video \u2192 Upscale \u2192 Interpolate": "\uB808\uD37C\uB7F0\uC2A4 \uC774\uBBF8\uC9C0 \u2192 \uC601\uC0C1 \u2192 \uC5C5\uC2A4\uCF00\uC77C \u2192 \uBCF4\uAC04",
+      "Upscale / Deblur \u2192 Stitch": "\uC5C5\uC2A4\uCF00\uC77C / \uB514\uBE14\uB7EC \u2192 \uC2A4\uD2F0\uCE58",
+      "Load Video \u2192 Prompt \u2192 Video Edit": "\uC601\uC0C1 \uBD88\uB7EC\uC624\uAE30 \u2192 \uD504\uB86C\uD504\uD2B8 \u2192 \uC601\uC0C1 \uC218\uC815",
+      "Load Video \u2192 Face Refine \u2192 View \u2192 Upscale \u2192 View": "\uC601\uC0C1 \u2192 \uC5BC\uAD74 \uB9AC\uD30C\uC778 \u2192 \uD655\uC778 \u2192 \uC5C5\uC2A4\uCF00\uC77C \u2192 \uD655\uC778",
+      "Asset Library \u2192 H3 reference video (@names)": "\uC5D0\uC14B \uB77C\uC774\uBE0C\uB7EC\uB9AC \u2192 H3 \uB808\uD37C\uB7F0\uC2A4 \uC601\uC0C1 (@\uC774\uB984)",
+      "Prompt \u2192 Music \u2192 Listen": "\uD504\uB86C\uD504\uD2B8 \u2192 \uC74C\uC545 \u2192 \uB4E3\uAE30"
+    };
+  }
+});
+
+// src/i18n.ts
+function t(key) {
+  return useLang.getState().lang === "ko" ? KO[key] ?? key : key;
+}
+var KO, read, useLang;
+var init_i18n = __esm({
+  "src/i18n.ts"() {
+    "use strict";
+    init_esm();
+    init_i18n_cards();
+    KO = {
+      // chrome
+      Canvas: "\uCE94\uBC84\uC2A4",
+      Simple: "\uC2EC\uD50C",
+      Settings: "\uC124\uC815",
+      Gallery: "\uAC24\uB7EC\uB9AC",
+      Nodes: "\uB178\uB4DC",
+      Assets: "\uC5D0\uC14B",
+      Models: "\uBAA8\uB378",
+      Search: "\uAC80\uC0C9",
+      "Search nodes\u2026": "\uB178\uB4DC \uAC80\uC0C9\u2026",
+      Run: "\uC2E4\uD589",
+      Stop: "\uC911\uC9C0",
+      "Run all": "\uC804\uCCB4 \uC2E4\uD589",
+      Save: "\uC800\uC7A5",
+      "Save as": "\uB2E4\uB978 \uC774\uB984\uC73C\uB85C \uC800\uC7A5",
+      Open: "\uC5F4\uAE30",
+      New: "\uC0C8\uB85C \uB9CC\uB4E4\uAE30",
+      Undo: "\uC2E4\uD589 \uCDE8\uC18C",
+      Redo: "\uB2E4\uC2DC \uC2E4\uD589",
+      Delete: "\uC0AD\uC81C",
+      Duplicate: "\uBCF5\uC81C",
+      Group: "\uADF8\uB8F9",
+      Ungroup: "\uADF8\uB8F9 \uD574\uC81C",
+      Lock: "\uC7A0\uAE08",
+      Unlock: "\uC7A0\uAE08 \uD574\uC81C",
+      "Zoom to fit": "\uD654\uBA74\uC5D0 \uB9DE\uCDA4",
+      Close: "\uB2EB\uAE30",
+      Apply: "\uC801\uC6A9",
+      Cancel: "\uCDE8\uC18C",
+      Download: "\uB2E4\uC6B4\uB85C\uB4DC",
+      "Add node": "\uB178\uB4DC \uCD94\uAC00",
+      "Clear results": "\uACB0\uACFC \uC9C0\uC6B0\uAE30",
+      "Copy to input": "\uC785\uB825\uC73C\uB85C \uBCF5\uC0AC",
+      // settings
+      "ComfyUI connection": "ComfyUI \uC5F0\uACB0",
+      "Server address": "\uC11C\uBC84 \uC8FC\uC18C",
+      "Same origin (proxy)": "\uB3D9\uC77C \uCD9C\uCC98(\uD504\uB85D\uC2DC)",
+      Test: "\uD14C\uC2A4\uD2B8",
+      Connected: "\uC5F0\uACB0\uB428",
+      "Not connected": "\uC5F0\uACB0 \uC548 \uB428",
+      Language: "\uC5B8\uC5B4",
+      "LLM backend": "LLM \uBC31\uC5D4\uB4DC",
+      "Local GGUF (llama.cpp)": "\uB85C\uCEEC GGUF (llama.cpp)",
+      "ComfyUI TextGenerate": "ComfyUI TextGenerate",
+      OpenRouter: "OpenRouter",
+      "Connect Custom": "Connect Custom (OpenAI \uD638\uD658)",
+      "GGUF model": "GGUF \uBAA8\uB378",
+      "Vision projector (mmproj)": "\uBE44\uC804 \uD504\uB85C\uC81D\uD130 (mmproj)",
+      "Text encoder": "\uD14D\uC2A4\uD2B8 \uC778\uCF54\uB354",
+      "Loader type": "\uB85C\uB354 \uD0C0\uC785",
+      "API key": "API \uD0A4",
+      "Text model": "\uD14D\uC2A4\uD2B8 \uBAA8\uB378",
+      "Vision model": "\uBE44\uC804 \uBAA8\uB378",
+      "Base URL": "\uAE30\uBCF8 URL",
+      Model: "\uBAA8\uB378",
+      "Context size": "\uCEE8\uD14D\uC2A4\uD2B8 \uD06C\uAE30",
+      "Connect & test": "\uC5F0\uACB0 \uBC0F \uD14C\uC2A4\uD2B8",
+      "Key is kept in server memory only.": "\uD0A4\uB294 \uC11C\uBC84 \uBA54\uBAA8\uB9AC\uC5D0\uB9CC \uBCF4\uAD00\uB429\uB2C8\uB2E4.",
+      "Key stored on server": "\uC11C\uBC84\uC5D0 \uD0A4 \uC800\uC7A5\uB428",
+      Temperature: "\uC628\uB3C4",
+      "Max tokens": "\uCD5C\uB300 \uD1A0\uD070",
+      "Save LLM settings": "LLM \uC124\uC815 \uC800\uC7A5",
+      Saved: "\uC800\uC7A5\uB428",
+      "Output folder": "\uCD9C\uB825 \uD3F4\uB354",
+      "Image models": "\uC774\uBBF8\uC9C0 \uBAA8\uB378",
+      // nodes (titles)
+      Prompt: "\uD504\uB86C\uD504\uD2B8",
+      "Prompt Concatenator": "\uD504\uB86C\uD504\uD2B8 \uACB0\uD569",
+      "Prompt Enhancer": "\uD504\uB86C\uD504\uD2B8 \uAC15\uD654",
+      "Image Describer": "\uC774\uBBF8\uC9C0 \uC124\uBA85",
+      "LLM (TJ)": "LLM (TJ)",
+      "Image Generate": "\uC774\uBBF8\uC9C0 \uC0DD\uC131",
+      "Image Edit": "\uC774\uBBF8\uC9C0 \uD3B8\uC9D1",
+      Inpaint: "\uC778\uD398\uC778\uD2B8",
+      Outpaint: "\uC544\uC6C3\uD398\uC778\uD2B8",
+      "Remove Background": "\uBC30\uACBD \uC81C\uAC70",
+      "Face Swap": "\uC5BC\uAD74 \uAD50\uCCB4",
+      Upscale: "\uC5C5\uC2A4\uCF00\uC77C",
+      "Video Generate": "\uBE44\uB514\uC624 \uC0DD\uC131",
+      Crop: "\uC790\uB974\uAE30",
+      Resize: "\uD06C\uAE30 \uC870\uC815",
+      Blur: "\uBE14\uB7EC",
+      Levels: "\uB808\uBCA8",
+      "Rotate and flip": "\uD68C\uC804/\uBC18\uC804",
+      "Color correction": "\uC0C9 \uBCF4\uC815",
+      Sharpen: "\uC120\uBA85\uD558\uAC8C",
+      Grayscale: "\uD751\uBC31",
+      Threshold: "\uC784\uACC4\uAC12",
+      Posterize: "\uD3EC\uC2A4\uD130\uD654",
+      "Hue Rotate": "\uC0C9\uC0C1 \uD68C\uC804",
+      Vignette: "\uBE44\uB124\uD2B8",
+      Pixelate: "\uD53D\uC140\uD654",
+      Blend: "\uBE14\uB80C\uB4DC",
+      Invert: "\uBC18\uC804",
+      Channels: "\uCC44\uB110",
+      "Color palette": "\uC0C9\uC0C1 \uD314\uB808\uD2B8",
+      "Extract Video Frame": "\uBE44\uB514\uC624 \uD504\uB808\uC784 \uCD94\uCD9C",
+      "Matte Grow/Shrink": "\uB9C8\uC2A4\uD06C \uD655\uC7A5/\uCD95\uC18C",
+      Painter: "\uD398\uC778\uD130",
+      Import: "\uAC00\uC838\uC624\uAE30",
+      Export: "\uB0B4\uBCF4\uB0B4\uAE30",
+      Preview: "\uBBF8\uB9AC\uBCF4\uAE30",
+      Router: "\uB77C\uC6B0\uD130",
+      Compare: "\uBE44\uAD50",
+      "Sticky Note": "\uBA54\uBAA8",
+      Number: "\uC22B\uC790",
+      Text: "\uD14D\uC2A4\uD2B8",
+      Toggle: "\uD1A0\uAE00",
+      Seed: "\uC2DC\uB4DC",
+      // categories
+      "Text / LLM": "\uD14D\uC2A4\uD2B8 / LLM",
+      Image: "\uC774\uBBF8\uC9C0",
+      Video: "\uBE44\uB514\uC624",
+      Edit: "\uD3B8\uC9D1",
+      Matte: "\uB9C8\uC2A4\uD06C",
+      Utility: "\uC720\uD2F8\uB9AC\uD2F0",
+      Data: "\uB370\uC774\uD130",
+      // node bodies
+      "Replace\u2026": "\uBC14\uAFB8\uAE30\u2026",
+      "Choose file\u2026": "\uD30C\uC77C \uC120\uD0DD\u2026",
+      "or drop a file on the canvas": "\uB610\uB294 \uCE94\uBC84\uC2A4\uC5D0 \uD30C\uC77C\uC744 \uB04C\uC5B4\uB2E4 \uB193\uC73C\uC138\uC694",
+      "Connect A and B": "A\uC640 B\uB97C \uC5F0\uACB0\uD558\uC138\uC694",
+      "Nothing connected yet": "\uC544\uC9C1 \uC5F0\uACB0\uB41C \uAC83\uC774 \uC5C6\uC2B5\uB2C8\uB2E4",
+      Advanced: "\uACE0\uAE09",
+      "Open painter": "\uD398\uC778\uD130 \uC5F4\uAE30",
+      planned: "\uC608\uC815",
+      Mask: "\uB9C8\uC2A4\uD06C",
+      Paint: "\uD398\uC778\uD2B8",
+      Brush: "\uBE0C\uB7EC\uC2DC",
+      Eraser: "\uC9C0\uC6B0\uAC1C",
+      Size: "\uD06C\uAE30",
+      Fill: "\uCC44\uC6B0\uAE30",
+      Empty: "\uBE44\uC6B0\uAE30",
+      Clear: "\uCD08\uAE30\uD654",
+      "Aspect ratio": "\uD654\uBA74 \uBE44\uC728",
+      "Size (MP)": "\uD06C\uAE30 (MP)",
+      Steps: "\uC2A4\uD15D",
+      Guidance: "\uAC00\uC774\uB358\uC2A4",
+      Sampler: "\uC0D8\uD50C\uB7EC",
+      Scheduler: "\uC2A4\uCF00\uC904\uB7EC",
+      "Negative prompt": "\uB124\uAC70\uD2F0\uBE0C \uD504\uB86C\uD504\uD2B8",
+      Batch: "\uBC30\uCE58",
+      "LoRA 1": "LoRA 1",
+      "LoRA 2": "LoRA 2",
+      "LoRA 1 strength": "LoRA 1 \uAC15\uB3C4",
+      "LoRA 2 strength": "LoRA 2 \uAC15\uB3C4",
+      Denoise: "\uB514\uB178\uC774\uC988",
+      "System prompt": "\uC2DC\uC2A4\uD15C \uD504\uB86C\uD504\uD2B8",
+      "Temperature (0 = settings)": "\uC628\uB3C4 (0 = \uC124\uC815\uAC12)",
+      Guidelines: "\uC9C0\uCE68",
+      "Write in English": "\uC601\uC5B4\uB85C \uC791\uC131",
+      For: "\uC6A9\uB3C4",
+      "Describe as": "\uC124\uBA85 \uBC29\uC2DD",
+      "Extra guidelines": "\uCD94\uAC00 \uC9C0\uCE68",
+      Separator: "\uAD6C\uBD84\uC790",
+      "Add-ons": "\uCD94\uAC00",
+      Texts: "\uD14D\uC2A4\uD2B8",
+      Images: "\uC774\uBBF8\uC9C0",
+      "Left px": "\uC67C\uCABD px",
+      "Top px": "\uC704 px",
+      "Right px": "\uC624\uB978\uCABD px",
+      "Bottom px": "\uC544\uB798 px",
+      "File name": "\uD30C\uC77C \uC774\uB984",
+      Note: "\uBA54\uBAA8",
+      Value: "\uAC12",
+      Scale: "\uBC30\uC728",
+      "Final scale": "\uCD5C\uC885 \uBC30\uC728",
+      Radius: "\uBC18\uACBD",
+      Amount: "\uC591",
+      Level: "\uB808\uBCA8",
+      Degrees: "\uAC01\uB3C4",
+      Strength: "\uAC15\uB3C4",
+      Softness: "\uBD80\uB4DC\uB7EC\uC6C0",
+      "Block size": "\uBE14\uB85D \uD06C\uAE30",
+      Opacity: "\uBD88\uD22C\uBA85\uB3C4",
+      Mode: "\uBAA8\uB4DC",
+      Brightness: "\uBC1D\uAE30",
+      Contrast: "\uB300\uBE44",
+      Saturation: "\uCC44\uB3C4",
+      Warmth: "\uC0C9\uC628\uB3C4",
+      Gamma: "\uAC10\uB9C8",
+      "Black point": "\uBE14\uB799 \uD3EC\uC778\uD2B8",
+      "White point": "\uD654\uC774\uD2B8 \uD3EC\uC778\uD2B8",
+      Channel: "\uCC44\uB110",
+      "Canvas width": "\uCE94\uBC84\uC2A4 \uB108\uBE44",
+      "Canvas height": "\uCE94\uBC84\uC2A4 \uB192\uC774",
+      Feather: "\uD398\uB354",
+      "Position %": "\uC704\uCE58 %",
+      Colors: "\uC0C9\uC0C1",
+      // simple mode
+      Generate: "\uC0DD\uC131",
+      Reference: "\uCC38\uC870",
+      Options: "\uC635\uC158",
+      Enhance: "\uD504\uB86C\uD504\uD2B8 \uAC15\uD654",
+      "Use as reference": "\uCC38\uC870\uB85C \uC0AC\uC6A9",
+      "To canvas": "\uCE94\uBC84\uC2A4\uB85C",
+      "Describe your image\u2026": "\uB9CC\uB4E4\uACE0 \uC2F6\uC740 \uC774\uBBF8\uC9C0\uB97C \uC124\uBA85\uD558\uC138\uC694\u2026",
+      "Describe what you want below and press Generate.": "\uC544\uB798\uC5D0 \uC6D0\uD558\uB294 \uAC83\uC744 \uC801\uACE0 \uC0DD\uC131\uC744 \uB204\uB974\uC138\uC694.",
+      "Leave empty to use the built-in proxy (recommended).": "\uBE44\uC6CC\uB450\uBA74 \uB0B4\uC7A5 \uD504\uB85D\uC2DC\uB97C \uC0AC\uC6A9\uD569\uB2C8\uB2E4 (\uAD8C\uC7A5).",
+      "Write a prompt first.": "\uBA3C\uC800 \uD504\uB86C\uD504\uD2B8\uB97C \uC785\uB825\uD558\uC138\uC694.",
+      Restore: "\uB418\uB3CC\uB9AC\uAE30",
+      "Load workflow (API JSON)\u2026": "\uC6CC\uD06C\uD50C\uB85C\uC6B0 \uBD88\uB7EC\uC624\uAE30 (API JSON)\u2026",
+      "Replace workflow\u2026": "\uC6CC\uD06C\uD50C\uB85C\uC6B0 \uBC14\uAFB8\uAE30\u2026",
+      "ComfyUI Workflow": "ComfyUI \uC6CC\uD06C\uD50C\uB85C\uC6B0",
+      Workflow: "\uC6CC\uD06C\uD50C\uB85C\uC6B0",
+      "Prompt field": "\uD504\uB86C\uD504\uD2B8 \uCE78",
+      "Image 1 field": "\uC774\uBBF8\uC9C0 1 \uCE78",
+      "Image 2 field": "\uC774\uBBF8\uC9C0 2 \uCE78",
+      "Video field": "\uBE44\uB514\uC624 \uCE78",
+      "Seed field": "\uC2DC\uB4DC \uCE78",
+      "Music models": "\uC74C\uC545 \uBAA8\uB378",
+      "Music Generate": "\uC74C\uC545 \uC0DD\uC131",
+      Audio: "\uC624\uB514\uC624",
+      "Length (s)": "\uAE38\uC774 (\uCD08)",
+      Key: "\uD0A4",
+      Lyrics: "\uAC00\uC0AC",
+      Style: "\uC2A4\uD0C0\uC77C",
+      "Video models": "\uBE44\uB514\uC624 \uBAA8\uB378",
+      "First frame": "\uCCAB \uD504\uB808\uC784",
+      "Last frame": "\uB9C8\uC9C0\uB9C9 \uD504\uB808\uC784",
+      "Stage-2 sigmas": "2\uB2E8\uACC4 \uC2DC\uADF8\uB9C8",
+      "Model downloads": "\uBAA8\uB378 \uB2E4\uC6B4\uB85C\uB4DC",
+      "Start the server with COMFY_DIR=<ComfyUI folder> to download here. Links below open in your browser.": "\uC11C\uBC84\uB97C COMFY_DIR=<ComfyUI \uD3F4\uB354> \uB85C \uC2E4\uD589\uD558\uBA74 \uC5EC\uAE30\uC11C \uBC14\uB85C \uB0B4\uB824\uBC1B\uC2B5\uB2C8\uB2E4. \uC9C0\uAE08\uC740 \uB9C1\uD06C\uAC00 \uBE0C\uB77C\uC6B0\uC800\uC5D0\uC11C \uC5F4\uB9BD\uB2C8\uB2E4.",
+      "Open melody editor": "\uBA5C\uB85C\uB514 \uC5D0\uB514\uD130 \uC5F4\uAE30",
+      "empty \u2014 open the editor": "\uBE44\uC5B4 \uC788\uC74C \u2014 \uC5D0\uB514\uD130\uB97C \uC5EC\uC138\uC694",
+      Play: "\uC7AC\uC0DD",
+      Record: "\uB179\uC74C",
+      notes: "\uC74C\uD45C",
+      bars: "\uB9C8\uB514",
+      Bars: "\uB9C8\uB514",
+      "overlapping notes dropped": "\uACB9\uCE5C \uC74C \uC81C\uC678",
+      "Melody Editor": "\uBA5C\uB85C\uB514 \uC5D0\uB514\uD130",
+      "Melody (ABC)": "\uBA5C\uB85C\uB514 (ABC)",
+      "Click = add note \xB7 drag = move \xB7 drag right edge (or Shift+drag) = length \xB7 double-click / right-click = delete \xB7 Space = play": "\uD074\uB9AD = \uC74C \uCD94\uAC00 \xB7 \uB4DC\uB798\uADF8 = \uC774\uB3D9 \xB7 \uC624\uB978\uCABD \uB05D \uB4DC\uB798\uADF8(\uB610\uB294 Shift+\uB4DC\uB798\uADF8) = \uAE38\uC774 \xB7 \uB354\uBE14\uD074\uB9AD/\uC6B0\uD074\uB9AD = \uC0AD\uC81C \xB7 \uC2A4\uD398\uC774\uC2A4 = \uC7AC\uC0DD",
+      // messages
+      "Nothing here yet.": "\uC544\uC9C1 \uC544\uBB34\uAC83\uB3C4 \uC5C6\uC2B5\uB2C8\uB2E4.",
+      "Connect an input first.": "\uBA3C\uC800 \uC785\uB825\uC744 \uC5F0\uACB0\uD558\uC138\uC694."
+    };
+    for (const [k, v] of Object.entries(KO_CARDS)) if (!(k in KO)) KO[k] = v;
+    read = () => {
+      try {
+        return localStorage.getItem("canvers.lang") === "en" ? "en" : "ko";
+      } catch {
+        return "ko";
+      }
+    };
+    useLang = create((set2) => ({
+      lang: read(),
+      setLang: (lang) => {
+        try {
+          localStorage.setItem("canvers.lang", lang);
+        } catch {
+        }
+        set2({ lang });
+      }
+    }));
+  }
+});
+
+// src/backend/llmGuard.ts
+async function comfyGenerating() {
+  try {
+    const q = await getJson("/queue");
+    return (q.queue_running?.length ?? 0) + (q.queue_pending?.length ?? 0) > 0;
+  } catch {
+    return false;
+  }
+}
+function show(place, text3) {
+  useLlmNotice.setState({ [place]: text3 });
+}
+async function acquireLocalLlm(backend, place = "bottom") {
+  if (!isLocalBackend(backend)) return () => {
+  };
+  let done = false, free;
+  const mine = new Promise((r) => {
+    free = r;
+  });
+  const prev = chain;
+  chain = chain.then(() => mine);
+  const release = () => {
+    if (done) return;
+    done = true;
+    if (activeLocal > 0 && started) activeLocal--;
+    free();
+  };
+  let started = false;
+  await prev;
+  let cancelled = false;
+  const entry = { place, cancel: () => {
+    cancelled = true;
+  } };
+  try {
+    let idle = 0, shown = false, sawBusy = false;
+    while (!cancelled) {
+      if (await comfyGenerating()) {
+        sawBusy = true;
+        idle = 0;
+      } else if (!sawBusy || ++idle >= IDLE_CHECKS) break;
+      if (!shown) {
+        shown = true;
+        waiting.add(entry);
+        show(place, t("Generating now \u2014 the local LLM waits until it is done (a local LLM running together with a generation can make it fail and stop ComfyUI). To use the AI right away, switch the LLM to OpenRouter."));
+      }
+      await sleep(2e3);
+    }
+  } catch (e) {
+    cleanup();
+    release();
+    throw e;
+  }
+  cleanup();
+  if (cancelled) {
+    release();
+    throw new Error(t("Cancelled while waiting for the generation to finish"));
+  }
+  started = true;
+  activeLocal++;
+  return release;
+  function cleanup() {
+    waiting.delete(entry);
+    if (![...waiting].some((w) => w.place === place)) show(place, null);
+  }
+}
+async function waitForLocalLlmIdle() {
+  if (activeLocal === 0) return;
+  show("bottom", t("A local LLM is running \u2014 the generation starts as soon as it is done (they must not run together)."));
+  try {
+    while (activeLocal > 0) await sleep(1e3);
+  } finally {
+    show("bottom", null);
+  }
+}
+var useLlmNotice, isLocalBackend, IDLE_CHECKS, sleep, waiting, chain, activeLocal;
+var init_llmGuard = __esm({
+  "src/backend/llmGuard.ts"() {
+    "use strict";
+    init_esm();
+    init_http();
+    init_i18n();
+    useLlmNotice = create(() => ({ live: null, bottom: null }));
+    isLocalBackend = (backend) => backend !== "openrouter";
+    IDLE_CHECKS = 2;
+    sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    waiting = /* @__PURE__ */ new Set();
+    chain = Promise.resolve();
+    activeLocal = 0;
+  }
+});
+
 // src/backend/comfy.ts
 var comfy_exports = {};
 __export(comfy_exports, {
@@ -2547,6 +3344,7 @@ async function recoverPrompt(promptId) {
   return null;
 }
 async function runPrompt(graph, opts = {}) {
+  await waitForLocalLlmIdle();
   await openSocket();
   const res = await fetch(url("/prompt"), {
     method: "POST",
@@ -2648,6 +3446,7 @@ var init_comfy = __esm({
   "src/backend/comfy.ts"() {
     "use strict";
     init_http();
+    init_llmGuard();
     clientId = globalThis.crypto?.randomUUID?.() ?? String(Math.random()).slice(2);
     viewUrl = (f) => url(`/view?filename=${encodeURIComponent(f.filename)}&subfolder=${encodeURIComponent(f.subfolder)}&type=${f.type}`);
     uid = (p = "a") => `${p}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
@@ -3406,7 +4205,7 @@ function defaultParams(def, engineId) {
 }
 function compatible(a, b) {
   if (a === b || a === "any" || b === "any") return true;
-  const imageLike = (t) => t === "image" || t === "mask";
+  const imageLike = (t2) => t2 === "image" || t2 === "mask";
   return imageLike(a) && imageLike(b);
 }
 
@@ -4009,6 +4808,7 @@ async function buildImageGraph(job) {
 }
 
 // src/backend/llm.ts
+init_llmGuard();
 init_http();
 init_comfy();
 init_settings();
@@ -4094,7 +4894,16 @@ async function warmUpServer() {
   } catch {
   }
 }
-async function runLlm(req, retried = false) {
+async function runLlm(req) {
+  const l = req.llm ?? useSettings.getState().llm;
+  const release = await acquireLocalLlm(l.backend, req.where);
+  try {
+    return await runLlmNow(req, false);
+  } finally {
+    release();
+  }
+}
+async function runLlmNow(req, retried) {
   const l = req.llm ?? useSettings.getState().llm;
   const images = req.images ?? [];
   if (l.backend === "custom") {
@@ -4123,7 +4932,7 @@ async function runLlm(req, retried = false) {
   }
   if (!res.ok && !retried && /last_prompt_id/.test(res.error ?? "")) {
     await warmUpServer();
-    return runLlm(req, true);
+    return runLlmNow(req, true);
   }
   if (!res.ok) throw new Error(res.error || "LLM request failed");
   return (res.result ?? "").trim();
@@ -4298,10 +5107,10 @@ var useGraph = create((set2, get) => ({
   setActive: (id, idx) => set2({ nodes: get().nodes.map((n2) => n2.id === id ? { ...n2, activeResult: Math.max(0, Math.min(idx, Math.max(0, n2.results.length - 1))) } : n2) }),
   connect: (e) => {
     const { nodes, edges } = get();
-    const s = nodes.find((n2) => n2.id === e.source), t = nodes.find((n2) => n2.id === e.target);
-    if (!s || !t || s.id === t.id) return false;
+    const s = nodes.find((n2) => n2.id === e.source), t2 = nodes.find((n2) => n2.id === e.target);
+    if (!s || !t2 || s.id === t2.id) return false;
     const sp = byId.get(s.defId)?.outputs.find((o) => o.id === e.sourceHandle);
-    const tp = byId.get(t.defId)?.inputs.find((i) => i.id === e.targetHandle);
+    const tp = byId.get(t2.defId)?.inputs.find((i) => i.id === e.targetHandle);
     if (!sp || !tp || !compatible(sp.type, tp.type)) return false;
     const keep = tp.multi ? edges : edges.filter((x) => !(x.target === e.target && x.targetHandle === e.targetHandle));
     if (keep.some((x) => x.source === e.source && x.sourceHandle === e.sourceHandle && x.target === e.target && x.targetHandle === e.targetHandle)) return false;
@@ -4401,13 +5210,13 @@ var useGraph = create((set2, get) => ({
   }
 }));
 function fillTurbo(nodes) {
-  const t = useSettings.getState().h3Turbo;
+  const t2 = useSettings.getState().h3Turbo;
   let changed = false;
   const out = nodes.map((n2) => {
     if (n2.defId !== "h3-turbo") return n2;
     const patch = {};
-    if ((!n2.params.turbo_lora || n2.params.turbo_lora === "none") && t.fl) patch.turbo_lora = t.fl;
-    if ((!n2.params.turbo_lora_ref || n2.params.turbo_lora_ref === "none") && t.ref) patch.turbo_lora_ref = t.ref;
+    if ((!n2.params.turbo_lora || n2.params.turbo_lora === "none") && t2.fl) patch.turbo_lora = t2.fl;
+    if ((!n2.params.turbo_lora_ref || n2.params.turbo_lora_ref === "none") && t2.ref) patch.turbo_lora_ref = t2.ref;
     if (!Object.keys(patch).length) return n2;
     changed = true;
     return { ...n2, params: { ...n2.params, ...patch } };
@@ -4415,10 +5224,10 @@ function fillTurbo(nodes) {
   return changed ? out : nodes;
 }
 function rememberedTurbo() {
-  const t = useSettings.getState().h3Turbo;
+  const t2 = useSettings.getState().h3Turbo;
   const out = {};
-  if (t.fl) out.turbo_lora = t.fl;
-  if (t.ref) out.turbo_lora_ref = t.ref;
+  if (t2.fl) out.turbo_lora = t2.fl;
+  if (t2.ref) out.turbo_lora_ref = t2.ref;
   return out;
 }
 var quiet = false;
@@ -4467,11 +5276,11 @@ function formatFor(defId, engineId) {
 function downstreamTarget(nodeId) {
   const { nodes, edges } = useGraph.getState();
   for (const e of edges.filter((x) => x.source === nodeId)) {
-    const t = nodes.find((n2) => n2.id === e.target);
-    if (!t) continue;
-    const def = byId.get(t.defId);
+    const t2 = nodes.find((n2) => n2.id === e.target);
+    if (!t2) continue;
+    const def = byId.get(t2.defId);
     if (!def || def.kind !== "generate") continue;
-    return formatFor(t.defId, t.engineId);
+    return formatFor(t2.defId, t2.engineId);
   }
   return null;
 }
@@ -4788,16 +5597,16 @@ async function buildLtxGraph(job) {
     const T = job.timeline;
     const fr = (sec) => Math.max(0, Math.min(frames - 1, Math.round(sec * FPS)));
     const texts = [...T.texts].sort((a, b) => a.startSec - b.startSec);
-    texts.forEach((t, i) => {
-      const st = i === 0 ? 0 : fr(t.startSec);
-      const en = i === texts.length - 1 ? frames : Math.max(st + 1, fr(t.endSec));
-      tl.segments.push({ id: `cvt-${i}`, start: st, length: en - st, prompt: t.prompt, type: "text" });
+    texts.forEach((t2, i) => {
+      const st = i === 0 ? 0 : fr(t2.startSec);
+      const en = i === texts.length - 1 ? frames : Math.max(st + 1, fr(t2.endSec));
+      tl.segments.push({ id: `cvt-${i}`, start: st, length: en - st, prompt: t2.prompt, type: "text" });
     });
     const imgs = [...T.images].sort((a, b) => a.startSec - b.startSec);
     imgs.forEach((im, i) => tl.segments.push({ id: `cvi-${i}`, start: im.end ? Math.max(0, fr(im.startSec) - ANCHOR + 1) : fr(im.startSec), length: ANCHOR, prompt: "", type: "image", isAnchor: false, imageFile: im.file, imageB64: "", isEndFrame: !!im.end }));
     if (texts.length) {
       tl.disable_prompt_relay = false;
-      localPrompts = texts.map((t) => t.prompt).join(" | ");
+      localPrompts = texts.map((t2) => t2.prompt).join(" | ");
       segLens = tl.segments.filter((x) => x.type === "text").map((x) => x.length).join(",");
     }
     if (T.audio) {
@@ -4956,7 +5765,7 @@ function h3Frames(seconds) {
 function h3Size(aspect2, mp) {
   const [a, b] = aspect2.split(":").map(Number);
   const ratio = a && b ? a / b : 16 / 9;
-  const t = Math.max(0.1, mp) * 1e6, h = Math.sqrt(t / ratio), w = h * ratio;
+  const t2 = Math.max(0.1, mp) * 1e6, h = Math.sqrt(t2 / ratio), w = h * ratio;
   const snap = (v) => Math.max(32, Math.round(v / 32) * 32);
   return { width: snap(w), height: snap(h) };
 }
@@ -5331,12 +6140,12 @@ async function buildPostGraph(job) {
       images = ["P:step", 0];
     } else if (s.method === "rtx") {
       await need2("TJ_NODE_RTXVSR", "RTX VSR", "ComfyUI-TJ_NODE (NVIDIA RTX GPU)");
-      const t = rtxTarget(s.rtx, s.srcW, s.srcH);
-      if (t.crop) {
-        g["P:crop"] = { class_type: "ImageCrop", inputs: { image: images, ...t.crop } };
+      const t2 = rtxTarget(s.rtx, s.srcW, s.srcH);
+      if (t2.crop) {
+        g["P:crop"] = { class_type: "ImageCrop", inputs: { image: images, ...t2.crop } };
         images = ["P:crop", 0];
       }
-      g["P:step"] = { class_type: "TJ_NODE_RTXVSR", inputs: { images, resize_type: t.type === "scale" ? "scale by multiplier" : "target dimensions", scale: t.type === "scale" ? t.scale : 2, width: t.width || 1920, height: t.height || 1080, quality: s.rtx.quality } };
+      g["P:step"] = { class_type: "TJ_NODE_RTXVSR", inputs: { images, resize_type: t2.type === "scale" ? "scale by multiplier" : "target dimensions", scale: t2.type === "scale" ? t2.scale : 2, width: t2.width || 1920, height: t2.height || 1080, quality: s.rtx.quality } };
       images = ["P:step", 0];
     } else {
       if (!s.modelName || s.modelName === "none") throw new Error("Pick an upscale model first");
@@ -6030,11 +6839,11 @@ function h3Cards(c) {
   return out;
 }
 function optFromCards(cards) {
-  const t = cards.turbo, s = cards.speed;
+  const t2 = cards.turbo, s = cards.speed;
   return {
     ...DEFAULT_OPT,
     ...s ? { attnBackend: s.attn_backend, attnForward: s.attn_forward, optimizer: s.optimizer, blockCache: s.block_cache, spectrum: !!s.spectrum, fusedModulation: !!s.fused_mod, shiftVideo: s.shift_video, shiftAudio: s.shift_audio } : {},
-    ...t ? { turbo: t.turbo, turboLora: t.turbo_lora, turboStrength: t.turbo_strength, turboSteps: t.turbo_steps, hires: !!t.hires, hiresStartMp: t.hires_start_mp, hiresFinalMp: t.hires_final_mp } : {}
+    ...t2 ? { turbo: t2.turbo, turboLora: t2.turbo_lora, turboStrength: t2.turbo_strength, turboSteps: t2.turbo_steps, hires: !!t2.hires, hiresStartMp: t2.hires_start_mp, hiresFinalMp: t2.hires_final_mp } : {}
   };
 }
 async function h3Opt(cards, ref = false) {
@@ -6083,7 +6892,7 @@ async function videoFps(url2) {
       ended = true;
       v.pause();
       v.removeAttribute("src");
-      const d = times.slice(1).map((t, i) => t - times[i]).filter((x) => x > 1e-3);
+      const d = times.slice(1).map((t2, i) => t2 - times[i]).filter((x) => x > 1e-3);
       if (d.length < 3) return resolve(null);
       d.sort((a, b) => a - b);
       const med = d[Math.floor(d.length / 2)];
@@ -6740,7 +7549,7 @@ async function runH3(c) {
       const tail = res.raw[built.tailNode ?? ""]?.images ?? [];
       let pick = lf ? { filename: lf.filename, subfolder: lf.subfolder ?? "", type: lf.type ?? "output" } : void 0;
       try {
-        const r = await pickChainFrame(tail.map((t) => ({ filename: t.filename, subfolder: t.subfolder ?? "", type: t.type ?? "temp" })));
+        const r = await pickChainFrame(tail.map((t2) => ({ filename: t2.filename, subfolder: t2.subfolder ?? "", type: t2.type ?? "temp" })));
         if (r.ok && r.picked) pick = r.picked;
       } catch {
       }
@@ -6776,8 +7585,8 @@ var RUNNERS = {
   toggle: async (c) => [textAsset(c.p.value ? "true" : "false", "value")],
   // ---- LLM (four backends, chosen in Settings)
   "llm-tj": async (c) => {
-    const t = c.text("text");
-    const prompt = [t, str(c.p.prompt)].filter(Boolean).join("\n\n");
+    const t2 = c.text("text");
+    const prompt = [t2, str(c.p.prompt)].filter(Boolean).join("\n\n");
     const images = c.inputs("image");
     if (!prompt && !images.length) throw new Error("Give the LLM some text or an image");
     c.progress(10, "asking the model\u2026");
@@ -6785,24 +7594,24 @@ var RUNNERS = {
     return [textAsset(await runLlm({ system: textOnlySystem(c), prompt, images, temperature: temperature > 0 ? temperature : void 0 }))];
   },
   "prompt-enhancer": async (c) => {
-    const t = need(c.text("text") || void 0, "Text");
+    const t2 = need(c.text("text") || void 0, "Text");
     c.progress(10, "enhancing\u2026");
     const own = c.inputs("image");
     const down = own.length ? null : downstreamImages(c.node.id);
     const imgs = own.length ? own : down.images.map((x) => x.asset);
     const ms = styleOf(c.node.id, { fmt: c.p.fmt, aes: c.p.aes, extra: c.p.style, purpose_sel: c.p.purpose }, { model_format: "Universal Natural Language", purpose: str(c.p.purpose) || down?.purpose || "Image" });
-    if (imgs.length) return [textAsset(await enhanceWithImages({ idea: t, images: imgs, purpose: ms.purpose, modelStyle: ms, progress: c.progress }))];
-    return [textAsset(await runLlm({ system: "", prompt: t, style: ms }))];
+    if (imgs.length) return [textAsset(await enhanceWithImages({ idea: t2, images: imgs, purpose: ms.purpose, modelStyle: ms, progress: c.progress }))];
+    return [textAsset(await runLlm({ system: "", prompt: t2, style: ms }))];
   },
   "music-writer": async (c) => {
-    const t = need(c.text("text") || void 0, "Text");
+    const t2 = need(c.text("text") || void 0, "Text");
     const key = { "lyrics from theme": "lyrics_from_theme", "lyrics from title": "lyrics_from_title", "enhance lyrics": "lyrics_enhance", "style caption \u2014 Ace-Step": "caption_acestep", "style caption \u2014 MiniMax Music": "caption_minimax", "style caption \u2014 YuE2": "caption_yue2", "cover prompt": "cover_prompt", "song title": "title" }[str(c.p.task)] ?? "lyrics_from_theme";
     c.progress(10, "loading prompt\u2026");
     const lib = await getJson("/music_one/llm/prompts");
     const system = lib.prompts?.[key];
     if (!system) throw new Error(`The MusicMaker prompt "${key}" was not found on the server`);
     c.progress(30, "writing\u2026");
-    return [textAsset(await runLlm({ system, prompt: t }))];
+    return [textAsset(await runLlm({ system, prompt: t2 }))];
   },
   "image-describer": async (c) => {
     const images = need(c.inputs("image"), "Image");
@@ -7007,8 +7816,8 @@ function opRunner(op) {
 // mcp/server.ts
 init_comfy();
 useSettings.getState().set({ comfyUrl: process.env.COMFY_URL ?? "http://127.0.0.1:8188" });
-var text2 = (t) => ({ content: [{ type: "text", text: t }] });
-var fail = (t) => ({ isError: true, content: [{ type: "text", text: t }] });
+var text2 = (t2) => ({ content: [{ type: "text", text: t2 }] });
+var fail = (t2) => ({ isError: true, content: [{ type: "text", text: t2 }] });
 async function saveAssets(assets, dir, stem) {
   fs.mkdirSync(dir, { recursive: true });
   const out = [];
@@ -7056,13 +7865,13 @@ async function runCanvas(a) {
   const targets = a.node_id ? [String(a.node_id)] : p.nodes.filter((n2) => byId.get(n2.defId) && !fed.has(n2.id) && ["generate", "llm"].includes(byId.get(n2.defId).kind)).map((n2) => n2.id);
   if (!targets.length) throw new Error("No generator/LLM node to run.");
   const lines = [];
-  for (const t of targets) {
+  for (const t2 of targets) {
     let res = [];
-    await executeGraph({ nodes: p.nodes, edges: p.edges }, t, { done: (id, assets) => {
-      if (id === t) res = assets;
+    await executeGraph({ nodes: p.nodes, edges: p.edges }, t2, { done: (id, assets) => {
+      if (id === t2) res = assets;
     } });
-    const files = await saveAssets(res, String(a.output_dir ?? path.dirname(String(a.path))), `${path.basename(String(a.path), ".json")}_${t}`);
-    lines.push(`${t}: ${files.join(", ") || res.map((r) => r.text).join(" ")}`);
+    const files = await saveAssets(res, String(a.output_dir ?? path.dirname(String(a.path))), `${path.basename(String(a.path), ".json")}_${t2}`);
+    lines.push(`${t2}: ${files.join(", ") || res.map((r) => r.text).join(" ")}`);
   }
   return text2(lines.join("\n"));
 }
@@ -7131,10 +7940,10 @@ var send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 async function handle(msg) {
   const { id, method, params } = msg;
   try {
-    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.9.0" } } });
-    if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS.map(({ run: _r, ...t }) => t) } });
+    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.9.1" } } });
+    if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS.map(({ run: _r, ...t2 }) => t2) } });
     if (method === "tools/call") {
-      const tool = TOOLS.find((t) => t.name === params?.name);
+      const tool = TOOLS.find((t2) => t2.name === params?.name);
       if (!tool) return send({ jsonrpc: "2.0", id, result: fail(`unknown tool ${params?.name}`) });
       try {
         return send({ jsonrpc: "2.0", id, result: await tool.run(params?.arguments ?? {}) });

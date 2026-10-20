@@ -1,11 +1,11 @@
 {
   "name": "ai-one-studio-canvers",
-  "version": "2.9.0",
+  "version": "2.9.1",
   "private": true,
   "type": "module",
   "description": "Node-canvas frontend for ComfyUI-TJ_NODE_STUDIO_ONE (backend API)",
   "scripts": {
-    "dev": "vite --port 5917 --host",
+    "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "start": "node serve.mjs",

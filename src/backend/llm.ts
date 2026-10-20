@@ -4,6 +4,7 @@
 //   openrouter → OpenRouter cloud models
 //   custom     → Connect Custom (any OpenAI-compatible server)
 // All four are served by ComfyUI-TJ_NODE_STUDIO_ONE's /tj_studio_one/llm/* and /tj_shared/* routes.
+import { acquireLocalLlm, type NoticePlace } from './llmGuard';
 import type { Asset } from '../types';
 import { getJson, postJson } from './http';
 import { fetchBlob } from './comfy';
@@ -87,6 +88,8 @@ async function ensureCustomKeys(roles: string[], which?: LlmSettings): Promise<v
 
 // ---- generation
 export interface LlmRequest {
+  /** where the 'waiting for the generation' notice is shown: inside the Live Canvas chat, or above the bottom toolbar (default) */
+  where?: NoticePlace;
   /** full system prompt (used when `style` and `refine` are not given) */
   system: string;
   /** let the server build the system prompt from the target model format / aesthetic / purpose (ONE STUDIO style) */
@@ -148,7 +151,14 @@ async function warmUpServer(): Promise<void> {
   } catch { /* the retry below reports the real error */ }
 }
 
-export async function runLlm(req: LlmRequest, retried = false): Promise<string> {
+/** A local LLM never runs together with a generation or another local LLM (that can crash ComfyUI): it waits its turn, with a yellow notice. */
+export async function runLlm(req: LlmRequest): Promise<string> {
+  const l = req.llm ?? useSettings.getState().llm;
+  const release = await acquireLocalLlm(l.backend, req.where);
+  try { return await runLlmNow(req, false); } finally { release(); }
+}
+
+async function runLlmNow(req: LlmRequest, retried: boolean): Promise<string> {
   const l = req.llm ?? useSettings.getState().llm;
   const images = req.images ?? [];
 
@@ -179,7 +189,7 @@ export async function runLlm(req: LlmRequest, retried = false): Promise<string> 
       prompt: req.prompt,
     });
   }
-  if (!res.ok && !retried && /last_prompt_id/.test(res.error ?? '')) { await warmUpServer(); return runLlm(req, true); }
+  if (!res.ok && !retried && /last_prompt_id/.test(res.error ?? '')) { await warmUpServer(); return runLlmNow(req, true); }
   if (!res.ok) throw new Error(res.error || 'LLM request failed');
   return (res.result ?? '').trim();
 }

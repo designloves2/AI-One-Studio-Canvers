@@ -1,5 +1,5 @@
 // Production server: serves the built canvas (dist/) and forwards ComfyUI + STUDIO_ONE traffic.
-//   COMFY_URL=http://127.0.0.1:8188 PORT=5917 node serve.mjs
+//   COMFY_URL=http://127.0.0.1:8188 PORT=8765 node serve.mjs
 import http from 'node:http';
 import net from 'node:net';
 import fs from 'node:fs';
@@ -10,7 +10,7 @@ import { handleCanvases } from './server-lib/canvases.mjs';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), 'dist');
 const target = new URL(process.env.COMFY_URL ?? 'http://127.0.0.1:8188');
-const port = Number(process.env.PORT ?? 5917);
+const port = Number(process.env.PORT ?? 8765);
 
 const PROXIED = ['/prompt', '/history', '/queue', '/upload', '/view', '/object_info', '/system_stats', '/interrupt', '/free', '/ws',
   '/flux_klein', '/z_image_turbo', '/krea2_one', '/sdxl_one', '/qwen2511_one', '/qwenimage21_one', '/anima_one', '/minimax_h3_one',

@@ -504,7 +504,7 @@ Reply with the JSON object only.`;
     onStatus?.(attempt ? 'fixing the reply…' : 'thinking…');
     const raw = await runLlm({ system: attempt ? `${system}
 
-Your previous reply was not valid JSON (${lastErr}). Return ONLY the JSON object.` : system, prompt, max_tokens: 7000, temperature: 0.5, llm: liveLlmSettings() });
+Your previous reply was not valid JSON (${lastErr}). Return ONLY the JSON object.` : system, prompt, max_tokens: 7000, temperature: 0.5, llm: liveLlmSettings(), where: 'live' });
     try {
       const p = parsePlan(raw);
       const need = (p.need_details ?? []).filter((x) => byId.has(x));

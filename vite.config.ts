@@ -26,6 +26,7 @@ export default defineConfig({
     // 127.0.0.1 (not only "localhost", which on Windows can mean IPv6 only) so a cloudflared tunnel can reach it;
     // tunnel host names are allowed (add more with CANVERS_ALLOWED_HOSTS=a.example.com,b.example.com)
     host: '127.0.0.1',
+    port: 8765, strictPort: true,   // the app's port (serve.mjs uses the same)
     allowedHosts: ['.trycloudflare.com', '.tjtj.cloud', ...(process.env.CANVERS_ALLOWED_HOSTS ?? '').split(',').map((x) => x.trim()).filter(Boolean)],
     proxy: {
       ...Object.fromEntries(proxied.map((p) => [p, common])),

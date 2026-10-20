@@ -2,6 +2,7 @@
 // through here (ComfyUI is the engine behind ComfyUI-TJ_NODE_STUDIO_ONE).
 import type { Asset, FileRef } from '../types';
 import { getJson, postJson, url, wsUrl } from './http';
+import { waitForLocalLlmIdle } from './llmGuard';
 
 export const clientId: string = (globalThis.crypto?.randomUUID?.() ?? String(Math.random()).slice(2));
 
@@ -157,6 +158,7 @@ export interface RunOptions {
 
 /** Queue an API-format graph and resolve with everything its output nodes produced. */
 export async function runPrompt(graph: Record<string, unknown>, opts: RunOptions = {}): Promise<RunResult> {
+  await waitForLocalLlmIdle();   // a generation never starts while a local LLM is running
   await openSocket();
   const res = await fetch(url('/prompt'), {
     method: 'POST', headers: { 'Content-Type': 'application/json' },

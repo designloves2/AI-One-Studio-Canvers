@@ -12,7 +12,7 @@ LLM 4가지 방식은 [ComfyUI-TJ_NODE](https://github.com/designloves2/ComfyUI-
 2. (모델 다운로드를 쓰려면 `set COMFY_DIR=C:\ComfyUI\ComfyUI` 처럼 ComfyUI 폴더를 지정) 이 폴더에서 **`start.bat`** (Windows) 또는 `./start.sh` (Mac/Linux) 를 실행합니다.
    - 처음 한 번은 Node.js(18 이상)가 필요합니다. 패키지 설치와 빌드는 자동입니다.
    - ComfyUI 주소가 다르면 `COMFY_URL` 환경변수로 지정: `set COMFY_URL=http://192.168.0.10:8188`
-3. 브라우저에서 **http://localhost:5917** 을 엽니다.
+3. 브라우저에서 **http://127.0.0.1:8765** 를 엽니다(포트 8765).
 
 왼쪽 **모델** 탭에서 연결·모델·필수 커스텀 노드가 갖춰졌는지 한눈에 확인할 수 있습니다.
 
@@ -39,6 +39,8 @@ LLM 4가지 방식은 [ComfyUI-TJ_NODE](https://github.com/designloves2/ComfyUI-
 4. **Connect Custom** — LM Studio · Ollama · llama.cpp 서버 등 OpenAI 호환 주소 (키는 서버 메모리에만 보관)
 
 설정은 서버에 저장되어 브라우저를 바꿔도 같습니다. `Test` 버튼으로 바로 확인하세요.
+
+> **생성 중에는 OpenRouter 만 바로 실행됩니다.** 1~2, 4번(로컬)은 ComfyUI 가 이미지/영상을 만드는 동안 같이 돌리면 생성이 실패하고 ComfyUI 가 종료될 수 있어서, 앱이 **생성이 끝날 때까지 대기**시키고 이유를 노란 글씨로 알려 줍니다(라이브 캔버스는 채팅 안, 그 밖은 캔버스 하단 툴바 위). 로컬 LLM 요청은 한 번에 하나씩 차례로 실행되고, 로컬 LLM 이 도는 동안 새 생성도 기다립니다.
 
 ## 지원 현황 (v1.1)
 
@@ -78,7 +80,7 @@ claude mcp add canvers -e COMFY_URL=http://127.0.0.1:8188 -- node C:\경로\AI-O
 
 ```
 npm install
-npm run dev        # http://localhost:5917 (ComfyUI는 COMFY_URL 로 프록시)
+npm run dev        # http://127.0.0.1:8765 (ComfyUI는 COMFY_URL 로 프록시)
 # vite.config.ts 로 띄우는 개발 서버는 127.0.0.1 에서 열립니다(cloudflared 터널용). 터널 도메인은 .trycloudflare.com, .tjtj.cloud
 # 와 CANVERS_ALLOWED_HOSTS=a.example.com,b.example.com 으로 허용합니다.
 npm run typecheck
