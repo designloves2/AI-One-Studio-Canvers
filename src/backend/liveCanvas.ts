@@ -3,6 +3,7 @@
 import { liveLlmSettings, runLlm } from './llm';
 import { useGraph } from '../store/graph';
 import { useSettings } from '../store/settings';
+import { t } from '../i18n';
 import { REGISTRY, byId, compatible } from '../registry';
 import type { ParamDef } from '../types';
 import { runNode, runAll, stopAll } from '../engine/actions';
@@ -93,14 +94,31 @@ export function canvasState(): string {
   return `Cards (id | type | "title" | engine | (x,y) | values):\n${lines.join('\n')}\nWires:\n${wires.join('\n') || '(none)'}${groups.length ? `\nGroups:\n${groups.join('\n')}` : ''}`;
 }
 
+const PRODUCTION_MODE = `
+PRODUCTION MODE — when the user names a project ("… 광고 영상 만들 준비해줘", "… 뮤직비디오 만들어줘", "브이로그", "스토리보드", "단편 영상" …)
+You are the director/producer. Do NOT ask for details and do NOT leave placeholders like "[scene 1]": decide the concept, tone, structure, shot list and every prompt text yourself, write real content, and state your key assumptions in one or two sentences in "say" (the user can then change anything). Ask a question only if the subject itself is missing. "준비" = build the canvas only; never run unless asked.
+Always create, in this order: (1) one Note card (def "note", params.text = the creative brief: logline, concept, mood/style, length, aspect, and the shot list as numbered lines), then the pipeline below. Default length: ad 30s, music video ~60s, vlog ~45s. Use 16:9 unless told otherwise. Shots are 5-15 s and add up to the length. Put the shot number in the titles ("샷 1 (8초)").
+Pipelines (cards via "near"/"row"/"col", wires via "links" — ports are chosen automatically):
+- AD: reference-image prompt cards (def prompt) in one row -> each wired to its own "image-generate" card placed below it. Shot prompt cards (def prompt) in the next row; below each shot a "video-generate" card (engine "h3-ref" when it uses a reference image, else "h3"; params seconds) wired from its shot prompt; wire the matching reference image-generate card to the video card's image port. One "video-stitch" card wired from all video cards (near the last video, place right). Optional when asked: "music-generate" -> "video-audio" with the stitched video.
+- MUSIC VIDEO: a prompt card with the song concept -> "music-writer" (params task "lyrics from theme") -> its text wired to a "music-generate" card's lyrics port; a prompt card with the music style wired to music-generate's prompt port. "beat-detect" wired from the music-generate audio. Shots follow the song structure (intro, verse, chorus, bridge, outro) with the lyric lines in each shot's prompt; one video-generate card per shot (below its prompt, wired); "video-stitch" from all videos; "video-audio" with the stitch video and the music-generate audio.
+- VLOG: scene prompt cards (a day / trip structure) -> each wired to an "image-generate" card (key frame), each image wired to a "video-generate" card (engine h3, image-to-video) placed below, plus the same scene prompt wired to the video card; "video-stitch" at the end.
+- STORYBOARD (frames only): shot prompt cards -> one "image-generate" per shot below it, arranged as a tidy row; no video cards.
+- IMAGE SET / CHARACTER SHEET etc.: prompt cards + image-generate (or "character-sheet") cards.
+- More situations (same rules: brief note + real texts + wired pipeline): SHORT-FORM / REELS (9:16, 15-30 s, hook in the first shot, 3-5 shots) · PRODUCT INTRO / UNBOXING · TRAILER / TEASER (3-5 shots, title card last) · ANIMATED SHORT / STORY (character-sheet card first, then shots that refer to it) · LYRIC VIDEO (lyrics sections as shots over the music) · GAME / FILM CINEMATIC INTRO · EXPLAINER / EDUCATION (one idea per shot) · FASHION / LOOKBOOK (image-generate set, then short motion clips) · TRAVEL / EVENT / WEDDING highlight · SNS AD SERIES (same idea in several aspects 16:9, 9:16, 1:1: duplicate the shot cards and set aspect) · POSTER / THUMBNAIL / PRODUCT IMAGE SET (prompt + image-generate per image, several variations) · CHARACTER DESIGN (character-sheet) · NARRATION / VOICE (put spoken lines in <d> in the shots; a music-generate or import-audio for sound) · LOCALIZED VERSIONS (copy the shot prompts, change the spoken language).
+- Working with what exists: if cards are already on the canvas, extend or edit them instead of starting over. For the user's own footage: "import-video" -> post-processing cards (pp-upscale, pp-denoise, pp-deblur, pp-interpolate, pp-grain, pp-resize), "face-refine", "video-refine", "video-audio" to add sound, "video-stitch" to join clips, "scene-detect"/"beat-detect" for timing, "extract-frame" for a key frame. For the user's own images: "import" -> image-edit / upscale / remove-bg / video-generate (image-to-video). Wire in the order the data flows (source -> processing -> result) and finish with a "preview" card for the result when useful.
+- Revisions: when the user says "shot 3 should be …", "make it more dramatic", "add a shot", "change the product name", edit the matching prompt cards (set) or add cards in the right place and keep the shot numbers/durations consistent (renumber titles, keep the total length).
+Reference-image prompt cards are titled "레퍼런스 이미지 N: …"; shot prompt cards use the H3 shot style above and mention @imageN when they use that reference.
+`;
+
 const allDecks = (): Deck[] => [...BUILTIN_DECKS, ...userDecks()];
 const findDeck = (ref: string): Deck | undefined => { const r = String(ref ?? '').toLowerCase(); return allDecks().find((d) => d.id.toLowerCase() === r || d.name.toLowerCase() === r); };
 /** "id = name - note [cards: key:def …]" for every deck, so the LLM knows which key is which card */
-function deckList(): string {
+function deckList(tiny = false): string {
+  if (tiny) return allDecks().map((d) => `${d.id} = ${d.name} [${d.nodes.map((x) => x.k).join(' ')}]`).join('\n');
   return allDecks().map((d) => `${d.id} = ${d.name} — ${short(d.note, 90)} [cards: ${d.nodes.map((x) => `${x.k}:${x.def}`).join(' ')}]`).join('\n');
 }
 
-const SYSTEM = (state: string, cards: string, compact: boolean) => `You are the Live Canvas assistant of AI ONE Studio Canvers, a node-card canvas for AI image/video/music generation.
+const SYSTEM = (state: string, cards: string, compact: boolean, tiny = false) => `You are the Live Canvas assistant of AI ONE Studio Canvers, a node-card canvas for AI image/video/music generation.
 You can READ the canvas (state below) and CHANGE it. The user talks to you; you answer with ONE JSON object and nothing else (no markdown, no code fence). The app executes it.
 
 JSON (every key except "say" is optional; use only what is needed):
@@ -134,29 +152,15 @@ How it works
 
 Writing MiniMax H3 video prompts (shot cards): 2-4 sentences of present-tense cinematic English: subject, action, setting, camera move, light, mood, then "Ambient sound:" and, if needed, spoken words as <d>[Korean] exact words</d>. Keep characters/products/look consistent between shots. Refer to reference images as @image1, @image2 (in the order of the reference cards). Shot lengths 5-15 s and they add up to the requested total.
 Writing reference-image prompt cards (def "prompt"): one per image the shots need, titled "레퍼런스 이미지 N: what it is", text = a detailed English text-to-image prompt. Put them in the row below the shots.
-
-PRODUCTION MODE — when the user names a project ("… 광고 영상 만들 준비해줘", "… 뮤직비디오 만들어줘", "브이로그", "스토리보드", "단편 영상" …)
-You are the director/producer. Do NOT ask for details and do NOT leave placeholders like "[scene 1]": decide the concept, tone, structure, shot list and every prompt text yourself, write real content, and state your key assumptions in one or two sentences in "say" (the user can then change anything). Ask a question only if the subject itself is missing. "준비" = build the canvas only; never run unless asked.
-Always create, in this order: (1) one Note card (def "note", params.text = the creative brief: logline, concept, mood/style, length, aspect, and the shot list as numbered lines), then the pipeline below. Default length: ad 30s, music video ~60s, vlog ~45s. Use 16:9 unless told otherwise. Shots are 5-15 s and add up to the length. Put the shot number in the titles ("샷 1 (8초)").
-Pipelines (cards via "near"/"row"/"col", wires via "links" — ports are chosen automatically):
-- AD: reference-image prompt cards (def prompt) in one row -> each wired to its own "image-generate" card placed below it. Shot prompt cards (def prompt) in the next row; below each shot a "video-generate" card (engine "h3-ref" when it uses a reference image, else "h3"; params seconds) wired from its shot prompt; wire the matching reference image-generate card to the video card's image port. One "video-stitch" card wired from all video cards (near the last video, place right). Optional when asked: "music-generate" -> "video-audio" with the stitched video.
-- MUSIC VIDEO: a prompt card with the song concept -> "music-writer" (params task "lyrics from theme") -> its text wired to a "music-generate" card's lyrics port; a prompt card with the music style wired to music-generate's prompt port. "beat-detect" wired from the music-generate audio. Shots follow the song structure (intro, verse, chorus, bridge, outro) with the lyric lines in each shot's prompt; one video-generate card per shot (below its prompt, wired); "video-stitch" from all videos; "video-audio" with the stitch video and the music-generate audio.
-- VLOG: scene prompt cards (a day / trip structure) -> each wired to an "image-generate" card (key frame), each image wired to a "video-generate" card (engine h3, image-to-video) placed below, plus the same scene prompt wired to the video card; "video-stitch" at the end.
-- STORYBOARD (frames only): shot prompt cards -> one "image-generate" per shot below it, arranged as a tidy row; no video cards.
-- IMAGE SET / CHARACTER SHEET etc.: prompt cards + image-generate (or "character-sheet") cards.
-- More situations (same rules: brief note + real texts + wired pipeline): SHORT-FORM / REELS (9:16, 15-30 s, hook in the first shot, 3-5 shots) · PRODUCT INTRO / UNBOXING · TRAILER / TEASER (3-5 shots, title card last) · ANIMATED SHORT / STORY (character-sheet card first, then shots that refer to it) · LYRIC VIDEO (lyrics sections as shots over the music) · GAME / FILM CINEMATIC INTRO · EXPLAINER / EDUCATION (one idea per shot) · FASHION / LOOKBOOK (image-generate set, then short motion clips) · TRAVEL / EVENT / WEDDING highlight · SNS AD SERIES (same idea in several aspects 16:9, 9:16, 1:1: duplicate the shot cards and set aspect) · POSTER / THUMBNAIL / PRODUCT IMAGE SET (prompt + image-generate per image, several variations) · CHARACTER DESIGN (character-sheet) · NARRATION / VOICE (put spoken lines in <d> in the shots; a music-generate or import-audio for sound) · LOCALIZED VERSIONS (copy the shot prompts, change the spoken language).
-- Working with what exists: if cards are already on the canvas, extend or edit them instead of starting over. For the user's own footage: "import-video" -> post-processing cards (pp-upscale, pp-denoise, pp-deblur, pp-interpolate, pp-grain, pp-resize), "face-refine", "video-refine", "video-audio" to add sound, "video-stitch" to join clips, "scene-detect"/"beat-detect" for timing, "extract-frame" for a key frame. For the user's own images: "import" -> image-edit / upscale / remove-bg / video-generate (image-to-video). Wire in the order the data flows (source -> processing -> result) and finish with a "preview" card for the result when useful.
-- Revisions: when the user says "shot 3 should be …", "make it more dramatic", "add a shot", "change the product name", edit the matching prompt cards (set) or add cards in the right place and keep the shot numbers/durations consistent (renumber titles, keep the total length).
-Reference-image prompt cards are titled "레퍼런스 이미지 N: …"; shot prompt cards use the H3 shot style above and mention @imageN when they use that reference.
-
+${tiny ? '' : PRODUCTION_MODE}
 CURRENT CANVAS
 ${state}
 
 DECKS
-${deckList()}
+${deckList(tiny)}
 
-COMBINING CARDS (typical chains — mix freely, any compatible ports can be wired)
-${COMBOS}
+${tiny ? '' : `COMBINING CARDS (typical chains — mix freely, any compatible ports can be wired)
+${COMBOS}`}
 
 AVAILABLE CARDS${compact ? ' (compact: ports only — reply with only {"need_details":["<card id>",…]} if you need the description and values of cards before planning)' : ''}
 ${cards}`;
@@ -481,7 +485,7 @@ function runSummary(ids: string[] | 'all'): { n: number; seconds: number; label:
   const gen = pick.filter((x) => byId.get(x.defId)?.kind === 'generate');
   const videos = gen.filter((x) => x.defId === 'video-generate');
   const seconds = videos.reduce((p, x) => p + (Number(x.params.seconds) || 0), 0);
-  return { n: gen.length, seconds, label: `${gen.length} generator card${gen.length === 1 ? '' : 's'}${videos.length ? `, ${videos.length} video${videos.length === 1 ? '' : 's'} (${seconds} s in total)` : ''}` };
+  return { n: gen.length, seconds, label: `${gen.length} ${t('generator cards')}${videos.length ? `, ${videos.length} ${t('videos')} (${t('total')} ${seconds}${t('s')})` : ''}` };
 }
 
 /** One chat turn: ask the LLM with the current canvas, parse its plan (one retry on bad JSON), apply it. */
@@ -492,8 +496,9 @@ User: ${userText}
 Reply with the JSON object only.`;
   const cfg = liveLlmSettings() ?? useSettings.getState().llm;
   // small-context backends get the compact card list and ask for details on demand
-  const compact = cfg.backend === 'comfy' || (cfg.backend === 'local' && cfg.n_ctx < 12000);
-  let system = SYSTEM(canvasState(), catalog(!compact), compact);
+  const compact = (import.meta.env.DEV && !!(window as unknown as { __forceCompact?: boolean }).__forceCompact) || cfg.backend === 'comfy' || (cfg.backend === 'local' && cfg.n_ctx < 12000);
+  const tiny = cfg.backend === 'local' && cfg.n_ctx < 8192;   // ~4k context: drop the production recipes and combos
+  let system = SYSTEM(canvasState(), catalog(!compact), compact, tiny);
   let plan: Plan | null = null, lastErr = '', detailed = false, wired = false;
   for (let attempt = 0; attempt < 3 && !plan; attempt++) {
     onStatus?.(attempt ? 'fixing the reply…' : 'thinking…');
@@ -503,7 +508,7 @@ Your previous reply was not valid JSON (${lastErr}). Return ONLY the JSON object
     try {
       const p = parsePlan(raw);
       const need = (p.need_details ?? []).filter((x) => byId.has(x));
-      if (compact && !detailed && need.length && !p.cards?.length && !p.decks?.length) { detailed = true; system = SYSTEM(canvasState(), `${catalog(false)}\n\nDETAILS OF THE CARDS YOU ASKED FOR\n${catalog(true, new Set(need))}`, false); attempt = -1; continue; }
+      if (compact && !detailed && need.length && !p.cards?.length && !p.decks?.length) { detailed = true; system = SYSTEM(canvasState(), `${catalog(false)}\n\nDETAILS OF THE CARDS YOU ASKED FOR\n${catalog(true, new Set(need))}`, false, tiny); attempt = -1; continue; }
       // a pipeline of generator cards without a single wire is almost always a forgotten "links": ask once more
       const gens = (p.cards ?? []).filter((c) => byId.get(c.def)?.kind === 'generate' || c.def === 'video-stitch').length;
       if (!wired && gens >= 2 && !(p.links ?? []).length && !(p.decks ?? []).length) { wired = true; lastErr = 'the new cards have no "links" — add the wires between them (and "set" the texts)'; system = `${system}
@@ -512,19 +517,22 @@ Your previous reply created cards but no "links". Return the complete plan again
       plan = p;
     } catch (e) { lastErr = (e as Error).message; }
   }
-  if (!plan) throw new Error(`The model did not return a usable plan (${lastErr}). Try again or pick a stronger LLM in Settings.`);
+  if (!plan) throw new Error(`The model did not return a usable plan (${lastErr}). Try again or pick a stronger LLM in Settings.${tiny ? ' A local model with a 4k context is too small for the Live Canvas: raise the context size to 8192 or more.' : ''}`);
   if (import.meta.env.DEV) (window as unknown as { __lastPlan?: Plan }).__lastPlan = plan;
   onStatus?.('placing cards…');
   // generation uses the GPU for minutes: only run when the user's message asks for it, and confirm what will start
+  let cancelled = false;
   let allowRun = /실행|돌려|돌리|시작|렌더|(^|[^a-z])(run|start|render)([^a-z]|$)|생성\s*(을|좀)?\s*(해|하|돌|시작)/i.test(userText);
   const wantsRun = (plan.run ?? []).length > 0;
   if (allowRun && wantsRun) {
     const sum = runSummary((plan.run ?? []).includes('all') ? 'all' : (plan.run ?? []));
-    if (sum.n > 0 && !(await askConfirm(`Start generating now? ${sum.label}. This uses the GPU and can take a while.`))) allowRun = false;
+    if (sum.n > 0 && !(await askConfirm(`${t('Start generating now?')} ${sum.label}
+${t('This uses the GPU and can take a while.')}`))) { allowRun = false; cancelled = true; }
   }
   // one checkpoint for the whole reply, so "undo" takes back everything this answer changed
   const before = { nodes: useGraph.getState().nodes, edges: useGraph.getState().edges };
   const notes = applyPlan(plan, { allowRun });
+  if (cancelled) { const i = notes.findIndex((x) => x.startsWith('run skipped')); if (i >= 0) notes[i] = 'run cancelled'; else notes.push('run cancelled'); }
   const videos = useGraph.getState().nodes.filter((n) => n.defId === 'video-generate');
   if (cardsAdded(plan) && videos.length) notes.push(`∑ ${videos.reduce((p, x) => p + (Number(x.params.seconds) || 0), 0)} s of video`);
   const suggest = (plan.suggest ?? []).filter((x) => typeof x === 'string' && x.trim()).slice(0, 4);

@@ -92,7 +92,7 @@ export function LivePanel() {
         {msgs.map((m, i) => (
           <div key={i} className={`live-msg ${m.role}${m.error ? ' err' : ''}`}>
             <div className="bubble-txt">{m.text}</div>
-            {m.notes?.length ? <div className="live-notes">{m.notes.map((n) => <span key={n} className="chip">✓ {n}</span>)}{undoers.current.has(i) && !m.notes.includes('undone') && <button className="chip undo" onClick={() => undoAnswer(i)}>↶ {T('Undo this answer')}</button>}</div> : null}
+            {m.notes?.length ? <div className="live-notes">{m.notes.map((n) => <span key={n} className="chip">✓ {T(n)}</span>)}{undoers.current.has(i) && !m.notes.includes('undone') && <button className="chip undo" onClick={() => undoAnswer(i)}>↶ {T('Undo this answer')}</button>}</div> : null}
             {m.suggest?.length ? <div className="live-suggest">{m.suggest.map((s) => <button key={s} className="chip" disabled={busy} onClick={() => void send(s)}>💡 {s}</button>)}</div> : null}
           </div>
         ))}

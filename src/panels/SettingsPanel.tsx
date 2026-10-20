@@ -138,6 +138,7 @@ function Llm({ target = 'main' }: { target?: 'main' | 'live' }) {
       {live && (
         <label className="srow"><span className="field-label">{T('Use the main LLM')}</span><input type="checkbox" checked={liveSet.same} onChange={(e) => useSettings.getState().setLive({ same: e.target.checked })} /></label>
       )}
+      {live && !liveSet.same && llm.backend === 'local' && llm.n_ctx < 8192 && <p className="status bad">{T('Live Canvas needs a context of 8192 or more for a local model.')}</p>}
       {live && liveSet.same ? <p className="muted">{T('Live Canvas follows the LLM above. Untick to pick another backend / model for it (a stronger model writes better plans).')}</p> : <>
       <div className="backends">
         {BACKENDS.map((b) => (

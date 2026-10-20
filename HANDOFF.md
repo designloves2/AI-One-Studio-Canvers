@@ -1,4 +1,4 @@
-# HANDOFF — AI ONE Studio Canvers (v2.8.0, 카드 덱 방식)
+# HANDOFF — AI ONE Studio Canvers (v2.8.1, 카드 덱 방식)
 
 이어서 작업하는 쪽은 이 문서만 읽으면 됩니다. (작업 중 계속 갱신됨)
 
@@ -49,6 +49,7 @@
 - 그룹 규칙(src/store/graph.ts group/fitGroup/reassignMembership, Flow.tsx): 틀은 zIndex -10 + elevateNodesOnSelect=false 로 항상 카드 아래, 틀 크기는 DOM 실측(measure). 그룹 이동=멤버 동반, 카드 단독 이동=그룹 고정, 드롭 시 틀 밖→소속 해제 / 틀 안→소속, 한 카드 한 그룹. 실기 확인(마우스 드래그).
 - LLM 백엔드 5종 모두 라이브 캔버스로 시험 통과(2026-10-20). ComfyUI 재시작 직후 'comfy'/'local' 백엔드의 last_prompt_id 오류는 앱이 더미 작업으로 자동 우회(llm.ts warmUpServer). 생각(reasoning) 모델은 max_tokens 를 넉넉히(Test=400).
 - 제작 모드(2.8.0): src/decks.production.ts(제작 덱 7종), src/backend/liveCombos.ts(조합 예시표), liveCanvas.ts(catalog(full|compact)·need_details·decks 명령·연결 누락 재요청·실행 확인), LivePanel(템플릿·첨부·제안·답변 되돌리기), NoteTools(메모 다듬기/수정). 실기: 광고 덱 15장 채움, 이미지 체인·후처리 체인·터보 옵션 카드 연결 모두 통과(OpenRouter).
+- 라이브 캔버스 로컬 LLM: n_ctx 8192 이상 필요(4096 은 JSON 실패). 미검증으로 남은 것: '연결 누락 시 재요청' 보정(코드만).
 - 알려진 제한: 소리 트랙이 없는 mp4 는 VHS 로더가 실패한다(후처리/Face Refine/Video Edit). 안내 문구만 추가함(comfy.ts friendlyError). 자동 무음 삽입은 미구현.
 - 미검증: Face Refine 다인 체인, Anima inpaint 모드.
 - 테스트 팁: vite HMR 후에는 모듈 URL 에 ?t= 가 붙어 콘솔 import 가 다른 인스턴스가 된다 → performance 리소스 목록의 정확한 URL 로 import.
