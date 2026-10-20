@@ -5,6 +5,8 @@ export const KO_CARDS: Record<string, string> = {
   'Select cards on the canvas first': '캔버스에서 카드를 먼저 선택하세요', 'Select some cards on the canvas and save them as a deck.': '캔버스에서 카드 몇 장을 선택해 덱으로 저장하세요.',
   'Legacy: load original STUDIO_ONE panels': '레거시: 원본 STUDIO_ONE 패널 불러오기', 'Adds the old all-in-one panels as extra nodes (reload needed). Off = card nodes only.': '예전 통짜 패널을 추가 노드로 불러옵니다(새로고침 필요). 꺼짐 = 카드 노드만.',
   // cards
+  'Polish note': '메모 다듬기',
+  'Write a note first.': '메모를 먼저 적어 주세요.', 'Undo this answer': '이 답변 취소', 'Production templates': '제작 템플릿', 'Attach an image: it becomes a card and the AI looks at it': '이미지 첨부: 카드가 되고 AI 가 봅니다', 'I plan the whole production myself — concept, shots, prompts, references, wiring. Just name the project.': '기획부터 샷 구성, 프롬프트, 레퍼런스, 연결까지 제가 알아서 짭니다. 프로젝트 이름만 알려 주세요.',
   'Connect one video generate card to each prompt': '프롬프트마다 영상 생성 카드를 하나씩 만들어 연결해줘', 'Tidy up the cards by their wires': '카드들을 연결 흐름대로 보기 좋게 정렬해줘', 'Group the same kind of cards together': '같은 종류의 카드끼리 모아서 정렬해줘',
   'Uses the Live Canvas LLM from Settings': '설정의 라이브 캔버스 전용 LLM을 사용합니다',
   'Live Canvas LLM': '라이브 캔버스 LLM', 'Use the main LLM': '메인 LLM 과 같은 설정 사용', 'Live Canvas follows the LLM above. Untick to pick another backend / model for it (a stronger model writes better plans).': '라이브 캔버스는 위의 LLM 을 그대로 씁니다. 체크를 풀면 라이브 캔버스만 다른 백엔드/모델을 고를 수 있어요 (성능 좋은 모델일수록 계획을 잘 짭니다).',

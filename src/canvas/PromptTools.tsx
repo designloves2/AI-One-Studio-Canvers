@@ -77,3 +77,44 @@ export function PromptTools({ id }: { id: string }) {
     </div>
   );
 }
+
+// ---- Sticky note: ✨ tidy / improve the note with the LLM, ✎ change it from a typed instruction
+const NOTE_SYSTEM = 'You are an editor for working notes on a creative production canvas (briefs, shot lists, ideas, to-dos, meeting notes). '
+  + 'Always keep the author\'s language, the facts, names, numbers and intent. Never add information the author did not imply unless it is an obvious gap you are asked to fill. '
+  + 'Output ONLY the resulting note text: no preamble, no explanation, no quotes, no code fences.';
+const NOTE_POLISH = ' Polish the note: fix spelling and wording, make it clear and concise, group related points, put steps or items on numbered / bulleted lines, give sections short headings when it helps, and remove repetition. Do not make it longer than needed.';
+
+export function NoteTools({ id }: { id: string }) {
+  const T = useT();
+  const [busy, setBusy] = useState(false);
+  const [prev, setPrev] = useState<string | null>(null);
+  const [err, setErr] = useState('');
+  const current = () => String(useGraph.getState().nodes.find((n) => n.id === id)?.params.text ?? '');
+  const set = (v: string) => useGraph.getState().setParam(id, 'text', v);
+
+  const enhance = async () => {
+    const cur = current(); if (!cur.trim()) { setErr(T('Write a note first.')); return; }
+    setBusy(true); setErr('');
+    try {
+      const out = await runLlm({ system: `${NOTE_SYSTEM}${NOTE_POLISH}`, prompt: cur, max_tokens: 1500 });
+      if (out) { setPrev(cur); set(out); }
+    } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
+  };
+  const refine = async () => {
+    const cur = current(); if (!cur.trim()) { setErr(T('Write a note first.')); return; }
+    setErr('');
+    const accepted = await runRefine(cur, (instruction) => runLlm({
+      system: `${NOTE_SYSTEM} Apply the change request to the note. Change only what it asks for and keep everything else as it is.`,
+      prompt: `Current note:\n${cur}\n\nChange request:\n${instruction}`, max_tokens: 1500,
+    }));
+    if (accepted) { setPrev(cur); set(accepted); }
+  };
+  return (
+    <div className="note-tools nodrag">
+      <button className="btn" disabled={busy} onClick={() => void enhance()}>{busy ? '…' : '✨ ' + T('Polish note')}</button>
+      <button className="btn" disabled={busy} onClick={() => void refine()}>✎ {T('Refine')}</button>
+      {prev !== null && <button className="btn" onClick={() => { set(prev); setPrev(null); }}>{T('Restore')}</button>}
+      {err && <span className="error-inline">{err}</span>}
+    </div>
+  );
+}

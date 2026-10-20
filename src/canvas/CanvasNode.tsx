@@ -10,7 +10,7 @@ import { activeAsset, portAssets, useUpstream } from './helpers';
 import { runNode, stopNode, addImports, download } from '../engine/actions';
 import { importFile, enhanceInstruction } from '../engine/run';
 import { runLlm } from '../backend/llm';
-import { PromptTools } from './PromptTools';
+import { PromptTools, NoteTools } from './PromptTools';
 import { useSensitive } from '../backend/sensitive';
 import { useSettings } from '../store/settings';
 import { t, useT } from '../i18n';
@@ -293,7 +293,9 @@ const PlainNode = memo(function PlainNode({ id, selected }: NodeProps) {
     return (
       <div className={`cnode note ${selected ? 'sel' : ''}`}>
         <NodeResizer minWidth={160} minHeight={90} isVisible={selected} />
-        <AutoText value={String(node.params.text ?? '')} onChange={(v) => setParam(id, 'text', v)} placeholder="…" rows={4} />
+        {/* a plain textarea that fills the card: text stays inside, long notes scroll */}
+        <textarea className="note-text nodrag nowheel" value={String(node.params.text ?? '')} onChange={(e) => setParam(id, 'text', e.target.value)} placeholder="…" />
+        <NoteTools id={id} />
       </div>
     );
   }

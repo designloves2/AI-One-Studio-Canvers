@@ -1,6 +1,7 @@
 // Card decks: ready-made chains of cards you can spread on the canvas in one click, plus your own saved selections.
 import { useGraph } from './store/graph';
 import type { Primitive } from './types';
+import { PRODUCTION_DECKS } from './decks.production';
 
 export interface DeckNode { k: string; def: string; x: number; y: number; engine?: string; params?: Record<string, Primitive> }
 export interface Deck { id: string; name: string; note: string; nodes: DeckNode[]; edges: [string, string, string, string][]; user?: boolean }
@@ -38,6 +39,8 @@ export const BUILTIN_DECKS: Deck[] = [
     edges: [['p', 'text', 'm', 'prompt'], ['m', 'audio', 'v', 'image']] },
 ];
 
+BUILTIN_DECKS.push(...PRODUCTION_DECKS);
+
 const KEY = 'canvers.decks.v1';
 export const userDecks = (): Deck[] => { try { return JSON.parse(localStorage.getItem(KEY) ?? '[]'); } catch { return []; } };
 const saveUser = (d: Deck[]) => { try { localStorage.setItem(KEY, JSON.stringify(d)); } catch { /* full */ } };
@@ -59,10 +62,10 @@ export function saveSelectionAsDeck(name: string): Deck | null {
 }
 
 /** spread a deck on the canvas, below whatever is already there */
-export function insertDeck(deck: Deck) {
+export function insertDeck(deck: Deck, at?: { x: number; y: number }): Map<string, string> {
   const g = useGraph.getState();
-  const ox = g.nodes.length ? Math.min(...g.nodes.map((x) => x.x)) : 80;
-  const oy = g.nodes.length ? Math.max(...g.nodes.map((x) => x.y + (x.h ?? 300))) + 80 : 80;
+  const ox = at?.x ?? (g.nodes.length ? Math.min(...g.nodes.map((x) => x.x)) : 80);
+  const oy = at?.y ?? (g.nodes.length ? Math.max(...g.nodes.map((x) => x.y + (x.h ?? 300))) + 80 : 80);
   const ids = new Map<string, string>();
   for (const dn of deck.nodes) {
     const id = useGraph.getState().addNode(dn.def, ox + dn.x, oy + dn.y, {});
@@ -92,4 +95,5 @@ export function insertDeck(deck: Deck) {
     }
     if (moves.length) { st.moveMany(moves); st.requestFit(); }
   }, 250);
+  return ids;
 }
