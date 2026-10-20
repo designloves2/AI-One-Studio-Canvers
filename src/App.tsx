@@ -17,7 +17,8 @@ import { addImports, openProjectFile, runAll, saveProjectFile, stopAll } from '.
 import { systemStats } from './backend/comfy';
 import { loadServerSettings } from './backend/llm';
 import { useT } from './i18n';
-import { askConfirm, DialogHost } from './ui/dialog';
+import { askConfirm, notify, DialogHost } from './ui/dialog';
+import { queueCounts, restartComfy } from './backend/server';
 import { RefineHost } from './ui/refine';
 import { ColorPopupHost } from './ui/ColorPopup';
 import { LightboxHost } from './ui/Lightbox';
@@ -44,6 +45,17 @@ function TopBar() {
   const mode = useGraph((s) => s.mode);
   const setMode = useGraph((s) => s.setMode);
   const [up, setUp] = useState<boolean | null>(null);
+  const [restarting, setRestarting] = useState(false);
+  const restart = async () => {
+    if (restarting) return;
+    let q = { running: 0, pending: 0 }; try { q = await queueCounts(); } catch { /* server may be stuck: still allow a restart */ }
+    const h = new Date().getHours();
+    const lines = [T('Restart ComfyUI?'), '', `${T('Running / waiting jobs')}: ${q.running} / ${q.pending}${q.running + q.pending ? ' — ' + T('they will be stopped') : ''}`, T('It takes about a minute. Save unsaved ComfyUI workflows first.')];
+    if (h >= 2 && h < 8) lines.push(T('Between 02:00 and 08:00 long batch jobs may be running.'));
+    if (!(await askConfirm(lines.join('\n')))) return;
+    setRestarting(true); setUp(false);
+    try { await restartComfy(); setUp(true); } catch (e) { await notify((e as Error).message); } finally { setRestarting(false); }
+  };
   useEffect(() => {
     const ping = () => systemStats().then(() => setUp(true), () => setUp(false));
     void ping(); const i = setInterval(ping, 10000); return () => clearInterval(i);
@@ -61,7 +73,7 @@ function TopBar() {
         <button className={mode === 'canvas' ? 'active' : ''} onClick={() => setMode('canvas')}>{T('Canvas')}</button>
         <button className={mode === 'simple' ? 'active' : ''} onClick={() => setMode('simple')}>{T('Simple')}</button>
       </div>
-      <div className="topbar-right"><span className={`engine-dot ${up ? 'on' : ''}`} title="ComfyUI + STUDIO_ONE"><i />ComfyUI</span></div>
+      <div className="topbar-right"><span className={`engine-dot ${up ? 'on' : ''}`} title="ComfyUI + STUDIO_ONE"><i />{restarting ? T('Restarting…') : 'ComfyUI'}</span><button className={`restart-btn${restarting ? ' spin' : ''}`} disabled={restarting} onClick={() => void restart()} title={T('Restart ComfyUI')}>↻</button></div>
     </div>
   );
 }

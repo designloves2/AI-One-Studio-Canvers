@@ -5,6 +5,7 @@ export const KO_CARDS: Record<string, string> = {
   'Select cards on the canvas first': '캔버스에서 카드를 먼저 선택하세요', 'Select some cards on the canvas and save them as a deck.': '캔버스에서 카드 몇 장을 선택해 덱으로 저장하세요.',
   'Legacy: load original STUDIO_ONE panels': '레거시: 원본 STUDIO_ONE 패널 불러오기', 'Adds the old all-in-one panels as extra nodes (reload needed). Off = card nodes only.': '예전 통짜 패널을 추가 노드로 불러옵니다(새로고침 필요). 꺼짐 = 카드 노드만.',
   // cards
+  'Restart ComfyUI?': 'ComfyUI 를 재시작할까요?', 'Running / waiting jobs': '실행 중 / 대기 중 작업', 'they will be stopped': '중단됩니다', 'It takes about a minute. Save unsaved ComfyUI workflows first.': '약 1분 걸립니다. ComfyUI 에서 저장 안 한 워크플로우는 먼저 저장하세요.', 'Between 02:00 and 08:00 long batch jobs may be running.': '새벽 02~08시에는 긴 배치 작업이 돌고 있을 수 있어요.', 'Restarting…': '재시작 중…', 'Restart ComfyUI': 'ComfyUI 재시작',
   'Live Canvas needs a context of 8192 or more for a local model.': '라이브 캔버스는 로컬 모델의 컨텍스트 크기를 8192 이상으로 권장합니다.',
   'Start generating now?': '지금 생성을 시작할까요?', 'This uses the GPU and can take a while.': 'GPU 를 쓰며 시간이 꽤 걸릴 수 있어요.', 'generator cards': '개의 생성 카드', videos: '개 영상', total: '총', s: '초', undone: '취소됨', 'run cancelled': '실행 취소됨',
   'Polish note': '메모 다듬기',
