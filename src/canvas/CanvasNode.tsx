@@ -4,7 +4,7 @@ import { Handle, Position, NodeResizer, type NodeProps } from '@xyflow/react';
 import { useGraph } from '../store/graph';
 import { byId, engineFor, paramsFor } from '../registry';
 import { PORT_COLORS, type Asset, type GraphNode, type PortDef } from '../types';
-import { Field, AutoText } from '../ui/Controls';
+import { Field, AutoText, ImeTextarea } from '../ui/Controls';
 import { AssetView } from './AssetView';
 import { activeAsset, portAssets, useUpstream } from './helpers';
 import { runNode, stopNode, addImports, download } from '../engine/actions';
@@ -329,7 +329,7 @@ const PlainNode = memo(function PlainNode({ id, selected }: NodeProps) {
       <div className={`cnode note ${selected ? 'sel' : ''}`}>
         <NodeResizer minWidth={160} minHeight={90} isVisible={selected} />
         {/* a plain textarea that fills the card: text stays inside, long notes scroll */}
-        <textarea className="note-text nodrag nowheel" value={String(node.params.text ?? '')} onChange={(e) => setParam(id, 'text', e.target.value)} placeholder="…" />
+        <ImeTextarea className="note-text nodrag nowheel" value={String(node.params.text ?? '')} onChange={(v) => setParam(id, 'text', v)} placeholder="…" />
         <NoteTools id={id} />
       </div>
     );

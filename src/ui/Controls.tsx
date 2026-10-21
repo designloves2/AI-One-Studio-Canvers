@@ -1,20 +1,56 @@
 import { SearchSelect } from './SearchSelect';
-import { useEffect, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type TextareaHTMLAttributes } from 'react';
 import type { ParamDef, Primitive } from '../types';
 import { useOptions } from '../backend/options';
 import { t } from '../i18n';
 
 interface Props { def: ParamDef; value: Primitive; onChange(v: Primitive): void; compact?: boolean }
 
+/** Korean / Japanese / Chinese input: while a character is being composed, keep the text locally and send it on to the card only when the composition ends (a re-render in the middle breaks the composition). */
+export function useComposing(value: string, onChange: (v: string) => void) {
+  const [draft, setDraft] = useState<string | null>(null);
+  return {
+    value: draft ?? value,
+    composing: draft !== null,
+    onChange: (e: { target: { value: string }; nativeEvent: Event }) => {
+      const v = e.target.value;
+      if ((e.nativeEvent as InputEvent).isComposing) setDraft(v); else { setDraft(null); onChange(v); }
+    },
+    onCompositionStart: () => setDraft((d) => d ?? value),
+    onCompositionEnd: (e: { currentTarget: { value: string } }) => { const v = e.currentTarget.value; setDraft(null); onChange(v); },
+  };
+}
+
+/**
+ * Same as the Simple-mode prompt box: a plain controlled textarea that keeps what you type in its own state. The card is
+ * updated 300 ms after you stop (and on blur); updating the card on every keystroke made Korean composition fall apart.
+ */
+export const ImeTextarea = forwardRef<HTMLTextAreaElement, Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'value' | 'onChange'> & { value: string; onChange(v: string): void; onLive?(v: string): void }>(
+  function ImeTextarea({ value, onChange, onLive, onBlur, ...rest }, ref) {
+    const inner = useRef<HTMLTextAreaElement>(null);
+    const [local, setLocal] = useState(value);
+    const pending = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const latest = useRef(local); latest.current = local;
+    useImperativeHandle(ref, () => inner.current!);
+    useEffect(() => { if (!pending.current) setLocal(value); }, [value]);
+    const flush = () => { if (pending.current) { clearTimeout(pending.current); pending.current = null; onChange(latest.current); } };
+    useEffect(() => flush, []); // eslint-disable-line react-hooks/exhaustive-deps
+    return <textarea {...rest} ref={inner} value={local}
+      onChange={(e) => { const v = e.target.value; setLocal(v); latest.current = v; onLive?.(v); if (pending.current) clearTimeout(pending.current); pending.current = setTimeout(flush, 300); }}
+      onBlur={(e) => { flush(); onBlur?.(e); }} />;
+  });
+
 /** textarea that grows with its content and stops canvas shortcuts while typing */
 export function AutoText({ value, onChange, placeholder, rows = 3 }: { value: string; onChange(v: string): void; placeholder?: string; rows?: number }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const [names, setNames] = useState<string[]>([]);
   const [sug, setSug] = useState<{ list: string[]; at: number; idx: number } | null>(null);
+  // The browser sizes the box itself (field-sizing); resetting style.height on every keystroke broke Korean composition.
+  const native = typeof CSS !== 'undefined' && CSS.supports?.('field-sizing', 'content');
   useEffect(() => {
-    const el = ref.current; if (!el) return;
+    const el = ref.current; if (!el || native) return;
     el.style.height = 'auto'; el.style.height = `${Math.min(360, Math.max(el.scrollHeight, rows * 18))}px`;
-  }, [value, rows]);
+  }, [value, rows, native]);
   useEffect(() => { let live = true; void import('../backend/assetlib').then((m) => m.mentionNames()).then((n) => { if (live) setNames(n); }); return () => { live = false; }; }, []);
   // typing @ opens the Asset Library names
   const look = (text: string, caret: number) => {
@@ -31,8 +67,9 @@ export function AutoText({ value, onChange, placeholder, rows = 3 }: { value: st
   };
   return (
     <div className="mention-wrap">
-      <textarea ref={ref} className="nodrag nowheel" rows={rows} value={value} placeholder={placeholder} spellCheck={false}
-        onChange={(e) => { onChange(e.target.value); look(e.target.value, e.target.selectionStart); }}
+      <ImeTextarea ref={ref} className="nodrag nowheel" rows={rows} value={value} placeholder={placeholder} spellCheck={false}
+        style={native ? ({ fieldSizing: 'content', minHeight: rows * 18, maxHeight: 360 } as React.CSSProperties) : undefined}
+        onChange={onChange} onLive={(v) => { const el = ref.current; if (el) look(v, el.selectionStart); }}
         onBlur={() => setTimeout(() => setSug(null), 150)}
         onKeyDown={(e) => {
           e.stopPropagation();
@@ -55,6 +92,11 @@ function SelectControl({ def, value, onChange }: Props) {
   return <SearchSelect value={String(value)} options={list} labels={def.control.labels} onChange={onChange} searchAt={def.control.source ? 0 : 8} />;
 }
 
+function TextInput({ value, onChange }: { value: string; onChange(v: string): void }) {
+  const ime = useComposing(value, onChange);
+  return <input className="nodrag" type="text" value={ime.value} onChange={ime.onChange} onCompositionStart={ime.onCompositionStart} onCompositionEnd={ime.onCompositionEnd} onKeyDown={(e) => e.stopPropagation()} />;
+}
+
 export function ParamControl({ def, value, onChange }: Props) {
   const c = def.control;
   const [draft, setDraft] = useState<string | null>(null);
@@ -62,7 +104,7 @@ export function ParamControl({ def, value, onChange }: Props) {
     case 'text':
       return c.multiline
         ? <AutoText value={String(value)} onChange={onChange} placeholder={c.placeholder} />
-        : <input className="nodrag" type="text" value={String(value)} onChange={(e) => onChange(e.target.value)} onKeyDown={(e) => e.stopPropagation()} />;
+        : <TextInput value={String(value)} onChange={onChange} />;
     case 'number':
       return <input className="nodrag" type="number" value={draft ?? String(value)} min={c.min} max={c.max} step={c.step ?? 1}
         onChange={(e) => { setDraft(e.target.value); const n = parseFloat(e.target.value); if (!Number.isNaN(n)) onChange(n); }}
