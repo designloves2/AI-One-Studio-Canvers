@@ -3,7 +3,7 @@ import { parseWorkflow, candidates } from '../backend/workflow';
 import { Handle, Position, NodeResizer, type NodeProps } from '@xyflow/react';
 import { useGraph } from '../store/graph';
 import { byId, engineFor, paramsFor } from '../registry';
-import { PORT_COLORS, type PortDef } from '../types';
+import { PORT_COLORS, type Asset, type GraphNode, type PortDef } from '../types';
 import { Field, AutoText } from '../ui/Controls';
 import { AssetView } from './AssetView';
 import { activeAsset, portAssets, useUpstream } from './helpers';
@@ -62,12 +62,43 @@ function PortRow({ nodeId, inp, out }: { nodeId: string; inp?: PortDef; out?: Po
   );
 }
 
+/** Pick several of a card's stacked clips and send them, in the order picked, to the Video Stitch it is wired to. */
+function ClipPicker({ node, clips }: { node: GraphNode; clips: Asset[] }) {
+  const T = useT();
+  const setPick = useGraph((s) => s.setPick);
+  const pick = node.pick ?? [];
+  const toggle = (a: Asset) => setPick(node.id, pick.includes(a.id) ? pick.filter((x) => x !== a.id) : [...pick, a.id]);
+  return (
+    <div className="clip-pick nodrag nowheel">
+      <div className="clip-pick-head">
+        <b>{T('Clips for the stitch')}</b>
+        <span className="muted">{pick.length ? `${pick.length} ${T('picked, sent in this order')}` : T('none picked: only the shown clip is sent')}</span>
+        <button onClick={() => setPick(node.id, clips.map((a) => a.id))}>{T('All')}</button>
+        <button onClick={() => setPick(node.id, [])}>{T('Clear')}</button>
+      </div>
+      <div className="clip-pick-row">
+        {clips.map((a, i) => {
+          const n = pick.indexOf(a.id); const f = a.file;
+          return (
+            <button key={a.id} className={`clip-tile${n >= 0 ? ' on' : ''}`} onClick={() => toggle(a)} title={f?.filename}>
+              {f && <img loading="lazy" draggable={false} alt="" src={`/ltx25_one/thumb?filename=${encodeURIComponent(f.filename)}&subfolder=${encodeURIComponent(f.subfolder)}`} />}
+              <span className="clip-idx">{i + 1}</span>
+              {n >= 0 && <span className="clip-num">{n + 1}</span>}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function Results({ id }: { id: string }) {
   const node = useGraph((s) => s.nodes.find((n) => n.id === id))!;
   const openViewer = useGraph((s) => s.openViewer);
   const setActive = useGraph((s) => s.setActive);
   const def = byId.get(node.defId)!;
   const main = portAssets(node, def.outputs[0]?.id);
+  const stitchLinked = useGraph((s) => s.edges.some((e) => e.source === id && s.nodes.find((n) => n.id === e.target)?.defId === 'video-stitch'));
   let others = def.outputs.slice(1).map((o) => ({ o, a: activeAsset(node, o.id) })).filter((x) => x.a);
   let cur = activeAsset(node, def.outputs[0]?.id);
   if (!cur && def.id === 'comfy-workflow' && others.length) { cur = others[0].a; others = []; } // video-only result
@@ -86,6 +117,7 @@ function Results({ id }: { id: string }) {
           )}
         </div>
       )}
+      {stitchLinked && main.length > 1 && main[0]?.type === 'video' && <ClipPicker node={node} clips={main} />}
       {others.length > 0 && <div className="mini-results">{others.map(({ o, a }) => <figure key={o.id}><AssetView asset={a!} controls={false} /><figcaption>{t(o.label)}</figcaption></figure>)}</div>}
     </div>
   );

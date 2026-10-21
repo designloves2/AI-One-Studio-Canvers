@@ -15,6 +15,7 @@ import { StatusPanel } from './panels/StatusPanel';
 import { SimpleView } from './simple/SimpleView';
 import { addImports, resumeInflight, runAll, saveCanvasToList, stopAll } from './engine/actions';
 import { clearInflight } from './backend/comfy';
+import { loadTurboFromStudio } from './backend/turboMemory';
 import { t as tr } from './i18n';
 import { CanvasesPanel } from './panels/CanvasesPanel';
 import { SystemMonitor } from './ui/SystemMonitor';
@@ -168,6 +169,7 @@ export function App() {
     // ONE STUDIO panels need their extensions loaded before a saved canvas that uses them is restored
     void (useSettings.getState().hostPanels ? loadStudio().catch(() => undefined) : Promise.resolve()).finally(async () => {
       if (booted) return; booted = true;   // effects can run twice in dev: start up only once
+      await loadTurboFromStudio();          // the last 7+1 LoRA picks (kept on the server) before any card is restored
       // a refresh (same tab) keeps the canvas; opening the app fresh starts on a new one - unsaved work is offered back first
       let restored = sameSession && restoreAutosave();
       if (!sameSession && hasUnsavedAutosave() && await askConfirm(tr('There is an unsaved canvas from last time. Restore it?'))) restored = restoreAutosave();

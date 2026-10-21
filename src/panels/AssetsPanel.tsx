@@ -4,7 +4,7 @@ import { getGallery, getVideoGallery, deleteOutput, type GalleryItem } from '../
 import { viewUrl, uid } from '../backend/comfy';
 import { useSettings } from '../store/settings';
 import { useGraph } from '../store/graph';
-import { download } from '../engine/actions';
+import { addGalleryCard, download } from '../engine/actions';
 import { useT } from '../i18n';
 import { mediaKey, useIsBlurred, useSensitive } from '../backend/sensitive';
 
@@ -48,14 +48,7 @@ export function AssetsPanel() {
     void load();
   };
 
-  const toCanvas = (it: GalleryItem) => {
-    const g = useGraph.getState();
-    const file = { filename: it.filename, subfolder: it.subfolder, type: 'output' as const };
-    const vid = /\.(mp4|webm|mov|mkv|gif)$/i.test(it.filename);
-    const id = g.addNode(vid ? 'import-video' : 'import', 120 + Math.random() * 160, 120 + Math.random() * 160);
-    g.setResults(id, [{ id: uid(), type: vid ? 'video' : 'image', url: viewUrl(file), file }]);
-    if (g.mode === 'simple') g.setMode('canvas');
-  };
+  const toCanvas = (it: GalleryItem) => { addGalleryCard({ filename: it.filename, subfolder: it.subfolder }); };
 
   // single click = enlarge, double click = card on the canvas
   const onClick = (it: GalleryItem) => { window.clearTimeout(clickTimer.current); clickTimer.current = window.setTimeout(() => setZoom(it), 230); };
@@ -107,17 +100,19 @@ function Thumb({ it, url, video, selectMode, picked, onPick, onClick, onDouble, 
   // streamed while the pointer is on its card, so a big gallery never holds dozens of decoders or /view streams.
   const [thumbFailed, setThumbFailed] = useState(false);
   const [hover, setHover] = useState(false);
+  // drag a card out of the gallery onto the canvas: it becomes a Load Image / Load Video card where it is dropped
+  const dragOut = (e: React.DragEvent) => { e.dataTransfer.setData('application/x-canvers-asset', JSON.stringify({ filename: it.filename, subfolder: it.subfolder, type: 'output' })); e.dataTransfer.setData('text/uri-list', url); e.dataTransfer.effectAllowed = 'copy'; };
   const vidThumb = `/ltx25_one/thumb?filename=${encodeURIComponent(it.filename)}&subfolder=${encodeURIComponent(it.subfolder)}`;
   const thumbUrl = `/tj_shared/thumb?filename=${encodeURIComponent(it.filename)}&subfolder=${encodeURIComponent(it.subfolder)}&root=output&t=${Math.round(it.mtime || 0)}`;
   return (
     <figure className={`thumb${blurred ? ' blurred' : ''}${selectMode && picked ? ' picked' : ''}`}>
       {video
-        ? <div className="vthumb" onMouseEnter={() => { if (!blurred && !selectMode) setHover(true); }} onMouseLeave={() => setHover(false)}
+        ? <div className="vthumb" draggable={!blurred && !selectMode} onDragStart={(e) => { setHover(false); dragOut(e); }} onMouseEnter={() => { if (!blurred && !selectMode) setHover(true); }} onMouseLeave={() => setHover(false)}
             onClick={selectMode ? onPick : blurred ? undefined : onClick} onDoubleClick={selectMode || blurred ? undefined : onDouble} title={`${it.filename} — ${T('Click: enlarge · Double-click: add to canvas')}`}>
             <img src={vidThumb} alt="" loading="lazy" draggable={false} />
             {hover && !selectMode && <video src={url} muted loop autoPlay playsInline />}
           </div>
-        : <img src={thumbFailed ? url : thumbUrl} onError={() => setThumbFailed(true)} alt="" loading="lazy" draggable={!blurred} onDragStart={(e) => e.dataTransfer.setData('text/uri-list', url)}
+        : <img src={thumbFailed ? url : thumbUrl} onError={() => setThumbFailed(true)} alt="" loading="lazy" draggable={!blurred && !selectMode} onDragStart={(e) => dragOut(e)}
             onClick={selectMode ? onPick : blurred ? undefined : onClick} onDoubleClick={selectMode || blurred ? undefined : onDouble} title={`${it.filename} — ${T('Click: enlarge · Double-click: add to canvas')}`} />}
       {selectMode && <span className="pick-box" onClick={onPick}>{picked ? '✓' : ''}</span>}
       <button className="eye" title={T(marked ? 'Reveal this item' : 'Hide this item')} onClick={() => useSensitive.getState().toggle(key)}>{marked ? '⊘' : '👁︎'}</button>

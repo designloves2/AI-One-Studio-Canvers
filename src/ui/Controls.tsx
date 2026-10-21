@@ -1,3 +1,4 @@
+import { SearchSelect } from './SearchSelect';
 import { useEffect, useRef, useState } from 'react';
 import type { ParamDef, Primitive } from '../types';
 import { useOptions } from '../backend/options';
@@ -50,11 +51,8 @@ function SelectControl({ def, value, onChange }: Props) {
   if (def.control.kind !== 'select') return null;
   const opts = useOptions(def.control.source, def.control.options);
   const list = opts.includes(String(value)) ? opts : [String(value), ...opts];
-  return (
-    <select className="nodrag" value={String(value)} onChange={(e) => onChange(e.target.value)}>
-      {list.map((o) => <option key={o} value={o}>{def.control.kind === 'select' && def.control.labels?.[o] || o}</option>)}
-    </select>
-  );
+  // long lists (LoRAs, models) get a search field on top; short ones (aspect ratio ...) stay a plain list
+  return <SearchSelect value={String(value)} options={list} labels={def.control.labels} onChange={onChange} searchAt={def.control.source ? 0 : 8} />;
 }
 
 export function ParamControl({ def, value, onChange }: Props) {

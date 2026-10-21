@@ -393,3 +393,25 @@ button.save-state.dirty { cursor: pointer; } button.save-state.dirty:hover { bac
 .llm-notice button { background: transparent; border: 1px solid rgba(240,180,41,.55); color: #f0b429; border-radius: 6px; padding: 2px 8px; font-size: 11px; cursor: pointer; white-space: nowrap; }
 .bubble-txt.llm-wait { color: #f0b429; background: rgba(240,180,41,.09); border: 1px solid rgba(240,180,41,.4); }
 .bubble-txt.llm-wait .mini-link { color: #f0b429; }
+
+/* clips picked on a video card for the Video Stitch it is wired to */
+.clip-pick { margin-top: 6px; padding: 6px; border: 1px solid var(--line2); border-radius: 8px; background: var(--bg2); }
+.clip-pick-head { display: flex; align-items: center; gap: 6px; font-size: 11px; margin-bottom: 5px; } .clip-pick-head .muted { flex: 1; font-size: 10.5px; }
+.clip-pick-head button { background: var(--bg3); border: 1px solid var(--line2); color: var(--fg); border-radius: 5px; padding: 1px 7px; font-size: 10.5px; cursor: pointer; }
+.clip-pick-row { display: flex; gap: 5px; overflow-x: auto; padding-bottom: 3px; }
+.clip-tile { position: relative; flex: 0 0 auto; width: 54px; height: 54px; padding: 0; border: 2px solid var(--line2); border-radius: 7px; overflow: hidden; background: #000; cursor: pointer; }
+.clip-tile img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: .75; }
+.clip-tile.on { border-color: var(--acc); } .clip-tile.on img { opacity: 1; }
+.clip-idx { position: absolute; left: 2px; bottom: 1px; font-size: 9px; color: #fff; text-shadow: 0 0 3px #000; }
+.clip-num { position: absolute; right: 2px; top: 2px; min-width: 16px; height: 16px; border-radius: 8px; background: var(--acc); color: #fff; font-size: 10px; font-weight: 700; line-height: 16px; text-align: center; }
+
+/* searchable drop-down (LoRA / model / combo lists) */
+.ssel-btn { display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%; min-width: 0; text-align: left; padding: 4px 8px; background: var(--bg); border: 1px solid var(--line2); border-radius: 7px; color: var(--fg); font: inherit; cursor: pointer; }
+.ssel-btn span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ssel-btn i { font-style: normal; color: var(--muted); font-size: 10px; }
+.ssel-btn:hover { border-color: var(--acc); }
+.ssel-pop { position: fixed; z-index: 3500; background: var(--bg2); border: 1px solid var(--line2); border-radius: 10px; box-shadow: 0 12px 36px rgba(0,0,0,.55); padding: 6px; display: flex; flex-direction: column; gap: 6px; }
+.ssel-search { width: 100%; padding: 6px 9px; border-radius: 7px; border: 1px solid var(--line2); background: var(--bg); color: var(--fg); font: inherit; outline: none; } .ssel-search:focus { border-color: var(--acc); }
+.ssel-list { overflow-y: auto; outline: none; }
+.ssel-item { padding: 5px 8px; border-radius: 6px; font-size: 12px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ssel-item.hi { background: var(--bg3); } .ssel-item.cur { color: var(--acc); font-weight: 600; }
+.ssel-empty { padding: 10px; color: var(--muted); font-size: 12px; text-align: center; }

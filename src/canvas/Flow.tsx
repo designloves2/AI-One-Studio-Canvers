@@ -9,7 +9,7 @@ import { byId, compatible } from '../registry';
 import { CanvasNode } from './CanvasNode';
 import { GroupNode } from './GroupNode';
 import { PORT_COLORS } from '../types';
-import { addImports, runAll } from '../engine/actions';
+import { addGalleryCard, addImports, runAll } from '../engine/actions';
 import { runNode } from '../engine/actions';
 import { ContextMenu, type CtxItem } from './ContextMenu';
 import type { Pending } from './NodeMenu';
@@ -125,6 +125,8 @@ export function Flow({ tool, onMenu }: { tool: 'select' | 'hand'; onMenu(at: { x
     const at = rf.screenToFlowPosition({ x: e.clientX, y: e.clientY });
     const defId = e.dataTransfer.getData('application/x-canvers-node');
     if (defId) { useGraph.getState().addNode(defId, at.x, at.y); return; }
+    const asset = e.dataTransfer.getData('application/x-canvers-asset');   // dragged out of the gallery
+    if (asset) { try { addGalleryCard(JSON.parse(asset), at); } catch { /* not ours */ } return; }
     if (e.dataTransfer.files.length) void addImports([...e.dataTransfer.files], at);
   }, [rf]);
 

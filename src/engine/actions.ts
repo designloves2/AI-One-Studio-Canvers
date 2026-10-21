@@ -5,7 +5,7 @@ import { canvasFileName, listCanvases, loadCanvas, saveCanvas } from '../backend
 import { useGraph, type ComposerRun } from '../store/graph';
 import { executeGraph, importFile } from './run';
 import { byId, defaultParams, engineFor } from '../registry';
-import { cancelPrompt, interrupt, readInflight, recoverPrompt, runContext, forgetInflight, assetFromFile, uid } from '../backend/comfy';
+import { cancelPrompt, interrupt, readInflight, recoverPrompt, runContext, forgetInflight, assetFromFile, uid, viewUrl } from '../backend/comfy';
 
 const controllers = new Map<string, AbortController>();
 
@@ -77,6 +77,17 @@ export async function runAll(): Promise<void> {
 }
 
 // ------------------------------------------------------------------ files
+/** An image / video from the gallery becomes a Load Image / Load Video card (at a drop position, or near the middle). */
+export function addGalleryCard(f: { filename: string; subfolder: string; type?: 'output' | 'input' | 'temp' }, at?: { x: number; y: number }): string {
+  const g = useGraph.getState();
+  const file = { filename: f.filename, subfolder: f.subfolder, type: f.type ?? ('output' as const) };
+  const vid = /\.(mp4|webm|mov|mkv|gif)$/i.test(file.filename);
+  const id = g.addNode(vid ? 'import-video' : 'import', at?.x ?? 120 + Math.random() * 160, at?.y ?? 120 + Math.random() * 160);
+  g.setResults(id, [{ id: uid(), type: vid ? 'video' : 'image', url: viewUrl(file), file }]);
+  if (g.mode === 'simple') g.setMode('canvas');
+  return id;
+}
+
 export function download(url: string, name: string) {
   const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
 }

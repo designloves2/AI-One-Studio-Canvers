@@ -89,6 +89,8 @@ export interface GraphNode {
   engineId?: string;
   results: Asset[];
   activeResult: number;
+  /** result ids picked (in order) to be sent on to a connected Video Stitch; empty = only the shown result */
+  pick?: string[];
   locked?: boolean;
   title?: string;
   /** card background colour (right-click → Card colour) */

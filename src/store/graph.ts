@@ -3,6 +3,7 @@ import type { Asset, GraphEdge, GraphNode, NodeRuntime, Primitive, Project } fro
 import { byId, compatible, defaultParams, engineFor } from '../registry';
 import { uid } from '../backend/comfy';
 import { useSettings } from './settings';
+import { saveTurboPick } from '../backend/turboMemory';
 
 export type AppMode = 'canvas' | 'simple';
 export type PanelId = null | 'canvases' | 'nodes' | 'decks' | 'assets' | 'library' | 'live' | 'settings' | 'models';
@@ -71,6 +72,7 @@ interface State {
   setResults(id: string, assets: Asset[], mode?: 'append' | 'replace'): void;
   clearResults(id: string): void;
   setActive(id: string, idx: number): void;
+  setPick(id: string, ids: string[]): void;
   connect(e: Omit<GraphEdge, 'id'>): boolean;
   removeEdges(ids: string[]): void;
   /** swap an edge with its neighbour feeding the same input port (changes the @imageN order) */
@@ -174,8 +176,8 @@ export const useGraph = create<State>((set, get) => ({
     set({ nodes: get().nodes.map((n) => (n.id === id ? { ...n, params: { ...n.params, [key]: v } } : n)) });
     // a 7+1 Turbo LoRA picked once stays the choice until it is changed again
     if (get().nodes.find((n) => n.id === id)?.defId === 'h3-turbo' && typeof v === 'string' && v !== 'none' && v !== '') {
-      if (key === 'turbo_lora') useSettings.getState().setH3Turbo({ fl: v });
-      else if (key === 'turbo_lora_ref') useSettings.getState().setH3Turbo({ ref: v });
+      if (key === 'turbo_lora') { useSettings.getState().setH3Turbo({ fl: v }); saveTurboPick('fl', v); }
+      else if (key === 'turbo_lora_ref') { useSettings.getState().setH3Turbo({ ref: v }); saveTurboPick('ref', v); }
       const filled = fillTurbo(get().nodes); if (filled !== get().nodes) set({ nodes: filled });
     }
   },
@@ -200,10 +202,11 @@ export const useGraph = create<State>((set, get) => ({
       nodes: get().nodes.map((n) => {
         if (n.id !== id) return n;
         const results = mode === 'append' ? [...n.results, ...assets] : assets;
-        return { ...n, results, activeResult: mode === 'append' ? n.results.length : 0 };
+        return { ...n, results, activeResult: mode === 'append' ? n.results.length : 0, ...(mode === 'append' ? {} : { pick: undefined }) };
       }),
     }),
-  clearResults: (id) => set({ nodes: get().nodes.map((n) => (n.id === id ? { ...n, results: [], activeResult: 0 } : n)) }),
+  clearResults: (id) => set({ nodes: get().nodes.map((n) => (n.id === id ? { ...n, results: [], activeResult: 0, pick: undefined } : n)) }),
+  setPick: (id, ids) => set({ nodes: get().nodes.map((n) => (n.id === id ? { ...n, pick: ids.length ? ids : undefined } : n)) }),
   setActive: (id, idx) => set({ nodes: get().nodes.map((n) => (n.id === id ? { ...n, activeResult: Math.max(0, Math.min(idx, Math.max(0, n.results.length - 1))) } : n)) }),
 
   connect: (e) => {
@@ -307,6 +310,9 @@ function rememberedTurbo(): Record<string, string> {
   if (t.fl) out.turbo_lora = t.fl; if (t.ref) out.turbo_lora_ref = t.ref;
   return out;
 }
+
+// whichever way a Turbo card appears (menu, deck, Live Canvas, load), an empty LoRA is filled with the last pick
+useGraph.subscribe((s) => { const f = fillTurbo(s.nodes); if (f !== s.nodes) useGraph.setState({ nodes: f }); });
 
 // loading / clearing a canvas replaces nodes and edges - that must not count as an edit
 let quiet = false;

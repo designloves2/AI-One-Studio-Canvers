@@ -89,6 +89,12 @@ export async function executeGraph(g: GraphLike, targetId: string, hooks: Hooks,
         for (const e of g.edges) {
           if (e.target !== node.id || e.targetHandle !== handle) continue;
           const src = g.nodes.find((n) => n.id === e.source); if (!src) continue;
+          // a Video Stitch takes the clips picked on the video card (in the order picked); without a pick, only the shown clip
+          if (node.defId === 'video-stitch' && src.pick?.length) {
+            const all = local.get(src.id) ?? src.results;
+            const list = src.pick.map((pid) => all.find((x) => x.id === pid)).filter((x): x is Asset => !!x);
+            if (list.length) { out.push(...list); continue; }
+          }
           const a = nodeAssets(src, e.sourceHandle, local); if (a) out.push(a);
         }
         return out;

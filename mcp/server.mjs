@@ -2441,6 +2441,12 @@ var init_i18n_cards = __esm({
       "Saved canvases": "\uC800\uC7A5\uB41C \uCE94\uBC84\uC2A4",
       "Not saved": "\uC800\uC7A5 \uC548 \uB428",
       "Click to save": "\uD074\uB9AD\uD574\uC11C \uC800\uC7A5",
+      "No match": "\uC77C\uCE58\uD558\uB294 \uD56D\uBAA9 \uC5C6\uC74C",
+      "Clips for the stitch": "\uC2A4\uD2F0\uCE58\uB85C \uBCF4\uB0BC \uD074\uB9BD",
+      "picked, sent in this order": "\uAC1C \uC120\uD0DD (\uACE0\uB978 \uC21C\uC11C\uB300\uB85C \uC804\uB2EC)",
+      "none picked: only the shown clip is sent": "\uC120\uD0DD \uC5C6\uC74C: \uC9C0\uAE08 \uBCF4\uC774\uB294 \uD074\uB9BD\uB9CC \uC804\uB2EC",
+      All: "\uC804\uCCB4",
+      Clear: "\uD574\uC81C",
       "Generating now \u2014 the local LLM waits until it is done (a local LLM running together with a generation can make it fail and stop ComfyUI). To use the AI right away, switch the LLM to OpenRouter.": "\uC9C0\uAE08 \uC0DD\uC131 \uC911\uC774\uB77C \uB85C\uCEEC LLM\uC740 \uC0DD\uC131\uC774 \uB05D\uB09C \uB4A4\uC5D0 \uC2E4\uD589\uB3FC\uC694 (\uB85C\uCEEC LLM\uC744 \uC0DD\uC131\uACFC \uB3D9\uC2DC\uC5D0 \uB3CC\uB9AC\uBA74 \uC0DD\uC131\uC774 \uC2E4\uD328\uD558\uACE0 ComfyUI\uAC00 \uC885\uB8CC\uB420 \uC218 \uC788\uC5B4\uC694). \uBC14\uB85C \uC4F0\uB824\uBA74 LLM\uC744 OpenRouter\uB85C \uBC14\uAFB8\uC138\uC694.",
       "Cancelled while waiting for the generation to finish": "\uC0DD\uC131\uC774 \uB05D\uB098\uAE38 \uAE30\uB2E4\uB9AC\uB2E4 \uCDE8\uC18C\uD588\uC5B4\uC694",
       "A local LLM is running \u2014 the generation starts as soon as it is done (they must not run together).": "\uB85C\uCEEC LLM\uC774 \uC2E4\uD589 \uC911\uC774\uB77C \uC0DD\uC131\uC740 LLM\uC774 \uB05D\uB098\uB294 \uB300\uB85C \uC2DC\uC791\uB3FC\uC694 (\uB458\uC744 \uB3D9\uC2DC\uC5D0 \uB3CC\uB9AC\uBA74 \uC548 \uB3FC\uC694).",
@@ -4945,6 +4951,17 @@ init_http();
 init_esm();
 init_comfy();
 init_settings();
+
+// src/backend/turboMemory.ts
+init_http();
+init_settings();
+var KEY2 = { fl: "pdd_file", ref: "pdd_file_reference" };
+function saveTurboPick(kind, lora) {
+  if (!lora || lora === "none") return;
+  void postJson("/minimax_h3_one/config", { [KEY2[kind]]: lora }).catch(() => void 0);
+}
+
+// src/store/graph.ts
 var MODE_KEY = "canvers.mode";
 function measure(n2) {
   const el = typeof document !== "undefined" ? document.querySelector(`.react-flow__node[data-id="${n2.id}"]`) : null;
@@ -5067,8 +5084,13 @@ var useGraph = create((set2, get) => ({
   setParam: (id, key, v) => {
     set2({ nodes: get().nodes.map((n2) => n2.id === id ? { ...n2, params: { ...n2.params, [key]: v } } : n2) });
     if (get().nodes.find((n2) => n2.id === id)?.defId === "h3-turbo" && typeof v === "string" && v !== "none" && v !== "") {
-      if (key === "turbo_lora") useSettings.getState().setH3Turbo({ fl: v });
-      else if (key === "turbo_lora_ref") useSettings.getState().setH3Turbo({ ref: v });
+      if (key === "turbo_lora") {
+        useSettings.getState().setH3Turbo({ fl: v });
+        saveTurboPick("fl", v);
+      } else if (key === "turbo_lora_ref") {
+        useSettings.getState().setH3Turbo({ ref: v });
+        saveTurboPick("ref", v);
+      }
       const filled = fillTurbo(get().nodes);
       if (filled !== get().nodes) set2({ nodes: filled });
     }
@@ -5100,10 +5122,11 @@ var useGraph = create((set2, get) => ({
     nodes: get().nodes.map((n2) => {
       if (n2.id !== id) return n2;
       const results = mode === "append" ? [...n2.results, ...assets] : assets;
-      return { ...n2, results, activeResult: mode === "append" ? n2.results.length : 0 };
+      return { ...n2, results, activeResult: mode === "append" ? n2.results.length : 0, ...mode === "append" ? {} : { pick: void 0 } };
     })
   }),
-  clearResults: (id) => set2({ nodes: get().nodes.map((n2) => n2.id === id ? { ...n2, results: [], activeResult: 0 } : n2) }),
+  clearResults: (id) => set2({ nodes: get().nodes.map((n2) => n2.id === id ? { ...n2, results: [], activeResult: 0, pick: void 0 } : n2) }),
+  setPick: (id, ids) => set2({ nodes: get().nodes.map((n2) => n2.id === id ? { ...n2, pick: ids.length ? ids : void 0 } : n2) }),
   setActive: (id, idx) => set2({ nodes: get().nodes.map((n2) => n2.id === id ? { ...n2, activeResult: Math.max(0, Math.min(idx, Math.max(0, n2.results.length - 1))) } : n2) }),
   connect: (e) => {
     const { nodes, edges } = get();
@@ -5230,6 +5253,10 @@ function rememberedTurbo() {
   if (t2.ref) out.turbo_lora_ref = t2.ref;
   return out;
 }
+useGraph.subscribe((s) => {
+  const f = fillTurbo(s.nodes);
+  if (f !== s.nodes) useGraph.setState({ nodes: f });
+});
 var quiet = false;
 function quietly(fn) {
   quiet = true;
@@ -7346,6 +7373,14 @@ async function executeGraph(g, targetId, hooks, signal) {
           if (e.target !== node.id || e.targetHandle !== handle2) continue;
           const src = g.nodes.find((n2) => n2.id === e.source);
           if (!src) continue;
+          if (node.defId === "video-stitch" && src.pick?.length) {
+            const all = local.get(src.id) ?? src.results;
+            const list = src.pick.map((pid) => all.find((x) => x.id === pid)).filter((x) => !!x);
+            if (list.length) {
+              out.push(...list);
+              continue;
+            }
+          }
           const a = nodeAssets(src, e.sourceHandle, local);
           if (a) out.push(a);
         }
@@ -7940,7 +7975,7 @@ var send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 async function handle(msg) {
   const { id, method, params } = msg;
   try {
-    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.9.1" } } });
+    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.9.2" } } });
     if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS.map(({ run: _r, ...t2 }) => t2) } });
     if (method === "tools/call") {
       const tool = TOOLS.find((t2) => t2.name === params?.name);
