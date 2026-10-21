@@ -3644,9 +3644,9 @@ var REGISTRY = [
     outputs: [P.imgOut()],
     params: [],
     engines: [
-      krea2("krea2", "Krea 2 (local)", [], true),
+      { ...krea2("krea2", "Krea 2 (local)", [], true), default: true },
       qwen21("qwen21", "Qwen Image 2.1 (local)", [], true),
-      { ...zimage("zimage", "Z-Image Turbo (local)", [], true), default: true },
+      zimage("zimage", "Z-Image Turbo (local)", [], true),
       klein("klein", "Flux.2 Klein (local)", [], true),
       qwen("qwen", "Qwen Image Edit 2511 (local)", [], true),
       anima("anima", "Anima (local)", [], true),
@@ -8203,7 +8203,7 @@ var send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 async function handle(msg) {
   const { id, method, params } = msg;
   try {
-    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.10.0" } } });
+    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.10.1" } } });
     if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS.map(({ run: _r, ...t2 }) => t2) } });
     if (method === "tools/call") {
       const tool = TOOLS.find((t2) => t2.name === params?.name);

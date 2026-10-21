@@ -132,9 +132,9 @@ export const REGISTRY: NodeDef[] = [
   { id: 'image-generate', title: 'Image Generate', category: 'Image', kind: 'generate',
     inputs: [P.textIn(), P.loraIn(), { id: 'layout', label: 'Moss boxes card (R2I)', type: 'pipe', optional: true }, P.seedIn()], outputs: [P.imgOut()], params: [],
     engines: [
-      krea2('krea2', 'Krea 2 (local)', [], true),
+      { ...krea2('krea2', 'Krea 2 (local)', [], true), default: true },
       qwen21('qwen21', 'Qwen Image 2.1 (local)', [], true),
-      { ...zimage('zimage', 'Z-Image Turbo (local)', [], true), default: true },
+      zimage('zimage', 'Z-Image Turbo (local)', [], true),
       klein('klein', 'Flux.2 Klein (local)', [], true),
       qwen('qwen', 'Qwen Image Edit 2511 (local)', [], true),
       anima('anima', 'Anima (local)', [], true),

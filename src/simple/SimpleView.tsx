@@ -88,7 +88,7 @@ export function SimpleView() {
         <textarea value={prompt} placeholder={defId === 'video-generate' ? T('Describe your video…') : T('Describe your image…')} onChange={(e) => setPrompt(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) go(); }} rows={2} />
         <div className="composer-bar">
           <select value={defId} onChange={(e) => pickNode(e.target.value)}>{MODELS.map((id) => <option key={id} value={id}>{T(byId.get(id)!.title)}</option>)}</select>
-          {def.engines && <select value={engineId} onChange={(e) => pickEngine(e.target.value)}>{def.engines.map((e) => <option key={e.id} value={e.id}>{e.label}</option>)}</select>}
+          {def.engines && <select value={engineId} onChange={(e) => pickEngine(e.target.value)}>{def.engines.filter((e) => e.id !== 'moss-r2i').map((e) => <option key={e.id} value={e.id}>{e.label}</option>)}</select>}
           <input ref={file} type="file" accept="image/*" multiple hidden onChange={async (e) => { const fs = [...(e.target.files ?? [])]; const as = await Promise.all(fs.map(importFile)); setRefs((p) => [...p, ...as]); e.target.value = ''; }} />
           <button className="btn" onClick={() => file.current?.click()}>＋ {T('Reference')}</button>
           <button className="btn" onClick={() => setOpen((o) => !o)}>⚙ {T('Options')}</button>
