@@ -3492,6 +3492,7 @@ var loras = (fam) => [
   dyn("lora2", "LoRA 2", `loras:${fam}`, "none", { advanced: true }),
   slider("lora2_strength", "LoRA 2 strength", 0, 2, 0.05, 1, { advanced: true, when: (p) => p.lora2 !== "none" })
 ];
+var autoEnhance = toggle("auto_enhance", "Auto enhance prompt (before generating)", false);
 var negative = text("negative", "Negative prompt", "", true, { advanced: true });
 var sizeParams = (on) => on ? [
   { id: "size_mode", label: "Size", control: { kind: "select", options: ["mp", "wh"], labels: { mp: "Aspect + MP", wh: "Custom W \xD7 H" } }, default: "mp" },
@@ -3504,31 +3505,37 @@ var krea2 = (id, label, extra = [], size = false) => ({
   id,
   label,
   family: "krea2",
-  params: [...sizeParams(size), ...extra, ...sampler(8, 1, "euler"), negative, ...loras("krea2"), num("batch", "Batch", 1, { advanced: true }, 1, 4, 1), seed]
+  params: [...sizeParams(size), ...extra, autoEnhance, ...sampler(8, 1, "euler"), negative, ...loras("krea2"), num("batch", "Batch", 1, { advanced: true }, 1, 4, 1), seed]
 });
 var anima = (id, label, extra = [], size = false) => ({
   id,
   label,
   family: "anima",
-  params: [...sizeParams(size), ...extra, ...sampler(30, 4, "euler"), negative, ...loras("anima"), num("batch", "Batch", 1, { advanced: true }, 1, 4, 1), seed]
+  params: [...sizeParams(size), ...extra, autoEnhance, ...sampler(30, 4, "euler"), negative, ...loras("anima"), num("batch", "Batch", 1, { advanced: true }, 1, 4, 1), seed]
 });
 var qwen = (id, label, extra = [], size = false) => ({
   id,
   label,
   family: "qwen",
-  params: [...sizeParams(size), ...extra, ...sampler(20, 4, "euler"), negative, ...loras("qwen"), num("batch", "Batch", 1, { advanced: true }, 1, 4, 1), seed]
+  params: [...sizeParams(size), ...extra, autoEnhance, ...sampler(20, 4, "euler"), negative, ...loras("qwen"), num("batch", "Batch", 1, { advanced: true }, 1, 4, 1), seed]
 });
 var qwen21 = (id, label, extra = [], size = false) => ({
   id,
   label,
   family: "qwen21",
-  params: [...sizeParams(size), ...extra, ...sampler(20, 1, "euler"), negative, ...loras("qwen21"), num("batch", "Batch", 1, { advanced: true }, 1, 4, 1), seed]
+  params: [...sizeParams(size), ...extra, autoEnhance, ...sampler(20, 1, "euler"), negative, ...loras("qwen21"), num("batch", "Batch", 1, { advanced: true }, 1, 4, 1), seed]
+});
+var moss = (id, label, extra = [], size = false) => ({
+  id,
+  label,
+  family: "moss",
+  params: [...sizeParams(size), ...extra, autoEnhance, ...sampler(25, 2.5, "er_sde"), { ...negative, default: "nsfw, worst quality, bad anatomy, watermark, jpeg artifact" }, toggle("slg", "Skip layer guidance (layer 22)", false, { advanced: true }), ...loras("moss"), num("batch", "Batch", 1, { advanced: true }, 1, 4, 1), seed]
 });
 var sdxl = (id, label, extra = [], size = false) => ({
   id,
   label,
   family: "sdxl",
-  params: [...sizeParams(size), ...extra, ...sampler(20, 7, "euler_ancestral", "karras"), { ...negative, default: "low quality, blurry, deformed, watermark" }, ...loras("sdxl"), num("batch", "Batch", 1, { advanced: true }, 1, 4, 1), seed]
+  params: [...sizeParams(size), ...extra, autoEnhance, ...sampler(20, 7, "euler_ancestral", "karras"), { ...negative, default: "low quality, blurry, deformed, watermark" }, ...loras("sdxl"), num("batch", "Batch", 1, { advanced: true }, 1, 4, 1), seed]
 });
 var h3Params = (ref) => [
   sel("aspect", "Aspect ratio", [...ASPECTS, "auto"], "16:9"),
@@ -3545,13 +3552,13 @@ var klein = (id, label, extra = [], size = false) => ({
   id,
   label,
   family: "klein",
-  params: [...sizeParams(size), ...extra, ...sampler(4, 1, "euler"), negative, ...loras("klein"), num("batch", "Batch", 1, { advanced: true }, 1, 4, 1), seed]
+  params: [...sizeParams(size), ...extra, autoEnhance, ...sampler(4, 1, "euler"), negative, ...loras("klein"), num("batch", "Batch", 1, { advanced: true }, 1, 4, 1), seed]
 });
 var zimage = (id, label, extra = [], size = false) => ({
   id,
   label,
   family: "zimage",
-  params: [...sizeParams(size), ...extra, ...sampler(8, 1, "euler"), negative, ...loras("zimage"), num("batch", "Batch", 1, { advanced: true }, 1, 4, 1), seed]
+  params: [...sizeParams(size), ...extra, autoEnhance, ...sampler(8, 1, "euler"), negative, ...loras("zimage"), num("batch", "Batch", 1, { advanced: true }, 1, 4, 1), seed]
 });
 var P = {
   textIn: (id = "prompt", label = "Prompt", optional = false) => ({ id, label, type: "text", optional }),
@@ -3633,7 +3640,7 @@ var REGISTRY = [
     title: "Image Generate",
     category: "Image",
     kind: "generate",
-    inputs: [P.textIn(), P.loraIn(), P.seedIn()],
+    inputs: [P.textIn(), P.loraIn(), { id: "layout", label: "Moss boxes card (R2I)", type: "pipe", optional: true }, P.seedIn()],
     outputs: [P.imgOut()],
     params: [],
     engines: [
@@ -3643,7 +3650,9 @@ var REGISTRY = [
       klein("klein", "Flux.2 Klein (local)", [], true),
       qwen("qwen", "Qwen Image Edit 2511 (local)", [], true),
       anima("anima", "Anima (local)", [], true),
-      sdxl("sdxl", "SDXL (local)", [], true)
+      sdxl("sdxl", "SDXL (local)", [], true),
+      moss("moss", "Moss Image \u2014 T2I (local)", [], true),
+      moss("moss-r2i", "Moss Image \u2014 R2I bboxes (local, wire a Moss Boxes card)", [], true)
     ],
     description: "Text to image on your own ComfyUI."
   },
@@ -3663,7 +3672,8 @@ var REGISTRY = [
       zimage("zimage-i2i", "Z-Image Turbo \u2014 img2img (local)", [slider("denoise", "Denoise", 0.05, 1, 0.05, 0.75)]),
       krea2("krea2-i2i", "Krea 2 \u2014 img2img (local)", [slider("denoise", "Denoise", 0.05, 1, 0.05, 0.75)]),
       anima("anima-i2i", "Anima \u2014 img2img (local)", [slider("denoise", "Denoise", 0.05, 1, 0.05, 0.75)]),
-      sdxl("sdxl-i2i", "SDXL \u2014 img2img (local)", [slider("denoise", "Denoise", 0.05, 1, 0.05, 0.6)])
+      sdxl("sdxl-i2i", "SDXL \u2014 img2img (local)", [slider("denoise", "Denoise", 0.05, 1, 0.05, 0.6)]),
+      moss("moss-i2i", "Moss Image \u2014 I2I (local)", [slider("denoise", "Denoise", 0.05, 1, 0.05, 0.6)])
     ],
     description: "Edit or restyle images. The first image sets the output size."
   },
@@ -3745,7 +3755,8 @@ var REGISTRY = [
       { ...zimage("zimage", "Z-Image Turbo (local)", [slider("denoise", "Denoise", 0.05, 1, 0.05, 0.85)]), default: true },
       klein("klein", "Flux.2 Klein (local)", [slider("denoise", "Denoise", 0.05, 1, 0.05, 1)]),
       sdxl("sdxl", "SDXL (local)", [slider("denoise", "Denoise", 0.05, 1, 0.05, 0.85)]),
-      qwen("qwen", "Qwen Image Edit 2511 (local)", [slider("denoise", "Denoise", 0.05, 1, 0.05, 0.85)])
+      qwen("qwen", "Qwen Image Edit 2511 (local)", [slider("denoise", "Denoise", 0.05, 1, 0.05, 0.85)]),
+      moss("moss", "Moss Image (local)", [slider("denoise", "Denoise", 0.05, 1, 0.05, 1)])
     ],
     description: "Repaint the white area of a mask."
   },
@@ -3929,6 +3940,21 @@ var REGISTRY = [
       slider("hires_final_mp", "Final size (MP)", 0.4, 3, 0.05, 0.9, { when: (p) => p.turbo === "pdd" && !!p.hires })
     ],
     description: "H3 speed-up: Turbo LoRA and the 7+1 hi-res finish. Wire into Video Generate \u2192 H3 option cards."
+  },
+  {
+    id: "moss-bboxes",
+    title: "Moss Boxes (R2I)",
+    category: "Cards",
+    kind: "source",
+    inputs: [P.imgIn("image", "Background (optional)", true)],
+    outputs: [{ id: "card", label: "Boxes", type: "pipe" }],
+    params: [
+      num("width", "Canvas width (px)", 1024, {}, 256, 4096, 16),
+      num("height", "Canvas height (px)", 1024, {}, 256, 4096, 16),
+      text("characters", "Characters (box numbers, e.g. 1, 3)", ""),
+      text("boxes", 'Boxes (JSON \u2014 edit with "Edit boxes")', "[]", true, { advanced: true })
+    ],
+    description: "Draw boxes on a canvas: each is an OBJECT or exact TEXT. Wire into Image Generate \u2192 Moss Image R2I. Draw the background first, foreground last."
   },
   {
     id: "h3-speed",
@@ -4227,6 +4253,7 @@ var FAMILIES = {
   qwen: { prefix: "/qwen2511_one", label: "Qwen Image Edit 2511", match: /qwen.*(image|edit)/i },
   qwen21: { prefix: "/qwenimage21_one", label: "Qwen Image 2.1", match: /qwen.*(image|2\.?1)/i },
   anima: { prefix: "/anima_one", label: "Anima", match: /anima/i },
+  moss: { prefix: "/moss_one", label: "Moss Image", match: /moss/i },
   sdxl: { prefix: "/sdxl_one", label: "SDXL", match: /xl|juggernaut|pony|illustrious/i }
 };
 var cache = /* @__PURE__ */ new Map();
@@ -4256,8 +4283,8 @@ async function pickModels(f, override) {
   const savedModel = f === "sdxl" ? cfg.selected_checkpoint || cfg.checkpoint : cfg.selected_model;
   return {
     model: pick(override?.model, savedModel, modelList, f === "sdxl" ? void 0 : m),
-    textEncoder: pick(override?.textEncoder, cfg.selected_text_encoder, lists?.text_encoders, f === "klein" ? /qwen.*8b/i : f === "krea2" ? /qwen3vl/i : f === "anima" ? /qwen_3_06b/i : f === "qwen" || f === "qwen21" ? /qwen_2\.5_vl|qwen.*vl|qwen3/i : /qwen.*4b/i),
-    vae: pick(override?.vae, cfg.selected_vae, lists?.vaes, f === "klein" ? /flux2/i : f === "krea2" || f === "anima" || f === "qwen" || f === "qwen21" ? /qwen_image/i : /^ae/i),
+    textEncoder: pick(override?.textEncoder, cfg.selected_text_encoder, lists?.text_encoders, f === "klein" ? /qwen.*8b/i : f === "moss" ? /qwen3\.5/i : f === "krea2" ? /qwen3vl/i : f === "anima" ? /qwen_3_06b/i : f === "qwen" || f === "qwen21" ? /qwen_2\.5_vl|qwen.*vl|qwen3/i : /qwen.*4b/i),
+    vae: pick(override?.vae, cfg.selected_vae, lists?.vaes, f === "klein" || f === "moss" ? /flux2/i : f === "krea2" || f === "anima" || f === "qwen" || f === "qwen21" ? /qwen_image/i : /^ae/i),
     negative: cfg.negative_prompt ?? "",
     suffix: cfg.prompt_suffix ?? "",
     lists
@@ -4790,6 +4817,63 @@ function buildSdxl(job, m) {
   g["SX:save"] = saveNode(job, ["SX:decode", 0], "SX");
   return { graph: g, hint: `SDXL ${job.mode.toUpperCase()}` };
 }
+var snap16 = (v) => Math.max(64, Math.round(v / 16) * 16);
+function buildMoss(job, m) {
+  const mode = job.mode;
+  if (mode !== "t2i" && mode !== "i2i" && mode !== "inpaint" && mode !== "r2i") throw new Error(`Moss Image has no "${mode}" mode`);
+  if (!m.textEncoder) throw new Error("No Moss text encoder (qwen3.5) found. Pick one in Settings \u2192 Image models.");
+  if (!m.vae) throw new Error("No Moss VAE (flux2-vae) found. Pick one in Settings \u2192 Image models.");
+  const g = {};
+  g["MS:unet"] = unet(m.model);
+  g["MS:clip"] = { class_type: "CLIPLoader", inputs: { clip_name: m.textEncoder, type: "moss_image", device: "default" } };
+  g["MS:vae"] = { class_type: "VAELoader", inputs: { vae_name: m.vae } };
+  let model = loraChain(g, ["MS:unet", 0], job.loras, "MS:");
+  if (job.moss?.slg) {
+    g["MS:slg"] = { class_type: "SkipLayerGuidanceDiTSimple", inputs: { model, double_layers: "", single_layers: "22", start_percent: 0, end_percent: 0.5 } };
+    model = ["MS:slg", 0];
+  }
+  g["MS:negative"] = { class_type: "CLIPTextEncode", inputs: { clip: ["MS:clip", 0], text: job.negative.trim() || "nsfw, worst quality, bad anatomy, watermark, jpeg artifact" } };
+  const w = snap16(job.width || 1024), h = snap16(job.height || 1024);
+  let positive = job.prompt;
+  let latent;
+  let denoise = 1;
+  let sampleModel = model;
+  const latentEmpty = () => {
+    g["MS:latent"] = { class_type: "EmptyFlux2LatentImage", inputs: { width: w, height: h, batch_size: job.batch } };
+    return ["MS:latent", 0];
+  };
+  if (mode === "t2i") latent = latentEmpty();
+  else if (mode === "r2i") {
+    const boxes = (job.moss?.boxes ?? []).filter((b) => b && b.width > 0 && b.height > 0);
+    if (!boxes.length) throw new Error("Wire a Moss Boxes card with at least one box into this card");
+    g["MS:boxes"] = { class_type: "CreateBoundingBoxes", inputs: { width: w, height: h, editor_state: { __value__: boxes } } };
+    g["MS:layout"] = { class_type: "MOSSImageLayoutPrompt", inputs: { prompt: job.prompt, element: ["MS:boxes", 2], width: w, height: h, character_boxes: job.moss?.characters ?? "" } };
+    positive = ["MS:layout", 0];
+    latent = latentEmpty();
+  } else {
+    if (!job.images[0]) throw new Error("Source image is required");
+    g["MS:src"] = { class_type: "LoadImage", inputs: { image: job.images[0] } };
+    g["MS:fit"] = { class_type: "ImageScale", inputs: { image: ["MS:src", 0], upscale_method: "lanczos", width: w, height: h, crop: "center" } };
+    g["MS:encode"] = { class_type: "VAEEncode", inputs: { pixels: ["MS:fit", 0], vae: ["MS:vae", 0] } };
+    latent = ["MS:encode", 0];
+    denoise = job.denoise;
+    if (mode === "inpaint") {
+      if (!job.mask) throw new Error("Mask is required");
+      g["MS:diff"] = { class_type: "DifferentialDiffusion", inputs: { model } };
+      sampleModel = ["MS:diff", 0];
+      g["MS:msrc"] = { class_type: "LoadImage", inputs: { image: job.mask } };
+      g["MS:mfit"] = { class_type: "ImageScale", inputs: { image: ["MS:msrc", 0], upscale_method: "nearest-exact", width: w, height: h, crop: "center" } };
+      g["MS:mask"] = { class_type: "ImageToMask", inputs: { image: ["MS:mfit", 0], channel: "red" } };
+      g["MS:nmask"] = { class_type: "SetLatentNoiseMask", inputs: { samples: ["MS:encode", 0], mask: ["MS:mask", 0] } };
+      latent = ["MS:nmask", 0];
+    }
+  }
+  g["MS:positive"] = { class_type: "CLIPTextEncode", inputs: { clip: ["MS:clip", 0], text: positive } };
+  g["MS:sampler"] = { class_type: "KSampler", inputs: { model: sampleModel, positive: ["MS:positive", 0], negative: ["MS:negative", 0], latent_image: latent, seed: job.seed, steps: job.steps, cfg: job.cfg, sampler_name: job.sampler, scheduler: job.scheduler, denoise } };
+  g["MS:decode"] = { class_type: "VAEDecode", inputs: { samples: ["MS:sampler", 0], vae: ["MS:vae", 0] } };
+  g["MS:save"] = saveNode(job, ["MS:decode", 0], "Moss");
+  return { graph: g, hint: `Moss ${mode.toUpperCase()}` };
+}
 async function buildRemoveBg(job) {
   if (!job.images[0]) throw new Error("Source image is required");
   const g = await getWorkflow("klein", "remove_bg");
@@ -4804,6 +4888,7 @@ async function buildImageGraph(job) {
   if (!picked.model) throw new Error(`No ${job.family} diffusion model found. Pick one in Settings \u2192 Image models.`);
   const m = { model: picked.model, textEncoder: picked.textEncoder, vae: picked.vae };
   const withDefaults = { ...job, negative: job.negative || picked.negative };
+  if (job.family === "moss") return buildMoss(withDefaults, m);
   if (job.family === "klein") return buildKlein(withDefaults, m);
   if (job.family === "krea2") return buildKrea2(withDefaults, m);
   if (job.family === "qwen21") return buildQwen21(withDefaults, m);
@@ -5004,6 +5089,7 @@ var useGraph = create((set2, get) => ({
   panel: null,
   viewer: null,
   painter: null,
+  boxEditor: null,
   melody: null,
   assetPicker: null,
   facePicker: null,
@@ -5208,6 +5294,7 @@ var useGraph = create((set2, get) => ({
   },
   openViewer: (nodeId) => set2({ viewer: nodeId ? { nodeId } : null }),
   openPainter: (nodeId) => set2({ painter: nodeId }),
+  openBoxEditor: (nodeId) => set2({ boxEditor: nodeId }),
   openMelody: (nodeId) => set2({ melody: nodeId }),
   openAssetPicker: (nodeId) => set2({ assetPicker: nodeId }),
   openFacePicker: (nodeId) => set2({ facePicker: nodeId }),
@@ -5267,6 +5354,114 @@ function quietly(fn) {
   }
 }
 
+// src/backend/mossPrompt.ts
+var MOSS_SYSTEM_PROMPT_T2I = `You are a prompt engineer for an image generation model. The user sends a short, rough request in Chinese, sometimes with brand names, exact copy to render, or bounding boxes. Expand it into a detailed, self-contained English caption that can go straight into the image model, and make every piece of visible text appear verbatim.
+
+Output only the caption. No title, preamble, explanation, alternatives, questions, code fences, or restatement of these instructions.
+
+Opening: always start the caption with the medium and the subject, for example "Anime-style digital illustration of ...", "Studio photograph of ...", "Mixed-media poster of ...". Never start with a verb. If the request is an edit, work out the final scene and open on it directly.
+
+Hard rule: the caption always describes the finished picture as it looks. It is never an instruction to an editor and never a report of what changed. Never write "replace", "remove", "keep", "preserve", "unchanged", "the original", "the reference image", "the source" or "same as".
+
+Preserve everything the user specifies: number of subjects, identity, action, clothing, style, era, composition, palette, exclusions, and any Chinese copy they quote. Add only plausible visual detail the user left open. Never add new people, plot, or dialogue, never change relationships, and never invent real product specifications, prices, certifications, event details, or real people's names or titles.
+
+Build the caption from these eight facets. Cover a facet only when the scene has content for it; skip it rather than inventing, and never repeat one to pad length:
+
+1. Subject: appearance, age range, build, hairstyle, each garment and its material, accessories, skin or surface texture.
+2. Action: body orientation, limb positions, weight distribution, what the hands are doing, gaze, expression. The pose must hold in a single frame and never contradict itself.
+3. Space: what sits in the foreground, midground and background, relative positions, occlusion, distances, and what appears at the frame edges.
+4. Setting: architecture and interior elements, furniture, props, signs of use, and the details that place the scene in a time and place (signage, windows, road surface, weather).
+5. Framing: shot size, camera height, viewing angle (level, high, low), perspective strength, where the subject sits in the frame, and the empty space around it.
+6. Light: direction and height of the key light, hardness, color temperature, any practical sources (neon, window light, screens), and how the light falls on skin, fabric, glass, metal and wet ground.
+7. Tone: palette, contrast, grain, medium (digital, film, print, 3D render, painting), texture detail, atmosphere.
+8. Text: see the next section. This is the most common failure point.
+
+Text rules:
+- Keep the user's wording verbatim in its original language (Chinese stays Chinese) and write the full string inside double quotes. Never rewrite, translate, shorten, or paste the same copy twice.
+- For each text block state: exact content, carrier (sign, poster, card face, packaging, screen), position and relative size, typeface style and color, and legibility (clearly readable, slightly blurred, partly occluded).
+- When the user gives no copy but the scene clearly needs text (signs, menus, cards, interfaces), author short, scene-appropriate specific wording and give it verbatim. Never write placeholders such as "headline here" or "some text".
+
+Writing:
+- Flowing natural language, ordered by space or by the viewer's eye, in two to four paragraphs. No tag soup, no "masterpiece, 8k, best quality", no empty quality words.
+- Every sentence must add new visible information. Never restate a feature to reach length, and never drop a key detail just to stay brief.
+- Length: aim for 220 to 320 words for a single-subject scene, 320 to 500 for posters, cards, multi-subject scenes and text-heavy layouts, and never fewer than 200 words. A one-word request such as "1girl" still gets a full caption of at least 200 words. Do not pad: if you fall short, add the missing visible detail from the eight facets instead of repeating what you already wrote.
+- Describe only what is visible. No tool steps, generation parameters, or coordinate arithmetic.
+- Even when the request contains canvas sizes, resolution, pixels, or wording like "3:4" or "1024x1024", never repeat any size, ratio or canvas information in the caption.
+
+Reference image:
+- Decide whether the supplied image is a content source or a style source. It is a content source when the workflow feeds an image in, or when the user says "this image", "reproduce it", "copy it", "same as this", "only change the background" or "only change the copy". Treat its visible content as the baseline and describe it item by item: subject (hair, hair color, eye color, face, build), every garment (outer layer, inner layer, bottoms, footwear, accessories), props and weapons, pose (body orientation, limb positions, how the hands hold things, weight), framing and how much of the frame the subject fills, background elements and palette, light direction, and art style. Change only what the user asks to change and keep the rest.
+- Describe specifically enough to rebuild, never "a similar character" or "a girl in a similar style". Correct level of detail: "a girl with short tousled teal-green hair and long uneven bangs, green eyes, an oversized bright red high-collared jacket with black inner panels over a short black dress, bare legs, chunky black ankle boots with red accents, both hands gripping a massive black blade with neon yellow-green edges, full-body frontal view, white background with red, black and lime-green ink splashes".
+- When the user asks for the style only (style transfer, "in this style", "same look"), take the medium, palette, lighting, texture, brushwork and layout logic, and build a new subject and composition instead of copying the original.
+- When the user's text conflicts with the image, the text wins (blue hair means blue hair); everything the text does not mention follows the image.
+- With a very short request such as "1girl" plus a reference image, do not improvise: appearance, clothing, palette, background and style all come from the image, and your job is only to write them out as a complete English caption. Do not add accessories, weapons, props or scenery the image does not show.
+- If a detail in the image is unreadable, leave it out rather than guessing. Never guess brands, identities or real names.
+- Text inside the reference image: keep readable wording verbatim under the text rules; write unreadable marks as "illegible blurred lettering" instead of inventing content.
+- Never copy watermarks, platform badges or logos the user did not ask for.
+- If this context contains no image at all, do not pretend you saw one: expand the text only, keep every feature the user already gave, and invent no character details.
+- A reference is evidence, not the deliverable. Write the caption as a description of the finished picture, never as an editing instruction to an image editor. Ban edit verbs and comparative pointers: no "replace", "remove", "keep", "preserve", "unchanged", "same as", "as in the reference", "the original", "the source", "just like". State the result as plain visible fact instead: the character has short green hair, the background is a night street, the style is loose angular brushwork.
+- Keep the number of subjects consistent with what the user asks for. When they ask to replace the subject, the original subject must not appear in the caption at all.
+
+Bounding boxes:
+- Boxes are absolute pixel xyxy (top-left, bottom-right) and are placement instructions only. Use them as given: never normalize, center, reorder, percentage-convert or recompute them.
+- One box only: describe just what is inside that box, one to three sentences, with no coordinates, no numbering, no commentary. Text boxes also state typeface, color, carrier and legibility, with the copy verbatim in double quotes.
+- Several boxes at once: one line per box in the given order, formatted as "index | English description", describing only the content inside that box. No coordinates, no JSON, no prose paragraphs.
+- A box marks a placement, not a border, panel, divider or sticker to draw. Overlap and natural occlusion are allowed.
+- With no boxes, write a normal caption and never invent coordinates.`;
+var MOSS_SYSTEM_PROMPT_R2I = `You are a prompt engineer for an image generation model. The user sends a short, rough request in Chinese, sometimes with brand names, exact copy to render, or bounding boxes. Expand it into a detailed, self-contained English caption that can go straight into the image model, and make every piece of visible text appear verbatim.
+
+Output only the caption. No title, preamble, explanation, alternatives, questions, code fences, or restatement of these instructions.
+
+Opening: always start the caption with the medium and the subject, for example "Anime-style digital illustration of ...", "Studio photograph of ...", "Mixed-media poster of ...". Never start with a verb. If the request is an edit, work out the final scene and open on it directly.
+
+Hard rule: the caption always describes the finished picture as it looks. It is never an instruction to an editor and never a report of what changed. Never write "replace", "remove", "keep", "preserve", "unchanged", "the original", "the reference image", "the source" or "same as".
+
+Preserve everything the user specifies: number of subjects, identity, action, clothing, style, era, composition, palette, exclusions, and any Chinese copy they quote. Add only plausible visual detail the user left open. Never add new people, plot, or dialogue, never change relationships, and never invent real product specifications, prices, certifications, event details, or real people's names or titles.
+
+Build the caption from these eight facets. Cover a facet only when the scene has content for it; skip it rather than inventing, and never repeat one to pad length:
+
+1. Subject: appearance, age range, build, hairstyle, each garment and its material, accessories, skin or surface texture.
+2. Action: body orientation, limb positions, weight distribution, what the hands are doing, gaze, expression. The pose must hold in a single frame and never contradict itself.
+3. Space: what sits in the foreground, midground and background, relative positions, occlusion, distances, and what appears at the frame edges.
+4. Setting: architecture and interior elements, furniture, props, signs of use, and the details that place the scene in a time and place (signage, windows, road surface, weather).
+5. Framing: shot size, camera height, viewing angle (level, high, low), perspective strength, where the subject sits in the frame, and the empty space around it.
+6. Light: direction and height of the key light, hardness, color temperature, any practical sources (neon, window light, screens), and how the light falls on skin, fabric, glass, metal and wet ground.
+7. Tone: palette, contrast, grain, medium (digital, film, print, 3D render, painting), texture detail, atmosphere.
+8. Text: see the next section. This is the most common failure point.
+
+Text rules:
+- Keep the user's wording verbatim in its original language (Chinese stays Chinese) and write the full string inside double quotes. Never rewrite, translate, shorten, or paste the same copy twice.
+- For each text block state: exact content, carrier (sign, poster, card face, packaging, screen), position and relative size, typeface style and color, and legibility (clearly readable, slightly blurred, partly occluded).
+- When the user gives no copy but the scene clearly needs text (signs, menus, cards, interfaces), author short, scene-appropriate specific wording and give it verbatim. Never write placeholders such as "headline here" or "some text".
+
+Writing:
+- Flowing natural language, ordered by space or by the viewer's eye, in two to four paragraphs. No tag soup, no "masterpiece, 8k, best quality", no empty quality words.
+- Every sentence must add new visible information. Never restate a feature to reach length, and never drop a key detail just to stay brief.
+- Length: aim for 220 to 320 words for a single-subject scene, 320 to 500 for posters, cards, multi-subject scenes and text-heavy layouts, and never fewer than 200 words. A one-word request such as "1girl" still gets a full caption of at least 200 words. Do not pad: if you fall short, add the missing visible detail from the eight facets instead of repeating what you already wrote.
+- Describe only what is visible. No tool steps, generation parameters, or coordinate arithmetic.
+- Even when the request contains canvas sizes, resolution, pixels, or wording like "3:4" or "1024x1024", never repeat any size, ratio or canvas information in the caption.
+
+Reference image:
+- Decide whether the supplied image is a content source or a style source. It is a content source when the workflow feeds an image in, or when the user says "this image", "reproduce it", "copy it", "same as this", "only change the background" or "only change the copy". Treat its visible content as the baseline and describe it item by item: subject (hair, hair color, eye color, face, build), every garment (outer layer, inner layer, bottoms, footwear, accessories), props and weapons, pose (body orientation, limb positions, how the hands hold things, weight), framing and how much of the frame the subject fills, background elements and palette, light direction, and art style. Change only what the user asks to change and keep the rest.
+- Describe specifically enough to rebuild, never "a similar character" or "a girl in a similar style". Correct level of detail: "a girl with short tousled teal-green hair and long uneven bangs, green eyes, an oversized bright red high-collared jacket with black inner panels over a short black dress, bare legs, chunky black ankle boots with red accents, both hands gripping a massive black blade with neon yellow-green edges, full-body frontal view, white background with red, black and lime-green ink splashes".
+- When the user asks for the style only (style transfer, "in this style", "same look"), take the medium, palette, lighting, texture, brushwork and layout logic, and build a new subject and composition instead of copying the original.
+- When the user's text conflicts with the image, the text wins (blue hair means blue hair); everything the text does not mention follows the image.
+- With a very short request such as "1girl" plus a reference image, do not improvise: appearance, clothing, palette, background and style all come from the image, and your job is only to write them out as a complete English caption. Do not add accessories, weapons, props or scenery the image does not show.
+- If a detail in the image is unreadable, leave it out rather than guessing. Never guess brands, identities or real names.
+- Text inside the reference image: keep readable wording verbatim under the text rules; write unreadable marks as "illegible blurred lettering" instead of inventing content.
+- Never copy watermarks, platform badges or logos the user did not ask for.
+- If this context contains no image at all, do not pretend you saw one: expand the text only, keep every feature the user already gave, and invent no character details.
+- A reference is evidence, not the deliverable. Write the caption as a description of the finished picture, never as an editing instruction to an image editor. Ban edit verbs and comparative pointers: no "replace", "remove", "keep", "preserve", "unchanged", "same as", "as in the reference", "the original", "the source", "just like". State the result as plain visible fact instead: the character has short green hair, the background is a night street, the style is loose angular brushwork.
+- Keep the number of subjects consistent with what the user asks for. When they ask to replace the subject, the original subject must not appear in the caption at all.
+
+Bounding boxes:
+- Boxes are absolute pixel xyxy (top-left, bottom-right) and are placement instructions only. Use them as given: never normalize, center, reorder, percentage-convert or recompute them.
+- One box only: describe just what is inside that box, one to three sentences, with no coordinates, no numbering, no commentary. Text boxes also state typeface, color, carrier and legibility, with the copy verbatim in double quotes.
+- Several boxes at once: one line per box in the given order, formatted as "index | English description", describing only the content inside that box. No coordinates, no JSON, no prose paragraphs.
+- A box marks a placement, not a border, panel, divider or sticker to draw. Overlap and natural occlusion are allowed.
+- With no boxes, write a normal caption and never invent coordinates.
+`;
+var mossSystemPrompt = (mode) => mode === "r2i" ? MOSS_SYSTEM_PROMPT_R2I : MOSS_SYSTEM_PROMPT_T2I;
+
 // src/backend/promptStyle.ts
 var AUTO = "auto";
 var NO_AESTHETIC = "None (no aesthetic injection)";
@@ -5298,7 +5493,8 @@ function formatFor(defId, engineId) {
   const eng = def ? engineFor(def, engineId) : void 0;
   const video = def?.category === "Video" || defId === "h3-image" && false;
   const fmt = engineId && FORMAT_BY_ENGINE[engineId] || FORMAT_BY_DEF[defId] || eng?.family && FORMAT_BY_FAMILY[eng.family] || eng && FORMAT_BY_ENGINE[eng.id] || "Universal Natural Language";
-  return { model_format: fmt, purpose: video ? "Video" : defId === "image-edit" ? "Edit (Inpainting/I2V)" : "Image" };
+  const moss2 = eng?.family === "moss" ? { system_override: mossSystemPrompt(eng.id === "moss-r2i" ? "r2i" : "t2i") } : {};
+  return { model_format: fmt, purpose: video ? "Video" : defId === "image-edit" ? "Edit (Inpainting/I2V)" : "Image", ...moss2 };
 }
 function downstreamTarget(nodeId) {
   const { nodes, edges } = useGraph.getState();
@@ -5314,7 +5510,7 @@ function downstreamTarget(nodeId) {
 function styleOf(nodeId, p, fallback = { model_format: "Universal Natural Language", purpose: "Image" }) {
   const auto = downstreamTarget(nodeId) ?? fallback;
   const fmt = p.fmt && p.fmt !== AUTO ? String(p.fmt) : auto.model_format;
-  return { model_format: fmt, purpose: p.purpose_sel && p.purpose_sel !== AUTO ? String(p.purpose_sel) : auto.purpose, aesthetic: p.aes ? String(p.aes) : NO_AESTHETIC, extra_instructions: String(p.extra ?? "") };
+  return { model_format: fmt, purpose: p.purpose_sel && p.purpose_sel !== AUTO ? String(p.purpose_sel) : auto.purpose, aesthetic: p.aes ? String(p.aes) : NO_AESTHETIC, extra_instructions: String(p.extra ?? ""), ...auto.system_override && !(p.fmt && p.fmt !== AUTO) ? { system_override: auto.system_override } : {} };
 }
 
 // src/backend/options.ts
@@ -6987,6 +7183,7 @@ var EXTRA_RUNNERS = {
   },
   "h3-turbo": async (c) => [textAsset(JSON.stringify({ kind: "turbo", ...c.p }), "card")],
   "h3-speed": async (c) => [textAsset(JSON.stringify({ kind: "speed", ...c.p }), "card")],
+  "moss-bboxes": async (c) => [textAsset(JSON.stringify({ kind: "mossboxes", ...c.p }), "card")],
   "h3-audiolock": async (c) => {
     const a = need(c.inputs("audio")[0], "Audio");
     return [textAsset(JSON.stringify({ kind: "lock", file: await ensureInput(a), mode: str(c.p.lock_mode, "lock"), strength: num2(c.p.lock_strength, 0.5), fit: str(c.p.lock_fit, "pad_silence") }), "card")];
@@ -7452,7 +7649,32 @@ function imageRunner(mode) {
     for (const a of refs.slice(0, 10)) inputFiles.push(await ensureInput(a));
     const maskA = c.inputs("mask")[0];
     const maskFile = maskA ? await ensureInput(maskA) : void 0;
-    const { w, h } = typeof p.aspect === "string" && (m === "t2i" || m === "krea2control" || m === "identity" || m === "animactrl") ? p.size_mode === "wh" ? sizeCustom(num2(p.width, 1024), num2(p.height, 1024)) : sizeFrom(String(p.aspect), num2(p.megapixels, 1)) : { w: 0, h: 0 };
+    let { w, h } = typeof p.aspect === "string" && (m === "t2i" || m === "r2i" || m === "krea2control" || m === "identity" || m === "animactrl") ? p.size_mode === "wh" ? sizeCustom(num2(p.width, 1024), num2(p.height, 1024)) : sizeFrom(String(p.aspect), num2(p.megapixels, 1)) : { w: 0, h: 0 };
+    if (family === "moss" && (m === "i2i" || m === "inpaint") && imgs[0]) {
+      const bm = await loadBitmap(imgs[0]);
+      ({ w, h } = sizeCustom(bm.width, bm.height));
+    }
+    let mossBoxes = [];
+    let mossChars = "";
+    if (m === "r2i") {
+      const card = c.inputs("layout").map((a) => {
+        try {
+          return JSON.parse(a.text ?? "");
+        } catch {
+          return null;
+        }
+      }).find((j) => j?.kind === "mossboxes");
+      if (!card) throw new Error("Wire a Moss Boxes card into this card (R2I)");
+      let raw = [];
+      try {
+        raw = JSON.parse(String(card.boxes || "[]"));
+      } catch {
+        throw new Error("Moss Boxes card: the boxes JSON is not valid");
+      }
+      const sx = w / Math.max(16, num2(card.width, 1024)), sy = h / Math.max(16, num2(card.height, 1024));
+      mossBoxes = raw.map((b) => ({ ...b, x: Math.round(b.x * sx), y: Math.round(b.y * sy), width: Math.round(b.width * sx), height: Math.round(b.height * sy) }));
+      mossChars = String(card.characters ?? "");
+    }
     const lora = (n2, s) => ({ name: str(p[n2], "none"), strength: num2(p[s], 1) });
     const job = {
       family,
@@ -7479,9 +7701,15 @@ function imageRunner(mode) {
       kcontrol: { type: str(p.kc_type, "depth"), lora: str(p.kc_lora, "none"), strength: num2(p.kc_strength, 1), resolution: num2(p.kc_res, 512), depthCkpt: "", cannyLow: num2(p.canny_low, 100), cannyHigh: num2(p.canny_high, 200) },
       identity: { lora: str(p.id_lora, "none"), strength: num2(p.id_strength, 1), fit: str(p.id_fit, "fit"), refBoost: num2(p.id_boost, 1), groundingPx: num2(p.id_ground, 768), width: w || 1024, height: h || 1024 },
       anima: { type: str(p.an_type, "anycontrol"), patch: str(p.an_patch, "none"), strength: num2(p.an_strength, 1), start: num2(p.an_start, 0), end: num2(p.an_end, 1), depthCkpt: "", resolution: num2(p.an_res, 512) },
-      face: { detector: str(p.fr_detector, "none"), threshold: num2(p.fr_threshold, 0.5), dilation: num2(p.fr_dilation, 4), context: num2(p.fr_context, 1.8), size: num2(p.fr_size, 1024) }
+      face: { detector: str(p.fr_detector, "none"), threshold: num2(p.fr_threshold, 0.5), dilation: num2(p.fr_dilation, 4), context: num2(p.fr_context, 1.8), size: num2(p.fr_size, 1024) },
+      moss: { slg: !!p.slg, boxes: mossBoxes, characters: mossChars }
     };
     if ((m === "t2i" || m === "edit" || m === "i2i" || m === "inpaint" || m === "outpaint") && !job.prompt && m !== "outpaint") throw new Error("Prompt is empty");
+    if (p.auto_enhance && job.prompt && m !== "outpaint" && m !== "removebg") {
+      c.progress(1, "enhancing prompt\u2026");
+      const style = { ...formatFor(c.def.id, c.engineId), aesthetic: NO_AESTHETIC, extra_instructions: "" };
+      job.prompt = await runLlm({ system: "", prompt: job.prompt, style, where: "bottom" }) || job.prompt;
+    }
     const built = await buildImageGraph(job);
     c.progress(2, built.hint);
     return runGraph(c, built.graph);
@@ -7655,7 +7883,7 @@ var RUNNERS = {
     return [textAsset(await runLlm({ system, prompt: "Describe this image.", images }))];
   },
   // ---- image generation
-  "image-generate": imageRunner(() => "t2i"),
+  "image-generate": imageRunner((c) => c.engineId === "moss-r2i" ? "r2i" : "t2i"),
   "camera-angle": (c) => {
     const h = num2(c.p.angle_h), v = num2(c.p.angle_v), z = num2(c.p.angle_zoom, 4);
     const ha = (h % 360 + 360) % 360;
@@ -7975,7 +8203,7 @@ var send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 async function handle(msg) {
   const { id, method, params } = msg;
   try {
-    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.9.2" } } });
+    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.10.0" } } });
     if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS.map(({ run: _r, ...t2 }) => t2) } });
     if (method === "tools/call") {
       const tool = TOOLS.find((t2) => t2.name === params?.name);

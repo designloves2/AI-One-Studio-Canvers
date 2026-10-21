@@ -2,7 +2,7 @@
 // Klein graphs start from the templates STUDIO_ONE serves; Z-Image graphs are assembled from core nodes.
 import { getWorkflow, pickModels, type Family } from './studio';
 
-export type ImageMode = 't2i' | 'i2i' | 'edit' | 'inpaint' | 'outpaint' | 'faceswap' | 'removebg' | 'controlnet' | 'facedraw' | 'krea2control' | 'identity' | 'animactrl';
+export type ImageMode = 't2i' | 'i2i' | 'edit' | 'inpaint' | 'outpaint' | 'faceswap' | 'removebg' | 'controlnet' | 'facedraw' | 'krea2control' | 'identity' | 'animactrl' | 'r2i';
 
 export interface Lora { name: string; strength: number }
 
@@ -39,7 +39,11 @@ export interface ImageJob {
   /** Anima LLLite control: any | depth | inpaint */
   anima?: { type: 'anycontrol' | 'depthcontrol' | 'inpaint'; patch: string; strength: number; start: number; end: number; depthCkpt: string; resolution: number };
   face?: { detector: string; threshold: number; dilation: number; context: number; size: number };
+  /** Moss Image: skip-layer guidance, and the drawn boxes (pixels of width x height) for R2I */
+  moss?: { slg: boolean; boxes: MossBox[]; characters: string };
 }
+
+export interface MossBox { x: number; y: number; width: number; height: number; metadata: { type: 'obj' | 'text'; text: string; desc: string; palette: string[] } }
 
 export interface Built { graph: Record<string, any>; hint: string }
 
@@ -518,6 +522,65 @@ function buildSdxl(job: ImageJob, m: { model: string }): Built {
   return { graph: g, hint: `SDXL ${job.mode.toUpperCase()}` };
 }
 
+// ------------------------------------------------------------------------- Moss Image
+// Same graphs as the Moss Image ONE STUDIO page (web/moss/graph_builder_moss.js). Width and height are multiples of 16.
+const snap16 = (v: number) => Math.max(64, Math.round(v / 16) * 16);
+
+function buildMoss(job: ImageJob, m: { model: string; textEncoder: string; vae: string }): Built {
+  const mode = job.mode;
+  if (mode !== 't2i' && mode !== 'i2i' && mode !== 'inpaint' && mode !== 'r2i') throw new Error(`Moss Image has no "${mode}" mode`);
+  if (!m.textEncoder) throw new Error('No Moss text encoder (qwen3.5) found. Pick one in Settings → Image models.');
+  if (!m.vae) throw new Error('No Moss VAE (flux2-vae) found. Pick one in Settings → Image models.');
+  const g: G = {};
+  g['MS:unet'] = unet(m.model);
+  g['MS:clip'] = { class_type: 'CLIPLoader', inputs: { clip_name: m.textEncoder, type: 'moss_image', device: 'default' } };
+  g['MS:vae'] = { class_type: 'VAELoader', inputs: { vae_name: m.vae } };
+  let model = loraChain(g, ['MS:unet', 0], job.loras, 'MS:');
+  if (job.moss?.slg) {
+    g['MS:slg'] = { class_type: 'SkipLayerGuidanceDiTSimple', inputs: { model, double_layers: '', single_layers: '22', start_percent: 0, end_percent: 0.5 } };
+    model = ['MS:slg', 0];
+  }
+  g['MS:negative'] = { class_type: 'CLIPTextEncode', inputs: { clip: ['MS:clip', 0], text: job.negative.trim() || 'nsfw, worst quality, bad anatomy, watermark, jpeg artifact' } };
+  const w = snap16(job.width || 1024), h = snap16(job.height || 1024);
+  let positive: unknown = job.prompt;
+  let latent: [string, number];
+  let denoise = 1;
+  let sampleModel: [string, number] = model;
+  const latentEmpty = (): [string, number] => { g['MS:latent'] = { class_type: 'EmptyFlux2LatentImage', inputs: { width: w, height: h, batch_size: job.batch } }; return ['MS:latent', 0]; };
+  if (mode === 't2i') latent = latentEmpty();
+  else if (mode === 'r2i') {
+    const boxes = (job.moss?.boxes ?? []).filter((b) => b && b.width > 0 && b.height > 0);
+    if (!boxes.length) throw new Error('Wire a Moss Boxes card with at least one box into this card');
+    // a list of exactly two boxes would be read as a [node, slot] link, so wrap it (ComfyUI unwraps __value__)
+    g['MS:boxes'] = { class_type: 'CreateBoundingBoxes', inputs: { width: w, height: h, editor_state: { __value__: boxes } } };
+    g['MS:layout'] = { class_type: 'MOSSImageLayoutPrompt', inputs: { prompt: job.prompt, element: ['MS:boxes', 2], width: w, height: h, character_boxes: job.moss?.characters ?? '' } };
+    positive = ['MS:layout', 0];
+    latent = latentEmpty();
+  } else {
+    if (!job.images[0]) throw new Error('Source image is required');
+    g['MS:src'] = { class_type: 'LoadImage', inputs: { image: job.images[0] } };
+    g['MS:fit'] = { class_type: 'ImageScale', inputs: { image: ['MS:src', 0], upscale_method: 'lanczos', width: w, height: h, crop: 'center' } };
+    g['MS:encode'] = { class_type: 'VAEEncode', inputs: { pixels: ['MS:fit', 0], vae: ['MS:vae', 0] } };
+    latent = ['MS:encode', 0];
+    denoise = job.denoise;
+    if (mode === 'inpaint') {
+      if (!job.mask) throw new Error('Mask is required');
+      g['MS:diff'] = { class_type: 'DifferentialDiffusion', inputs: { model } };
+      sampleModel = ['MS:diff', 0];
+      g['MS:msrc'] = { class_type: 'LoadImage', inputs: { image: job.mask } };
+      g['MS:mfit'] = { class_type: 'ImageScale', inputs: { image: ['MS:msrc', 0], upscale_method: 'nearest-exact', width: w, height: h, crop: 'center' } };
+      g['MS:mask'] = { class_type: 'ImageToMask', inputs: { image: ['MS:mfit', 0], channel: 'red' } };
+      g['MS:nmask'] = { class_type: 'SetLatentNoiseMask', inputs: { samples: ['MS:encode', 0], mask: ['MS:mask', 0] } };
+      latent = ['MS:nmask', 0];
+    }
+  }
+  g['MS:positive'] = { class_type: 'CLIPTextEncode', inputs: { clip: ['MS:clip', 0], text: positive } };
+  g['MS:sampler'] = { class_type: 'KSampler', inputs: { model: sampleModel, positive: ['MS:positive', 0], negative: ['MS:negative', 0], latent_image: latent, seed: job.seed, steps: job.steps, cfg: job.cfg, sampler_name: job.sampler, scheduler: job.scheduler, denoise } };
+  g['MS:decode'] = { class_type: 'VAEDecode', inputs: { samples: ['MS:sampler', 0], vae: ['MS:vae', 0] } };
+  g['MS:save'] = saveNode(job, ['MS:decode', 0], 'Moss');
+  return { graph: g, hint: `Moss ${mode.toUpperCase()}` };
+}
+
 // ------------------------------------------------------------------------- background removal
 async function buildRemoveBg(job: ImageJob): Promise<Built> {
   if (!job.images[0]) throw new Error('Source image is required');
@@ -534,6 +597,7 @@ export async function buildImageGraph(job: ImageJob): Promise<Built> {
   if (!picked.model) throw new Error(`No ${job.family} diffusion model found. Pick one in Settings → Image models.`);
   const m = { model: picked.model, textEncoder: picked.textEncoder, vae: picked.vae };
   const withDefaults = { ...job, negative: job.negative || picked.negative };
+  if (job.family === 'moss') return buildMoss(withDefaults, m);
   if (job.family === 'klein') return buildKlein(withDefaults, m);
   if (job.family === 'krea2') return buildKrea2(withDefaults, m);
   if (job.family === 'qwen21') return buildQwen21(withDefaults, m);

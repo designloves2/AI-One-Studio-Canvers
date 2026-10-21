@@ -46,7 +46,7 @@ LLM 4가지 방식은 [ComfyUI-TJ_NODE](https://github.com/designloves2/ComfyUI-
 
 | 구분 | 상태 |
 |---|---|
-| 이미지 생성/편집/인페인트/아웃페인트: Z-Image Turbo, Flux.2 Klein, Krea 2, SDXL, Anima, Qwen Image Edit 2511, Qwen Image 2.1 | ✅ |
+| 이미지 생성/편집/인페인트/아웃페인트: Z-Image Turbo, Flux.2 Klein, Krea 2, SDXL, Anima, Qwen Image Edit 2511, Qwen Image 2.1, Moss Image (T2I·I2I·R2I bboxes·INPAINT) | ✅ |
 | 얼굴 교체(Klein), 배경 제거, 업스케일(ESRGAN 계열) | ✅ |
 | **비디오: LTX 2.5** (텍스트→영상, 첫/마지막 프레임→영상, 오디오 포함, 2단계 업스케일) | ✅ |
 | **비디오: MiniMax H3 전체** — 텍스트 / 첫·마지막 프레임 / 멀티 레퍼런스(9장), 여러 클립(`---`로 구분) + 마지막 프레임 이어가기 + **One-Take(latent 연속)** + 자동 스티치, **Audio Lock**, Turbo 3종(larryvrh · Turbo LoRA Basic · lightx2v/SLA), **7+1 하이레스 마무리**, 어텐션 백엔드·패치·캐시·H3 최적화·Spectrum | ✅ |

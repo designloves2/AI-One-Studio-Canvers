@@ -1,4 +1,4 @@
-# HANDOFF — AI ONE Studio Canvers (v2.9.2, 카드 덱 방식)
+# HANDOFF — AI ONE Studio Canvers (v2.10.0, 카드 덱 방식)
 
 이어서 작업하는 쪽은 이 문서만 읽으면 됩니다. (작업 중 계속 갱신됨)
 

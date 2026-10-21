@@ -3,8 +3,9 @@
 import { getJson } from './http';
 import { byId, engineFor } from '../registry';
 import { useGraph } from '../store/graph';
+import { mossSystemPrompt } from './mossPrompt';
 
-export interface PromptStyle { model_format: string; aesthetic: string; purpose: string; extra_instructions: string }
+export interface PromptStyle { model_format: string; aesthetic: string; purpose: string; extra_instructions: string; /** Moss Image: its own enhancer system prompt, sent instead of the generic one */ system_override?: string }
 export const AUTO = 'auto';
 export const NO_AESTHETIC = 'None (no aesthetic injection)';
 
@@ -25,16 +26,17 @@ export function styleCatalog(): Promise<StyleCatalog> {
   return catalog;
 }
 
-export function formatFor(defId: string, engineId?: string): { model_format: string; purpose: string } {
+export function formatFor(defId: string, engineId?: string): { model_format: string; purpose: string; system_override?: string } {
   const def = byId.get(defId);
   const eng = def ? engineFor(def, engineId) : undefined;
   const video = def?.category === 'Video' || defId === 'h3-image' && false;
   const fmt = (engineId && FORMAT_BY_ENGINE[engineId]) || FORMAT_BY_DEF[defId] || (eng?.family && FORMAT_BY_FAMILY[eng.family]) || (eng && FORMAT_BY_ENGINE[eng.id]) || 'Universal Natural Language';
-  return { model_format: fmt, purpose: video ? 'Video' : (defId === 'image-edit' ? 'Edit (Inpainting/I2V)' : 'Image') };
+  const moss = eng?.family === 'moss' ? { system_override: mossSystemPrompt(eng.id === 'moss-r2i' ? 'r2i' : 't2i') } : {};
+  return { model_format: fmt, purpose: video ? 'Video' : (defId === 'image-edit' ? 'Edit (Inpainting/I2V)' : 'Image'), ...moss };
 }
 
 /** The phrasing target implied by the cards a prompt node feeds (first connected generator that has a known model). */
-export function downstreamTarget(nodeId: string): { model_format: string; purpose: string } | null {
+export function downstreamTarget(nodeId: string): { model_format: string; purpose: string; system_override?: string } | null {
   const { nodes, edges } = useGraph.getState();
   for (const e of edges.filter((x) => x.source === nodeId)) {
     const t = nodes.find((n) => n.id === e.target); if (!t) continue;
@@ -45,8 +47,8 @@ export function downstreamTarget(nodeId: string): { model_format: string; purpos
 }
 
 /** Node-level choices stored on a Prompt / Prompt Enhancer card (fmt/aes/extra); 'auto' follows the connected generator. */
-export function styleOf(nodeId: string, p: Record<string, any>, fallback: { model_format: string; purpose: string } = { model_format: 'Universal Natural Language', purpose: 'Image' }): PromptStyle {
+export function styleOf(nodeId: string, p: Record<string, any>, fallback: { model_format: string; purpose: string; system_override?: string } = { model_format: 'Universal Natural Language', purpose: 'Image' }): PromptStyle {
   const auto = downstreamTarget(nodeId) ?? fallback;
   const fmt = p.fmt && p.fmt !== AUTO ? String(p.fmt) : auto.model_format;
-  return { model_format: fmt, purpose: p.purpose_sel && p.purpose_sel !== AUTO ? String(p.purpose_sel) : auto.purpose, aesthetic: p.aes ? String(p.aes) : NO_AESTHETIC, extra_instructions: String(p.extra ?? '') };
+  return { model_format: fmt, purpose: p.purpose_sel && p.purpose_sel !== AUTO ? String(p.purpose_sel) : auto.purpose, aesthetic: p.aes ? String(p.aes) : NO_AESTHETIC, extra_instructions: String(p.extra ?? ''), ...(auto.system_override && !(p.fmt && p.fmt !== AUTO) ? { system_override: auto.system_override } : {}) };
 }

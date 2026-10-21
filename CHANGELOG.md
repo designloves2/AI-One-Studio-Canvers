@@ -2,6 +2,14 @@
 
 형식: 버전 · 날짜 / 추가 · 변경 · 수정. 버전은 `package.json`, `mcp/server.ts`와 같습니다.
 
+## 2.10.0 — 2026-10-22
+
+### 추가
+- **Moss Image**: 이미지 생성에 Moss Image(T2I · R2I bboxes), 이미지 편집에 I2I, 인페인트에 INPAINT 엔진을 추가했습니다(ComfyUI MOSS-Image 템플릿과 같은 그래프). 설정의 이미지 모델 목록·상태 패널에도 나옵니다. 프록시에 `/moss_one` 경로를 추가했습니다.
+- **Moss Boxes (R2I) 카드**: 캔버스에 박스를 그려 OBJECT / TEXT(정확한 글자)로 지정합니다(설명 · 팔레트 · Characters 번호). Image Generate 의 'Moss boxes card (R2I)' 입력에 연결하면 생성 크기에 맞춰 좌표가 변환됩니다. `CreateBoundingBoxes.editor_state` 는 `{"__value__": boxes}` 로 감싸 보내 박스가 정확히 2개일 때도 통과합니다.
+- **Moss 프롬프트 향상용 시스템 프롬프트**: Moss 카드에 연결된 프롬프트의 Enhance 는 노드의 MOSS 시스템 프롬프트(T2I/I2I/INPAINT 는 T2I 용, R2I 는 R2I 용)를 `system_override` 로 보냅니다.
+- **생성 직전 자동 향상(Auto Enhance)**: 이미지 생성 카드에 '생성 직전 프롬프트 자동 향상' 토글(기본 꺼짐). 켜면 카드의 엔진에 맞는 형식으로 향상한 뒤 생성합니다(프롬프트 카드의 글은 그대로). 로컬 LLM 은 생성 중 대기 규칙을 따릅니다.
+
 ## 2.9.2 — 2026-10-21
 
 ### 추가

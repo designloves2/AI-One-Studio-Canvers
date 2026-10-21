@@ -13,7 +13,7 @@ const target = new URL(process.env.COMFY_URL ?? 'http://127.0.0.1:8188');
 const port = Number(process.env.PORT ?? 8765);
 
 const PROXIED = ['/prompt', '/history', '/queue', '/upload', '/view', '/object_info', '/system_stats', '/interrupt', '/free', '/ws',
-  '/flux_klein', '/z_image_turbo', '/krea2_one', '/sdxl_one', '/qwen2511_one', '/qwenimage21_one', '/anima_one', '/minimax_h3_one',
+  '/flux_klein', '/z_image_turbo', '/krea2_one', '/sdxl_one', '/qwen2511_one', '/qwenimage21_one', '/anima_one', '/moss_one', '/minimax_h3_one',
   '/ltx25_one', '/music_one', '/tj_studio_one', '/tj_shared', '/shared', '/tj_node', '/itda_studio_one', '/extensions', '/api', '/internal', '/userdata', '/models', '/embeddings', '/custom_nodes'];
 const isProxied = (p) => PROXIED.some((x) => p === x || p.startsWith(x + '/') || p.startsWith(x + '?'));
 

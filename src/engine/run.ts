@@ -3,7 +3,7 @@
 import type { Asset, GraphEdge, GraphNode, NodeDef, Primitive } from '../types';
 import { byId, engineFor } from '../registry';
 import { assetFromFile, ensureInput, fetchBlob, runPrompt, uid, uploadToInput } from '../backend/comfy';
-import { buildImageGraph, type ImageJob, type ImageMode } from '../backend/imageGen';
+import { buildImageGraph, type ImageJob, type ImageMode, type MossBox } from '../backend/imageGen';
 import { FAMILIES, pickModels, type Family } from '../backend/studio';
 import { runLlm } from '../backend/llm';
 import { loadOptions } from '../backend/options';
@@ -16,7 +16,7 @@ import { useSettings } from '../store/settings';
 import { textAsset, num, str, need } from './util';
 import { EXTRA_RUNNERS, cardLoras, h3Cards, h3Opt } from './more';
 import { downstreamImages, enhanceWithImages } from '../backend/refEnhance';
-import { styleOf } from '../backend/promptStyle';
+import { styleOf, formatFor, NO_AESTHETIC } from '../backend/promptStyle';
 import { applyOp, blendOp, canvasToAsset, channelOp, invertMask, loadBitmap, maskGrow, palette, videoFrame } from '../editing/ops';
 
 export interface GraphLike { nodes: GraphNode[]; edges: GraphEdge[] }
@@ -172,8 +172,21 @@ function imageRunner(mode: (c: Ctx) => ImageMode): Runner {
     const maskA = c.inputs('mask')[0];
     const maskFile = maskA ? await ensureInput(maskA) : undefined;
 
-    const { w, h } = typeof p.aspect === 'string' && (m === 't2i' || m === 'krea2control' || m === 'identity' || m === 'animactrl')
+    let { w, h } = typeof p.aspect === 'string' && (m === 't2i' || m === 'r2i' || m === 'krea2control' || m === 'identity' || m === 'animactrl')
       ? (p.size_mode === 'wh' ? sizeCustom(num(p.width, 1024), num(p.height, 1024)) : sizeFrom(String(p.aspect), num(p.megapixels, 1))) : { w: 0, h: 0 };
+    // Moss I2I / inpaint work at the source's own size (multiple of 16)
+    if (family === 'moss' && (m === 'i2i' || m === 'inpaint') && imgs[0]) { const bm = await loadBitmap(imgs[0]); ({ w, h } = sizeCustom(bm.width, bm.height)); }
+    // Moss R2I: the boxes were drawn on the card's own canvas; scale them to the size that is rendered
+    let mossBoxes: MossBox[] = [];
+    let mossChars = '';
+    if (m === 'r2i') {
+      const card = c.inputs('layout').map((a) => { try { return JSON.parse(a.text ?? ''); } catch { return null; } }).find((j) => j?.kind === 'mossboxes');
+      if (!card) throw new Error('Wire a Moss Boxes card into this card (R2I)');
+      let raw: MossBox[] = []; try { raw = JSON.parse(String(card.boxes || '[]')); } catch { throw new Error('Moss Boxes card: the boxes JSON is not valid'); }
+      const sx = w / Math.max(16, num(card.width, 1024)), sy = h / Math.max(16, num(card.height, 1024));
+      mossBoxes = raw.map((b) => ({ ...b, x: Math.round(b.x * sx), y: Math.round(b.y * sy), width: Math.round(b.width * sx), height: Math.round(b.height * sy) }));
+      mossChars = String(card.characters ?? '');
+    }
     const lora = (n: string, s: string) => ({ name: str(p[n], 'none'), strength: num(p[s], 1) });
 
     const job: ImageJob = {
@@ -193,8 +206,14 @@ function imageRunner(mode: (c: Ctx) => ImageMode): Runner {
       identity: { lora: str(p.id_lora, 'none'), strength: num(p.id_strength, 1), fit: str(p.id_fit, 'fit'), refBoost: num(p.id_boost, 1), groundingPx: num(p.id_ground, 768), width: w || 1024, height: h || 1024 },
       anima: { type: str(p.an_type, 'anycontrol') as 'anycontrol', patch: str(p.an_patch, 'none'), strength: num(p.an_strength, 1), start: num(p.an_start, 0), end: num(p.an_end, 1), depthCkpt: '', resolution: num(p.an_res, 512) },
       face: { detector: str(p.fr_detector, 'none'), threshold: num(p.fr_threshold, 0.5), dilation: num(p.fr_dilation, 4), context: num(p.fr_context, 1.8), size: num(p.fr_size, 1024) },
+      moss: { slg: !!p.slg, boxes: mossBoxes, characters: mossChars },
     };
     if ((m === 't2i' || m === 'edit' || m === 'i2i' || m === 'inpaint' || m === 'outpaint') && !job.prompt && m !== 'outpaint') throw new Error('Prompt is empty');
+    if (p.auto_enhance && job.prompt && m !== 'outpaint' && m !== 'removebg') {
+      c.progress(1, 'enhancing prompt…');
+      const style = { ...formatFor(c.def.id, c.engineId), aesthetic: NO_AESTHETIC, extra_instructions: '' };
+      job.prompt = (await runLlm({ system: '', prompt: job.prompt, style, where: 'bottom' })) || job.prompt;
+    }
     const built = await buildImageGraph(job);
     c.progress(2, built.hint);
     return runGraph(c, built.graph);
@@ -346,7 +365,7 @@ const RUNNERS: Record<string, Runner> = {
   },
 
   // ---- image generation
-  'image-generate': imageRunner(() => 't2i'),
+  'image-generate': imageRunner((c) => (c.engineId === 'moss-r2i' ? 'r2i' : 't2i')),
   'camera-angle': (c) => {
     const h = num(c.p.angle_h), v = num(c.p.angle_v), z = num(c.p.angle_zoom, 4); const ha = ((h % 360) + 360) % 360;
     const hDir = ha < 22.5 || ha >= 337.5 ? 'front view' : ha < 67.5 ? 'front-right quarter view' : ha < 112.5 ? 'right side view' : ha < 157.5 ? 'back-right quarter view' : ha < 202.5 ? 'back view' : ha < 247.5 ? 'back-left quarter view' : ha < 292.5 ? 'left side view' : 'front-left quarter view';

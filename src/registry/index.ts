@@ -34,6 +34,8 @@ const loras = (fam: string): ParamDef[] => [
   slider('lora2_strength', 'LoRA 2 strength', 0, 2, 0.05, 1, { advanced: true, when: (p) => p.lora2 !== 'none' }),
 ];
 
+/** run the prompt through Prompt Enhance (the model's own phrasing) right before generating */
+const autoEnhance = toggle('auto_enhance', 'Auto enhance prompt (before generating)', false);
 const negative = text('negative', 'Negative prompt', '', true, { advanced: true });
 
 /** Image size: aspect ratio + megapixels, or an exact width x height (snapped to a multiple of 16 at run time). */
@@ -45,23 +47,27 @@ const sizeParams = (on: boolean): ParamDef[] => (on ? [
 
 const krea2 = (id: string, label: string, extra: ParamDef[] = [], size = false): EngineDef => ({
   id, label, family: 'krea2',
-  params: [...sizeParams(size), ...extra, ...sampler(8, 1, 'euler'), negative, ...loras('krea2'), num('batch', 'Batch', 1, { advanced: true }, 1, 4, 1), seed],
+  params: [...sizeParams(size), ...extra, autoEnhance, ...sampler(8, 1, 'euler'), negative, ...loras('krea2'), num('batch', 'Batch', 1, { advanced: true }, 1, 4, 1), seed],
 });
 const anima = (id: string, label: string, extra: ParamDef[] = [], size = false): EngineDef => ({
   id, label, family: 'anima',
-  params: [...sizeParams(size), ...extra, ...sampler(30, 4, 'euler'), negative, ...loras('anima'), num('batch', 'Batch', 1, { advanced: true }, 1, 4, 1), seed],
+  params: [...sizeParams(size), ...extra, autoEnhance, ...sampler(30, 4, 'euler'), negative, ...loras('anima'), num('batch', 'Batch', 1, { advanced: true }, 1, 4, 1), seed],
 });
 const qwen = (id: string, label: string, extra: ParamDef[] = [], size = false): EngineDef => ({
   id, label, family: 'qwen',
-  params: [...sizeParams(size), ...extra, ...sampler(20, 4, 'euler'), negative, ...loras('qwen'), num('batch', 'Batch', 1, { advanced: true }, 1, 4, 1), seed],
+  params: [...sizeParams(size), ...extra, autoEnhance, ...sampler(20, 4, 'euler'), negative, ...loras('qwen'), num('batch', 'Batch', 1, { advanced: true }, 1, 4, 1), seed],
 });
 const qwen21 = (id: string, label: string, extra: ParamDef[] = [], size = false): EngineDef => ({
   id, label, family: 'qwen21',
-  params: [...sizeParams(size), ...extra, ...sampler(20, 1, 'euler'), negative, ...loras('qwen21'), num('batch', 'Batch', 1, { advanced: true }, 1, 4, 1), seed],
+  params: [...sizeParams(size), ...extra, autoEnhance, ...sampler(20, 1, 'euler'), negative, ...loras('qwen21'), num('batch', 'Batch', 1, { advanced: true }, 1, 4, 1), seed],
+});
+const moss = (id: string, label: string, extra: ParamDef[] = [], size = false): EngineDef => ({
+  id, label, family: 'moss',
+  params: [...sizeParams(size), ...extra, autoEnhance, ...sampler(25, 2.5, 'er_sde'), { ...negative, default: 'nsfw, worst quality, bad anatomy, watermark, jpeg artifact' }, toggle('slg', 'Skip layer guidance (layer 22)', false, { advanced: true }), ...loras('moss'), num('batch', 'Batch', 1, { advanced: true }, 1, 4, 1), seed],
 });
 const sdxl = (id: string, label: string, extra: ParamDef[] = [], size = false): EngineDef => ({
   id, label, family: 'sdxl',
-  params: [...sizeParams(size), ...extra, ...sampler(20, 7, 'euler_ancestral', 'karras'), { ...negative, default: 'low quality, blurry, deformed, watermark' }, ...loras('sdxl'), num('batch', 'Batch', 1, { advanced: true }, 1, 4, 1), seed],
+  params: [...sizeParams(size), ...extra, autoEnhance, ...sampler(20, 7, 'euler_ancestral', 'karras'), { ...negative, default: 'low quality, blurry, deformed, watermark' }, ...loras('sdxl'), num('batch', 'Batch', 1, { advanced: true }, 1, 4, 1), seed],
 });
 
 // The H3 node keeps only the basics. Turbo / 7+1 hi-res, speed & attention, Audio Lock and LoRAs are separate cards
@@ -76,11 +82,11 @@ const h3Params = (ref: boolean): ParamDef[] => [
 
 const klein = (id: string, label: string, extra: ParamDef[] = [], size = false): EngineDef => ({
   id, label, family: 'klein',
-  params: [...sizeParams(size), ...extra, ...sampler(4, 1, 'euler'), negative, ...loras('klein'), num('batch', 'Batch', 1, { advanced: true }, 1, 4, 1), seed],
+  params: [...sizeParams(size), ...extra, autoEnhance, ...sampler(4, 1, 'euler'), negative, ...loras('klein'), num('batch', 'Batch', 1, { advanced: true }, 1, 4, 1), seed],
 });
 const zimage = (id: string, label: string, extra: ParamDef[] = [], size = false): EngineDef => ({
   id, label, family: 'zimage',
-  params: [...sizeParams(size), ...extra, ...sampler(8, 1, 'euler'), negative, ...loras('zimage'), num('batch', 'Batch', 1, { advanced: true }, 1, 4, 1), seed],
+  params: [...sizeParams(size), ...extra, autoEnhance, ...sampler(8, 1, 'euler'), negative, ...loras('zimage'), num('batch', 'Batch', 1, { advanced: true }, 1, 4, 1), seed],
 });
 
 // ---------------------------------------------------------------- ports
@@ -124,7 +130,7 @@ export const REGISTRY: NodeDef[] = [
 
   // ============================================================ Image generation
   { id: 'image-generate', title: 'Image Generate', category: 'Image', kind: 'generate',
-    inputs: [P.textIn(), P.loraIn(), P.seedIn()], outputs: [P.imgOut()], params: [],
+    inputs: [P.textIn(), P.loraIn(), { id: 'layout', label: 'Moss boxes card (R2I)', type: 'pipe', optional: true }, P.seedIn()], outputs: [P.imgOut()], params: [],
     engines: [
       krea2('krea2', 'Krea 2 (local)', [], true),
       qwen21('qwen21', 'Qwen Image 2.1 (local)', [], true),
@@ -133,6 +139,8 @@ export const REGISTRY: NodeDef[] = [
       qwen('qwen', 'Qwen Image Edit 2511 (local)', [], true),
       anima('anima', 'Anima (local)', [], true),
       sdxl('sdxl', 'SDXL (local)', [], true),
+      moss('moss', 'Moss Image — T2I (local)', [], true),
+      moss('moss-r2i', 'Moss Image — R2I bboxes (local, wire a Moss Boxes card)', [], true),
     ], description: 'Text to image on your own ComfyUI.' },
   { id: 'image-edit', title: 'Image Edit', category: 'Image', kind: 'generate',
     inputs: [P.textIn(), P.imgIn('image', 'Images', false, true), P.loraIn(), P.seedIn()], outputs: [P.imgOut()], params: [],
@@ -145,6 +153,7 @@ export const REGISTRY: NodeDef[] = [
       krea2('krea2-i2i', 'Krea 2 — img2img (local)', [slider('denoise', 'Denoise', 0.05, 1, 0.05, 0.75)]),
       anima('anima-i2i', 'Anima — img2img (local)', [slider('denoise', 'Denoise', 0.05, 1, 0.05, 0.75)]),
       sdxl('sdxl-i2i', 'SDXL — img2img (local)', [slider('denoise', 'Denoise', 0.05, 1, 0.05, 0.6)]),
+      moss('moss-i2i', 'Moss Image — I2I (local)', [slider('denoise', 'Denoise', 0.05, 1, 0.05, 0.6)]),
     ], description: 'Edit or restyle images. The first image sets the output size.' },
   { id: 'controlnet', title: 'ControlNet Generate (Z-Image)', category: 'Image', kind: 'generate',
     inputs: [P.textIn(), P.imgIn('image', 'Control image'), P.loraIn(), P.seedIn()], outputs: [P.imgOut()], params: [],
@@ -177,6 +186,7 @@ export const REGISTRY: NodeDef[] = [
       klein('klein', 'Flux.2 Klein (local)', [slider('denoise', 'Denoise', 0.05, 1, 0.05, 1)]),
       sdxl('sdxl', 'SDXL (local)', [slider('denoise', 'Denoise', 0.05, 1, 0.05, 0.85)]),
       qwen('qwen', 'Qwen Image Edit 2511 (local)', [slider('denoise', 'Denoise', 0.05, 1, 0.05, 0.85)]),
+      moss('moss', 'Moss Image (local)', [slider('denoise', 'Denoise', 0.05, 1, 0.05, 1)]),
     ], description: 'Repaint the white area of a mask.' },
   { id: 'outpaint', title: 'Outpaint', category: 'Image', kind: 'generate',
     inputs: [P.textIn('prompt', 'Prompt', true), P.imgIn(), P.loraIn(), P.seedIn()], outputs: [P.imgOut()], params: [],
@@ -259,6 +269,12 @@ export const REGISTRY: NodeDef[] = [
       toggle('hires', '7+1 hi-res finish (7 steps small → upscale → 1 step big)', true, { when: (p) => p.turbo === 'pdd' }),
       slider('hires_start_mp', 'Start size (MP)', 0.2, 1, 0.05, 0.5, { when: (p) => p.turbo === 'pdd' && !!p.hires }), slider('hires_final_mp', 'Final size (MP)', 0.4, 3, 0.05, 0.9, { when: (p) => p.turbo === 'pdd' && !!p.hires }),
     ], description: 'H3 speed-up: Turbo LoRA and the 7+1 hi-res finish. Wire into Video Generate → H3 option cards.' },
+  { id: 'moss-bboxes', title: 'Moss Boxes (R2I)', category: 'Cards', kind: 'source', inputs: [P.imgIn('image', 'Background (optional)', true)], outputs: [{ id: 'card', label: 'Boxes', type: 'pipe' }],
+    params: [
+      num('width', 'Canvas width (px)', 1024, {}, 256, 4096, 16), num('height', 'Canvas height (px)', 1024, {}, 256, 4096, 16),
+      text('characters', 'Characters (box numbers, e.g. 1, 3)', ''),
+      text('boxes', 'Boxes (JSON — edit with "Edit boxes")', '[]', true, { advanced: true }),
+    ], description: 'Draw boxes on a canvas: each is an OBJECT or exact TEXT. Wire into Image Generate → Moss Image R2I. Draw the background first, foreground last.' },
   { id: 'h3-speed', title: 'H3 Speed & Attention', category: 'Cards', kind: 'source', inputs: [], outputs: [{ id: 'card', label: 'Speed', type: 'pipe' }],
     params: [
       sel('attn_backend', 'Attention backend', ['none', 'ck', 'sage', 'solattn_kijai', 'sla'], 'none'), sel('attn_forward', 'Attention forward patch', ['none', 'memeff_sage', 'solattn_sag'], 'none'),

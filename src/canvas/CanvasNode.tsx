@@ -297,6 +297,8 @@ export const CanvasNode = memo(function CanvasNode(props: NodeProps) {
   return isHost ? <HostCard id={props.id} selected={props.selected} /> : <PlainNode {...props} />;
 });
 
+const boxCount = (s: unknown): number => { try { const j = JSON.parse(String(s || '[]')); return Array.isArray(j) ? j.length : 0; } catch { return 0; } };
+
 const PlainNode = memo(function PlainNode({ id, selected }: NodeProps) {
   const node = useGraph((s) => s.nodes.find((n) => n.id === id));
   const rt = useGraph((s) => s.runtime[id]);
@@ -304,6 +306,7 @@ const PlainNode = memo(function PlainNode({ id, selected }: NodeProps) {
   const setEngine = useGraph((s) => s.setEngine);
   const setTitle = useGraph((s) => s.setTitle);
   const openPainter = useGraph((s) => s.openPainter);
+  const openBoxEditor = useGraph((s) => s.openBoxEditor);
   const llmBackend = useSettings((s) => s.llm.backend);
   const [adv, setAdv] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -375,6 +378,7 @@ const PlainNode = memo(function PlainNode({ id, selected }: NodeProps) {
       {def.id === 'asset-library' && <AssetLibBody id={id} />}
       {def.id === 'face-refine' && <FacePickBody id={id} />}
       {def.id === 'painter' && <button className="btn nodrag open-painter" onClick={() => openPainter(id)}>{T('Open painter')}</button>}
+      {def.id === 'moss-bboxes' && <button className="btn nodrag open-painter" onClick={() => openBoxEditor(id)}>{T('Edit boxes')} ({boxCount(node.params.boxes)})</button>}
 
       {running && <div className="bar"><b style={{ width: `${Math.max(4, rt!.pct)}%` }} /><em>{rt!.label ?? `${rt!.pct}%`}</em></div>}
       {rt?.status === 'error' && <div className="error">{rt.error}</div>}

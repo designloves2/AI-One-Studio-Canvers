@@ -143,6 +143,7 @@ export const EXTRA_RUNNERS: Record<string, Runner> = {
   },
   'h3-turbo': async (c) => [textAsset(JSON.stringify({ kind: 'turbo', ...c.p }), 'card')],
   'h3-speed': async (c) => [textAsset(JSON.stringify({ kind: 'speed', ...c.p }), 'card')],
+  'moss-bboxes': async (c) => [textAsset(JSON.stringify({ kind: 'mossboxes', ...c.p }), 'card')],
   'h3-audiolock': async (c) => {
     const a = need(c.inputs('audio')[0], 'Audio');
     return [textAsset(JSON.stringify({ kind: 'lock', file: await ensureInput(a), mode: str(c.p.lock_mode, 'lock'), strength: num(c.p.lock_strength, 0.5), fit: str(c.p.lock_fit, 'pad_silence') }), 'card')];

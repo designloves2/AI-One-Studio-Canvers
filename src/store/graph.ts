@@ -44,6 +44,9 @@ interface State {
   panel: PanelId;
   viewer: { nodeId: string } | null;
   painter: string | null;
+  /** Moss Boxes card whose box editor is open */
+  boxEditor: string | null;
+  openBoxEditor(nodeId: string | null): void;
   melody: string | null;
   assetPicker: string | null;
   facePicker: string | null;
@@ -122,7 +125,7 @@ export const useGraph = create<State>((set, get) => ({
   canvasFile: null,
   dirty: false,
   nodes: [], edges: [], runtime: {}, selected: [], past: [], future: [],
-  mode: readMode(), panel: null, viewer: null, painter: null, melody: null, assetPicker: null, facePicker: null, fitTick: 0,
+  mode: readMode(), panel: null, viewer: null, painter: null, boxEditor: null, melody: null, assetPicker: null, facePicker: null, fitTick: 0,
   composerRuns: readRuns(),
 
   setMode: (mode) => { try { localStorage.setItem(MODE_KEY, mode); } catch { /* ignore */ } set({ mode, ...(mode === 'simple' && (get().panel === 'decks' || get().panel === 'nodes') ? { panel: null } : {}) }); },
@@ -276,6 +279,7 @@ export const useGraph = create<State>((set, get) => ({
 
   openViewer: (nodeId) => set({ viewer: nodeId ? { nodeId } : null }),
   openPainter: (nodeId) => set({ painter: nodeId }),
+  openBoxEditor: (nodeId) => set({ boxEditor: nodeId }),
   openMelody: (nodeId) => set({ melody: nodeId }),
   openAssetPicker: (nodeId) => set({ assetPicker: nodeId }),
   openFacePicker: (nodeId) => set({ facePicker: nodeId }),

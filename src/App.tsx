@@ -5,6 +5,7 @@ import { Flow } from './canvas/Flow';
 import { NodeMenu } from './canvas/NodeMenu';
 import { Viewer } from './canvas/Viewer';
 import { Painter } from './canvas/Painter';
+import { BoxEditor } from './canvas/BoxEditor';
 import { MelodyEditor } from './canvas/MelodyEditor';
 import { AssetPicker, FacePicker } from './canvas/Pickers';
 import { NodesPanel } from './panels/NodesPanel';
@@ -244,6 +245,7 @@ export function App() {
       {menu && <NodeMenu at={menu} flow={menu.flow} pending={menu.pending} onClose={() => setMenu(null)} />}
       <Viewer />
       <Painter />
+      <BoxEditor />
       <MelodyEditor />
       <AssetPicker />
       <FacePicker />

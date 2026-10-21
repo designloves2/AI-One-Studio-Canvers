@@ -8,7 +8,7 @@ import { handleCanvases } from './server-lib/canvases.mjs';
 // Dev: the browser talks to this server only; ComfyUI (+ the STUDIO_ONE routes) is proxied,
 // so there are no CORS problems. Override the target with COMFY_URL.
 const target = process.env.COMFY_URL ?? 'http://127.0.0.1:8188';
-const proxied = ['/prompt', '/history', '/queue', '/upload', '/view', '/object_info', '/system_stats', '/interrupt', '/free', '/flux_klein', '/z_image_turbo', '/krea2_one', '/sdxl_one', '/qwen2511_one', '/qwenimage21_one', '/anima_one', '/minimax_h3_one', '/ltx25_one', '/music_one', '/tj_studio_one', '/tj_shared', '/shared', '/tj_node', '/itda_studio_one', '/extensions', '/api', '/internal', '/userdata', '/models', '/embeddings', '/custom_nodes'];
+const proxied = ['/prompt', '/history', '/queue', '/upload', '/view', '/object_info', '/system_stats', '/interrupt', '/free', '/flux_klein', '/z_image_turbo', '/krea2_one', '/sdxl_one', '/qwen2511_one', '/qwenimage21_one', '/anima_one', '/moss_one', '/minimax_h3_one', '/ltx25_one', '/music_one', '/tj_studio_one', '/tj_shared', '/shared', '/tj_node', '/itda_studio_one', '/extensions', '/api', '/internal', '/userdata', '/models', '/embeddings', '/custom_nodes'];
 
 // ComfyUI refuses requests whose Origin host differs from its own Host (loopback origin check),
 // so the proxy presents ComfyUI's own origin instead of the dev server's.
