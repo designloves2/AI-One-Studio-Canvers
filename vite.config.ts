@@ -15,7 +15,7 @@ const proxied = ['/prompt', '/history', '/queue', '/upload', '/view', '/object_i
 const common = {
   target, changeOrigin: true,
   configure: (proxy: any) => {
-    const fix = (req: any) => { try { req.setHeader('origin', target); } catch { /* headers already sent */ } };
+    const fix = (req: any) => { try { req.setHeader('origin', target); if (req.getHeader('referer')) req.setHeader('referer', target + '/'); } catch { /* headers already sent */ } };
     proxy.on('proxyReq', fix); proxy.on('proxyReqWs', fix);
   },
 };

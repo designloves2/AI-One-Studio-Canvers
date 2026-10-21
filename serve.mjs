@@ -24,7 +24,7 @@ const server = http.createServer(async (req, res) => {
   if (await handleDownloads(req, res)) return;
   if (await handleCanvases(req, res)) return;
   if (isProxied(p)) {
-    const up = http.request({ host: target.hostname, port: target.port || 80, path: req.url, method: req.method, headers: { ...req.headers, host: target.host, ...(req.headers.origin ? { origin: target.origin } : {}) } }, (r) => {
+    const up = http.request({ host: target.hostname, port: target.port || 80, path: req.url, method: req.method, headers: { ...req.headers, host: target.host, ...(req.headers.origin ? { origin: target.origin } : {}), ...(req.headers.referer ? { referer: target.origin + '/' } : {}) } }, (r) => {
       res.writeHead(r.statusCode ?? 502, r.headers); r.pipe(res);
     });
     up.on('error', (e) => { res.writeHead(502, { 'content-type': 'application/json' }); res.end(JSON.stringify({ error: `ComfyUI unreachable at ${target.origin}: ${e.message}` })); });
@@ -39,7 +39,7 @@ const server = http.createServer(async (req, res) => {
 // WebSocket: tunnel the raw upgrade to ComfyUI
 server.on('upgrade', (req, socket, head) => {
   const up = net.connect(Number(target.port || 80), target.hostname, () => {
-    up.write(`${req.method} ${req.url} HTTP/1.1\r\n` + Object.entries({ ...req.headers, host: target.host, ...(req.headers.origin ? { origin: target.origin } : {}) }).map(([k, v]) => `${k}: ${v}`).join('\r\n') + '\r\n\r\n');
+    up.write(`${req.method} ${req.url} HTTP/1.1\r\n` + Object.entries({ ...req.headers, host: target.host, ...(req.headers.origin ? { origin: target.origin } : {}), ...(req.headers.referer ? { referer: target.origin + '/' } : {}) }).map(([k, v]) => `${k}: ${v}`).join('\r\n') + '\r\n\r\n');
     if (head?.length) up.write(head);
     socket.pipe(up).pipe(socket);
   });

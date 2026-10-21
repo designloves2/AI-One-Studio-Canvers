@@ -2,6 +2,11 @@
 
 형식: 버전 · 날짜 / 추가 · 변경 · 수정. 버전은 `package.json`, `mcp/server.ts`와 같습니다.
 
+## 2.10.2 — 2026-10-22
+
+### 수정
+- **에셋 라이브러리 403**: ComfyUI(TJ_NODE)는 `Referer` 호스트가 자기 주소와 다르면 `403 Cross-origin requests are not allowed` 를 돌려줍니다. 프록시(`vite.config.ts`, `serve.mjs`)가 `Origin` 만 바꾸고 `Referer` 는 그대로 보내 `/tj_node/reflib/assets` 가 막혔습니다. 이제 `Referer` 도 ComfyUI 주소로 바꿔 보냅니다.
+
 ## 2.10.1 — 2026-10-22
 
 ### 변경
