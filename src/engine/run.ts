@@ -238,7 +238,7 @@ async function previewOf(c: Ctx, tiny: 'taeh3' | 'taeltx2_3'): Promise<PreviewCf
   // 'auto': the tiny decoder of the model family (without one the video latent has no colour preview)
   const have = await loadOptions('tinyvaes');
   const auto = have.find((x) => x.startsWith(tiny)) ?? 'none';
-  return j ? { key: `cvprev_${c.node.id}`, maxResolution: num(j.max_resolution, 512), quality: num(j.jpeg_quality, 85), frames: num(j.preview_frames, 8), fps: num(j.preview_fps, 12), tinyVae: str(j.tiny_vae, 'auto') === 'auto' ? auto : str(j.tiny_vae, 'none'), audio: !!j.with_audio } : undefined;
+  return j ? { key: `cvprev_${c.node.id}`, maxResolution: num(j.max_resolution, 1024), quality: num(j.jpeg_quality, 85), frames: num(j.preview_frames, 243), fps: num(j.preview_fps, 12), tinyVae: str(j.tiny_vae, 'auto') === 'auto' ? auto : str(j.tiny_vae, 'none'), audio: !!j.with_audio } : undefined;
 }
 
 /** Auto Prompt: the written prompt goes back into the Prompt card wired to this card (when there is one). */

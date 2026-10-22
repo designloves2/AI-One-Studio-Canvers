@@ -2870,9 +2870,9 @@ var init_registry = __esm({
         inputs: [{ id: "video", label: "Video Generate \u2192 Live preview", type: "pipe", optional: true }],
         outputs: [],
         params: [
-          num("max_resolution", "Preview max size (px, 0 = full)", 512, { advanced: true }, 0, 8192, 8),
+          num("max_resolution", "Preview max size (px, 0 = full)", 1024, { advanced: true }, 0, 8192, 8),
           num("jpeg_quality", "JPEG quality", 85, { advanced: true }, 30, 100, 1),
-          num("preview_frames", "Frames per preview (1 = still)", 8, { advanced: true }, 1, 1024, 1),
+          num("preview_frames", "Frames per preview (1 = still)", 243, { advanced: true }, 1, 1024, 1),
           num("preview_fps", "Preview FPS", 12, { advanced: true }, 1, 60, 1),
           dyn("tiny_vae", "Tiny VAE (auto = the one of the model)", "tinyvaes+auto", "auto", { advanced: true }),
           toggle("with_audio", "Preview with audio (H3: decodes the audio each step)", false, { advanced: true })
@@ -7977,7 +7977,7 @@ async function previewOf(c, tiny) {
   }
   const have = await loadOptions("tinyvaes");
   const auto = have.find((x) => x.startsWith(tiny)) ?? "none";
-  return j ? { key: `cvprev_${c.node.id}`, maxResolution: num2(j.max_resolution, 512), quality: num2(j.jpeg_quality, 85), frames: num2(j.preview_frames, 8), fps: num2(j.preview_fps, 12), tinyVae: str(j.tiny_vae, "auto") === "auto" ? auto : str(j.tiny_vae, "none"), audio: !!j.with_audio } : void 0;
+  return j ? { key: `cvprev_${c.node.id}`, maxResolution: num2(j.max_resolution, 1024), quality: num2(j.jpeg_quality, 85), frames: num2(j.preview_frames, 243), fps: num2(j.preview_fps, 12), tinyVae: str(j.tiny_vae, "auto") === "auto" ? auto : str(j.tiny_vae, "none"), audio: !!j.with_audio } : void 0;
 }
 async function putIntoPromptCard(c, text3) {
   try {
@@ -8541,7 +8541,7 @@ var send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 async function handle(msg) {
   const { id, method, params } = msg;
   try {
-    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.22.1" } } });
+    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.22.2" } } });
     if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS.map(({ run: _r, ...t2 }) => t2) } });
     if (method === "tools/call") {
       const tool = TOOLS.find((t2) => t2.name === params?.name);

@@ -282,8 +282,8 @@ export const REGISTRY: NodeDef[] = [
     ], description: 'Draw boxes on a canvas: each is an OBJECT or exact TEXT. Wire into Image Generate → Moss Image R2I. Draw the background first, foreground last.' },
   { id: 'video-preview', title: 'Generation Video Preview (live)', category: 'Cards', kind: 'source', inputs: [{ id: 'video', label: 'Video Generate → Live preview', type: 'pipe', optional: true }], outputs: [],
     params: [
-      num('max_resolution', 'Preview max size (px, 0 = full)', 512, { advanced: true }, 0, 8192, 8), num('jpeg_quality', 'JPEG quality', 85, { advanced: true }, 30, 100, 1),
-      num('preview_frames', 'Frames per preview (1 = still)', 8, { advanced: true }, 1, 1024, 1), num('preview_fps', 'Preview FPS', 12, { advanced: true }, 1, 60, 1),
+      num('max_resolution', 'Preview max size (px, 0 = full)', 1024, { advanced: true }, 0, 8192, 8), num('jpeg_quality', 'JPEG quality', 85, { advanced: true }, 30, 100, 1),
+      num('preview_frames', 'Frames per preview (1 = still)', 243, { advanced: true }, 1, 1024, 1), num('preview_fps', 'Preview FPS', 12, { advanced: true }, 1, 60, 1),
       dyn('tiny_vae', 'Tiny VAE (auto = the one of the model)', 'tinyvaes+auto', 'auto', { advanced: true }), toggle('with_audio', 'Preview with audio (H3: decodes the audio each step)', false, { advanced: true }),
     ], description: 'Shows the video while it is being generated. Put it below a Video Generate card and wire the Live preview output of that card into it.' },
   { id: 'h3-speed', title: 'H3 Speed & Attention', category: 'Cards', kind: 'source', inputs: [], outputs: [{ id: 'card', label: 'Speed', type: 'pipe' }],

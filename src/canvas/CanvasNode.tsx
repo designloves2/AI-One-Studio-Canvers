@@ -299,7 +299,11 @@ export const CanvasNode = memo(function CanvasNode(props: NodeProps) {
 
 /** the live preview: an animated clip (video/mp4) while a video is being sampled, a still image otherwise */
 function PreviewMedia({ src, className }: { src: string; className: string }) {
-  return src.startsWith('data:video') ? <video className={className} src={src} autoPlay loop muted playsInline /> : <img className={className} src={src} alt="" />;
+  // click = play / pause; the frames keep arriving as new clips, so the choice is kept across them
+  const [paused, setPaused] = useState(false);
+  if (!src.startsWith('data:video')) return <img className={className} src={src} alt="" />;
+  return <video className={className} src={src} autoPlay={!paused} loop muted playsInline title={paused ? 'Play' : 'Pause'} style={{ cursor: 'pointer' }}
+    onClick={(e) => { const v = e.currentTarget; if (v.paused) { void v.play(); setPaused(false); } else { v.pause(); setPaused(true); } }} />;
 }
 
 const boxCount = (s: unknown): number => { try { const j = JSON.parse(String(s || '[]')); return Array.isArray(j) ? j.length : 0; } catch { return 0; } };
