@@ -2344,6 +2344,789 @@ var init_settings = __esm({
   }
 });
 
+// src/registry/index.ts
+function paramsFor(def, engineId) {
+  const eng = engineFor(def, engineId);
+  return eng?.params ?? def.params;
+}
+function engineFor(def, engineId) {
+  return def.engines?.find((e) => e.id === engineId) ?? def.engines?.find((e) => e.default) ?? def.engines?.[0];
+}
+function defaultParams(def, engineId) {
+  const out = {};
+  for (const p of paramsFor(def, engineId)) out[p.id] = p.default;
+  return out;
+}
+function compatible(a, b) {
+  if (a === b || a === "any" || b === "any") return true;
+  const imageLike = (t2) => t2 === "image" || t2 === "mask";
+  return imageLike(a) && imageLike(b);
+}
+var sel, dyn, slider, num, text, toggle, ASPECTS, aspect, seed, megapixels, sampler, loras, autoEnhance, negative, sizeParams, krea2, anima, qwen, qwen21, moss, sdxl, h3Params, klein, zimage, P, edit, REGISTRY, byId;
+var init_registry = __esm({
+  "src/registry/index.ts"() {
+    "use strict";
+    sel = (id, label, options, def, extra = {}) => ({ id, label, control: { kind: "select", options }, default: def, ...extra });
+    dyn = (id, label, source, def = "none", extra = {}) => ({ id, label, control: { kind: "select", options: [def], source }, default: def, ...extra });
+    slider = (id, label, min, max, step, def, extra = {}) => ({ id, label, control: { kind: "slider", min, max, step }, default: def, ...extra });
+    num = (id, label, def, extra = {}, min, max, step) => ({ id, label, control: { kind: "number", min, max, step }, default: def, ...extra });
+    text = (id, label, def = "", multiline = false, extra = {}) => ({ id, label, control: { kind: "text", multiline }, default: def, ...extra });
+    toggle = (id, label, def = false, extra = {}) => ({ id, label, control: { kind: "toggle" }, default: def, ...extra });
+    ASPECTS = ["1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "21:9"];
+    aspect = (def = "1:1") => sel("aspect", "Aspect ratio", ASPECTS, def);
+    seed = { id: "seed", label: "Seed", control: { kind: "seed" }, default: -1, advanced: true };
+    megapixels = (def = 1) => slider("megapixels", "Size (MP)", 0.25, 4, 0.25, def);
+    sampler = (steps, cfg, smp, sch = "simple") => [
+      slider("steps", "Steps", 1, 60, 1, steps, { advanced: true }),
+      slider("cfg", "Guidance", 0, 15, 0.1, cfg, { advanced: true }),
+      dyn("sampler", "Sampler", "samplers", smp, { advanced: true }),
+      dyn("scheduler", "Scheduler", "schedulers", sch, { advanced: true })
+    ];
+    loras = (fam) => [
+      dyn("lora1", "LoRA 1", `loras:${fam}`, "none", { advanced: true }),
+      slider("lora1_strength", "LoRA 1 strength", 0, 2, 0.05, 1, { advanced: true, when: (p) => p.lora1 !== "none" }),
+      dyn("lora2", "LoRA 2", `loras:${fam}`, "none", { advanced: true }),
+      slider("lora2_strength", "LoRA 2 strength", 0, 2, 0.05, 1, { advanced: true, when: (p) => p.lora2 !== "none" })
+    ];
+    autoEnhance = toggle("auto_enhance", "Auto enhance prompt (before generating)", false);
+    negative = text("negative", "Negative prompt", "", true, { advanced: true });
+    sizeParams = (on) => on ? [
+      { id: "size_mode", label: "Size", control: { kind: "select", options: ["mp", "wh"], labels: { mp: "Aspect + MP", wh: "Custom W \xD7 H" } }, default: "mp" },
+      { ...aspect(), when: (p) => p.size_mode !== "wh" },
+      { ...megapixels(), when: (p) => p.size_mode !== "wh" },
+      num("width", "Width (px)", 1024, { when: (p) => p.size_mode === "wh" }, 256, 4096, 16),
+      num("height", "Height (px)", 1024, { when: (p) => p.size_mode === "wh" }, 256, 4096, 16)
+    ] : [];
+    krea2 = (id, label, extra = [], size = false) => ({
+      id,
+      label,
+      family: "krea2",
+      params: [...sizeParams(size), ...extra, autoEnhance, ...sampler(8, 1, "euler"), negative, ...loras("krea2"), num("batch", "Batch", 1, { advanced: true }, 1, 4, 1), seed]
+    });
+    anima = (id, label, extra = [], size = false) => ({
+      id,
+      label,
+      family: "anima",
+      params: [...sizeParams(size), ...extra, autoEnhance, ...sampler(30, 4, "euler"), negative, ...loras("anima"), num("batch", "Batch", 1, { advanced: true }, 1, 4, 1), seed]
+    });
+    qwen = (id, label, extra = [], size = false) => ({
+      id,
+      label,
+      family: "qwen",
+      params: [...sizeParams(size), ...extra, autoEnhance, ...sampler(20, 4, "euler"), negative, ...loras("qwen"), num("batch", "Batch", 1, { advanced: true }, 1, 4, 1), seed]
+    });
+    qwen21 = (id, label, extra = [], size = false) => ({
+      id,
+      label,
+      family: "qwen21",
+      params: [...sizeParams(size), ...extra, autoEnhance, ...sampler(20, 1, "euler"), negative, ...loras("qwen21"), num("batch", "Batch", 1, { advanced: true }, 1, 4, 1), seed]
+    });
+    moss = (id, label, extra = [], size = false) => ({
+      id,
+      label,
+      family: "moss",
+      params: [...sizeParams(size), ...extra, autoEnhance, ...sampler(25, 2.5, "er_sde"), { ...negative, default: "nsfw, worst quality, bad anatomy, watermark, jpeg artifact" }, toggle("slg", "Skip layer guidance (layer 22)", false, { advanced: true }), ...loras("moss"), num("batch", "Batch", 1, { advanced: true }, 1, 4, 1), seed]
+    });
+    sdxl = (id, label, extra = [], size = false) => ({
+      id,
+      label,
+      family: "sdxl",
+      params: [...sizeParams(size), ...extra, autoEnhance, ...sampler(20, 7, "euler_ancestral", "karras"), { ...negative, default: "low quality, blurry, deformed, watermark" }, ...loras("sdxl"), num("batch", "Batch", 1, { advanced: true }, 1, 4, 1), seed]
+    });
+    h3Params = (ref) => [
+      sel("aspect", "Aspect ratio", [...ASPECTS, "auto"], "16:9"),
+      megapixels(0.9),
+      slider("seconds", "Clip length (s)", 5.2, 15, 0.5, 8),
+      ...ref ? [] : [sel("continuity", "Several clips (separate prompts with ---)", ["none", "lastframe", "onetake"], "lastframe"), toggle("stitch", "Stitch clips into one video", true)],
+      slider("steps", "Steps (no turbo)", 1, 60, 1, 20, { advanced: true }),
+      dyn("sampler", "Sampler", "samplers", "er_sde", { advanced: true }),
+      dyn("scheduler", "Scheduler", "schedulers", "simple", { advanced: true }),
+      dyn("upscale_model", "Upscale model (after render)", "upscalers", "none", { advanced: true }),
+      toggle("auto_prompt", "Auto Prompt (write the prompt with the LLM before generating)", false),
+      seed
+    ];
+    klein = (id, label, extra = [], size = false) => ({
+      id,
+      label,
+      family: "klein",
+      params: [...sizeParams(size), ...extra, autoEnhance, ...sampler(4, 1, "euler"), negative, ...loras("klein"), num("batch", "Batch", 1, { advanced: true }, 1, 4, 1), seed]
+    });
+    zimage = (id, label, extra = [], size = false) => ({
+      id,
+      label,
+      family: "zimage",
+      params: [...sizeParams(size), ...extra, autoEnhance, ...sampler(8, 1, "euler"), negative, ...loras("zimage"), num("batch", "Batch", 1, { advanced: true }, 1, 4, 1), seed]
+    });
+    P = {
+      textIn: (id = "prompt", label = "Prompt", optional = false) => ({ id, label, type: "text", optional }),
+      textOut: (id = "text", label = "Text") => ({ id, label, type: "text" }),
+      imgIn: (id = "image", label = "Image", optional = false, multi = false) => ({ id, label, type: "image", optional, multi }),
+      imgOut: (id = "image", label = "Image") => ({ id, label, type: "image" }),
+      maskIn: (id = "mask", label = "Mask", optional = false) => ({ id, label, type: "mask", optional }),
+      maskOut: (id = "mask", label = "Mask") => ({ id, label, type: "mask" }),
+      loraIn: () => ({ id: "loras", label: "LoRA cards", type: "lora", optional: true, multi: true }),
+      cardIn: (label = "Option cards") => ({ id: "cards", label, type: "pipe", optional: true, multi: true }),
+      seedIn: () => ({ id: "seed_in", label: "Seed", type: "number", optional: true })
+    };
+    edit = (id, title, params, description, inputs = [P.imgIn()], outputs = [P.imgOut()]) => ({ id, title, category: "Edit", kind: "edit", inputs, outputs, params, description });
+    REGISTRY = [
+      // ============================================================ Text / LLM
+      {
+        id: "prompt",
+        title: "Prompt",
+        category: "Text / LLM",
+        kind: "source",
+        inputs: [{ id: "vars", label: "Add-ons", type: "text", optional: true, multi: true }],
+        outputs: [P.textOut()],
+        params: [text("text", "Prompt", "", true)],
+        description: "Free text. Anything wired into Add-ons is appended."
+      },
+      {
+        id: "concat",
+        title: "Prompt Concatenator",
+        category: "Text / LLM",
+        kind: "source",
+        inputs: [{ id: "texts", label: "Texts", type: "text", multi: true }],
+        outputs: [P.textOut()],
+        params: [text("separator", "Separator", ", ")],
+        description: "Join several texts into one."
+      },
+      {
+        id: "llm-tj",
+        title: "LLM (TJ)",
+        category: "Text / LLM",
+        kind: "llm",
+        inputs: [P.textIn("text", "Text", true), P.imgIn("image", "Image", true)],
+        outputs: [P.textOut()],
+        params: [text("system", "System prompt", "You are a helpful assistant. Answer concisely.", true), text("prompt", "Prompt", "", true), slider("temperature", "Temperature (0 = settings)", 0, 2, 0.05, 0, { advanced: true })],
+        description: "Ask any model. Backend (Local GGUF \xB7 ComfyUI TextGenerate \xB7 OpenRouter \xB7 Connect Custom) is chosen in Settings."
+      },
+      {
+        id: "prompt-enhancer",
+        title: "Prompt Enhancer",
+        category: "Text / LLM",
+        kind: "llm",
+        inputs: [P.textIn("text", "Text"), P.imgIn("image", "Reference images (optional)", true, true)],
+        outputs: [P.textOut()],
+        params: [dyn("fmt", "Write for", "promptformats", "auto"), dyn("aes", "Aesthetic", "promptaesthetics", "None (no aesthetic injection)"), sel("purpose", "For", ["Image", "Video"], "Image"), text("style", "Guidelines", "Rewrite as a rich, detailed generation prompt. Keep the core idea.", true), toggle("english", "Write in English", true, { advanced: true })],
+        description: "Rewrites a short idea into a detailed prompt."
+      },
+      {
+        id: "music-writer",
+        title: "Music Writer (LLM)",
+        category: "Text / LLM",
+        kind: "llm",
+        inputs: [P.textIn("text", "Idea / theme / lyrics")],
+        outputs: [P.textOut()],
+        params: [sel("task", "Write", ["lyrics from theme", "lyrics from title", "enhance lyrics", "style caption \u2014 Ace-Step", "style caption \u2014 MiniMax Music", "style caption \u2014 YuE2", "cover prompt", "song title"], "lyrics from theme")],
+        description: "Uses your LLM and the MusicMaker prompt library to write lyrics, a style caption, a cover prompt or a title. Wire the result into Music Generate."
+      },
+      {
+        id: "image-describer",
+        title: "Image Describer",
+        category: "Text / LLM",
+        kind: "llm",
+        inputs: [P.imgIn()],
+        outputs: [P.textOut()],
+        params: [sel("task", "Describe as", ["Plain description", "Generation prompt", "Booru-style tags", "Pose & anatomy"], "Generation prompt"), text("guidelines", "Extra guidelines", "", true)],
+        description: "Turns an image into text with a vision model."
+      },
+      // ============================================================ Image generation
+      {
+        id: "image-generate",
+        title: "Image Generate",
+        category: "Image",
+        kind: "generate",
+        inputs: [P.textIn(), P.loraIn(), { id: "layout", label: "Moss boxes card (R2I)", type: "pipe", optional: true }, P.seedIn()],
+        outputs: [P.imgOut()],
+        params: [],
+        engines: [
+          { ...krea2("krea2", "Krea 2 (local)", [], true), default: true },
+          qwen21("qwen21", "Qwen Image 2.1 (local)", [], true),
+          zimage("zimage", "Z-Image Turbo (local)", [], true),
+          klein("klein", "Flux.2 Klein (local)", [], true),
+          qwen("qwen", "Qwen Image Edit 2511 (local)", [], true),
+          anima("anima", "Anima (local)", [], true),
+          sdxl("sdxl", "SDXL (local)", [], true),
+          moss("moss", "Moss Image \u2014 T2I (local)", [], true),
+          moss("moss-r2i", "Moss Image \u2014 R2I bboxes (local, wire a Moss Boxes card)", [], true)
+        ],
+        description: "Text to image on your own ComfyUI."
+      },
+      {
+        id: "image-edit",
+        title: "Image Edit",
+        category: "Image",
+        kind: "generate",
+        inputs: [P.textIn(), P.imgIn("image", "Images", false, true), P.loraIn(), P.seedIn()],
+        outputs: [P.imgOut()],
+        params: [],
+        engines: [
+          { ...klein("klein-edit", "Flux.2 Klein \u2014 edit with references (local)"), default: true },
+          qwen21("qwen21-edit", "Qwen Image 2.1 \u2014 up to 10 references (local)"),
+          { ...qwen("qwen-edit", "Qwen Image Edit 2511 \u2014 up to 3 references (local)") },
+          klein("klein-i2i", "Flux.2 Klein \u2014 img2img (local)", [slider("denoise", "Denoise", 0.05, 1, 0.05, 0.75)]),
+          zimage("zimage-i2i", "Z-Image Turbo \u2014 img2img (local)", [slider("denoise", "Denoise", 0.05, 1, 0.05, 0.75)]),
+          krea2("krea2-i2i", "Krea 2 \u2014 img2img (local)", [slider("denoise", "Denoise", 0.05, 1, 0.05, 0.75)]),
+          anima("anima-i2i", "Anima \u2014 img2img (local)", [slider("denoise", "Denoise", 0.05, 1, 0.05, 0.75)]),
+          sdxl("sdxl-i2i", "SDXL \u2014 img2img (local)", [slider("denoise", "Denoise", 0.05, 1, 0.05, 0.6)]),
+          moss("moss-i2i", "Moss Image \u2014 I2I (local)", [slider("denoise", "Denoise", 0.05, 1, 0.05, 0.6)])
+        ],
+        description: "Edit or restyle images. The first image sets the output size."
+      },
+      {
+        id: "controlnet",
+        title: "ControlNet Generate (Z-Image)",
+        category: "Image",
+        kind: "generate",
+        inputs: [P.textIn(), P.imgIn("image", "Control image"), P.loraIn(), P.seedIn()],
+        outputs: [P.imgOut()],
+        params: [],
+        engines: [{ ...zimage("zimage-cn", "Z-Image Turbo Fun ControlNet (local)", [dyn("cn_patch", "ControlNet model", "modelpatches", "none"), dyn("cn_pre", "Preprocessor", "preprocessors", "DepthAnythingPreprocessor"), slider("cn_strength", "Control strength", 0, 2, 0.05, 1), num("cn_res", "Preprocess resolution", 1024, { advanced: true }, 256, 2048, 64)]), default: true }],
+        description: "Generate following the pose / depth / edges of a control image (preprocessor + Z-Image Fun ControlNet)."
+      },
+      {
+        id: "krea2-control",
+        title: "ControlNet Generate (Krea 2)",
+        category: "Image",
+        kind: "generate",
+        inputs: [P.textIn(), P.imgIn("image", "Control image"), P.loraIn(), P.seedIn()],
+        outputs: [P.imgOut()],
+        params: [],
+        engines: [{ ...krea2("krea2-ctrl", "Krea 2 depth / canny control (local)", [sel("kc_type", "Control type", ["depth", "canny"], "depth"), dyn("kc_lora", "Control LoRA", "loras:krea2", "none"), slider("kc_strength", "Control strength", 0, 2, 0.05, 1), num("kc_res", "Preprocess resolution", 512, { advanced: true }, 256, 2048, 64), num("canny_low", "Canny low", 100, { advanced: true, when: (p) => p.kc_type === "canny" }, 0, 255, 1), num("canny_high", "Canny high", 200, { advanced: true, when: (p) => p.kc_type === "canny" }, 0, 255, 1)], true), default: true }],
+        description: "Krea 2 following a depth map or canny edges of a control image (Control LoRA)."
+      },
+      {
+        id: "krea2-identity",
+        title: "Identity Edit (Krea 2)",
+        category: "Image",
+        kind: "generate",
+        inputs: [P.textIn("prompt", "Edit instruction"), P.imgIn("image", "Image (+ optional 2nd)", false, true), P.loraIn(), P.seedIn()],
+        outputs: [P.imgOut()],
+        params: [],
+        engines: [{ ...krea2("krea2-id", "Krea 2 identity edit (local)", [dyn("id_lora", "Identity-edit LoRA", "loras:krea2", "none"), slider("id_strength", "LoRA strength", 0, 2, 0.05, 1), sel("id_fit", "Fit", ["fit", "crop (legacy)"], "fit", { advanced: true }), slider("id_boost", "Reference boost", 0, 3, 0.05, 1, { advanced: true }), num("id_ground", "Grounding px", 768, { advanced: true }, 256, 2048, 64)], true), default: true }],
+        description: "Edit an image by instruction while keeping the subject (Krea 2 identity-edit LoRA). A second image can be a reference."
+      },
+      {
+        id: "anima-control",
+        title: "Control / Inpaint (Anima)",
+        category: "Image",
+        kind: "generate",
+        inputs: [P.textIn(), P.imgIn("image", "Image"), P.maskIn("mask", "Mask (inpaint)", true), P.loraIn(), P.seedIn()],
+        outputs: [P.imgOut()],
+        params: [],
+        engines: [{ ...anima("anima-ctrl", "Anima LLLite control (local)", [sel("an_type", "Mode", ["anycontrol", "depthcontrol", "inpaint"], "anycontrol"), dyn("an_patch", "LLLite model", "modelpatches", "none"), slider("an_strength", "Strength", 0, 2, 0.05, 1), slider("an_start", "Start", 0, 1, 0.05, 0, { advanced: true }), slider("an_end", "End", 0, 1, 0.05, 1, { advanced: true }), num("an_res", "Depth preprocess resolution", 512, { advanced: true, when: (p) => p.an_type === "depthcontrol" }, 256, 2048, 64)], true), default: true }],
+        description: "Anima with LLLite control: any-control, depth-control or inpainting."
+      },
+      {
+        id: "face-redraw",
+        title: "Face Redraw (Z-Image)",
+        category: "Image",
+        kind: "generate",
+        inputs: [P.textIn(), P.imgIn("image", "Portrait"), P.loraIn(), P.seedIn()],
+        outputs: [P.imgOut()],
+        params: [],
+        engines: [{ ...zimage("zimage-fr", "Z-Image Turbo \u2014 face redraw (local)", [dyn("fr_detector", "Face detector", "bboxdetectors", "none"), dyn("cn_patch", "ControlNet model", "modelpatches", "none"), dyn("cn_pre", "Preprocessor", "preprocessors", "DepthAnythingPreprocessor"), slider("cn_strength", "Control strength", 0, 2, 0.05, 1), slider("denoise", "Redraw strength", 0.05, 1, 0.05, 0.55), slider("fr_threshold", "Detect threshold", 0.1, 1, 0.05, 0.5, { advanced: true }), num("fr_dilation", "Mask dilation", 4, { advanced: true }, 0, 64, 1), slider("fr_context", "Context around the face", 1, 4, 0.1, 1.8, { advanced: true }), num("fr_size", "Working size px", 1024, { advanced: true }, 512, 2048, 64), num("cn_res", "Preprocess resolution", 1024, { advanced: true }, 256, 2048, 64)]), default: true }],
+        description: "Detect the face in an image and redraw only that area (with your face LoRA) using ControlNet depth, then paste it back."
+      },
+      {
+        id: "camera-angle",
+        title: "Camera Angle (Qwen)",
+        category: "Image",
+        kind: "generate",
+        inputs: [P.imgIn("image", "Image"), P.textIn("prompt", "Extra prompt (optional)", true), P.loraIn(), P.seedIn()],
+        outputs: [P.imgOut()],
+        params: [],
+        engines: [{ ...qwen("qwen-angle", "Qwen Image Edit 2511 \u2014 multi-angle (local)", [slider("angle_h", "Horizontal angle (\xB0)", 0, 359, 1, 0), slider("angle_v", "Vertical angle (\xB0)", -30, 60, 1, 0), slider("angle_zoom", "Distance (close 0 \u2026 wide 10)", 0, 10, 0.5, 4), dyn("angle_lora", "Angle LoRA", "loras:qwen", "none"), slider("angle_strength", "Angle LoRA strength", 0, 2, 0.05, 1)]), default: true }],
+        description: "View the same subject from another camera angle (needs a multi-angle LoRA)."
+      },
+      {
+        id: "inpaint",
+        title: "Inpaint",
+        category: "Image",
+        kind: "generate",
+        inputs: [P.textIn(), P.imgIn(), P.maskIn(), P.loraIn(), P.seedIn()],
+        outputs: [P.imgOut()],
+        params: [],
+        engines: [
+          { ...zimage("zimage", "Z-Image Turbo (local)", [slider("denoise", "Denoise", 0.05, 1, 0.05, 0.85)]), default: true },
+          klein("klein", "Flux.2 Klein (local)", [slider("denoise", "Denoise", 0.05, 1, 0.05, 1)]),
+          sdxl("sdxl", "SDXL (local)", [slider("denoise", "Denoise", 0.05, 1, 0.05, 0.85)]),
+          qwen("qwen", "Qwen Image Edit 2511 (local)", [slider("denoise", "Denoise", 0.05, 1, 0.05, 0.85)]),
+          moss("moss", "Moss Image (local)", [slider("denoise", "Denoise", 0.05, 1, 0.05, 1)])
+        ],
+        description: "Repaint the white area of a mask."
+      },
+      {
+        id: "outpaint",
+        title: "Outpaint",
+        category: "Image",
+        kind: "generate",
+        inputs: [P.textIn("prompt", "Prompt", true), P.imgIn(), P.loraIn(), P.seedIn()],
+        outputs: [P.imgOut()],
+        params: [],
+        engines: [
+          { ...zimage("zimage", "Z-Image Turbo (local)", [num("left", "Left px", 0, {}, 0, 2048, 64), num("top", "Top px", 0, {}, 0, 2048, 64), num("right", "Right px", 256, {}, 0, 2048, 64), num("bottom", "Bottom px", 0, {}, 0, 2048, 64)]), default: true },
+          klein("klein", "Flux.2 Klein (local, needs KJNodes)", [num("left", "Left px", 0, {}, 0, 2048, 64), num("top", "Top px", 0, {}, 0, 2048, 64), num("right", "Right px", 256, {}, 0, 2048, 64), num("bottom", "Bottom px", 0, {}, 0, 2048, 64)]),
+          sdxl("sdxl", "SDXL (local)", [num("left", "Left px", 0, {}, 0, 2048, 64), num("top", "Top px", 0, {}, 0, 2048, 64), num("right", "Right px", 256, {}, 0, 2048, 64), num("bottom", "Bottom px", 0, {}, 0, 2048, 64)])
+        ],
+        description: "Extend the canvas around an image."
+      },
+      {
+        id: "face-swap",
+        title: "Face Swap",
+        category: "Image",
+        kind: "generate",
+        inputs: [P.textIn("prompt", "Prompt", true), P.imgIn("image", "Target"), P.imgIn("face", "Face source"), P.seedIn()],
+        outputs: [P.imgOut()],
+        params: [],
+        engines: [{ ...klein("klein", "Flux.2 Klein (local)", [slider("denoise", "Denoise", 0.05, 1, 0.05, 1)]), default: true }],
+        description: "Put the face/head of the second image on the first."
+      },
+      {
+        id: "remove-bg",
+        title: "Remove Background",
+        category: "Image",
+        kind: "generate",
+        inputs: [P.imgIn()],
+        outputs: [P.imgOut()],
+        params: [],
+        engines: [{ id: "rmbg", label: "BiRefNet (local)", family: "klein", default: true, params: [dyn("bg_model", "Model", "bgmodels", "birefnet.safetensors")] }],
+        description: "Cut the subject out (transparent PNG)."
+      },
+      {
+        id: "upscale",
+        title: "Upscale",
+        category: "Image",
+        kind: "generate",
+        inputs: [P.imgIn(), P.seedIn()],
+        outputs: [P.imgOut()],
+        params: [],
+        engines: [
+          { id: "seedvr2", label: "SeedVR2 (local)", family: "core", params: [dyn("sv_dit", "DiT model", "seedvr2dit", "none"), dyn("sv_vae", "VAE model", "seedvr2vae", "none"), num("sv_res", "Target resolution (short edge)", 2048, {}, 256, 8192, 64), num("sv_max", "Max resolution", 4096, { advanced: true }, 512, 16384, 64), sel("sv_color", "Colour correction", ["lab", "wavelet", "wavelet_adaptive", "hsv", "adain", "none"], "lab", { advanced: true }), sel("sv_offload", "Offload device", ["cpu", "none"], "cpu", { advanced: true }), num("sv_swap", "Blocks to swap", 0, { advanced: true }, 0, 36, 1), sel("sv_attn", "Attention", ["sdpa", "flash_attn_2", "sageattn_2"], "sdpa", { advanced: true }), num("seed", "Seed", 42, { advanced: true })] },
+          { id: "esrgan", label: "Upscale model (ComfyUI core)", family: "core", default: true, params: [dyn("upscale_model", "Model", "upscalers", "none"), slider("scale_by", "Final scale", 0.25, 4, 0.25, 1, { advanced: true })] }
+        ],
+        description: "Enlarge with an ESRGAN-type model from ComfyUI/models/upscale_models."
+      },
+      {
+        id: "music-generate",
+        title: "Music Generate",
+        category: "Audio",
+        kind: "generate",
+        inputs: [P.textIn("prompt", "Style", false), P.textIn("lyrics", "Lyrics", true), { id: "cover", label: "Cover source", type: "audio", optional: true }, P.textIn("melody", "Melody (ABC)", true), P.seedIn()],
+        outputs: [{ id: "audio", label: "Audio", type: "audio" }],
+        params: [],
+        engines: [
+          { id: "acestep", label: "Ace-Step 1.5 (local)", family: "music", default: true, params: [slider("seconds", "Length (s)", 5, 300, 1, 60), num("bpm", "BPM", 120, {}, 40, 240, 1), text("keyscale", "Key", "A minor"), sel("timesignature", "Time signature", ["2", "3", "4", "6"], "4", { advanced: true }), sel("language", "Language", ["en", "ko", "ja", "zh", "es", "fr", "de"], "en", { advanced: true }), sel("format", "Format", ["flac", "mp3", "opus"], "flac", { advanced: true }), slider("steps1", "Stage 1 steps", 1, 60, 1, 30, { advanced: true }), slider("steps2", "Stage 2 steps (0 = off)", 0, 60, 1, 20, { advanced: true }), slider("steps3", "Stage 3 steps (0 = off)", 0, 60, 1, 15, { advanced: true }), slider("cfg", "Guidance", 0, 10, 0.1, 1, { advanced: true }), seed] },
+          { id: "yue2", label: "YuE2 \u2014 text / cover music (local)", family: "music", params: [slider("seconds", "Length (s)", 10, 300, 1, 60), sel("format", "Format", ["flac", "mp3", "opus"], "flac", { advanced: true }), slider("temperature", "Temperature", 0.1, 2, 0.05, 1, { advanced: true }), slider("top_p", "Top-p", 0.1, 1, 0.01, 0.95, { advanced: true }), num("top_k", "Top-k", 100, { advanced: true }, 1, 500, 1), slider("repetition", "Repetition penalty", 1, 2, 0.01, 1.2, { advanced: true }), seed] },
+          { id: "minimax", label: "MiniMax Music 3 (local)", family: "music", params: [slider("seconds", "Length (s)", 5, 300, 1, 60), sel("format", "Format", ["flac", "mp3", "opus"], "flac", { advanced: true }), slider("steps1", "Steps", 1, 80, 1, 30, { advanced: true }), slider("cfg", "Guidance", 0, 10, 0.1, 1.7, { advanced: true }), seed] }
+        ],
+        description: "Songs and instrumentals. Style prompt (+ optional lyrics) in, audio out. Models: Settings \u2192 Music models."
+      },
+      {
+        id: "melody-editor",
+        title: "Melody Editor",
+        category: "Audio",
+        kind: "source",
+        inputs: [],
+        outputs: [P.textOut("abc", "Melody (ABC)")],
+        params: [text("melody", "melody", "", false, { advanced: true }), text("abc", "abc", "", false, { advanced: true })],
+        description: "Draw a melody on a piano roll, or record it from a MIDI keyboard. Wire it into YuE2 (Melody) \u2014 YuE2 then sings and arranges around your tune."
+      },
+      {
+        id: "comfy-workflow",
+        title: "ComfyUI Workflow",
+        category: "Workflow",
+        kind: "generate",
+        inputs: [P.textIn("prompt", "Prompt", true), P.imgIn("image", "Images", true, true), { id: "video", label: "Video", type: "video", optional: true }, P.seedIn()],
+        outputs: [P.imgOut("image", "Image"), { id: "video", label: "Video", type: "video" }],
+        params: [text("workflow", "Workflow JSON", "", true, { advanced: true }), text("prompt_target", "Prompt field", "", false, { advanced: true }), text("image_target", "Image 1 field", "", false, { advanced: true }), text("image2_target", "Image 2 field", "", false, { advanced: true }), text("video_target", "Video field", "", false, { advanced: true }), text("seed_target", "Seed field", "", false, { advanced: true }), { id: "seed", label: "Seed", control: { kind: "seed" }, default: -1, advanced: true }],
+        description: "Run any API-format ComfyUI workflow (video, LTX, H3, Wan\u2026). Load the JSON, pick which fields take the prompt / images / seed."
+      },
+      {
+        id: "video-generate",
+        title: "Video Generate",
+        category: "Video",
+        kind: "generate",
+        inputs: [P.textIn("prompt", "Prompt", false), P.imgIn("image", "First frame / references", true, true), P.imgIn("last", "Last frame", true), P.cardIn("H3 option cards"), P.loraIn(), { id: "assets", label: "Asset Library", type: "pipe", optional: true }, P.seedIn()],
+        outputs: [{ id: "video", label: "Video", type: "video" }],
+        params: [],
+        engines: [
+          { id: "h3", label: "MiniMax H3 \u2014 text / first-last frame (local)", family: "h3", default: true, params: h3Params(false) },
+          { id: "h3-ref", label: "MiniMax H3 \u2014 multi-reference (local)", family: "h3", params: h3Params(true) },
+          { id: "ltx25", label: "LTX 2.5 (local, with audio)", family: "ltx25", params: [sel("aspect", "Aspect ratio", [...ASPECTS, "auto"], "16:9"), megapixels(1), slider("seconds", "Length (s)", 2, 20, 1, 5), toggle("chain_last", "Several clips (separate prompts with ---): start each clip from the last frame of the one before", true), toggle("stitch", "Stitch clips into one video", true), slider("steps", "Steps", 1, 40, 1, 12, { advanced: true }), slider("cfg", "Guidance", 0, 10, 0.1, 1, { advanced: true }), dyn("sampler", "Sampler", "samplers", "euler_ancestral", { advanced: true }), dyn("scheduler", "Scheduler", "schedulers", "linear_quadratic", { advanced: true }), text("stage2", "Stage-2 sigmas", "0.85, 0.7250, 0.4219, 0.0", false, { advanced: true }), ...loras("ltx25"), toggle("auto_prompt", "Auto Prompt (write the prompt with the LLM before generating)", false), seed] }
+        ],
+        description: "Text \u2192 video, or first/last frame \u2192 video (LTX 2.5). LTX 2.5 or MiniMax H3. Other models: ComfyUI Workflow node."
+      },
+      // ============================================================ Edit (runs in the browser)
+      edit("crop", "Crop", [num("x", "X %", 0, {}, 0, 100, 1), num("y", "Y %", 0, {}, 0, 100, 1), num("w", "Width %", 100, {}, 1, 100, 1), num("h", "Height %", 100, {}, 1, 100, 1)], "Cut out a rectangle (percent of the image)."),
+      edit("resize", "Resize", [sel("mode", "Mode", ["scale", "fit width", "fit height", "exact"], "scale"), slider("scale", "Scale", 0.1, 4, 0.05, 1, { when: (p) => p.mode === "scale" }), num("width", "Width", 1024, { when: (p) => p.mode === "fit width" || p.mode === "exact" }, 1, 8192, 1), num("height", "Height", 1024, { when: (p) => p.mode === "fit height" || p.mode === "exact" }, 1, 8192, 1)], "Change the pixel size."),
+      edit("blur", "Blur", [slider("radius", "Radius", 0, 50, 0.5, 4)], "Gaussian blur."),
+      edit("levels", "Levels", [slider("black", "Black point", 0, 254, 1, 0), slider("white", "White point", 1, 255, 1, 255), slider("gamma", "Gamma", 0.1, 3, 0.05, 1)], "Black / white point and gamma."),
+      edit("rotate-flip", "Rotate and flip", [sel("rotate", "Rotate", ["0", "90", "180", "270"], "0"), toggle("flip_h", "Flip horizontal"), toggle("flip_v", "Flip vertical")], "Rotate in 90\xB0 steps and mirror."),
+      edit("color-correct", "Color correction", [slider("brightness", "Brightness", 0, 2, 0.01, 1), slider("contrast", "Contrast", 0, 2, 0.01, 1), slider("saturation", "Saturation", 0, 3, 0.01, 1), slider("temperature", "Warmth", -100, 100, 1, 0)], "Brightness, contrast, saturation, warmth."),
+      edit("sharpen", "Sharpen", [slider("amount", "Amount", 0, 3, 0.05, 0.8)], "Unsharp-style sharpening."),
+      edit("grayscale", "Grayscale", [slider("amount", "Amount", 0, 1, 0.05, 1)], "Remove colour."),
+      edit("threshold", "Threshold", [slider("level", "Level", 0, 255, 1, 128)], "Pure black / white by brightness."),
+      edit("posterize", "Posterize", [slider("levels", "Levels", 2, 32, 1, 6)], "Reduce the number of tones."),
+      edit("hue-rotate", "Hue Rotate", [slider("degrees", "Degrees", -180, 180, 1, 30)], "Shift all colours around the wheel."),
+      edit("vignette", "Vignette", [slider("strength", "Strength", 0, 1, 0.05, 0.5), slider("softness", "Softness", 0.1, 1, 0.05, 0.6)], "Darken the corners."),
+      edit("pixelate", "Pixelate", [slider("size", "Block size", 2, 128, 1, 12)], "Blocky mosaic."),
+      edit("invert", "Invert", [], "Negative of the image."),
+      edit("channels", "Channels", [sel("channel", "Channel", ["red", "green", "blue", "alpha", "luminance"], "luminance")], "Pull one channel out as grayscale image + mask.", [P.imgIn()], [P.imgOut(), P.maskOut()]),
+      edit("blend", "Blend", [sel("mode", "Mode", ["normal", "multiply", "screen", "overlay", "darken", "lighten", "difference", "soft-light"], "normal"), slider("opacity", "Opacity", 0, 1, 0.05, 1)], "Put one image over another.", [P.imgIn("base", "Base"), P.imgIn("top", "Top"), P.maskIn("mask", "Mask", true)]),
+      edit("mask-grow", "Matte Grow/Shrink", [slider("amount", "Pixels (\u2212 shrink)", -64, 64, 1, 8), slider("feather", "Feather", 0, 64, 1, 0)], "Grow, shrink or soften a mask.", [P.maskIn()], [P.maskOut()]),
+      edit("invert-mask", "Invert Mask", [], "Swap black and white in a mask.", [P.maskIn()], [P.maskOut()]),
+      {
+        id: "color-palette",
+        title: "Color palette",
+        category: "Edit",
+        kind: "edit",
+        inputs: [P.imgIn()],
+        outputs: [P.textOut("text", "Colors")],
+        params: [slider("count", "Colors", 2, 12, 1, 5)],
+        description: "Dominant colours as hex text."
+      },
+      {
+        id: "extract-frame",
+        title: "Extract Video Frame",
+        category: "Edit",
+        kind: "edit",
+        inputs: [{ id: "video", label: "Video", type: "video" }],
+        outputs: [P.imgOut()],
+        params: [slider("position", "Position %", 0, 100, 1, 100)],
+        description: "Grab one frame (default: last)."
+      },
+      {
+        id: "painter",
+        title: "Painter",
+        category: "Edit",
+        kind: "edit",
+        inputs: [P.imgIn("image", "Image", true)],
+        outputs: [P.imgOut("image", "Result"), P.maskOut()],
+        params: [num("width", "Canvas width", 1024, {}, 64, 4096, 8), num("height", "Canvas height", 1024, {}, 64, 4096, 8)],
+        description: "Draw on an image or paint a mask. Double-click the preview to open the editor."
+      },
+      // ============================================================ Utility
+      // ---------------------------------------------------------------- cards (small settings blocks you wire in)
+      {
+        id: "lora-card",
+        title: "LoRA",
+        category: "Cards",
+        kind: "source",
+        inputs: [{ id: "lora_in", label: "More LoRAs", type: "lora", optional: true, multi: true }],
+        outputs: [{ id: "lora", label: "LoRA", type: "lora" }],
+        params: [dyn("lora", "LoRA", "loras:all", "none"), slider("strength", "Strength", -2, 2, 0.05, 1)],
+        description: "One LoRA. Wire it into any image or video node \u2014 chain several cards to stack LoRAs."
+      },
+      {
+        id: "h3-turbo",
+        title: "H3 Turbo \xB7 7+1",
+        category: "Cards",
+        kind: "source",
+        inputs: [],
+        outputs: [{ id: "card", label: "Turbo", type: "pipe" }],
+        params: [
+          { id: "turbo", label: "Turbo", control: { kind: "select", options: ["pdd", "larryvrh", "lightx2v", "none"], labels: { pdd: "Turbo LoRA (Basic)", larryvrh: "Turbo LoRA (larryvrh)", lightx2v: "SLA Turbo (lightx2v)", none: "None" } }, default: "pdd" },
+          dyn("turbo_lora", "Turbo LoRA (first / last frame)", "loras:h3", "none", { when: (p) => p.turbo !== "none" }),
+          dyn("turbo_lora_ref", "Turbo LoRA (reference)", "loras:h3", "none", { when: (p) => p.turbo !== "none" }),
+          slider("turbo_strength", "Turbo strength", 0, 2, 0.05, 1, { when: (p) => p.turbo !== "none" }),
+          slider("turbo_steps", "Turbo steps", 1, 16, 1, 8, { advanced: true, when: (p) => p.turbo !== "none" }),
+          toggle("hires", "7+1 hi-res finish (7 steps small \u2192 upscale \u2192 1 step big)", true, { when: (p) => p.turbo === "pdd" || p.turbo === "none" }),
+          slider("hires_start_mp", "Start size (MP)", 0.2, 1, 0.05, 0.7, { when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires }),
+          slider("hires_final_mp", "Final size (MP)", 0.4, 3, 0.05, 1.6, { when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires }),
+          { id: "hires_last", label: "7+1 last step model", control: { kind: "select", options: ["same", "fixed"], labels: { same: "Same as generation", fixed: "Fixed model" } }, default: "same", when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires },
+          dyn("hires_last_model", "7+1 last step model (none = One Studio setting)", "h3unets", "none", { when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && p.hires_last === "fixed" }),
+          toggle("hires_no_opt", "Bypass H3 Memory Optimization on the last step", false, { advanced: true, when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires }),
+          num("hires_chunk_rows", "Last step chunk rows", 2048, { advanced: true, when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && !p.hires_no_opt }, 256, 16384, 256)
+        ],
+        description: "H3 speed-up: Turbo LoRA and the 7+1 hi-res finish. Wire into Video Generate \u2192 H3 option cards."
+      },
+      {
+        id: "moss-bboxes",
+        title: "Moss Boxes (R2I)",
+        category: "Cards",
+        kind: "source",
+        inputs: [P.imgIn("image", "Background (optional)", true)],
+        outputs: [{ id: "card", label: "Boxes", type: "pipe" }],
+        params: [
+          num("width", "Canvas width (px)", 1024, {}, 256, 4096, 16),
+          num("height", "Canvas height (px)", 1024, {}, 256, 4096, 16),
+          text("characters", "Characters (box numbers, e.g. 1, 3)", ""),
+          text("boxes", 'Boxes (JSON \u2014 edit with "Edit boxes")', "[]", true, { advanced: true })
+        ],
+        description: "Draw boxes on a canvas: each is an OBJECT or exact TEXT. Wire into Image Generate \u2192 Moss Image R2I. Draw the background first, foreground last."
+      },
+      {
+        id: "h3-speed",
+        title: "H3 Speed & Attention",
+        category: "Cards",
+        kind: "source",
+        inputs: [],
+        outputs: [{ id: "card", label: "Speed", type: "pipe" }],
+        params: [
+          sel("attn_backend", "Attention backend", ["none", "ck", "sage", "solattn_kijai", "sla"], "none"),
+          sel("attn_forward", "Attention forward patch", ["none", "memeff_sage", "solattn_sag"], "none"),
+          sel("optimizer", "H3 optimizer", ["none", "memory", "memory_sparse"], "none"),
+          sel("block_cache", "Block cache", ["none", "fbcache"], "none"),
+          toggle("spectrum", "Spectrum", false),
+          toggle("fused_mod", "Fused modulation", false),
+          slider("shift_video", "Shift (video)", 1, 20, 0.5, 12, { advanced: true }),
+          slider("shift_audio", "Shift (audio)", 1, 10, 0.5, 3, { advanced: true })
+        ],
+        description: "H3 attention backends, memory optimiser, block cache, Spectrum and sigma shift."
+      },
+      {
+        id: "h3-audiolock",
+        title: "H3 Audio Lock",
+        category: "Cards",
+        kind: "source",
+        inputs: [{ id: "audio", label: "Audio", type: "audio" }],
+        outputs: [{ id: "card", label: "Audio lock", type: "pipe" }],
+        params: [sel("lock_mode", "Mode", ["lock", "remix"], "lock"), slider("lock_strength", "Strength (remix)", 0, 1, 0.05, 0.5, { when: (p) => p.lock_mode === "remix" }), sel("lock_fit", "If the audio is shorter", ["pad_silence", "loop", "none"], "pad_silence")],
+        description: "Make H3 use your audio (voice / music) instead of generating its own; each clip gets its own slice."
+      },
+      {
+        id: "asset-library",
+        title: "Asset Library",
+        category: "Cards",
+        kind: "source",
+        inputs: [],
+        outputs: [P.imgOut("image", "Images"), P.textOut("mentions", "@names"), { id: "assets", label: "For H3", type: "pipe" }],
+        params: [text("project", "Project id", ""), text("ids", "Asset ids", "")],
+        description: "Pick characters, places and props from your reference library. Write @name in the prompt; H3 Reference resolves it."
+      },
+      // ---------------------------------------------------------------- post-processing (one card per step, video in → video out)
+      ...(() => {
+        const fpsParam = num("fps", "Source frame rate (fps, 0 = detect)", 0, { advanced: true }, 0, 240, 1);
+        const previewParam = num("preview_frames", "Test on the first N frames (0 = whole video)", 0, { advanced: true }, 0, 600, 1);
+        const vin = [{ id: "video", label: "Video", type: "video" }], vout = [{ id: "video", label: "Video", type: "video" }];
+        const pp = (id, title, params, description, engines) => ({ id, title, category: "Postprocess", kind: "generate", inputs: vin, outputs: vout, params: engines ? params : [...params, fpsParam, previewParam], engines: engines?.map((e) => ({ ...e, params: [...e.params ?? [], fpsParam, previewParam] })), description });
+        const rtxP = (pre, whenOk = () => true) => [
+          sel(`${pre}mode`, "Size by", ["scale", "short", "long", "wh"], "scale", { when: whenOk }),
+          slider(`${pre}scale`, "Scale", 1, 4, 0.25, 2, { when: (p) => whenOk(p) && p[`${pre}mode`] === "scale" }),
+          num(`${pre}short`, "Short edge px", 1080, { when: (p) => whenOk(p) && p[`${pre}mode`] === "short" }, 8, 8192, 8),
+          num(`${pre}long`, "Long edge px", 1920, { when: (p) => whenOk(p) && p[`${pre}mode`] === "long" }, 8, 8192, 8),
+          num(`${pre}w`, "Width", 1920, { when: (p) => whenOk(p) && p[`${pre}mode`] === "wh" }, 8, 8192, 8),
+          num(`${pre}h`, "Height", 1080, { when: (p) => whenOk(p) && p[`${pre}mode`] === "wh" }, 8, 8192, 8),
+          sel(`${pre}anchor`, "Crop anchor", ["center", "left", "right", "top", "bottom"], "center", { advanced: true, when: (p) => whenOk(p) && p[`${pre}mode`] === "wh" }),
+          sel(`${pre}quality`, "Quality", ["LOW", "MEDIUM", "HIGH", "ULTRA"], "ULTRA", { when: whenOk })
+        ];
+        return [
+          pp("pp-deblur", "Deblur (RTX)", [sel("strength", "Strength", ["LOW", "MEDIUM", "HIGH", "ULTRA"], "MEDIUM")], "NVIDIA RTX Deblur on every frame."),
+          pp("pp-denoise", "Denoise (RTX)", [sel("strength", "Strength", ["LOW", "MEDIUM", "HIGH", "ULTRA"], "MEDIUM")], "NVIDIA RTX Denoise on every frame."),
+          pp("pp-upscale", "Video Upscale", [], "Enlarge a video: FlashVSR, RTX VSR or an upscale model; optional second RTX pass.", [
+            { id: "flashvsr", label: "FlashVSR", family: "post", default: true, params: [
+              sel("fv_model", "Model", ["FlashVSR-v1.1", "FlashVSR"], "FlashVSR-v1.1"),
+              sel("fv_mode", "Mode", ["tiny", "tiny-long", "full"], "tiny"),
+              slider("fv_scale", "Scale", 2, 4, 1, 2),
+              toggle("fv_color", "Colour fix", true),
+              num("fv_tile", "Tile size", 384, { advanced: true }, 64, 2048, 32),
+              num("fv_overlap", "Tile overlap", 32, { advanced: true }, 0, 512, 8),
+              num("fv_seed", "Seed", 42, { advanced: true }),
+              toggle("two_pass", "2nd pass with RTX VSR", false),
+              ...rtxP("p2_", (p) => !!p.two_pass)
+            ] },
+            { id: "rtx", label: "RTX VSR (TJ)", family: "post", params: rtxP("rtx_") },
+            { id: "model", label: "Upscale model (ESRGAN\u2026)", family: "post", params: [dyn("model_name", "Model", "upscalers", "none"), toggle("two_pass", "2nd pass with RTX VSR", false), ...rtxP("p2_", (p) => !!p.two_pass)] }
+          ]),
+          pp("pp-skin", "Skin Retouch", [slider("evenness", "Evenness", 0, 1, 0.01, 0.3), slider("smoothing", "Smoothing", 0, 1, 0.01, 0.2), slider("redness", "Redness", 0, 1, 0.01, 0), slider("shine", "Shine", 0, 1, 0.01, 0), sel("blemish", "Blemish fix", ["off", "subtle", "strong"], "off"), toggle("preserve", "Keep moles / scars", true, { advanced: true }), slider("microtexture", "Micro-texture", 0, 3, 0.05, 0, { advanced: true })], "Non-generative skin evening, de-shine and blemish fix."),
+          pp("pp-grain", "Film Grain", [slider("amount", "Amount", 0, 1, 0.01, 0.25), slider("size", "Size", 0.3, 3, 0.05, 1), slider("color", "Colour grain", 0, 1, 0.01, 0), slider("lum_bias", "Shadow bias", 0, 1, 0.01, 0), sel("noise", "Noise", ["smooth", "grainy"], "smooth")], "Add film grain (ComfyUI core GLSL shader)."),
+          pp("pp-interpolate", "Frame Interpolation", [slider("target_fps", "Target FPS", 24, 120, 1, 48), slider("scale", "Flow scale", 0.25, 2, 0.25, 1, { advanced: true }), text("model_name", "RIFE model", "flownet.pkl", false, { advanced: true }), num("batch", "Batch size", 8, { advanced: true }, 1, 64, 1), toggle("fp16", "FP16", true, { advanced: true })], "RIFE: smooth motion by adding in-between frames."),
+          pp("pp-resize", "Video Resize", [sel("mode", "Mode", ["Long side", "Short side", "Ratio", "Mega Pixel", "Width x Height"], "Long side"), num("target_px", "Target px", 1920, { when: (p) => p.mode === "Long side" || p.mode === "Short side" }, 8, 16384, 2), num("ratio_w", "Ratio W", 16, { when: (p) => p.mode === "Ratio" }, 1, 64, 1), num("ratio_h", "Ratio H", 9, { when: (p) => p.mode === "Ratio" }, 1, 64, 1), slider("megapixels", "Megapixels", 0.1, 8, 0.1, 1, { when: (p) => p.mode === "Mega Pixel" }), num("width", "Width", 1280, { when: (p) => p.mode === "Width x Height" }, 8, 16384, 2), num("height", "Height", 720, { when: (p) => p.mode === "Width x Height" }, 8, 16384, 2), sel("crop", "Fit", ["crop", "stretch"], "crop", { when: (p) => p.mode === "Width x Height" }), sel("method", "Resampling", ["lanczos", "bilinear", "bicubic", "area", "nearest-exact"], "lanczos", { advanced: true })], "Change the video size or aspect ratio."),
+          {
+            id: "face-refine",
+            title: "Face Refine (H3)",
+            category: "Postprocess",
+            kind: "generate",
+            inputs: [{ id: "video", label: "Video", type: "video" }, P.textIn("prompt", "Prompt", true), P.imgIn("image", "Face references", true, true), P.cardIn("H3 option cards"), P.loraIn(), P.seedIn()],
+            outputs: vout,
+            params: [
+              dyn("detector", "Face detector", "facedetectors", "none"),
+              dyn("fallback", "Fallback detector", "facedetectors", "none", { advanced: true }),
+              sel("select", "Which face", ["largest_face", "smallest_face", "left_most", "right_most", "top_most", "bottom_most", "centre_most", "detector_score", "manual"], "largest_face"),
+              text("picks", "Picked faces (manual)", "", false, { when: (p) => p.select === "manual" }),
+              text("pick_mode", "Pick mode", "shots", false, { advanced: true, when: () => false }),
+              slider("denoise", "Redraw strength", 0.05, 1, 0.05, 0.4),
+              slider("confidence", "Detect confidence", 0.05, 1, 0.05, 0.35, { advanced: true }),
+              slider("crop_factor", "Crop factor", 1, 6, 0.1, 2.5, { advanced: true }),
+              sel("canvas_mode", "Canvas", ["auto_capped_768", "auto_no_downscale", "manual"], "auto_capped_768", { advanced: true }),
+              num("canvas_w", "Canvas W", 768, { advanced: true, when: (p) => p.canvas_mode === "manual" }, 64, 2048, 32),
+              num("canvas_h", "Canvas H", 768, { advanced: true, when: (p) => p.canvas_mode === "manual" }, 64, 2048, 32),
+              num("smooth", "Smooth window", 21, { advanced: true }, 1, 99, 2),
+              toggle("cuts", "Detect scene cuts", false, { advanced: true }),
+              slider("cut_threshold", "Cut threshold", 1, 10, 0.5, 3, { advanced: true, when: (p) => !!p.cuts }),
+              toggle("identity", "Follow the same person", true, { advanced: true }),
+              slider("identity_threshold", "Identity threshold", 0.1, 0.9, 0.01, 0.45, { advanced: true }),
+              sel("identity_model", "Identity model", ["insightface", "clip_vision", "ccip"], "insightface", { advanced: true }),
+              slider("mul_small", "Small face \xD7", 0, 2, 0.05, 1, { advanced: true }),
+              slider("mul_large", "Large face \xD7", 0, 2, 0.05, 0.35, { advanced: true }),
+              slider("px_small", "Small face px", 8, 200, 1, 30, { advanced: true }),
+              slider("px_large", "Large face px", 20, 600, 1, 120, { advanced: true }),
+              slider("steps", "Steps (no turbo)", 1, 30, 1, 8, { advanced: true }),
+              dyn("sampler", "Sampler", "samplers", "euler", { advanced: true }),
+              dyn("scheduler", "Scheduler", "schedulers", "simple", { advanced: true }),
+              sel("paste", "Paste back", ["face_only", "face_ellipse", "full_crop"], "face_only", { advanced: true }),
+              slider("feather", "Feather", 0, 64, 1, 6, { advanced: true }),
+              slider("colour", "Colour match", 0, 1, 0.05, 1, { advanced: true }),
+              slider("blend", "Blend", 0, 1, 0.05, 1, { advanced: true }),
+              sel("undetected", "Frames without a face", ["fade_out", "skip", "composite_anyway"], "fade_out", { advanced: true }),
+              seed
+            ],
+            description: "Redraw small faces in a finished H3 clip: track \u2192 crop \u2192 H3 redraw \u2192 stitch back. Needs ComfyUI-H3-FaceRefine."
+          },
+          {
+            id: "h3-image",
+            title: "Image Generate (H3)",
+            category: "Image",
+            kind: "generate",
+            inputs: [P.textIn(), P.imgIn("image", "Reference images (optional)", true, true), P.cardIn("H3 option cards"), P.loraIn(), P.seedIn()],
+            outputs: [P.imgOut()],
+            params: [
+              sel("aspect", "Aspect ratio", ASPECTS, "1:1"),
+              slider("final_mp", "Final size (MP)", 0.25, 4, 0.25, 1.5),
+              toggle("final", "High quality 2nd pass (latent upscale)", true),
+              slider("preview_mp", "First pass size (MP)", 0.1, 1.5, 0.05, 0.5, { advanced: true }),
+              slider("steps", "Steps (no turbo)", 1, 60, 1, 20, { advanced: true }),
+              slider("pass2", "2nd pass steps", 3, 5, 1, 3, { advanced: true, when: (p) => !!p.final }),
+              toggle("fizgig", "Fizgig single-frame latent", false, { advanced: true }),
+              sel("ref_size", "Reference size", ["max", "match"], "max", { advanced: true }),
+              seed
+            ],
+            description: "A still image from the MiniMax H3 model \u2014 text to image, or add reference images (up to 9)."
+          },
+          {
+            id: "character-sheet",
+            title: "Character Sheet",
+            category: "Image",
+            kind: "generate",
+            inputs: [P.imgIn("image", "Character reference", false, true), P.textIn("prompt", "Prompt (optional)", true), P.loraIn(), P.seedIn()],
+            outputs: [P.imgOut("image", "Sheet"), { id: "video", label: "Turnaround video", type: "video" }],
+            params: [
+              sel("aspect", "Aspect ratio", ["3:4", "9:16", "1:1", "16:9", "4:3"], "3:4"),
+              megapixels(0.9),
+              text("frames", "Frames for the 8 cells", "7, 22, 37, 52, 67, 82, 107, 118"),
+              toggle("save_frames", "Also save each frame", false, { advanced: true }),
+              toggle("latent_up", "Cheap first pass + latent upscale", false, { advanced: true }),
+              slider("first_mp", "First pass size (MP)", 0.2, 1, 0.05, 0.36, { advanced: true, when: (p) => !!p.latent_up }),
+              slider("pass2", "Second pass steps", 3, 5, 1, 3, { advanced: true, when: (p) => !!p.latent_up }),
+              sel("deblur", "RTX Deblur", ["none", "LOW", "MEDIUM", "HIGH", "ULTRA"], "none", { advanced: true }),
+              toggle("rtx", "RTX VSR", false, { advanced: true }),
+              toggle("supersample", "Scale back down (supersample)", false, { advanced: true, when: (p) => !!p.rtx }),
+              sel("ref_size", "Reference size", ["max", "match"], "max", { advanced: true }),
+              num("max_dim", "Sheet max size px", 2048, { advanced: true }, 512, 8192, 64),
+              seed
+            ],
+            description: "H3 reference-to-video turnaround (front / back / profile / \xBE / expressions) assembled into a model sheet."
+          }
+        ];
+      })(),
+      {
+        id: "ltx-director",
+        title: "LTX Director (timeline)",
+        category: "Video",
+        kind: "generate",
+        inputs: [P.textIn("prompt", "Overall prompt", false), P.imgIn("image", "Images (in time order)", true, true), { id: "audio", label: "Audio (custom track)", type: "audio", optional: true }, { id: "video", label: "Motion video (guide)", type: "video", optional: true }, P.loraIn(), P.seedIn()],
+        outputs: [{ id: "video", label: "Video", type: "video" }],
+        params: [
+          text("beats", "Beats \u2014 one per line:  start-end: prompt  (seconds)", "", true),
+          text("image_times", "Image times (s), in the order connected", "0"),
+          toggle("last_at_end", "Pin the last image to the end", false),
+          num("audio_start", "Audio starts at (s)", 0, {}, 0, 60, 0.1),
+          num("motion_start", "Motion video starts at (s)", 0, {}, 0, 60, 0.1),
+          slider("motion_strength", "Motion strength", 0, 1, 0.05, 1),
+          sel("aspect", "Aspect ratio", [...ASPECTS, "auto"], "16:9"),
+          megapixels(1),
+          slider("seconds", "Length (s)", 2, 20, 1, 8),
+          slider("steps", "Steps", 1, 40, 1, 12, { advanced: true }),
+          slider("cfg", "Guidance", 0, 10, 0.1, 1, { advanced: true }),
+          dyn("sampler", "Sampler", "samplers", "euler_ancestral", { advanced: true }),
+          dyn("scheduler", "Scheduler", "schedulers", "linear_quadratic", { advanced: true }),
+          text("stage2", "Stage-2 sigmas", "0.85, 0.7250, 0.4219, 0.0", false, { advanced: true }),
+          seed
+        ],
+        description: "LTX 2.5 with a timeline: a different prompt for each moment, and images pinned at chosen times."
+      },
+      {
+        id: "video-refine",
+        title: "Video Edit (LTX 2.5 refine)",
+        category: "Video",
+        kind: "generate",
+        inputs: [{ id: "video", label: "Video", type: "video" }, P.textIn("prompt", "Prompt", true), P.loraIn(), P.seedIn()],
+        outputs: [{ id: "video", label: "Video", type: "video" }],
+        params: [slider("steps", "Steps", 1, 20, 1, 4), slider("denoise", "Change amount", 0.05, 1, 0.05, 0.15), text("negative", "Negative prompt", "bad anatomy, inconsistent look, low resolution,", true, { advanced: true }), dyn("sampler", "Sampler", "samplers", "euler_ancestral", { advanced: true }), dyn("scheduler", "Scheduler", "schedulers", "simple", { advanced: true }), seed],
+        description: "Re-render an existing clip with LTX 2.5: 2\xD7 latent upscale + a light, prompt-guided refine (keeps the sound)."
+      },
+      {
+        id: "video-audio",
+        title: "Add Audio to Video",
+        category: "Video",
+        kind: "generate",
+        inputs: [{ id: "video", label: "Video", type: "video" }, { id: "audio", label: "Audio", type: "audio" }],
+        outputs: [{ id: "video", label: "Video", type: "video" }],
+        params: [slider("start", "Start the audio at (s)", 0, 120, 0.5, 0)],
+        description: "Replace a video\u2019s sound with an audio track (for example from Music Generate)."
+      },
+      {
+        id: "scene-detect",
+        title: "Scene Detect",
+        category: "Video",
+        kind: "generate",
+        inputs: [{ id: "video", label: "Video", type: "video" }],
+        outputs: [P.textOut()],
+        params: [slider("threshold", "Sensitivity (lower = more cuts)", 0.05, 0.95, 0.05, 0.3)],
+        description: "Find the cuts in a video (ITDA ONE STUDIO). The times come out as text."
+      },
+      {
+        id: "beat-detect",
+        title: "Beat Detect",
+        category: "Audio",
+        kind: "generate",
+        inputs: [{ id: "media", label: "Audio / video", type: "any" }],
+        outputs: [P.textOut()],
+        params: [],
+        description: "Find the tempo and beat times of a song or video (ITDA ONE STUDIO). Needs librosa on the server."
+      },
+      {
+        id: "video-bridge",
+        title: "Transition Bridge",
+        category: "Video",
+        kind: "generate",
+        inputs: [{ id: "a", label: "Clip A (before)", type: "video" }, { id: "b", label: "Clip B (after)", type: "video" }],
+        outputs: [{ id: "video", label: "Bridge clip", type: "video" }],
+        params: [sel("mode", "Transition", ["interpolate", "crossfade"], "interpolate"), slider("frames", "Length (frames)", 2, 48, 1, 8)],
+        description: "A short clip that blends the last frame of A into the first frame of B. Put it between A and B in Video Stitch (ITDA ONE STUDIO)."
+      },
+      {
+        id: "video-stitch",
+        title: "Video Stitch",
+        category: "Video",
+        kind: "generate",
+        inputs: [{ id: "videos", label: "Videos (in order)", type: "video", multi: true }],
+        outputs: [{ id: "video", label: "Video", type: "video" }],
+        params: [
+          { id: "mode", label: "Join", control: { kind: "select", options: ["concat", "onetake"], labels: { concat: "Join as they are", onetake: "One-Take (trim the shared 1.625 s)" } }, default: "concat" },
+          slider("overlap", "Trim overlap (s)", 0, 3, 0.05, 0, { advanced: true, when: (p) => p.mode !== "onetake" })
+        ],
+        description: "Join several videos into one, in the order they are connected. One-Take: clips made with the One-Take continuity share their first 1.625 s with the previous clip, so that part is trimmed (the clips are re-encoded)."
+      },
+      { id: "import-audio", title: "Import Audio", category: "Utility", kind: "source", inputs: [], outputs: [{ id: "audio", label: "Audio", type: "audio" }], params: [], description: "Load an audio file (e.g. a recording for YuE2 Cover Music)." },
+      { id: "import", title: "Load Image", category: "Utility", kind: "source", inputs: [], outputs: [{ id: "image", label: "Image", type: "image" }], params: [], description: "Load an image from your computer, or drop one on the canvas." },
+      { id: "import-video", title: "Load Video", category: "Utility", kind: "source", inputs: [], outputs: [{ id: "video", label: "Video", type: "video" }], params: [], description: "Load a video from your computer, or drop one on the canvas." },
+      { id: "export", title: "Export", category: "Utility", kind: "output", inputs: [{ id: "image", label: "Media", type: "any" }], outputs: [], params: [text("name", "File name", "canvers")], description: "Download the connected result." },
+      { id: "preview", title: "Result Viewer", category: "Utility", kind: "output", inputs: [{ id: "image", label: "Image / video / audio / text", type: "any", optional: true }], outputs: [{ id: "out", label: "Pass through", type: "any" }], params: [], description: "Look at any image or text." },
+      { id: "router", title: "Router", category: "Utility", kind: "edit", inputs: [P.imgIn("image", "In", false)], outputs: [P.imgOut("image", "Out")], params: [], description: "A pass-through to tidy wires." },
+      { id: "compare", title: "Compare", category: "Utility", kind: "output", inputs: [{ id: "a", label: "A", type: "any" }, { id: "b", label: "B", type: "any" }], outputs: [], params: [], description: "Drag a slider between two images." },
+      { id: "note", title: "Sticky Note", category: "Utility", kind: "note", inputs: [], outputs: [], params: [text("text", "Note", "", true)], description: "A memo on the canvas." },
+      { id: "number", title: "Number", category: "Data", kind: "source", inputs: [], outputs: [{ id: "value", label: "Value", type: "number" }], params: [num("value", "Value", 0, {}, void 0, void 0, 1)], description: "A number to wire into other nodes." },
+      { id: "text-data", title: "Text", category: "Data", kind: "source", inputs: [], outputs: [P.textOut()], params: [text("text", "Text", "", true)], description: "A fixed piece of text." },
+      { id: "toggle", title: "Toggle", category: "Data", kind: "source", inputs: [], outputs: [{ id: "value", label: "On", type: "boolean" }], params: [toggle("value", "On", true)], description: "On / off switch." },
+      { id: "seed-node", title: "Seed", category: "Data", kind: "source", inputs: [], outputs: [{ id: "value", label: "Seed", type: "number" }], params: [{ id: "value", label: "Seed", control: { kind: "seed" }, default: 12345 }], description: "One seed shared by several nodes." }
+    ];
+    byId = new Map(REGISTRY.map((n2) => [n2.id, n2]));
+  }
+});
+
 // src/backend/http.ts
 function wsUrl(clientId2) {
   const b = base();
@@ -3464,788 +4247,399 @@ var init_comfy = __esm({
   }
 });
 
+// src/backend/turboMemory.ts
+function saveTurboPick(kind, lora) {
+  if (!lora || lora === "none") return;
+  void postJson("/minimax_h3_one/config", { [KEY2[kind]]: lora }).catch(() => void 0);
+}
+var KEY2;
+var init_turboMemory = __esm({
+  "src/backend/turboMemory.ts"() {
+    "use strict";
+    init_http();
+    init_settings();
+    KEY2 = { fl: "pdd_file", ref: "pdd_file_reference" };
+  }
+});
+
+// src/store/graph.ts
+var graph_exports = {};
+__export(graph_exports, {
+  hasUnsavedAutosave: () => hasUnsavedAutosave,
+  restoreAutosave: () => restoreAutosave,
+  setHostSerializer: () => setHostSerializer,
+  startAutosave: () => startAutosave,
+  useGraph: () => useGraph
+});
+function measure(n2) {
+  const el = typeof document !== "undefined" ? document.querySelector(`.react-flow__node[data-id="${n2.id}"]`) : null;
+  return { w: n2.w ?? (el?.offsetWidth || 300), h: n2.h ?? (el?.offsetHeight || 260) };
+}
+function fillTurbo(nodes) {
+  const t2 = useSettings.getState().h3Turbo;
+  let changed = false;
+  const out = nodes.map((n2) => {
+    if (n2.defId !== "h3-turbo") return n2;
+    const patch = {};
+    if ((!n2.params.turbo_lora || n2.params.turbo_lora === "none") && t2.fl) patch.turbo_lora = t2.fl;
+    if ((!n2.params.turbo_lora_ref || n2.params.turbo_lora_ref === "none") && t2.ref) patch.turbo_lora_ref = t2.ref;
+    if (!Object.keys(patch).length) return n2;
+    changed = true;
+    return { ...n2, params: { ...n2.params, ...patch } };
+  });
+  return changed ? out : nodes;
+}
+function rememberedTurbo() {
+  const t2 = useSettings.getState().h3Turbo;
+  const out = {};
+  if (t2.fl) out.turbo_lora = t2.fl;
+  if (t2.ref) out.turbo_lora_ref = t2.ref;
+  return out;
+}
+function quietly(fn) {
+  quiet = true;
+  try {
+    fn();
+  } finally {
+    quiet = false;
+  }
+}
+function startAutosave() {
+  useGraph.subscribe((s, prev) => {
+    const edited = s.nodes !== prev.nodes || s.edges !== prev.edges || s.projectName !== prev.projectName;
+    if (!edited && s.canvasFile === prev.canvasFile && s.dirty === prev.dirty) return;
+    if (edited && !quiet && !s.dirty) {
+      useGraph.setState({ dirty: true });
+      return;
+    }
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      try {
+        const g = useGraph.getState();
+        localStorage.setItem(AUTO_KEY, JSON.stringify({ ...g.toProject(), savedAs: g.canvasFile, dirty: g.dirty }));
+      } catch {
+      }
+    }, 600);
+  });
+}
+function hasUnsavedAutosave() {
+  try {
+    const p = JSON.parse(localStorage.getItem(AUTO_KEY) ?? "null");
+    if (!p || p.app !== "ai-one-studio-canvers" || !p.nodes?.length) return false;
+    return p.dirty ?? !p.savedAs;
+  } catch {
+    return false;
+  }
+}
+function restoreAutosave() {
+  try {
+    const raw = localStorage.getItem(AUTO_KEY);
+    if (!raw) return false;
+    const p = JSON.parse(raw);
+    if (p?.app !== "ai-one-studio-canvers") return false;
+    const x = p;
+    useGraph.getState().loadProject(p, x.savedAs ?? null, x.dirty ?? false);
+    return true;
+  } catch {
+    return false;
+  }
+}
+var MODE_KEY, RUNS_KEY, readMode, readRuns, writeRuns, hostSerializer, setHostSerializer, useGraph, quiet, AUTO_KEY, timer;
+var init_graph = __esm({
+  "src/store/graph.ts"() {
+    "use strict";
+    init_esm();
+    init_registry();
+    init_comfy();
+    init_settings();
+    init_turboMemory();
+    MODE_KEY = "canvers.mode";
+    RUNS_KEY = "canvers.runs.v1";
+    readMode = () => {
+      try {
+        return localStorage.getItem(MODE_KEY) === "simple" ? "simple" : "canvas";
+      } catch {
+        return "canvas";
+      }
+    };
+    readRuns = () => {
+      try {
+        return JSON.parse(localStorage.getItem(RUNS_KEY) ?? "[]");
+      } catch {
+        return [];
+      }
+    };
+    writeRuns = (r) => {
+      try {
+        localStorage.setItem(RUNS_KEY, JSON.stringify(r.slice(0, 150).map((x) => x.status === "running" ? { ...x, status: "error", error: "interrupted" } : x)));
+      } catch {
+      }
+    };
+    hostSerializer = null;
+    setHostSerializer = (f) => {
+      hostSerializer = f;
+    };
+    useGraph = create((set2, get) => ({
+      projectId: uid("p"),
+      projectName: "untitled",
+      canvasFile: null,
+      dirty: false,
+      nodes: [],
+      edges: [],
+      runtime: {},
+      selected: [],
+      past: [],
+      future: [],
+      mode: readMode(),
+      panel: null,
+      viewer: null,
+      painter: null,
+      boxEditor: null,
+      melody: null,
+      assetPicker: null,
+      facePicker: null,
+      fitTick: 0,
+      composerRuns: readRuns(),
+      setMode: (mode) => {
+        try {
+          localStorage.setItem(MODE_KEY, mode);
+        } catch {
+        }
+        set2({ mode, ...mode === "simple" && (get().panel === "decks" || get().panel === "nodes") ? { panel: null } : {} });
+      },
+      setPanel: (panel) => set2({ panel }),
+      setName: (projectName) => set2({ projectName }),
+      snapshot: () => {
+        const { nodes, edges, past } = get();
+        set2({ past: [...past.slice(-59), { nodes, edges }], future: [] });
+      },
+      undo: () => {
+        const { past, future, nodes, edges } = get();
+        const prev = past[past.length - 1];
+        if (!prev) return;
+        set2({ ...prev, past: past.slice(0, -1), future: [{ nodes, edges }, ...future] });
+      },
+      redo: () => {
+        const { past, future, nodes, edges } = get();
+        const next = future[0];
+        if (!next) return;
+        set2({ ...next, past: [...past, { nodes, edges }], future: future.slice(1) });
+      },
+      addNode: (defId, x, y, init) => {
+        const def = byId.get(defId);
+        if (!def) throw new Error(`unknown node ${defId}`);
+        get().snapshot();
+        const engine = engineFor(def);
+        const node = {
+          id: uid("n"),
+          defId,
+          x,
+          y,
+          results: [],
+          activeResult: 0,
+          engineId: engine?.id,
+          params: { ...defaultParams(def, engine?.id), ...defId === "h3-turbo" ? rememberedTurbo() : {} },
+          ...defId === "note" ? { w: 240, h: 160 } : {},
+          ...init
+        };
+        set2({ nodes: [...get().nodes, node], selected: [node.id] });
+        return node.id;
+      },
+      removeNodes: (ids) => {
+        const set_ = new Set(ids);
+        get().snapshot();
+        set2({
+          nodes: get().nodes.filter((n2) => !set_.has(n2.id)).map((n2) => n2.members ? { ...n2, members: n2.members.filter((m) => !set_.has(m)) } : n2),
+          edges: get().edges.filter((e) => !set_.has(e.source) && !set_.has(e.target)),
+          selected: get().selected.filter((s) => !set_.has(s))
+        });
+      },
+      duplicateNodes: (ids) => {
+        get().snapshot();
+        const map = /* @__PURE__ */ new Map();
+        const copies = [];
+        for (const n2 of get().nodes) if (ids.includes(n2.id)) {
+          const id = uid("n");
+          map.set(n2.id, id);
+          copies.push({ ...n2, id, x: n2.x + 40, y: n2.y + 40, params: { ...n2.params }, results: [], activeResult: 0, locked: false, members: void 0 });
+        }
+        const edges = get().edges.filter((e) => map.has(e.source) && map.has(e.target)).map((e) => ({ ...e, id: uid("e"), source: map.get(e.source), target: map.get(e.target) }));
+        set2({ nodes: [...get().nodes, ...copies], edges: [...get().edges, ...edges], selected: copies.map((c) => c.id) });
+      },
+      moveNode: (id, x, y) => set2({ nodes: get().nodes.map((n2) => n2.id === id ? { ...n2, x, y } : n2) }),
+      moveMany: (deltas) => {
+        const m = new Map(deltas.map((d) => [d.id, d]));
+        set2({ nodes: get().nodes.map((n2) => m.has(n2.id) ? { ...n2, x: m.get(n2.id).x, y: m.get(n2.id).y } : n2) });
+      },
+      setSize: (id, w, h) => set2({ nodes: get().nodes.map((n2) => n2.id === id ? { ...n2, w, h } : n2) }),
+      setParam: (id, key, v) => {
+        set2({ nodes: get().nodes.map((n2) => n2.id === id ? { ...n2, params: { ...n2.params, [key]: v } } : n2) });
+        if (get().nodes.find((n2) => n2.id === id)?.defId === "h3-turbo" && typeof v === "string" && v !== "none" && v !== "") {
+          if (key === "turbo_lora") {
+            useSettings.getState().setH3Turbo({ fl: v });
+            saveTurboPick("fl", v);
+          } else if (key === "turbo_lora_ref") {
+            useSettings.getState().setH3Turbo({ ref: v });
+            saveTurboPick("ref", v);
+          }
+          const filled = fillTurbo(get().nodes);
+          if (filled !== get().nodes) set2({ nodes: filled });
+        }
+      },
+      setEngine: (id, engineId) => {
+        get().snapshot();
+        set2({
+          nodes: get().nodes.map((n2) => {
+            if (n2.id !== id) return n2;
+            const def = byId.get(n2.defId);
+            const fresh = defaultParams(def, engineId);
+            const params = { ...fresh };
+            for (const k of Object.keys(fresh)) if (k in n2.params && typeof n2.params[k] === typeof fresh[k]) params[k] = n2.params[k];
+            return { ...n2, engineId, params };
+          })
+        });
+      },
+      setColor: (ids, color) => {
+        get().snapshot();
+        set2({ nodes: get().nodes.map((n2) => ids.includes(n2.id) ? { ...n2, color, ...color === void 0 ? { textColor: void 0 } : {} } : n2) });
+      },
+      setCardColors: (ids, color, textColor) => {
+        get().snapshot();
+        set2({ nodes: get().nodes.map((n2) => ids.includes(n2.id) ? { ...n2, color, textColor } : n2) });
+      },
+      setTitle: (id, title) => set2({ nodes: get().nodes.map((n2) => n2.id === id ? { ...n2, title } : n2) }),
+      setLocked: (ids, locked) => set2({ nodes: get().nodes.map((n2) => ids.includes(n2.id) ? { ...n2, locked } : n2) }),
+      setResults: (id, assets, mode = "replace") => set2({
+        nodes: get().nodes.map((n2) => {
+          if (n2.id !== id) return n2;
+          const results = mode === "append" ? [...n2.results, ...assets] : assets;
+          return { ...n2, results, activeResult: mode === "append" ? n2.results.length : 0, ...mode === "append" ? {} : { pick: void 0 } };
+        })
+      }),
+      clearResults: (id) => set2({ nodes: get().nodes.map((n2) => n2.id === id ? { ...n2, results: [], activeResult: 0, pick: void 0 } : n2) }),
+      setPick: (id, ids) => set2({ nodes: get().nodes.map((n2) => n2.id === id ? { ...n2, pick: ids.length ? ids : void 0 } : n2) }),
+      setActive: (id, idx) => set2({ nodes: get().nodes.map((n2) => n2.id === id ? { ...n2, activeResult: Math.max(0, Math.min(idx, Math.max(0, n2.results.length - 1))) } : n2) }),
+      connect: (e) => {
+        const { nodes, edges } = get();
+        const s = nodes.find((n2) => n2.id === e.source), t2 = nodes.find((n2) => n2.id === e.target);
+        if (!s || !t2 || s.id === t2.id) return false;
+        const sp = byId.get(s.defId)?.outputs.find((o) => o.id === e.sourceHandle);
+        const tp = byId.get(t2.defId)?.inputs.find((i) => i.id === e.targetHandle);
+        if (!sp || !tp || !compatible(sp.type, tp.type)) return false;
+        const keep = tp.multi ? edges : edges.filter((x) => !(x.target === e.target && x.targetHandle === e.targetHandle));
+        if (keep.some((x) => x.source === e.source && x.sourceHandle === e.sourceHandle && x.target === e.target && x.targetHandle === e.targetHandle)) return false;
+        get().snapshot();
+        set2({ edges: [...keep, { ...e, id: uid("e") }] });
+        return true;
+      },
+      moveEdge: (id, delta) => {
+        const es = get().edges;
+        const e = es.find((x) => x.id === id);
+        if (!e) return;
+        const group = es.filter((x) => x.target === e.target && x.targetHandle === e.targetHandle);
+        const k = group.findIndex((x) => x.id === id), other = group[k + delta];
+        if (!other) return;
+        get().snapshot();
+        set2({ edges: es.map((x) => x.id === id ? other : x.id === other.id ? e : x) });
+      },
+      removeEdges: (ids) => {
+        get().snapshot();
+        set2({ edges: get().edges.filter((e) => !ids.includes(e.id)) });
+      },
+      setRuntime: (id, rt) => set2({ runtime: { ...get().runtime, [id]: { ...{ status: "idle", pct: 0 }, ...get().runtime[id], ...rt } } }),
+      select: (selected) => set2({ selected }),
+      group: (ids) => {
+        const members = get().nodes.filter((n2) => ids.includes(n2.id) && !n2.members);
+        if (members.length < 1) return;
+        get().snapshot();
+        const g = { id: uid("g"), defId: "group", x: 0, y: 0, w: 240, h: 160, params: {}, results: [], activeResult: 0, title: "Group", members: members.map((m) => m.id) };
+        const taken = new Set(g.members);
+        set2({ nodes: [g, ...get().nodes.map((n2) => n2.members ? { ...n2, members: n2.members.filter((m) => !taken.has(m)) } : n2)], selected: [g.id] });
+        get().fitGroup(g.id);
+        if (typeof requestAnimationFrame !== "undefined") requestAnimationFrame(() => requestAnimationFrame(() => get().fitGroup(g.id)));
+      },
+      fitGroup: (id) => {
+        const grp = get().nodes.find((n2) => n2.id === id && n2.members);
+        if (!grp) return;
+        const mem = get().nodes.filter((n2) => grp.members.includes(n2.id));
+        if (!mem.length) return;
+        const pad = 40, top = 64;
+        const rects = mem.map((m) => {
+          const s = measure(m);
+          return { x: m.x, y: m.y, w: s.w, h: s.h };
+        });
+        const x = Math.min(...rects.map((r) => r.x)) - pad, y = Math.min(...rects.map((r) => r.y)) - top;
+        const x2 = Math.max(...rects.map((r) => r.x + r.w)) + pad, y2 = Math.max(...rects.map((r) => r.y + r.h)) + pad;
+        set2({ nodes: get().nodes.map((n2) => n2.id === id ? { ...n2, x, y, w: x2 - x, h: y2 - y } : n2) });
+      },
+      reassignMembership: (ids) => {
+        const st = get();
+        const groups = st.nodes.filter((n2) => n2.members);
+        if (!groups.length) return;
+        let changed = false;
+        let nodes = st.nodes;
+        for (const id of ids) {
+          const c = nodes.find((n2) => n2.id === id);
+          if (!c || c.members) continue;
+          const s = measure(c), cx = c.x + s.w / 2, cy = c.y + s.h / 2;
+          const inside = groups.find((gr) => {
+            const cur = nodes.find((n2) => n2.id === gr.id);
+            return cx >= cur.x && cx <= cur.x + (cur.w ?? 0) && cy >= cur.y && cy <= cur.y + (cur.h ?? 0);
+          });
+          const was = nodes.find((n2) => n2.members?.includes(id));
+          if (was?.id === inside?.id) continue;
+          nodes = nodes.map((n2) => n2.id === was?.id ? { ...n2, members: n2.members.filter((m) => m !== id) } : n2.id === inside?.id ? { ...n2, members: [...n2.members, id] } : n2);
+          changed = true;
+        }
+        if (changed) set2({ nodes });
+      },
+      ungroup: (id) => {
+        get().snapshot();
+        set2({ nodes: get().nodes.filter((n2) => n2.id !== id), selected: [] });
+      },
+      openViewer: (nodeId) => set2({ viewer: nodeId ? { nodeId } : null }),
+      openPainter: (nodeId) => set2({ painter: nodeId }),
+      openBoxEditor: (nodeId) => set2({ boxEditor: nodeId }),
+      openMelody: (nodeId) => set2({ melody: nodeId }),
+      openAssetPicker: (nodeId) => set2({ assetPicker: nodeId }),
+      openFacePicker: (nodeId) => set2({ facePicker: nodeId }),
+      toProject: () => ({ app: "ai-one-studio-canvers", version: 1, id: get().projectId, name: get().projectName, nodes: hostSerializer ? get().nodes.map(hostSerializer) : get().nodes, edges: get().edges, updatedAt: (/* @__PURE__ */ new Date()).toISOString() }),
+      markSaved: (file) => set2({ canvasFile: file, dirty: false }),
+      loadProject: (p, file = null, dirty = false) => quietly(() => set2({ canvasFile: file, dirty, projectId: p.id ?? uid("p"), projectName: p.name || "untitled", nodes: fillTurbo(p.nodes ?? []), edges: p.edges ?? [], runtime: {}, selected: [], past: [], future: [], fitTick: get().fitTick + 1 })),
+      newProject: () => quietly(() => set2({ canvasFile: null, dirty: false, projectId: uid("p"), projectName: "untitled", nodes: [], edges: [], runtime: {}, selected: [], past: [], future: [] })),
+      requestFit: () => set2({ fitTick: get().fitTick + 1 }),
+      addComposerRun: (r) => {
+        const runs = [r, ...get().composerRuns];
+        writeRuns(runs);
+        set2({ composerRuns: runs });
+      },
+      patchComposerRun: (id, patch) => {
+        const runs = get().composerRuns.map((r) => r.id === id ? { ...r, ...patch } : r);
+        writeRuns(runs);
+        set2({ composerRuns: runs });
+      },
+      removeComposerRun: (id) => {
+        const runs = get().composerRuns.filter((r) => r.id !== id);
+        writeRuns(runs);
+        set2({ composerRuns: runs });
+      }
+    }));
+    useGraph.subscribe((s) => {
+      const f = fillTurbo(s.nodes);
+      if (f !== s.nodes) useGraph.setState({ nodes: f });
+    });
+    quiet = false;
+    AUTO_KEY = "canvers.autosave.v1";
+  }
+});
+
 // mcp/server.ts
 init_settings();
 import fs from "node:fs";
 import path from "node:path";
 
-// src/registry/index.ts
-var sel = (id, label, options, def, extra = {}) => ({ id, label, control: { kind: "select", options }, default: def, ...extra });
-var dyn = (id, label, source, def = "none", extra = {}) => ({ id, label, control: { kind: "select", options: [def], source }, default: def, ...extra });
-var slider = (id, label, min, max, step, def, extra = {}) => ({ id, label, control: { kind: "slider", min, max, step }, default: def, ...extra });
-var num = (id, label, def, extra = {}, min, max, step) => ({ id, label, control: { kind: "number", min, max, step }, default: def, ...extra });
-var text = (id, label, def = "", multiline = false, extra = {}) => ({ id, label, control: { kind: "text", multiline }, default: def, ...extra });
-var toggle = (id, label, def = false, extra = {}) => ({ id, label, control: { kind: "toggle" }, default: def, ...extra });
-var ASPECTS = ["1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "21:9"];
-var aspect = (def = "1:1") => sel("aspect", "Aspect ratio", ASPECTS, def);
-var seed = { id: "seed", label: "Seed", control: { kind: "seed" }, default: -1, advanced: true };
-var megapixels = (def = 1) => slider("megapixels", "Size (MP)", 0.25, 4, 0.25, def);
-var sampler = (steps, cfg, smp, sch = "simple") => [
-  slider("steps", "Steps", 1, 60, 1, steps, { advanced: true }),
-  slider("cfg", "Guidance", 0, 15, 0.1, cfg, { advanced: true }),
-  dyn("sampler", "Sampler", "samplers", smp, { advanced: true }),
-  dyn("scheduler", "Scheduler", "schedulers", sch, { advanced: true })
-];
-var loras = (fam) => [
-  dyn("lora1", "LoRA 1", `loras:${fam}`, "none", { advanced: true }),
-  slider("lora1_strength", "LoRA 1 strength", 0, 2, 0.05, 1, { advanced: true, when: (p) => p.lora1 !== "none" }),
-  dyn("lora2", "LoRA 2", `loras:${fam}`, "none", { advanced: true }),
-  slider("lora2_strength", "LoRA 2 strength", 0, 2, 0.05, 1, { advanced: true, when: (p) => p.lora2 !== "none" })
-];
-var autoEnhance = toggle("auto_enhance", "Auto enhance prompt (before generating)", false);
-var negative = text("negative", "Negative prompt", "", true, { advanced: true });
-var sizeParams = (on) => on ? [
-  { id: "size_mode", label: "Size", control: { kind: "select", options: ["mp", "wh"], labels: { mp: "Aspect + MP", wh: "Custom W \xD7 H" } }, default: "mp" },
-  { ...aspect(), when: (p) => p.size_mode !== "wh" },
-  { ...megapixels(), when: (p) => p.size_mode !== "wh" },
-  num("width", "Width (px)", 1024, { when: (p) => p.size_mode === "wh" }, 256, 4096, 16),
-  num("height", "Height (px)", 1024, { when: (p) => p.size_mode === "wh" }, 256, 4096, 16)
-] : [];
-var krea2 = (id, label, extra = [], size = false) => ({
-  id,
-  label,
-  family: "krea2",
-  params: [...sizeParams(size), ...extra, autoEnhance, ...sampler(8, 1, "euler"), negative, ...loras("krea2"), num("batch", "Batch", 1, { advanced: true }, 1, 4, 1), seed]
-});
-var anima = (id, label, extra = [], size = false) => ({
-  id,
-  label,
-  family: "anima",
-  params: [...sizeParams(size), ...extra, autoEnhance, ...sampler(30, 4, "euler"), negative, ...loras("anima"), num("batch", "Batch", 1, { advanced: true }, 1, 4, 1), seed]
-});
-var qwen = (id, label, extra = [], size = false) => ({
-  id,
-  label,
-  family: "qwen",
-  params: [...sizeParams(size), ...extra, autoEnhance, ...sampler(20, 4, "euler"), negative, ...loras("qwen"), num("batch", "Batch", 1, { advanced: true }, 1, 4, 1), seed]
-});
-var qwen21 = (id, label, extra = [], size = false) => ({
-  id,
-  label,
-  family: "qwen21",
-  params: [...sizeParams(size), ...extra, autoEnhance, ...sampler(20, 1, "euler"), negative, ...loras("qwen21"), num("batch", "Batch", 1, { advanced: true }, 1, 4, 1), seed]
-});
-var moss = (id, label, extra = [], size = false) => ({
-  id,
-  label,
-  family: "moss",
-  params: [...sizeParams(size), ...extra, autoEnhance, ...sampler(25, 2.5, "er_sde"), { ...negative, default: "nsfw, worst quality, bad anatomy, watermark, jpeg artifact" }, toggle("slg", "Skip layer guidance (layer 22)", false, { advanced: true }), ...loras("moss"), num("batch", "Batch", 1, { advanced: true }, 1, 4, 1), seed]
-});
-var sdxl = (id, label, extra = [], size = false) => ({
-  id,
-  label,
-  family: "sdxl",
-  params: [...sizeParams(size), ...extra, autoEnhance, ...sampler(20, 7, "euler_ancestral", "karras"), { ...negative, default: "low quality, blurry, deformed, watermark" }, ...loras("sdxl"), num("batch", "Batch", 1, { advanced: true }, 1, 4, 1), seed]
-});
-var h3Params = (ref) => [
-  sel("aspect", "Aspect ratio", [...ASPECTS, "auto"], "16:9"),
-  megapixels(0.9),
-  slider("seconds", "Clip length (s)", 5.2, 15, 0.5, 8),
-  ...ref ? [] : [sel("continuity", "Several clips (separate prompts with ---)", ["none", "lastframe", "onetake"], "lastframe"), toggle("stitch", "Stitch clips into one video", true)],
-  slider("steps", "Steps (no turbo)", 1, 60, 1, 20, { advanced: true }),
-  dyn("sampler", "Sampler", "samplers", "er_sde", { advanced: true }),
-  dyn("scheduler", "Scheduler", "schedulers", "simple", { advanced: true }),
-  dyn("upscale_model", "Upscale model (after render)", "upscalers", "none", { advanced: true }),
-  seed
-];
-var klein = (id, label, extra = [], size = false) => ({
-  id,
-  label,
-  family: "klein",
-  params: [...sizeParams(size), ...extra, autoEnhance, ...sampler(4, 1, "euler"), negative, ...loras("klein"), num("batch", "Batch", 1, { advanced: true }, 1, 4, 1), seed]
-});
-var zimage = (id, label, extra = [], size = false) => ({
-  id,
-  label,
-  family: "zimage",
-  params: [...sizeParams(size), ...extra, autoEnhance, ...sampler(8, 1, "euler"), negative, ...loras("zimage"), num("batch", "Batch", 1, { advanced: true }, 1, 4, 1), seed]
-});
-var P = {
-  textIn: (id = "prompt", label = "Prompt", optional = false) => ({ id, label, type: "text", optional }),
-  textOut: (id = "text", label = "Text") => ({ id, label, type: "text" }),
-  imgIn: (id = "image", label = "Image", optional = false, multi = false) => ({ id, label, type: "image", optional, multi }),
-  imgOut: (id = "image", label = "Image") => ({ id, label, type: "image" }),
-  maskIn: (id = "mask", label = "Mask", optional = false) => ({ id, label, type: "mask", optional }),
-  maskOut: (id = "mask", label = "Mask") => ({ id, label, type: "mask" }),
-  loraIn: () => ({ id: "loras", label: "LoRA cards", type: "lora", optional: true, multi: true }),
-  cardIn: (label = "Option cards") => ({ id: "cards", label, type: "pipe", optional: true, multi: true }),
-  seedIn: () => ({ id: "seed_in", label: "Seed", type: "number", optional: true })
-};
-var edit = (id, title, params, description, inputs = [P.imgIn()], outputs = [P.imgOut()]) => ({ id, title, category: "Edit", kind: "edit", inputs, outputs, params, description });
-var REGISTRY = [
-  // ============================================================ Text / LLM
-  {
-    id: "prompt",
-    title: "Prompt",
-    category: "Text / LLM",
-    kind: "source",
-    inputs: [{ id: "vars", label: "Add-ons", type: "text", optional: true, multi: true }],
-    outputs: [P.textOut()],
-    params: [text("text", "Prompt", "", true)],
-    description: "Free text. Anything wired into Add-ons is appended."
-  },
-  {
-    id: "concat",
-    title: "Prompt Concatenator",
-    category: "Text / LLM",
-    kind: "source",
-    inputs: [{ id: "texts", label: "Texts", type: "text", multi: true }],
-    outputs: [P.textOut()],
-    params: [text("separator", "Separator", ", ")],
-    description: "Join several texts into one."
-  },
-  {
-    id: "llm-tj",
-    title: "LLM (TJ)",
-    category: "Text / LLM",
-    kind: "llm",
-    inputs: [P.textIn("text", "Text", true), P.imgIn("image", "Image", true)],
-    outputs: [P.textOut()],
-    params: [text("system", "System prompt", "You are a helpful assistant. Answer concisely.", true), text("prompt", "Prompt", "", true), slider("temperature", "Temperature (0 = settings)", 0, 2, 0.05, 0, { advanced: true })],
-    description: "Ask any model. Backend (Local GGUF \xB7 ComfyUI TextGenerate \xB7 OpenRouter \xB7 Connect Custom) is chosen in Settings."
-  },
-  {
-    id: "prompt-enhancer",
-    title: "Prompt Enhancer",
-    category: "Text / LLM",
-    kind: "llm",
-    inputs: [P.textIn("text", "Text"), P.imgIn("image", "Reference images (optional)", true, true)],
-    outputs: [P.textOut()],
-    params: [dyn("fmt", "Write for", "promptformats", "auto"), dyn("aes", "Aesthetic", "promptaesthetics", "None (no aesthetic injection)"), sel("purpose", "For", ["Image", "Video"], "Image"), text("style", "Guidelines", "Rewrite as a rich, detailed generation prompt. Keep the core idea.", true), toggle("english", "Write in English", true, { advanced: true })],
-    description: "Rewrites a short idea into a detailed prompt."
-  },
-  {
-    id: "music-writer",
-    title: "Music Writer (LLM)",
-    category: "Text / LLM",
-    kind: "llm",
-    inputs: [P.textIn("text", "Idea / theme / lyrics")],
-    outputs: [P.textOut()],
-    params: [sel("task", "Write", ["lyrics from theme", "lyrics from title", "enhance lyrics", "style caption \u2014 Ace-Step", "style caption \u2014 MiniMax Music", "style caption \u2014 YuE2", "cover prompt", "song title"], "lyrics from theme")],
-    description: "Uses your LLM and the MusicMaker prompt library to write lyrics, a style caption, a cover prompt or a title. Wire the result into Music Generate."
-  },
-  {
-    id: "image-describer",
-    title: "Image Describer",
-    category: "Text / LLM",
-    kind: "llm",
-    inputs: [P.imgIn()],
-    outputs: [P.textOut()],
-    params: [sel("task", "Describe as", ["Plain description", "Generation prompt", "Booru-style tags", "Pose & anatomy"], "Generation prompt"), text("guidelines", "Extra guidelines", "", true)],
-    description: "Turns an image into text with a vision model."
-  },
-  // ============================================================ Image generation
-  {
-    id: "image-generate",
-    title: "Image Generate",
-    category: "Image",
-    kind: "generate",
-    inputs: [P.textIn(), P.loraIn(), { id: "layout", label: "Moss boxes card (R2I)", type: "pipe", optional: true }, P.seedIn()],
-    outputs: [P.imgOut()],
-    params: [],
-    engines: [
-      { ...krea2("krea2", "Krea 2 (local)", [], true), default: true },
-      qwen21("qwen21", "Qwen Image 2.1 (local)", [], true),
-      zimage("zimage", "Z-Image Turbo (local)", [], true),
-      klein("klein", "Flux.2 Klein (local)", [], true),
-      qwen("qwen", "Qwen Image Edit 2511 (local)", [], true),
-      anima("anima", "Anima (local)", [], true),
-      sdxl("sdxl", "SDXL (local)", [], true),
-      moss("moss", "Moss Image \u2014 T2I (local)", [], true),
-      moss("moss-r2i", "Moss Image \u2014 R2I bboxes (local, wire a Moss Boxes card)", [], true)
-    ],
-    description: "Text to image on your own ComfyUI."
-  },
-  {
-    id: "image-edit",
-    title: "Image Edit",
-    category: "Image",
-    kind: "generate",
-    inputs: [P.textIn(), P.imgIn("image", "Images", false, true), P.loraIn(), P.seedIn()],
-    outputs: [P.imgOut()],
-    params: [],
-    engines: [
-      { ...klein("klein-edit", "Flux.2 Klein \u2014 edit with references (local)"), default: true },
-      qwen21("qwen21-edit", "Qwen Image 2.1 \u2014 up to 10 references (local)"),
-      { ...qwen("qwen-edit", "Qwen Image Edit 2511 \u2014 up to 3 references (local)") },
-      klein("klein-i2i", "Flux.2 Klein \u2014 img2img (local)", [slider("denoise", "Denoise", 0.05, 1, 0.05, 0.75)]),
-      zimage("zimage-i2i", "Z-Image Turbo \u2014 img2img (local)", [slider("denoise", "Denoise", 0.05, 1, 0.05, 0.75)]),
-      krea2("krea2-i2i", "Krea 2 \u2014 img2img (local)", [slider("denoise", "Denoise", 0.05, 1, 0.05, 0.75)]),
-      anima("anima-i2i", "Anima \u2014 img2img (local)", [slider("denoise", "Denoise", 0.05, 1, 0.05, 0.75)]),
-      sdxl("sdxl-i2i", "SDXL \u2014 img2img (local)", [slider("denoise", "Denoise", 0.05, 1, 0.05, 0.6)]),
-      moss("moss-i2i", "Moss Image \u2014 I2I (local)", [slider("denoise", "Denoise", 0.05, 1, 0.05, 0.6)])
-    ],
-    description: "Edit or restyle images. The first image sets the output size."
-  },
-  {
-    id: "controlnet",
-    title: "ControlNet Generate (Z-Image)",
-    category: "Image",
-    kind: "generate",
-    inputs: [P.textIn(), P.imgIn("image", "Control image"), P.loraIn(), P.seedIn()],
-    outputs: [P.imgOut()],
-    params: [],
-    engines: [{ ...zimage("zimage-cn", "Z-Image Turbo Fun ControlNet (local)", [dyn("cn_patch", "ControlNet model", "modelpatches", "none"), dyn("cn_pre", "Preprocessor", "preprocessors", "DepthAnythingPreprocessor"), slider("cn_strength", "Control strength", 0, 2, 0.05, 1), num("cn_res", "Preprocess resolution", 1024, { advanced: true }, 256, 2048, 64)]), default: true }],
-    description: "Generate following the pose / depth / edges of a control image (preprocessor + Z-Image Fun ControlNet)."
-  },
-  {
-    id: "krea2-control",
-    title: "ControlNet Generate (Krea 2)",
-    category: "Image",
-    kind: "generate",
-    inputs: [P.textIn(), P.imgIn("image", "Control image"), P.loraIn(), P.seedIn()],
-    outputs: [P.imgOut()],
-    params: [],
-    engines: [{ ...krea2("krea2-ctrl", "Krea 2 depth / canny control (local)", [sel("kc_type", "Control type", ["depth", "canny"], "depth"), dyn("kc_lora", "Control LoRA", "loras:krea2", "none"), slider("kc_strength", "Control strength", 0, 2, 0.05, 1), num("kc_res", "Preprocess resolution", 512, { advanced: true }, 256, 2048, 64), num("canny_low", "Canny low", 100, { advanced: true, when: (p) => p.kc_type === "canny" }, 0, 255, 1), num("canny_high", "Canny high", 200, { advanced: true, when: (p) => p.kc_type === "canny" }, 0, 255, 1)], true), default: true }],
-    description: "Krea 2 following a depth map or canny edges of a control image (Control LoRA)."
-  },
-  {
-    id: "krea2-identity",
-    title: "Identity Edit (Krea 2)",
-    category: "Image",
-    kind: "generate",
-    inputs: [P.textIn("prompt", "Edit instruction"), P.imgIn("image", "Image (+ optional 2nd)", false, true), P.loraIn(), P.seedIn()],
-    outputs: [P.imgOut()],
-    params: [],
-    engines: [{ ...krea2("krea2-id", "Krea 2 identity edit (local)", [dyn("id_lora", "Identity-edit LoRA", "loras:krea2", "none"), slider("id_strength", "LoRA strength", 0, 2, 0.05, 1), sel("id_fit", "Fit", ["fit", "crop (legacy)"], "fit", { advanced: true }), slider("id_boost", "Reference boost", 0, 3, 0.05, 1, { advanced: true }), num("id_ground", "Grounding px", 768, { advanced: true }, 256, 2048, 64)], true), default: true }],
-    description: "Edit an image by instruction while keeping the subject (Krea 2 identity-edit LoRA). A second image can be a reference."
-  },
-  {
-    id: "anima-control",
-    title: "Control / Inpaint (Anima)",
-    category: "Image",
-    kind: "generate",
-    inputs: [P.textIn(), P.imgIn("image", "Image"), P.maskIn("mask", "Mask (inpaint)", true), P.loraIn(), P.seedIn()],
-    outputs: [P.imgOut()],
-    params: [],
-    engines: [{ ...anima("anima-ctrl", "Anima LLLite control (local)", [sel("an_type", "Mode", ["anycontrol", "depthcontrol", "inpaint"], "anycontrol"), dyn("an_patch", "LLLite model", "modelpatches", "none"), slider("an_strength", "Strength", 0, 2, 0.05, 1), slider("an_start", "Start", 0, 1, 0.05, 0, { advanced: true }), slider("an_end", "End", 0, 1, 0.05, 1, { advanced: true }), num("an_res", "Depth preprocess resolution", 512, { advanced: true, when: (p) => p.an_type === "depthcontrol" }, 256, 2048, 64)], true), default: true }],
-    description: "Anima with LLLite control: any-control, depth-control or inpainting."
-  },
-  {
-    id: "face-redraw",
-    title: "Face Redraw (Z-Image)",
-    category: "Image",
-    kind: "generate",
-    inputs: [P.textIn(), P.imgIn("image", "Portrait"), P.loraIn(), P.seedIn()],
-    outputs: [P.imgOut()],
-    params: [],
-    engines: [{ ...zimage("zimage-fr", "Z-Image Turbo \u2014 face redraw (local)", [dyn("fr_detector", "Face detector", "bboxdetectors", "none"), dyn("cn_patch", "ControlNet model", "modelpatches", "none"), dyn("cn_pre", "Preprocessor", "preprocessors", "DepthAnythingPreprocessor"), slider("cn_strength", "Control strength", 0, 2, 0.05, 1), slider("denoise", "Redraw strength", 0.05, 1, 0.05, 0.55), slider("fr_threshold", "Detect threshold", 0.1, 1, 0.05, 0.5, { advanced: true }), num("fr_dilation", "Mask dilation", 4, { advanced: true }, 0, 64, 1), slider("fr_context", "Context around the face", 1, 4, 0.1, 1.8, { advanced: true }), num("fr_size", "Working size px", 1024, { advanced: true }, 512, 2048, 64), num("cn_res", "Preprocess resolution", 1024, { advanced: true }, 256, 2048, 64)]), default: true }],
-    description: "Detect the face in an image and redraw only that area (with your face LoRA) using ControlNet depth, then paste it back."
-  },
-  {
-    id: "camera-angle",
-    title: "Camera Angle (Qwen)",
-    category: "Image",
-    kind: "generate",
-    inputs: [P.imgIn("image", "Image"), P.textIn("prompt", "Extra prompt (optional)", true), P.loraIn(), P.seedIn()],
-    outputs: [P.imgOut()],
-    params: [],
-    engines: [{ ...qwen("qwen-angle", "Qwen Image Edit 2511 \u2014 multi-angle (local)", [slider("angle_h", "Horizontal angle (\xB0)", 0, 359, 1, 0), slider("angle_v", "Vertical angle (\xB0)", -30, 60, 1, 0), slider("angle_zoom", "Distance (close 0 \u2026 wide 10)", 0, 10, 0.5, 4), dyn("angle_lora", "Angle LoRA", "loras:qwen", "none"), slider("angle_strength", "Angle LoRA strength", 0, 2, 0.05, 1)]), default: true }],
-    description: "View the same subject from another camera angle (needs a multi-angle LoRA)."
-  },
-  {
-    id: "inpaint",
-    title: "Inpaint",
-    category: "Image",
-    kind: "generate",
-    inputs: [P.textIn(), P.imgIn(), P.maskIn(), P.loraIn(), P.seedIn()],
-    outputs: [P.imgOut()],
-    params: [],
-    engines: [
-      { ...zimage("zimage", "Z-Image Turbo (local)", [slider("denoise", "Denoise", 0.05, 1, 0.05, 0.85)]), default: true },
-      klein("klein", "Flux.2 Klein (local)", [slider("denoise", "Denoise", 0.05, 1, 0.05, 1)]),
-      sdxl("sdxl", "SDXL (local)", [slider("denoise", "Denoise", 0.05, 1, 0.05, 0.85)]),
-      qwen("qwen", "Qwen Image Edit 2511 (local)", [slider("denoise", "Denoise", 0.05, 1, 0.05, 0.85)]),
-      moss("moss", "Moss Image (local)", [slider("denoise", "Denoise", 0.05, 1, 0.05, 1)])
-    ],
-    description: "Repaint the white area of a mask."
-  },
-  {
-    id: "outpaint",
-    title: "Outpaint",
-    category: "Image",
-    kind: "generate",
-    inputs: [P.textIn("prompt", "Prompt", true), P.imgIn(), P.loraIn(), P.seedIn()],
-    outputs: [P.imgOut()],
-    params: [],
-    engines: [
-      { ...zimage("zimage", "Z-Image Turbo (local)", [num("left", "Left px", 0, {}, 0, 2048, 64), num("top", "Top px", 0, {}, 0, 2048, 64), num("right", "Right px", 256, {}, 0, 2048, 64), num("bottom", "Bottom px", 0, {}, 0, 2048, 64)]), default: true },
-      klein("klein", "Flux.2 Klein (local, needs KJNodes)", [num("left", "Left px", 0, {}, 0, 2048, 64), num("top", "Top px", 0, {}, 0, 2048, 64), num("right", "Right px", 256, {}, 0, 2048, 64), num("bottom", "Bottom px", 0, {}, 0, 2048, 64)]),
-      sdxl("sdxl", "SDXL (local)", [num("left", "Left px", 0, {}, 0, 2048, 64), num("top", "Top px", 0, {}, 0, 2048, 64), num("right", "Right px", 256, {}, 0, 2048, 64), num("bottom", "Bottom px", 0, {}, 0, 2048, 64)])
-    ],
-    description: "Extend the canvas around an image."
-  },
-  {
-    id: "face-swap",
-    title: "Face Swap",
-    category: "Image",
-    kind: "generate",
-    inputs: [P.textIn("prompt", "Prompt", true), P.imgIn("image", "Target"), P.imgIn("face", "Face source"), P.seedIn()],
-    outputs: [P.imgOut()],
-    params: [],
-    engines: [{ ...klein("klein", "Flux.2 Klein (local)", [slider("denoise", "Denoise", 0.05, 1, 0.05, 1)]), default: true }],
-    description: "Put the face/head of the second image on the first."
-  },
-  {
-    id: "remove-bg",
-    title: "Remove Background",
-    category: "Image",
-    kind: "generate",
-    inputs: [P.imgIn()],
-    outputs: [P.imgOut()],
-    params: [],
-    engines: [{ id: "rmbg", label: "BiRefNet (local)", family: "klein", default: true, params: [dyn("bg_model", "Model", "bgmodels", "birefnet.safetensors")] }],
-    description: "Cut the subject out (transparent PNG)."
-  },
-  {
-    id: "upscale",
-    title: "Upscale",
-    category: "Image",
-    kind: "generate",
-    inputs: [P.imgIn(), P.seedIn()],
-    outputs: [P.imgOut()],
-    params: [],
-    engines: [
-      { id: "seedvr2", label: "SeedVR2 (local)", family: "core", params: [dyn("sv_dit", "DiT model", "seedvr2dit", "none"), dyn("sv_vae", "VAE model", "seedvr2vae", "none"), num("sv_res", "Target resolution (short edge)", 2048, {}, 256, 8192, 64), num("sv_max", "Max resolution", 4096, { advanced: true }, 512, 16384, 64), sel("sv_color", "Colour correction", ["lab", "wavelet", "wavelet_adaptive", "hsv", "adain", "none"], "lab", { advanced: true }), sel("sv_offload", "Offload device", ["cpu", "none"], "cpu", { advanced: true }), num("sv_swap", "Blocks to swap", 0, { advanced: true }, 0, 36, 1), sel("sv_attn", "Attention", ["sdpa", "flash_attn_2", "sageattn_2"], "sdpa", { advanced: true }), num("seed", "Seed", 42, { advanced: true })] },
-      { id: "esrgan", label: "Upscale model (ComfyUI core)", family: "core", default: true, params: [dyn("upscale_model", "Model", "upscalers", "none"), slider("scale_by", "Final scale", 0.25, 4, 0.25, 1, { advanced: true })] }
-    ],
-    description: "Enlarge with an ESRGAN-type model from ComfyUI/models/upscale_models."
-  },
-  {
-    id: "music-generate",
-    title: "Music Generate",
-    category: "Audio",
-    kind: "generate",
-    inputs: [P.textIn("prompt", "Style", false), P.textIn("lyrics", "Lyrics", true), { id: "cover", label: "Cover source", type: "audio", optional: true }, P.textIn("melody", "Melody (ABC)", true), P.seedIn()],
-    outputs: [{ id: "audio", label: "Audio", type: "audio" }],
-    params: [],
-    engines: [
-      { id: "acestep", label: "Ace-Step 1.5 (local)", family: "music", default: true, params: [slider("seconds", "Length (s)", 5, 300, 1, 60), num("bpm", "BPM", 120, {}, 40, 240, 1), text("keyscale", "Key", "A minor"), sel("timesignature", "Time signature", ["2", "3", "4", "6"], "4", { advanced: true }), sel("language", "Language", ["en", "ko", "ja", "zh", "es", "fr", "de"], "en", { advanced: true }), sel("format", "Format", ["flac", "mp3", "opus"], "flac", { advanced: true }), slider("steps1", "Stage 1 steps", 1, 60, 1, 30, { advanced: true }), slider("steps2", "Stage 2 steps (0 = off)", 0, 60, 1, 20, { advanced: true }), slider("steps3", "Stage 3 steps (0 = off)", 0, 60, 1, 15, { advanced: true }), slider("cfg", "Guidance", 0, 10, 0.1, 1, { advanced: true }), seed] },
-      { id: "yue2", label: "YuE2 \u2014 text / cover music (local)", family: "music", params: [slider("seconds", "Length (s)", 10, 300, 1, 60), sel("format", "Format", ["flac", "mp3", "opus"], "flac", { advanced: true }), slider("temperature", "Temperature", 0.1, 2, 0.05, 1, { advanced: true }), slider("top_p", "Top-p", 0.1, 1, 0.01, 0.95, { advanced: true }), num("top_k", "Top-k", 100, { advanced: true }, 1, 500, 1), slider("repetition", "Repetition penalty", 1, 2, 0.01, 1.2, { advanced: true }), seed] },
-      { id: "minimax", label: "MiniMax Music 3 (local)", family: "music", params: [slider("seconds", "Length (s)", 5, 300, 1, 60), sel("format", "Format", ["flac", "mp3", "opus"], "flac", { advanced: true }), slider("steps1", "Steps", 1, 80, 1, 30, { advanced: true }), slider("cfg", "Guidance", 0, 10, 0.1, 1.7, { advanced: true }), seed] }
-    ],
-    description: "Songs and instrumentals. Style prompt (+ optional lyrics) in, audio out. Models: Settings \u2192 Music models."
-  },
-  {
-    id: "melody-editor",
-    title: "Melody Editor",
-    category: "Audio",
-    kind: "source",
-    inputs: [],
-    outputs: [P.textOut("abc", "Melody (ABC)")],
-    params: [text("melody", "melody", "", false, { advanced: true }), text("abc", "abc", "", false, { advanced: true })],
-    description: "Draw a melody on a piano roll, or record it from a MIDI keyboard. Wire it into YuE2 (Melody) \u2014 YuE2 then sings and arranges around your tune."
-  },
-  {
-    id: "comfy-workflow",
-    title: "ComfyUI Workflow",
-    category: "Workflow",
-    kind: "generate",
-    inputs: [P.textIn("prompt", "Prompt", true), P.imgIn("image", "Images", true, true), { id: "video", label: "Video", type: "video", optional: true }, P.seedIn()],
-    outputs: [P.imgOut("image", "Image"), { id: "video", label: "Video", type: "video" }],
-    params: [text("workflow", "Workflow JSON", "", true, { advanced: true }), text("prompt_target", "Prompt field", "", false, { advanced: true }), text("image_target", "Image 1 field", "", false, { advanced: true }), text("image2_target", "Image 2 field", "", false, { advanced: true }), text("video_target", "Video field", "", false, { advanced: true }), text("seed_target", "Seed field", "", false, { advanced: true }), { id: "seed", label: "Seed", control: { kind: "seed" }, default: -1, advanced: true }],
-    description: "Run any API-format ComfyUI workflow (video, LTX, H3, Wan\u2026). Load the JSON, pick which fields take the prompt / images / seed."
-  },
-  {
-    id: "video-generate",
-    title: "Video Generate",
-    category: "Video",
-    kind: "generate",
-    inputs: [P.textIn("prompt", "Prompt", false), P.imgIn("image", "First frame / references", true, true), P.imgIn("last", "Last frame", true), P.cardIn("H3 option cards"), P.loraIn(), { id: "assets", label: "Asset Library", type: "pipe", optional: true }, P.seedIn()],
-    outputs: [{ id: "video", label: "Video", type: "video" }],
-    params: [],
-    engines: [
-      { id: "h3", label: "MiniMax H3 \u2014 text / first-last frame (local)", family: "h3", default: true, params: h3Params(false) },
-      { id: "h3-ref", label: "MiniMax H3 \u2014 multi-reference (local)", family: "h3", params: h3Params(true) },
-      { id: "ltx25", label: "LTX 2.5 (local, with audio)", family: "ltx25", params: [sel("aspect", "Aspect ratio", [...ASPECTS, "auto"], "16:9"), megapixels(1), slider("seconds", "Length (s)", 2, 20, 1, 5), slider("steps", "Steps", 1, 40, 1, 12, { advanced: true }), slider("cfg", "Guidance", 0, 10, 0.1, 1, { advanced: true }), dyn("sampler", "Sampler", "samplers", "euler_ancestral", { advanced: true }), dyn("scheduler", "Scheduler", "schedulers", "linear_quadratic", { advanced: true }), text("stage2", "Stage-2 sigmas", "0.85, 0.7250, 0.4219, 0.0", false, { advanced: true }), ...loras("ltx25"), seed] }
-    ],
-    description: "Text \u2192 video, or first/last frame \u2192 video (LTX 2.5). LTX 2.5 or MiniMax H3. Other models: ComfyUI Workflow node."
-  },
-  // ============================================================ Edit (runs in the browser)
-  edit("crop", "Crop", [num("x", "X %", 0, {}, 0, 100, 1), num("y", "Y %", 0, {}, 0, 100, 1), num("w", "Width %", 100, {}, 1, 100, 1), num("h", "Height %", 100, {}, 1, 100, 1)], "Cut out a rectangle (percent of the image)."),
-  edit("resize", "Resize", [sel("mode", "Mode", ["scale", "fit width", "fit height", "exact"], "scale"), slider("scale", "Scale", 0.1, 4, 0.05, 1, { when: (p) => p.mode === "scale" }), num("width", "Width", 1024, { when: (p) => p.mode === "fit width" || p.mode === "exact" }, 1, 8192, 1), num("height", "Height", 1024, { when: (p) => p.mode === "fit height" || p.mode === "exact" }, 1, 8192, 1)], "Change the pixel size."),
-  edit("blur", "Blur", [slider("radius", "Radius", 0, 50, 0.5, 4)], "Gaussian blur."),
-  edit("levels", "Levels", [slider("black", "Black point", 0, 254, 1, 0), slider("white", "White point", 1, 255, 1, 255), slider("gamma", "Gamma", 0.1, 3, 0.05, 1)], "Black / white point and gamma."),
-  edit("rotate-flip", "Rotate and flip", [sel("rotate", "Rotate", ["0", "90", "180", "270"], "0"), toggle("flip_h", "Flip horizontal"), toggle("flip_v", "Flip vertical")], "Rotate in 90\xB0 steps and mirror."),
-  edit("color-correct", "Color correction", [slider("brightness", "Brightness", 0, 2, 0.01, 1), slider("contrast", "Contrast", 0, 2, 0.01, 1), slider("saturation", "Saturation", 0, 3, 0.01, 1), slider("temperature", "Warmth", -100, 100, 1, 0)], "Brightness, contrast, saturation, warmth."),
-  edit("sharpen", "Sharpen", [slider("amount", "Amount", 0, 3, 0.05, 0.8)], "Unsharp-style sharpening."),
-  edit("grayscale", "Grayscale", [slider("amount", "Amount", 0, 1, 0.05, 1)], "Remove colour."),
-  edit("threshold", "Threshold", [slider("level", "Level", 0, 255, 1, 128)], "Pure black / white by brightness."),
-  edit("posterize", "Posterize", [slider("levels", "Levels", 2, 32, 1, 6)], "Reduce the number of tones."),
-  edit("hue-rotate", "Hue Rotate", [slider("degrees", "Degrees", -180, 180, 1, 30)], "Shift all colours around the wheel."),
-  edit("vignette", "Vignette", [slider("strength", "Strength", 0, 1, 0.05, 0.5), slider("softness", "Softness", 0.1, 1, 0.05, 0.6)], "Darken the corners."),
-  edit("pixelate", "Pixelate", [slider("size", "Block size", 2, 128, 1, 12)], "Blocky mosaic."),
-  edit("invert", "Invert", [], "Negative of the image."),
-  edit("channels", "Channels", [sel("channel", "Channel", ["red", "green", "blue", "alpha", "luminance"], "luminance")], "Pull one channel out as grayscale image + mask.", [P.imgIn()], [P.imgOut(), P.maskOut()]),
-  edit("blend", "Blend", [sel("mode", "Mode", ["normal", "multiply", "screen", "overlay", "darken", "lighten", "difference", "soft-light"], "normal"), slider("opacity", "Opacity", 0, 1, 0.05, 1)], "Put one image over another.", [P.imgIn("base", "Base"), P.imgIn("top", "Top"), P.maskIn("mask", "Mask", true)]),
-  edit("mask-grow", "Matte Grow/Shrink", [slider("amount", "Pixels (\u2212 shrink)", -64, 64, 1, 8), slider("feather", "Feather", 0, 64, 1, 0)], "Grow, shrink or soften a mask.", [P.maskIn()], [P.maskOut()]),
-  edit("invert-mask", "Invert Mask", [], "Swap black and white in a mask.", [P.maskIn()], [P.maskOut()]),
-  {
-    id: "color-palette",
-    title: "Color palette",
-    category: "Edit",
-    kind: "edit",
-    inputs: [P.imgIn()],
-    outputs: [P.textOut("text", "Colors")],
-    params: [slider("count", "Colors", 2, 12, 1, 5)],
-    description: "Dominant colours as hex text."
-  },
-  {
-    id: "extract-frame",
-    title: "Extract Video Frame",
-    category: "Edit",
-    kind: "edit",
-    inputs: [{ id: "video", label: "Video", type: "video" }],
-    outputs: [P.imgOut()],
-    params: [slider("position", "Position %", 0, 100, 1, 100)],
-    description: "Grab one frame (default: last)."
-  },
-  {
-    id: "painter",
-    title: "Painter",
-    category: "Edit",
-    kind: "edit",
-    inputs: [P.imgIn("image", "Image", true)],
-    outputs: [P.imgOut("image", "Result"), P.maskOut()],
-    params: [num("width", "Canvas width", 1024, {}, 64, 4096, 8), num("height", "Canvas height", 1024, {}, 64, 4096, 8)],
-    description: "Draw on an image or paint a mask. Double-click the preview to open the editor."
-  },
-  // ============================================================ Utility
-  // ---------------------------------------------------------------- cards (small settings blocks you wire in)
-  {
-    id: "lora-card",
-    title: "LoRA",
-    category: "Cards",
-    kind: "source",
-    inputs: [{ id: "lora_in", label: "More LoRAs", type: "lora", optional: true, multi: true }],
-    outputs: [{ id: "lora", label: "LoRA", type: "lora" }],
-    params: [dyn("lora", "LoRA", "loras:all", "none"), slider("strength", "Strength", -2, 2, 0.05, 1)],
-    description: "One LoRA. Wire it into any image or video node \u2014 chain several cards to stack LoRAs."
-  },
-  {
-    id: "h3-turbo",
-    title: "H3 Turbo \xB7 7+1",
-    category: "Cards",
-    kind: "source",
-    inputs: [],
-    outputs: [{ id: "card", label: "Turbo", type: "pipe" }],
-    params: [
-      { id: "turbo", label: "Turbo", control: { kind: "select", options: ["pdd", "larryvrh", "lightx2v", "none"], labels: { pdd: "Turbo LoRA (Basic)", larryvrh: "Turbo LoRA (larryvrh)", lightx2v: "SLA Turbo (lightx2v)", none: "None" } }, default: "pdd" },
-      dyn("turbo_lora", "Turbo LoRA (first / last frame)", "loras:h3", "none", { when: (p) => p.turbo !== "none" }),
-      dyn("turbo_lora_ref", "Turbo LoRA (reference)", "loras:h3", "none", { when: (p) => p.turbo !== "none" }),
-      slider("turbo_strength", "Turbo strength", 0, 2, 0.05, 1, { when: (p) => p.turbo !== "none" }),
-      slider("turbo_steps", "Turbo steps", 1, 16, 1, 8, { advanced: true, when: (p) => p.turbo !== "none" }),
-      toggle("hires", "7+1 hi-res finish (7 steps small \u2192 upscale \u2192 1 step big)", true, { when: (p) => p.turbo === "pdd" || p.turbo === "none" }),
-      slider("hires_start_mp", "Start size (MP)", 0.2, 1, 0.05, 0.7, { when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires }),
-      slider("hires_final_mp", "Final size (MP)", 0.4, 3, 0.05, 1.6, { when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires }),
-      { id: "hires_last", label: "7+1 last step model", control: { kind: "select", options: ["same", "fixed"], labels: { same: "Same as generation", fixed: "Fixed model" } }, default: "same", when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires },
-      dyn("hires_last_model", "7+1 last step model (none = One Studio setting)", "h3unets", "none", { when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && p.hires_last === "fixed" }),
-      toggle("hires_no_opt", "Bypass H3 Memory Optimization on the last step", false, { advanced: true, when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires }),
-      num("hires_chunk_rows", "Last step chunk rows", 2048, { advanced: true, when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && !p.hires_no_opt }, 256, 16384, 256)
-    ],
-    description: "H3 speed-up: Turbo LoRA and the 7+1 hi-res finish. Wire into Video Generate \u2192 H3 option cards."
-  },
-  {
-    id: "moss-bboxes",
-    title: "Moss Boxes (R2I)",
-    category: "Cards",
-    kind: "source",
-    inputs: [P.imgIn("image", "Background (optional)", true)],
-    outputs: [{ id: "card", label: "Boxes", type: "pipe" }],
-    params: [
-      num("width", "Canvas width (px)", 1024, {}, 256, 4096, 16),
-      num("height", "Canvas height (px)", 1024, {}, 256, 4096, 16),
-      text("characters", "Characters (box numbers, e.g. 1, 3)", ""),
-      text("boxes", 'Boxes (JSON \u2014 edit with "Edit boxes")', "[]", true, { advanced: true })
-    ],
-    description: "Draw boxes on a canvas: each is an OBJECT or exact TEXT. Wire into Image Generate \u2192 Moss Image R2I. Draw the background first, foreground last."
-  },
-  {
-    id: "h3-speed",
-    title: "H3 Speed & Attention",
-    category: "Cards",
-    kind: "source",
-    inputs: [],
-    outputs: [{ id: "card", label: "Speed", type: "pipe" }],
-    params: [
-      sel("attn_backend", "Attention backend", ["none", "ck", "sage", "solattn_kijai", "sla"], "none"),
-      sel("attn_forward", "Attention forward patch", ["none", "memeff_sage", "solattn_sag"], "none"),
-      sel("optimizer", "H3 optimizer", ["none", "memory", "memory_sparse"], "none"),
-      sel("block_cache", "Block cache", ["none", "fbcache"], "none"),
-      toggle("spectrum", "Spectrum", false),
-      toggle("fused_mod", "Fused modulation", false),
-      slider("shift_video", "Shift (video)", 1, 20, 0.5, 12, { advanced: true }),
-      slider("shift_audio", "Shift (audio)", 1, 10, 0.5, 3, { advanced: true })
-    ],
-    description: "H3 attention backends, memory optimiser, block cache, Spectrum and sigma shift."
-  },
-  {
-    id: "h3-audiolock",
-    title: "H3 Audio Lock",
-    category: "Cards",
-    kind: "source",
-    inputs: [{ id: "audio", label: "Audio", type: "audio" }],
-    outputs: [{ id: "card", label: "Audio lock", type: "pipe" }],
-    params: [sel("lock_mode", "Mode", ["lock", "remix"], "lock"), slider("lock_strength", "Strength (remix)", 0, 1, 0.05, 0.5, { when: (p) => p.lock_mode === "remix" }), sel("lock_fit", "If the audio is shorter", ["pad_silence", "loop", "none"], "pad_silence")],
-    description: "Make H3 use your audio (voice / music) instead of generating its own; each clip gets its own slice."
-  },
-  {
-    id: "asset-library",
-    title: "Asset Library",
-    category: "Cards",
-    kind: "source",
-    inputs: [],
-    outputs: [P.imgOut("image", "Images"), P.textOut("mentions", "@names"), { id: "assets", label: "For H3", type: "pipe" }],
-    params: [text("project", "Project id", ""), text("ids", "Asset ids", "")],
-    description: "Pick characters, places and props from your reference library. Write @name in the prompt; H3 Reference resolves it."
-  },
-  // ---------------------------------------------------------------- post-processing (one card per step, video in → video out)
-  ...(() => {
-    const fpsParam = num("fps", "Source frame rate (fps, 0 = detect)", 0, { advanced: true }, 0, 240, 1);
-    const previewParam = num("preview_frames", "Test on the first N frames (0 = whole video)", 0, { advanced: true }, 0, 600, 1);
-    const vin = [{ id: "video", label: "Video", type: "video" }], vout = [{ id: "video", label: "Video", type: "video" }];
-    const pp = (id, title, params, description, engines) => ({ id, title, category: "Postprocess", kind: "generate", inputs: vin, outputs: vout, params: engines ? params : [...params, fpsParam, previewParam], engines: engines?.map((e) => ({ ...e, params: [...e.params ?? [], fpsParam, previewParam] })), description });
-    const rtxP = (pre, whenOk = () => true) => [
-      sel(`${pre}mode`, "Size by", ["scale", "short", "long", "wh"], "scale", { when: whenOk }),
-      slider(`${pre}scale`, "Scale", 1, 4, 0.25, 2, { when: (p) => whenOk(p) && p[`${pre}mode`] === "scale" }),
-      num(`${pre}short`, "Short edge px", 1080, { when: (p) => whenOk(p) && p[`${pre}mode`] === "short" }, 8, 8192, 8),
-      num(`${pre}long`, "Long edge px", 1920, { when: (p) => whenOk(p) && p[`${pre}mode`] === "long" }, 8, 8192, 8),
-      num(`${pre}w`, "Width", 1920, { when: (p) => whenOk(p) && p[`${pre}mode`] === "wh" }, 8, 8192, 8),
-      num(`${pre}h`, "Height", 1080, { when: (p) => whenOk(p) && p[`${pre}mode`] === "wh" }, 8, 8192, 8),
-      sel(`${pre}anchor`, "Crop anchor", ["center", "left", "right", "top", "bottom"], "center", { advanced: true, when: (p) => whenOk(p) && p[`${pre}mode`] === "wh" }),
-      sel(`${pre}quality`, "Quality", ["LOW", "MEDIUM", "HIGH", "ULTRA"], "ULTRA", { when: whenOk })
-    ];
-    return [
-      pp("pp-deblur", "Deblur (RTX)", [sel("strength", "Strength", ["LOW", "MEDIUM", "HIGH", "ULTRA"], "MEDIUM")], "NVIDIA RTX Deblur on every frame."),
-      pp("pp-denoise", "Denoise (RTX)", [sel("strength", "Strength", ["LOW", "MEDIUM", "HIGH", "ULTRA"], "MEDIUM")], "NVIDIA RTX Denoise on every frame."),
-      pp("pp-upscale", "Video Upscale", [], "Enlarge a video: FlashVSR, RTX VSR or an upscale model; optional second RTX pass.", [
-        { id: "flashvsr", label: "FlashVSR", family: "post", default: true, params: [
-          sel("fv_model", "Model", ["FlashVSR-v1.1", "FlashVSR"], "FlashVSR-v1.1"),
-          sel("fv_mode", "Mode", ["tiny", "tiny-long", "full"], "tiny"),
-          slider("fv_scale", "Scale", 2, 4, 1, 2),
-          toggle("fv_color", "Colour fix", true),
-          num("fv_tile", "Tile size", 384, { advanced: true }, 64, 2048, 32),
-          num("fv_overlap", "Tile overlap", 32, { advanced: true }, 0, 512, 8),
-          num("fv_seed", "Seed", 42, { advanced: true }),
-          toggle("two_pass", "2nd pass with RTX VSR", false),
-          ...rtxP("p2_", (p) => !!p.two_pass)
-        ] },
-        { id: "rtx", label: "RTX VSR (TJ)", family: "post", params: rtxP("rtx_") },
-        { id: "model", label: "Upscale model (ESRGAN\u2026)", family: "post", params: [dyn("model_name", "Model", "upscalers", "none"), toggle("two_pass", "2nd pass with RTX VSR", false), ...rtxP("p2_", (p) => !!p.two_pass)] }
-      ]),
-      pp("pp-skin", "Skin Retouch", [slider("evenness", "Evenness", 0, 1, 0.01, 0.3), slider("smoothing", "Smoothing", 0, 1, 0.01, 0.2), slider("redness", "Redness", 0, 1, 0.01, 0), slider("shine", "Shine", 0, 1, 0.01, 0), sel("blemish", "Blemish fix", ["off", "subtle", "strong"], "off"), toggle("preserve", "Keep moles / scars", true, { advanced: true }), slider("microtexture", "Micro-texture", 0, 3, 0.05, 0, { advanced: true })], "Non-generative skin evening, de-shine and blemish fix."),
-      pp("pp-grain", "Film Grain", [slider("amount", "Amount", 0, 1, 0.01, 0.25), slider("size", "Size", 0.3, 3, 0.05, 1), slider("color", "Colour grain", 0, 1, 0.01, 0), slider("lum_bias", "Shadow bias", 0, 1, 0.01, 0), sel("noise", "Noise", ["smooth", "grainy"], "smooth")], "Add film grain (ComfyUI core GLSL shader)."),
-      pp("pp-interpolate", "Frame Interpolation", [slider("target_fps", "Target FPS", 24, 120, 1, 48), slider("scale", "Flow scale", 0.25, 2, 0.25, 1, { advanced: true }), text("model_name", "RIFE model", "flownet.pkl", false, { advanced: true }), num("batch", "Batch size", 8, { advanced: true }, 1, 64, 1), toggle("fp16", "FP16", true, { advanced: true })], "RIFE: smooth motion by adding in-between frames."),
-      pp("pp-resize", "Video Resize", [sel("mode", "Mode", ["Long side", "Short side", "Ratio", "Mega Pixel", "Width x Height"], "Long side"), num("target_px", "Target px", 1920, { when: (p) => p.mode === "Long side" || p.mode === "Short side" }, 8, 16384, 2), num("ratio_w", "Ratio W", 16, { when: (p) => p.mode === "Ratio" }, 1, 64, 1), num("ratio_h", "Ratio H", 9, { when: (p) => p.mode === "Ratio" }, 1, 64, 1), slider("megapixels", "Megapixels", 0.1, 8, 0.1, 1, { when: (p) => p.mode === "Mega Pixel" }), num("width", "Width", 1280, { when: (p) => p.mode === "Width x Height" }, 8, 16384, 2), num("height", "Height", 720, { when: (p) => p.mode === "Width x Height" }, 8, 16384, 2), sel("crop", "Fit", ["crop", "stretch"], "crop", { when: (p) => p.mode === "Width x Height" }), sel("method", "Resampling", ["lanczos", "bilinear", "bicubic", "area", "nearest-exact"], "lanczos", { advanced: true })], "Change the video size or aspect ratio."),
-      {
-        id: "face-refine",
-        title: "Face Refine (H3)",
-        category: "Postprocess",
-        kind: "generate",
-        inputs: [{ id: "video", label: "Video", type: "video" }, P.textIn("prompt", "Prompt", true), P.imgIn("image", "Face references", true, true), P.cardIn("H3 option cards"), P.loraIn(), P.seedIn()],
-        outputs: vout,
-        params: [
-          dyn("detector", "Face detector", "facedetectors", "none"),
-          dyn("fallback", "Fallback detector", "facedetectors", "none", { advanced: true }),
-          sel("select", "Which face", ["largest_face", "smallest_face", "left_most", "right_most", "top_most", "bottom_most", "centre_most", "detector_score", "manual"], "largest_face"),
-          text("picks", "Picked faces (manual)", "", false, { when: (p) => p.select === "manual" }),
-          text("pick_mode", "Pick mode", "shots", false, { advanced: true, when: () => false }),
-          slider("denoise", "Redraw strength", 0.05, 1, 0.05, 0.4),
-          slider("confidence", "Detect confidence", 0.05, 1, 0.05, 0.35, { advanced: true }),
-          slider("crop_factor", "Crop factor", 1, 6, 0.1, 2.5, { advanced: true }),
-          sel("canvas_mode", "Canvas", ["auto_capped_768", "auto_no_downscale", "manual"], "auto_capped_768", { advanced: true }),
-          num("canvas_w", "Canvas W", 768, { advanced: true, when: (p) => p.canvas_mode === "manual" }, 64, 2048, 32),
-          num("canvas_h", "Canvas H", 768, { advanced: true, when: (p) => p.canvas_mode === "manual" }, 64, 2048, 32),
-          num("smooth", "Smooth window", 21, { advanced: true }, 1, 99, 2),
-          toggle("cuts", "Detect scene cuts", false, { advanced: true }),
-          slider("cut_threshold", "Cut threshold", 1, 10, 0.5, 3, { advanced: true, when: (p) => !!p.cuts }),
-          toggle("identity", "Follow the same person", true, { advanced: true }),
-          slider("identity_threshold", "Identity threshold", 0.1, 0.9, 0.01, 0.45, { advanced: true }),
-          sel("identity_model", "Identity model", ["insightface", "clip_vision", "ccip"], "insightface", { advanced: true }),
-          slider("mul_small", "Small face \xD7", 0, 2, 0.05, 1, { advanced: true }),
-          slider("mul_large", "Large face \xD7", 0, 2, 0.05, 0.35, { advanced: true }),
-          slider("px_small", "Small face px", 8, 200, 1, 30, { advanced: true }),
-          slider("px_large", "Large face px", 20, 600, 1, 120, { advanced: true }),
-          slider("steps", "Steps (no turbo)", 1, 30, 1, 8, { advanced: true }),
-          dyn("sampler", "Sampler", "samplers", "euler", { advanced: true }),
-          dyn("scheduler", "Scheduler", "schedulers", "simple", { advanced: true }),
-          sel("paste", "Paste back", ["face_only", "face_ellipse", "full_crop"], "face_only", { advanced: true }),
-          slider("feather", "Feather", 0, 64, 1, 6, { advanced: true }),
-          slider("colour", "Colour match", 0, 1, 0.05, 1, { advanced: true }),
-          slider("blend", "Blend", 0, 1, 0.05, 1, { advanced: true }),
-          sel("undetected", "Frames without a face", ["fade_out", "skip", "composite_anyway"], "fade_out", { advanced: true }),
-          seed
-        ],
-        description: "Redraw small faces in a finished H3 clip: track \u2192 crop \u2192 H3 redraw \u2192 stitch back. Needs ComfyUI-H3-FaceRefine."
-      },
-      {
-        id: "h3-image",
-        title: "Image Generate (H3)",
-        category: "Image",
-        kind: "generate",
-        inputs: [P.textIn(), P.imgIn("image", "Reference images (optional)", true, true), P.cardIn("H3 option cards"), P.loraIn(), P.seedIn()],
-        outputs: [P.imgOut()],
-        params: [
-          sel("aspect", "Aspect ratio", ASPECTS, "1:1"),
-          slider("final_mp", "Final size (MP)", 0.25, 4, 0.25, 1.5),
-          toggle("final", "High quality 2nd pass (latent upscale)", true),
-          slider("preview_mp", "First pass size (MP)", 0.1, 1.5, 0.05, 0.5, { advanced: true }),
-          slider("steps", "Steps (no turbo)", 1, 60, 1, 20, { advanced: true }),
-          slider("pass2", "2nd pass steps", 3, 5, 1, 3, { advanced: true, when: (p) => !!p.final }),
-          toggle("fizgig", "Fizgig single-frame latent", false, { advanced: true }),
-          sel("ref_size", "Reference size", ["max", "match"], "max", { advanced: true }),
-          seed
-        ],
-        description: "A still image from the MiniMax H3 model \u2014 text to image, or add reference images (up to 9)."
-      },
-      {
-        id: "character-sheet",
-        title: "Character Sheet",
-        category: "Image",
-        kind: "generate",
-        inputs: [P.imgIn("image", "Character reference", false, true), P.textIn("prompt", "Prompt (optional)", true), P.loraIn(), P.seedIn()],
-        outputs: [P.imgOut("image", "Sheet"), { id: "video", label: "Turnaround video", type: "video" }],
-        params: [
-          sel("aspect", "Aspect ratio", ["3:4", "9:16", "1:1", "16:9", "4:3"], "3:4"),
-          megapixels(0.9),
-          text("frames", "Frames for the 8 cells", "7, 22, 37, 52, 67, 82, 107, 118"),
-          toggle("save_frames", "Also save each frame", false, { advanced: true }),
-          toggle("latent_up", "Cheap first pass + latent upscale", false, { advanced: true }),
-          slider("first_mp", "First pass size (MP)", 0.2, 1, 0.05, 0.36, { advanced: true, when: (p) => !!p.latent_up }),
-          slider("pass2", "Second pass steps", 3, 5, 1, 3, { advanced: true, when: (p) => !!p.latent_up }),
-          sel("deblur", "RTX Deblur", ["none", "LOW", "MEDIUM", "HIGH", "ULTRA"], "none", { advanced: true }),
-          toggle("rtx", "RTX VSR", false, { advanced: true }),
-          toggle("supersample", "Scale back down (supersample)", false, { advanced: true, when: (p) => !!p.rtx }),
-          sel("ref_size", "Reference size", ["max", "match"], "max", { advanced: true }),
-          num("max_dim", "Sheet max size px", 2048, { advanced: true }, 512, 8192, 64),
-          seed
-        ],
-        description: "H3 reference-to-video turnaround (front / back / profile / \xBE / expressions) assembled into a model sheet."
-      }
-    ];
-  })(),
-  {
-    id: "ltx-director",
-    title: "LTX Director (timeline)",
-    category: "Video",
-    kind: "generate",
-    inputs: [P.textIn("prompt", "Overall prompt", false), P.imgIn("image", "Images (in time order)", true, true), { id: "audio", label: "Audio (custom track)", type: "audio", optional: true }, { id: "video", label: "Motion video (guide)", type: "video", optional: true }, P.loraIn(), P.seedIn()],
-    outputs: [{ id: "video", label: "Video", type: "video" }],
-    params: [
-      text("beats", "Beats \u2014 one per line:  start-end: prompt  (seconds)", "", true),
-      text("image_times", "Image times (s), in the order connected", "0"),
-      toggle("last_at_end", "Pin the last image to the end", false),
-      num("audio_start", "Audio starts at (s)", 0, {}, 0, 60, 0.1),
-      num("motion_start", "Motion video starts at (s)", 0, {}, 0, 60, 0.1),
-      slider("motion_strength", "Motion strength", 0, 1, 0.05, 1),
-      sel("aspect", "Aspect ratio", [...ASPECTS, "auto"], "16:9"),
-      megapixels(1),
-      slider("seconds", "Length (s)", 2, 20, 1, 8),
-      slider("steps", "Steps", 1, 40, 1, 12, { advanced: true }),
-      slider("cfg", "Guidance", 0, 10, 0.1, 1, { advanced: true }),
-      dyn("sampler", "Sampler", "samplers", "euler_ancestral", { advanced: true }),
-      dyn("scheduler", "Scheduler", "schedulers", "linear_quadratic", { advanced: true }),
-      text("stage2", "Stage-2 sigmas", "0.85, 0.7250, 0.4219, 0.0", false, { advanced: true }),
-      seed
-    ],
-    description: "LTX 2.5 with a timeline: a different prompt for each moment, and images pinned at chosen times."
-  },
-  {
-    id: "video-refine",
-    title: "Video Edit (LTX 2.5 refine)",
-    category: "Video",
-    kind: "generate",
-    inputs: [{ id: "video", label: "Video", type: "video" }, P.textIn("prompt", "Prompt", true), P.loraIn(), P.seedIn()],
-    outputs: [{ id: "video", label: "Video", type: "video" }],
-    params: [slider("steps", "Steps", 1, 20, 1, 4), slider("denoise", "Change amount", 0.05, 1, 0.05, 0.15), text("negative", "Negative prompt", "bad anatomy, inconsistent look, low resolution,", true, { advanced: true }), dyn("sampler", "Sampler", "samplers", "euler_ancestral", { advanced: true }), dyn("scheduler", "Scheduler", "schedulers", "simple", { advanced: true }), seed],
-    description: "Re-render an existing clip with LTX 2.5: 2\xD7 latent upscale + a light, prompt-guided refine (keeps the sound)."
-  },
-  {
-    id: "video-audio",
-    title: "Add Audio to Video",
-    category: "Video",
-    kind: "generate",
-    inputs: [{ id: "video", label: "Video", type: "video" }, { id: "audio", label: "Audio", type: "audio" }],
-    outputs: [{ id: "video", label: "Video", type: "video" }],
-    params: [slider("start", "Start the audio at (s)", 0, 120, 0.5, 0)],
-    description: "Replace a video\u2019s sound with an audio track (for example from Music Generate)."
-  },
-  {
-    id: "scene-detect",
-    title: "Scene Detect",
-    category: "Video",
-    kind: "generate",
-    inputs: [{ id: "video", label: "Video", type: "video" }],
-    outputs: [P.textOut()],
-    params: [slider("threshold", "Sensitivity (lower = more cuts)", 0.05, 0.95, 0.05, 0.3)],
-    description: "Find the cuts in a video (ITDA ONE STUDIO). The times come out as text."
-  },
-  {
-    id: "beat-detect",
-    title: "Beat Detect",
-    category: "Audio",
-    kind: "generate",
-    inputs: [{ id: "media", label: "Audio / video", type: "any" }],
-    outputs: [P.textOut()],
-    params: [],
-    description: "Find the tempo and beat times of a song or video (ITDA ONE STUDIO). Needs librosa on the server."
-  },
-  {
-    id: "video-bridge",
-    title: "Transition Bridge",
-    category: "Video",
-    kind: "generate",
-    inputs: [{ id: "a", label: "Clip A (before)", type: "video" }, { id: "b", label: "Clip B (after)", type: "video" }],
-    outputs: [{ id: "video", label: "Bridge clip", type: "video" }],
-    params: [sel("mode", "Transition", ["interpolate", "crossfade"], "interpolate"), slider("frames", "Length (frames)", 2, 48, 1, 8)],
-    description: "A short clip that blends the last frame of A into the first frame of B. Put it between A and B in Video Stitch (ITDA ONE STUDIO)."
-  },
-  {
-    id: "video-stitch",
-    title: "Video Stitch",
-    category: "Video",
-    kind: "generate",
-    inputs: [{ id: "videos", label: "Videos (in order)", type: "video", multi: true }],
-    outputs: [{ id: "video", label: "Video", type: "video" }],
-    params: [
-      { id: "mode", label: "Join", control: { kind: "select", options: ["concat", "onetake"], labels: { concat: "Join as they are", onetake: "One-Take (trim the shared 1.625 s)" } }, default: "concat" },
-      slider("overlap", "Trim overlap (s)", 0, 3, 0.05, 0, { advanced: true, when: (p) => p.mode !== "onetake" })
-    ],
-    description: "Join several videos into one, in the order they are connected. One-Take: clips made with the One-Take continuity share their first 1.625 s with the previous clip, so that part is trimmed (the clips are re-encoded)."
-  },
-  { id: "import-audio", title: "Import Audio", category: "Utility", kind: "source", inputs: [], outputs: [{ id: "audio", label: "Audio", type: "audio" }], params: [], description: "Load an audio file (e.g. a recording for YuE2 Cover Music)." },
-  { id: "import", title: "Load Image", category: "Utility", kind: "source", inputs: [], outputs: [{ id: "image", label: "Image", type: "image" }], params: [], description: "Load an image from your computer, or drop one on the canvas." },
-  { id: "import-video", title: "Load Video", category: "Utility", kind: "source", inputs: [], outputs: [{ id: "video", label: "Video", type: "video" }], params: [], description: "Load a video from your computer, or drop one on the canvas." },
-  { id: "export", title: "Export", category: "Utility", kind: "output", inputs: [{ id: "image", label: "Media", type: "any" }], outputs: [], params: [text("name", "File name", "canvers")], description: "Download the connected result." },
-  { id: "preview", title: "Result Viewer", category: "Utility", kind: "output", inputs: [{ id: "image", label: "Image / video / audio / text", type: "any", optional: true }], outputs: [{ id: "out", label: "Pass through", type: "any" }], params: [], description: "Look at any image or text." },
-  { id: "router", title: "Router", category: "Utility", kind: "edit", inputs: [P.imgIn("image", "In", false)], outputs: [P.imgOut("image", "Out")], params: [], description: "A pass-through to tidy wires." },
-  { id: "compare", title: "Compare", category: "Utility", kind: "output", inputs: [{ id: "a", label: "A", type: "any" }, { id: "b", label: "B", type: "any" }], outputs: [], params: [], description: "Drag a slider between two images." },
-  { id: "note", title: "Sticky Note", category: "Utility", kind: "note", inputs: [], outputs: [], params: [text("text", "Note", "", true)], description: "A memo on the canvas." },
-  { id: "number", title: "Number", category: "Data", kind: "source", inputs: [], outputs: [{ id: "value", label: "Value", type: "number" }], params: [num("value", "Value", 0, {}, void 0, void 0, 1)], description: "A number to wire into other nodes." },
-  { id: "text-data", title: "Text", category: "Data", kind: "source", inputs: [], outputs: [P.textOut()], params: [text("text", "Text", "", true)], description: "A fixed piece of text." },
-  { id: "toggle", title: "Toggle", category: "Data", kind: "source", inputs: [], outputs: [{ id: "value", label: "On", type: "boolean" }], params: [toggle("value", "On", true)], description: "On / off switch." },
-  { id: "seed-node", title: "Seed", category: "Data", kind: "source", inputs: [], outputs: [{ id: "value", label: "Seed", type: "number" }], params: [{ id: "value", label: "Seed", control: { kind: "seed" }, default: 12345 }], description: "One seed shared by several nodes." }
-];
-var byId = new Map(REGISTRY.map((n2) => [n2.id, n2]));
-function paramsFor(def, engineId) {
-  const eng = engineFor(def, engineId);
-  return eng?.params ?? def.params;
-}
-function engineFor(def, engineId) {
-  return def.engines?.find((e) => e.id === engineId) ?? def.engines?.find((e) => e.default) ?? def.engines?.[0];
-}
-function defaultParams(def, engineId) {
-  const out = {};
-  for (const p of paramsFor(def, engineId)) out[p.id] = p.default;
-  return out;
-}
-function compatible(a, b) {
-  if (a === b || a === "any" || b === "any") return true;
-  const imageLike = (t2) => t2 === "image" || t2 === "mask";
-  return imageLike(a) && imageLike(b);
-}
-
 // src/engine/run.ts
+init_registry();
 init_comfy();
 
 // src/backend/studio.ts
@@ -5035,328 +5429,8 @@ async function runLlmNow(req, retried) {
 
 // src/backend/promptStyle.ts
 init_http();
-
-// src/store/graph.ts
-init_esm();
-init_comfy();
-init_settings();
-
-// src/backend/turboMemory.ts
-init_http();
-init_settings();
-var KEY2 = { fl: "pdd_file", ref: "pdd_file_reference" };
-function saveTurboPick(kind, lora) {
-  if (!lora || lora === "none") return;
-  void postJson("/minimax_h3_one/config", { [KEY2[kind]]: lora }).catch(() => void 0);
-}
-
-// src/store/graph.ts
-var MODE_KEY = "canvers.mode";
-function measure(n2) {
-  const el = typeof document !== "undefined" ? document.querySelector(`.react-flow__node[data-id="${n2.id}"]`) : null;
-  return { w: n2.w ?? (el?.offsetWidth || 300), h: n2.h ?? (el?.offsetHeight || 260) };
-}
-var RUNS_KEY = "canvers.runs.v1";
-var readMode = () => {
-  try {
-    return localStorage.getItem(MODE_KEY) === "simple" ? "simple" : "canvas";
-  } catch {
-    return "canvas";
-  }
-};
-var readRuns = () => {
-  try {
-    return JSON.parse(localStorage.getItem(RUNS_KEY) ?? "[]");
-  } catch {
-    return [];
-  }
-};
-var writeRuns = (r) => {
-  try {
-    localStorage.setItem(RUNS_KEY, JSON.stringify(r.slice(0, 150).map((x) => x.status === "running" ? { ...x, status: "error", error: "interrupted" } : x)));
-  } catch {
-  }
-};
-var hostSerializer = null;
-var useGraph = create((set2, get) => ({
-  projectId: uid("p"),
-  projectName: "untitled",
-  canvasFile: null,
-  dirty: false,
-  nodes: [],
-  edges: [],
-  runtime: {},
-  selected: [],
-  past: [],
-  future: [],
-  mode: readMode(),
-  panel: null,
-  viewer: null,
-  painter: null,
-  boxEditor: null,
-  melody: null,
-  assetPicker: null,
-  facePicker: null,
-  fitTick: 0,
-  composerRuns: readRuns(),
-  setMode: (mode) => {
-    try {
-      localStorage.setItem(MODE_KEY, mode);
-    } catch {
-    }
-    set2({ mode, ...mode === "simple" && (get().panel === "decks" || get().panel === "nodes") ? { panel: null } : {} });
-  },
-  setPanel: (panel) => set2({ panel }),
-  setName: (projectName) => set2({ projectName }),
-  snapshot: () => {
-    const { nodes, edges, past } = get();
-    set2({ past: [...past.slice(-59), { nodes, edges }], future: [] });
-  },
-  undo: () => {
-    const { past, future, nodes, edges } = get();
-    const prev = past[past.length - 1];
-    if (!prev) return;
-    set2({ ...prev, past: past.slice(0, -1), future: [{ nodes, edges }, ...future] });
-  },
-  redo: () => {
-    const { past, future, nodes, edges } = get();
-    const next = future[0];
-    if (!next) return;
-    set2({ ...next, past: [...past, { nodes, edges }], future: future.slice(1) });
-  },
-  addNode: (defId, x, y, init) => {
-    const def = byId.get(defId);
-    if (!def) throw new Error(`unknown node ${defId}`);
-    get().snapshot();
-    const engine = engineFor(def);
-    const node = {
-      id: uid("n"),
-      defId,
-      x,
-      y,
-      results: [],
-      activeResult: 0,
-      engineId: engine?.id,
-      params: { ...defaultParams(def, engine?.id), ...defId === "h3-turbo" ? rememberedTurbo() : {} },
-      ...defId === "note" ? { w: 240, h: 160 } : {},
-      ...init
-    };
-    set2({ nodes: [...get().nodes, node], selected: [node.id] });
-    return node.id;
-  },
-  removeNodes: (ids) => {
-    const set_ = new Set(ids);
-    get().snapshot();
-    set2({
-      nodes: get().nodes.filter((n2) => !set_.has(n2.id)).map((n2) => n2.members ? { ...n2, members: n2.members.filter((m) => !set_.has(m)) } : n2),
-      edges: get().edges.filter((e) => !set_.has(e.source) && !set_.has(e.target)),
-      selected: get().selected.filter((s) => !set_.has(s))
-    });
-  },
-  duplicateNodes: (ids) => {
-    get().snapshot();
-    const map = /* @__PURE__ */ new Map();
-    const copies = [];
-    for (const n2 of get().nodes) if (ids.includes(n2.id)) {
-      const id = uid("n");
-      map.set(n2.id, id);
-      copies.push({ ...n2, id, x: n2.x + 40, y: n2.y + 40, params: { ...n2.params }, results: [], activeResult: 0, locked: false, members: void 0 });
-    }
-    const edges = get().edges.filter((e) => map.has(e.source) && map.has(e.target)).map((e) => ({ ...e, id: uid("e"), source: map.get(e.source), target: map.get(e.target) }));
-    set2({ nodes: [...get().nodes, ...copies], edges: [...get().edges, ...edges], selected: copies.map((c) => c.id) });
-  },
-  moveNode: (id, x, y) => set2({ nodes: get().nodes.map((n2) => n2.id === id ? { ...n2, x, y } : n2) }),
-  moveMany: (deltas) => {
-    const m = new Map(deltas.map((d) => [d.id, d]));
-    set2({ nodes: get().nodes.map((n2) => m.has(n2.id) ? { ...n2, x: m.get(n2.id).x, y: m.get(n2.id).y } : n2) });
-  },
-  setSize: (id, w, h) => set2({ nodes: get().nodes.map((n2) => n2.id === id ? { ...n2, w, h } : n2) }),
-  setParam: (id, key, v) => {
-    set2({ nodes: get().nodes.map((n2) => n2.id === id ? { ...n2, params: { ...n2.params, [key]: v } } : n2) });
-    if (get().nodes.find((n2) => n2.id === id)?.defId === "h3-turbo" && typeof v === "string" && v !== "none" && v !== "") {
-      if (key === "turbo_lora") {
-        useSettings.getState().setH3Turbo({ fl: v });
-        saveTurboPick("fl", v);
-      } else if (key === "turbo_lora_ref") {
-        useSettings.getState().setH3Turbo({ ref: v });
-        saveTurboPick("ref", v);
-      }
-      const filled = fillTurbo(get().nodes);
-      if (filled !== get().nodes) set2({ nodes: filled });
-    }
-  },
-  setEngine: (id, engineId) => {
-    get().snapshot();
-    set2({
-      nodes: get().nodes.map((n2) => {
-        if (n2.id !== id) return n2;
-        const def = byId.get(n2.defId);
-        const fresh = defaultParams(def, engineId);
-        const params = { ...fresh };
-        for (const k of Object.keys(fresh)) if (k in n2.params && typeof n2.params[k] === typeof fresh[k]) params[k] = n2.params[k];
-        return { ...n2, engineId, params };
-      })
-    });
-  },
-  setColor: (ids, color) => {
-    get().snapshot();
-    set2({ nodes: get().nodes.map((n2) => ids.includes(n2.id) ? { ...n2, color, ...color === void 0 ? { textColor: void 0 } : {} } : n2) });
-  },
-  setCardColors: (ids, color, textColor) => {
-    get().snapshot();
-    set2({ nodes: get().nodes.map((n2) => ids.includes(n2.id) ? { ...n2, color, textColor } : n2) });
-  },
-  setTitle: (id, title) => set2({ nodes: get().nodes.map((n2) => n2.id === id ? { ...n2, title } : n2) }),
-  setLocked: (ids, locked) => set2({ nodes: get().nodes.map((n2) => ids.includes(n2.id) ? { ...n2, locked } : n2) }),
-  setResults: (id, assets, mode = "replace") => set2({
-    nodes: get().nodes.map((n2) => {
-      if (n2.id !== id) return n2;
-      const results = mode === "append" ? [...n2.results, ...assets] : assets;
-      return { ...n2, results, activeResult: mode === "append" ? n2.results.length : 0, ...mode === "append" ? {} : { pick: void 0 } };
-    })
-  }),
-  clearResults: (id) => set2({ nodes: get().nodes.map((n2) => n2.id === id ? { ...n2, results: [], activeResult: 0, pick: void 0 } : n2) }),
-  setPick: (id, ids) => set2({ nodes: get().nodes.map((n2) => n2.id === id ? { ...n2, pick: ids.length ? ids : void 0 } : n2) }),
-  setActive: (id, idx) => set2({ nodes: get().nodes.map((n2) => n2.id === id ? { ...n2, activeResult: Math.max(0, Math.min(idx, Math.max(0, n2.results.length - 1))) } : n2) }),
-  connect: (e) => {
-    const { nodes, edges } = get();
-    const s = nodes.find((n2) => n2.id === e.source), t2 = nodes.find((n2) => n2.id === e.target);
-    if (!s || !t2 || s.id === t2.id) return false;
-    const sp = byId.get(s.defId)?.outputs.find((o) => o.id === e.sourceHandle);
-    const tp = byId.get(t2.defId)?.inputs.find((i) => i.id === e.targetHandle);
-    if (!sp || !tp || !compatible(sp.type, tp.type)) return false;
-    const keep = tp.multi ? edges : edges.filter((x) => !(x.target === e.target && x.targetHandle === e.targetHandle));
-    if (keep.some((x) => x.source === e.source && x.sourceHandle === e.sourceHandle && x.target === e.target && x.targetHandle === e.targetHandle)) return false;
-    get().snapshot();
-    set2({ edges: [...keep, { ...e, id: uid("e") }] });
-    return true;
-  },
-  moveEdge: (id, delta) => {
-    const es = get().edges;
-    const e = es.find((x) => x.id === id);
-    if (!e) return;
-    const group = es.filter((x) => x.target === e.target && x.targetHandle === e.targetHandle);
-    const k = group.findIndex((x) => x.id === id), other = group[k + delta];
-    if (!other) return;
-    get().snapshot();
-    set2({ edges: es.map((x) => x.id === id ? other : x.id === other.id ? e : x) });
-  },
-  removeEdges: (ids) => {
-    get().snapshot();
-    set2({ edges: get().edges.filter((e) => !ids.includes(e.id)) });
-  },
-  setRuntime: (id, rt) => set2({ runtime: { ...get().runtime, [id]: { ...{ status: "idle", pct: 0 }, ...get().runtime[id], ...rt } } }),
-  select: (selected) => set2({ selected }),
-  group: (ids) => {
-    const members = get().nodes.filter((n2) => ids.includes(n2.id) && !n2.members);
-    if (members.length < 1) return;
-    get().snapshot();
-    const g = { id: uid("g"), defId: "group", x: 0, y: 0, w: 240, h: 160, params: {}, results: [], activeResult: 0, title: "Group", members: members.map((m) => m.id) };
-    const taken = new Set(g.members);
-    set2({ nodes: [g, ...get().nodes.map((n2) => n2.members ? { ...n2, members: n2.members.filter((m) => !taken.has(m)) } : n2)], selected: [g.id] });
-    get().fitGroup(g.id);
-    if (typeof requestAnimationFrame !== "undefined") requestAnimationFrame(() => requestAnimationFrame(() => get().fitGroup(g.id)));
-  },
-  fitGroup: (id) => {
-    const grp = get().nodes.find((n2) => n2.id === id && n2.members);
-    if (!grp) return;
-    const mem = get().nodes.filter((n2) => grp.members.includes(n2.id));
-    if (!mem.length) return;
-    const pad = 40, top = 64;
-    const rects = mem.map((m) => {
-      const s = measure(m);
-      return { x: m.x, y: m.y, w: s.w, h: s.h };
-    });
-    const x = Math.min(...rects.map((r) => r.x)) - pad, y = Math.min(...rects.map((r) => r.y)) - top;
-    const x2 = Math.max(...rects.map((r) => r.x + r.w)) + pad, y2 = Math.max(...rects.map((r) => r.y + r.h)) + pad;
-    set2({ nodes: get().nodes.map((n2) => n2.id === id ? { ...n2, x, y, w: x2 - x, h: y2 - y } : n2) });
-  },
-  reassignMembership: (ids) => {
-    const st = get();
-    const groups = st.nodes.filter((n2) => n2.members);
-    if (!groups.length) return;
-    let changed = false;
-    let nodes = st.nodes;
-    for (const id of ids) {
-      const c = nodes.find((n2) => n2.id === id);
-      if (!c || c.members) continue;
-      const s = measure(c), cx = c.x + s.w / 2, cy = c.y + s.h / 2;
-      const inside = groups.find((gr) => {
-        const cur = nodes.find((n2) => n2.id === gr.id);
-        return cx >= cur.x && cx <= cur.x + (cur.w ?? 0) && cy >= cur.y && cy <= cur.y + (cur.h ?? 0);
-      });
-      const was = nodes.find((n2) => n2.members?.includes(id));
-      if (was?.id === inside?.id) continue;
-      nodes = nodes.map((n2) => n2.id === was?.id ? { ...n2, members: n2.members.filter((m) => m !== id) } : n2.id === inside?.id ? { ...n2, members: [...n2.members, id] } : n2);
-      changed = true;
-    }
-    if (changed) set2({ nodes });
-  },
-  ungroup: (id) => {
-    get().snapshot();
-    set2({ nodes: get().nodes.filter((n2) => n2.id !== id), selected: [] });
-  },
-  openViewer: (nodeId) => set2({ viewer: nodeId ? { nodeId } : null }),
-  openPainter: (nodeId) => set2({ painter: nodeId }),
-  openBoxEditor: (nodeId) => set2({ boxEditor: nodeId }),
-  openMelody: (nodeId) => set2({ melody: nodeId }),
-  openAssetPicker: (nodeId) => set2({ assetPicker: nodeId }),
-  openFacePicker: (nodeId) => set2({ facePicker: nodeId }),
-  toProject: () => ({ app: "ai-one-studio-canvers", version: 1, id: get().projectId, name: get().projectName, nodes: hostSerializer ? get().nodes.map(hostSerializer) : get().nodes, edges: get().edges, updatedAt: (/* @__PURE__ */ new Date()).toISOString() }),
-  markSaved: (file) => set2({ canvasFile: file, dirty: false }),
-  loadProject: (p, file = null, dirty = false) => quietly(() => set2({ canvasFile: file, dirty, projectId: p.id ?? uid("p"), projectName: p.name || "untitled", nodes: fillTurbo(p.nodes ?? []), edges: p.edges ?? [], runtime: {}, selected: [], past: [], future: [], fitTick: get().fitTick + 1 })),
-  newProject: () => quietly(() => set2({ canvasFile: null, dirty: false, projectId: uid("p"), projectName: "untitled", nodes: [], edges: [], runtime: {}, selected: [], past: [], future: [] })),
-  requestFit: () => set2({ fitTick: get().fitTick + 1 }),
-  addComposerRun: (r) => {
-    const runs = [r, ...get().composerRuns];
-    writeRuns(runs);
-    set2({ composerRuns: runs });
-  },
-  patchComposerRun: (id, patch) => {
-    const runs = get().composerRuns.map((r) => r.id === id ? { ...r, ...patch } : r);
-    writeRuns(runs);
-    set2({ composerRuns: runs });
-  },
-  removeComposerRun: (id) => {
-    const runs = get().composerRuns.filter((r) => r.id !== id);
-    writeRuns(runs);
-    set2({ composerRuns: runs });
-  }
-}));
-function fillTurbo(nodes) {
-  const t2 = useSettings.getState().h3Turbo;
-  let changed = false;
-  const out = nodes.map((n2) => {
-    if (n2.defId !== "h3-turbo") return n2;
-    const patch = {};
-    if ((!n2.params.turbo_lora || n2.params.turbo_lora === "none") && t2.fl) patch.turbo_lora = t2.fl;
-    if ((!n2.params.turbo_lora_ref || n2.params.turbo_lora_ref === "none") && t2.ref) patch.turbo_lora_ref = t2.ref;
-    if (!Object.keys(patch).length) return n2;
-    changed = true;
-    return { ...n2, params: { ...n2.params, ...patch } };
-  });
-  return changed ? out : nodes;
-}
-function rememberedTurbo() {
-  const t2 = useSettings.getState().h3Turbo;
-  const out = {};
-  if (t2.fl) out.turbo_lora = t2.fl;
-  if (t2.ref) out.turbo_lora_ref = t2.ref;
-  return out;
-}
-useGraph.subscribe((s) => {
-  const f = fillTurbo(s.nodes);
-  if (f !== s.nodes) useGraph.setState({ nodes: f });
-});
-var quiet = false;
-function quietly(fn) {
-  quiet = true;
-  try {
-    fn();
-  } finally {
-    quiet = false;
-  }
-}
+init_registry();
+init_graph();
 
 // src/backend/mossPrompt.ts
 var MOSS_SYSTEM_PROMPT_T2I = `You are a prompt engineer for an image generation model. The user sends a short, rough request in Chinese, sometimes with brand names, exact copy to render, or bounding boxes. Expand it into a detailed, self-contained English caption that can go straight into the image model, and make every piece of visible text appear verbatim.
@@ -6240,6 +6314,7 @@ async function buildH3Graph(job) {
 }
 var pickChainFrame = (images) => postJson("/minimax_h3_one/pick_chain_frame", { images });
 var copyToInput = (f) => postJson("/minimax_h3_one/copy_to_input", f);
+var clipLastFrame = (filename, subfolder) => postJson("/minimax_h3_one/clip_last_frame", { filename, subfolder });
 var stitchClips = (clips, filenamePrefix, overlapSeconds, overrideAudio) => postJson("/minimax_h3_one/stitch", { clips, filename_prefix: filenamePrefix, ...overlapSeconds ? { overlap_seconds: overlapSeconds } : {}, ...overrideAudio ? { override_audio: { type: "input", subfolder: "", start: 0, ...overrideAudio } } : {} });
 
 // src/backend/workflow.ts
@@ -7480,7 +7555,13 @@ beats at (s): ${secs.join(", ")}`)];
   }
 };
 
+// src/backend/refEnhance.ts
+init_graph();
+init_registry();
+
 // src/canvas/helpers.ts
+init_registry();
+init_graph();
 function portAssets(node, port) {
   const def = byId.get(node.defId);
   if (!def) return node.results;
@@ -7536,6 +7617,102 @@ async function enhanceWithImages(o) {
   }
   const system = [enhanceInstruction(o.purpose, o.style ?? "", o.english ?? true), refRules].join("\n");
   return runLlm({ system, prompt: o.idea });
+}
+
+// src/backend/h3Prompt.ts
+var PREAMBLE = "You rewrite the user's request into a finished prompt for the MiniMax H3 video model. Follow the guide below exactly. Write the prompt in the structure and labels the guide defines, stay grounded in what the request and any image analysis actually show, and output ONLY the finished prompt text - no preamble, no commentary, no code fences.\n\n";
+var H3_SYSTEM_PROMPT_BASE = PREAMBLE + "# Video Prompt Writing Guide (T2VA / I2VA / FL2VA / L2VA)\n\n## 1. Task Overview\n\n- **T2VA**: Builds a complete audiovisual timeline from text.\n- **I2VA**: T2VA body + first-frame instruction + a visual path that develops forward from the first frame.\n- **FL2VA**: T2VA body + first-and-last-frame instruction + a continuous path from the first frame to the last frame.\n- **L2VA**: T2VA body + last-frame instruction + a path that converges from a plausible preceding state to the last frame.\n\n## 2. Final Prompt Structure\n\n### 2.1 Part One Is the Instruction\n\n**T2VA** has no image-alignment instruction and begins directly with the three core fields.\n\n**I2VA** always uses:\n\n```text\nFor the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.\n```\n\n**FL2VA** always uses:\n\n```text\nHow the reference pictures align with the target video \u2014 Picture 1 (from Shot 1) aligns with the 0.00-second mark of the target video; Picture 2 (from Shot N) aligns with the S.SS-second mark of the target video.\n```\n\n**L2VA** always uses:\n\n```text\nHow the reference pictures align with the target video \u2014 <Picture 1> (from [Shot N]) aligns with the S.SS-second mark of the target video.\n```\n\nHere, `N` is the index of the actual final shot, and `S.SS` is the effective video duration formatted to exactly two decimal places. The instruction must be the first line of the final prompt, followed by one blank line before the core fields.\n\n### 2.2 Part Two Contains the Three Core Fields\n\n```text\nintegrated_multimodal_description: [Shot 1] ...\n\noverall_soundscape: ...\n\nnon_diegetic_music: ...\n```\n\n- **integrated_multimodal_description**: Describes visuals, actions, shots, speakers, dialogue, singing, and diegetic audio along the timeline.\n- **overall_soundscape**: Summarizes ambient sound, physical action sounds, and non-verbal human sounds across the entire video.\n- **non_diegetic_music**: Describes background music that the characters cannot hear and only the audience can hear.\n\n## 3. How to Incorporate Keyframes into the Multimodal Description\n\n### 3.1 I2VA: Begin from the Image and Develop Forward\n\n`<Picture 1>` is the actual first frame of the video at 0.00 seconds and belongs to `[Shot 1]`. The description should first establish the style, subjects, composition, and scene anchors in the image, then describe the next action. Character identity, clothing, colors, key objects, and spatial relationships should remain consistent.\n\nRecommended structure: **first-frame anchor \u2192 action onset \u2192 continuous development \u2192 result or reaction**.\n\n### 3.2 FL2VA: Describe the Path Between the First and Last Frames\n\nPicture 1 is the opening, and Picture 2 is the ending. Focus on how the subject moves, how poses change, how objects are manipulated, how the composition evolves, and how the scene or lighting transitions.\n\nFL2VA generally favors a single shot so the model can interpolate continuously from the first frame to the last frame. Use multiple shots only when they are explicitly specified. The last frame must be reached by the final `[Shot N]` at the end of the video.\n\nRecommended structure: **first-frame state \u2192 observable intermediate changes \u2192 progressively narrowing differences \u2192 last-frame state**.\n\n### 3.3 L2VA: Infer the Opening and Land on the Image at the End\n\n`<Picture 1>` is the final frame of the video and belongs to the last `[Shot N]`; it does not inherently belong to Shot 1. Infer a plausible earlier state from the user's intent and the last frame, then describe how the characters, objects, camera, and scene gradually approach the reference image.\n\nRecommended structure: **plausible preceding state \u2192 explicit action and transition path \u2192 gradual convergence in the final shot \u2192 last-frame landing**.\n\n## 4. How to Write the Three Shared Core Sections\n\n### 4.1 Develop the Multimodal Description Along the Timeline\n\n`integrated_multimodal_description` is the main body of the rewritten prompt. Every detail should correspond to something visible or audible: visual style, initial composition, subject appearance and position, scene and key props, actions and reactions, shot changes, spoken language, and synchronized diegetic sound.\n\nAt the beginning of `[Shot 1]`, state the overall style and initial composition. Common styles include `Cinematic`, `live-action`, `2D-animated`, `3D CG`, `claymation`, `watercolor`, and `vintage film`. For keyframe tasks, derive the style from the reference image; for T2VA, select it from the user's text.\n\n```text\n[Shot 1] Live-action, cinematic, a medium-wide shot frames...\n```\n\n### 4.2 Shots and Cuts\n\nDo not add a timestamp to the first shot. Use sequential shot numbers for later shots, and begin each one with a strictly increasing cut time that falls within the video duration:\n\n```text\n[Shot 2] At 00:03.500, the camera cuts to...\n```\n\nFor ordinary cuts, use `the camera cuts to`, `the shot cuts to`, `the shot transitions to`, `the shot changes to`, or `the shot switches to`. When explicitly requested by the user, cross-dissolve, fade, or wipe may also be used. A cut should introduce new information about the subject, space, state, viewpoint, or time. If only the distance or a slight angle needs to change, prefer camera motion.\n\n### 4.3 Camera Motion: Motion Type + Amplitude + Speed\n\nA complete camera-motion expression has three dimensions: the **motion type** defines how the camera moves, **amplitude** defines the range of compositional change, and **speed** defines the pacing of that change. Add amplitude and speed only when they are meaningful; medium amplitude and normal speed are usually omitted.\n\n| Dimension | Available Expression | Description |\n|-|-|-|\n| Motion type | `Zoom In / Zoom Out` | The focal length changes while the camera body remains stationary |\n| Motion type | `Push In / Pull Out` | The camera moves forward / backward |\n| Motion type | `Pan Left / Pan Right` | The camera remains in place while the lens pivots horizontally |\n| Motion type | `Truck Left / Truck Right` | The camera translates horizontally |\n| Motion type | `Tilt Up / Tilt Down` | The camera remains in place while the lens pivots vertically |\n| Motion type | `Pedestal Up / Pedestal Down` | The entire camera moves upward / downward |\n| Motion type | `Arc Shot` | The camera moves in an arc around the subject |\n| Motion type | `Tracking Shot` | The camera follows a moving subject |\n| Motion type | `Static Shot` | The camera position and lens remain still |\n| Motion type | `Shake Slightly / Shake Strongly` | Slight / strong camera shake |\n| Motion type | `POV` | The subject's point of view |\n| Motion type | `Roll Clockwise / Roll Counterclockwise` | The camera rolls clockwise / counterclockwise around the lens axis |\n| Amplitude | `with small amplitude` | Small-range change |\n| Amplitude | `with large amplitude` | Large-range change |\n| Speed | `at slow speed` | Slow movement |\n| Speed | `at fast speed` | Fast movement |\n\nCamera motion should be written as a natural English action within the shot, rather than stacked as separate labels at the end of a sentence:\n\n```text\nThe camera pushes in with small amplitude at slow speed toward the folded letter in her hands.\nThe camera pans right with large amplitude at fast speed, revealing the open doorway.\nThe camera holds a static shot as the runner exits the frame.\n```\n\n### 4.4 Speakers, Dialogue, and Singing\n\nSubjects who speak, sing, or produce an off-screen human voice use stable IDs such as `(S1)` and `(S2)`. When multiple already-numbered speakers speak or sing together, use a compound ID such as `(S1,S2)`. A speaker keeps the same ID across shots; characters who never vocalize receive no speaker ID.\n\nWhen a speaker first appears, provide enough information from the visual and audio context to establish a stable identity, such as character type, age, gender, whether the person is on-screen, pitch, timbre, speaking rate, or accent. Place the speaker's identifying phrase, ID, action, and delivery outside `<d>`. Inside `<d>`, include only the language tag and the actual user-provided spoken content. Preserve every original word and punctuation mark verbatim; do not translate or rewrite them.\n\n```text\nThe young woman with a quiet, breathy voice (S1) says: <d>[English] I get off at the next station.</d>\nThe two children (S1,S2) shout together, <d>[English] Wait for us!</d>\n```\n\nFor voiceover, use the exact phrase `says in an off-screen voiceover`. Immediately after every voiceover `<d>` block, state that the corresponding on-screen character's lips remain closed:\n\n```text\nThe man (S1) says in an off-screen voiceover: <d>[English] I still remember that road.</d> while his lips remain completely closed.\n```\n\nWhen the same line of dialogue or lyrics crosses a cut, use `<scenetrans>` at the connecting points in both parts and explicitly state that the audio continues across the cut. Use `<cutoff>` when speech is truncated by the end of the video. Continuity may be expressed with `continues seamlessly across the cut`, `continues uninterrupted into the next shot`, `carries over from the previous shot`, or `remains audible across the transition`.\n\n### 4.5 On-Screen Text\n\nPlace any banner, sign, label, subtitle, or neon text that is actually visible on screen in English double quotation marks. Preserve the original text and punctuation verbatim, without translation.\n\n```text\nA red neon sign reading \"\u8425\u4E1A\u4E2D\" glows above the doorway.\n```\n\n### 4.6 overall_soundscape\n\nUse 1\u20134 English sentences in one continuous paragraph to summarize the ambient sound, physical action sounds, and non-verbal human sounds across the full video, such as wind, rain, traffic, footsteps, fabric movement, impacts, breathing, laughter, or panting. Dialogue, singing, and diegetic music already belong in the multimodal description and should not be repeated here. Use `N/A` only when the user explicitly requests complete silence throughout the video.\n\n```text\noverall_soundscape: Steady rain taps against the caf\xE9 windows while low room ambience continues underneath. The entrance bell rings once, followed by wet footsteps and the soft scrape of a chair.\n```\n\n### 4.7 non_diegetic_music\n\nUse 1\u20133 English sentences to describe background music that the characters cannot hear and only the audience can hear. Focus on instrumentation, speed, rhythm, and dynamic changes; do not use abstract mood words or explain the emotional function of the score. Singing, instruments, radio, television, or phone music audible to the characters are diegetic events and should appear in the multimodal description. Use `N/A` when there is no non-diegetic music.\n\n```text\nnon_diegetic_music: Sparse piano notes at a slow tempo, joined by sustained low strings that gradually increase in volume before fading out.\n```\n\n## 5. Cases\n\n### Case 1: T2VA\n\nWith no reference image, construct the complete timeline directly from the text. You may add scene, character, action, and sound details that remain consistent with the user's intent.\n\n```text\nintegrated_multimodal_description: [Shot 1] Live-action, cinematic, a medium-wide shot frames a baker opening the shutters of a small street bakery before sunrise. The camera pushes in with small amplitude at slow speed as the middle-aged baker with a calm, slightly raspy voice (S1) places a fresh loaf on the wooden counter and says: <d>[English] First batch of the morning.</d> [Shot 2] At 00:05.000, the camera cuts to a close-up of steam rising from the sliced bread while the baker's final words carry over from the previous shot.\n\noverall_soundscape: Wooden shutters scrape open over a quiet street as trays clink softly inside the bakery. The doorbell rings once, followed by light footsteps and the crisp sound of bread being sliced.\n\nnon_diegetic_music: A soft acoustic-guitar pattern at a moderate tempo, joined by sparse upright-bass notes and a gentle fade at the end.\n```\n\n### Case 2: I2VA\n\nWrite the first-frame instruction first, then use the subject, composition, and scene in Picture 1 as the starting point of Shot 1 before describing how the scene continues to develop.\n\n```text\nFor the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.\n\nintegrated_multimodal_description: [Shot 1] Live-action, cinematic, the young woman shown in <Picture 1> remains beside the rain-covered train window, preserving her appearance, clothing, seat position, and the carriage layout. The camera trucks right with small amplitude at slow speed as she lifts her gaze from the folded letter toward the passing city lights. Her reflection moves across the glass while the quiet, breathy young woman (S1) says: <d>[English] I get off at the next station.</d> She folds the letter along its existing crease.\n\noverall_soundscape: The train wheels produce a steady metallic rhythm beneath a low ventilation hum. Rain ticks against the window while paper rustles softly in her hands.\n\nnon_diegetic_music: Sustained cello notes at a slow tempo with widely spaced piano tones, gradually decreasing in volume.\n```\n\n### Case 3: FL2VA\n\nThe two images anchor the opening and ending respectively. The body should not repeat two static image descriptions; instead, it should supply the motion path that connects them. The following example is an eight-second single shot.\n\n```text\nHow the reference pictures align with the target video \u2014 Picture 1 (from Shot 1) aligns with the 0.00-second mark of the target video; Picture 2 (from Shot 1) aligns with the 8.00-second mark of the target video.\n\nintegrated_multimodal_description: [Shot 1] Live-action, cinematic, a rain-soaked cyclist begins in the position and framing established by Picture 1, holding a closed black umbrella beside a silver bicycle. The camera pulls out with small amplitude at slow speed as she releases the bicycle handle, raises the umbrella above her shoulder, and presses the runner upward until the canopy opens. Water rolls from the expanding fabric while she steps beneath it, rotates the handle into the final angle, and settles into the pose, spacing, and composition established by Picture 2 at the end of the shot.\n\noverall_soundscape: Rain falls steadily on the pavement, followed by the metallic click of the umbrella runner and the soft snap of the canopy opening. Water drips from the bicycle frame as distant traffic passes.\n\nnon_diegetic_music: N/A\n```\n\n### Case 4: L2VA\n\nThe image anchors only the final moment. First establish a compatible earlier state, then let the actions, object states, and composition gradually land on Picture 1 in the final shot. The following example is a six-second single shot.\n\n```text\nHow the reference pictures align with the target video \u2014 <Picture 1> (from [Shot 1]) aligns with the 6.00-second mark of the target video.\n\nintegrated_multimodal_description: [Shot 1] Live-action, cinematic, a close shot begins with an intact drinking glass near the edge of a dark wooden table, while the same hand and sleeve visible in <Picture 1> approach from the right. The camera pushes in with small amplitude at slow speed as the fingertips strike the rim. The glass tips, falls, and hits the floor with a sharp impact; cracks spread through it as fragments slide outward. Toward the end, the moving pieces lose momentum and settle into the exact broken arrangement, hand position, camera angle, lighting, and final composition established by <Picture 1>.\n\noverall_soundscape: Fingertips tap the glass before it scrapes across the tabletop, falls, and breaks with a sharp crash. Small fragments scatter and gradually stop sliding across the floor.\n\nnon_diegetic_music: A low electronic pulse at a slow tempo, ending immediately after the glass breaks.\n```\n";
+var H3_SYSTEM_PROMPT_REF = PREAMBLE + "# Full-Reference Mode Rewrite Output Format Guide\n\nThis guide explains how rewrite outputs are organized and written in full-reference mode.\n\nWrite all six rewrite sections in English. Preserve the original language only for dialogue and lyrics inside `<d>` and for text visibly present in the scene.\n\n**Description detail:** Make `detailed_description` as detailed and explicit as possible. For each shot, clearly establish the current composition, subject appearance and position, environment and lighting, actions and state changes, camera movement, current sound, and the points where referenced content actually appears or takes effect. Avoid reducing the description to a plot summary or a list of reference relationships.\n\n> The basic formats for shots, camera movement, speakers, dialogue, and ordinary sound are shared with the Video Prompt Writing Guide (T2VA / I2VA / FL2VA / L2VA). This guide focuses on the reference labels, analysis sections, and format differences specific to full-reference mode.\n\n## 1. Overall Structure\n\nA complete rewrite output consists of six sections in the following order:\n\n| Section | Purpose |\n| --- | --- |\n| `subject_definitions` | Defines referenced content and its reference labels |\n| `summary` | Summarizes the task type, target video, and main reference relationships |\n| `retention_analysis` | Describes how referenced content is preserved, transferred, or reused |\n| `detailed_description` | Describes visuals, actions, shots, sound, and dialogue in playback order |\n| `overall_soundscape` | Summarizes ambience and physical sounds |\n| `non_diegetic_music` | Describes background music audible only to the audience |\n\n## 2. Reference Labels and Definitions (`subject_definitions`)\n\nFull-reference rewrites use four types of labels to identify the source and role of referenced content:\n\n| Label | Meaning |\n| --- | --- |\n| `<Subject N>` | Visible content abstracted from reference assets that can be reused or modified in the target video |\n| `<Picture N>` | A reference image used as a concrete target frame or shot-planning anchor |\n| `<Video N>` | A reference video that provides an editing source, continuation starting point, or whole-video temporal structure |\n| `<Audio N>` | An audio signal that is copied or referenced |\n\n> Once a reference label is assigned to a piece of content, it keeps the same meaning across `subject_definitions`, `summary`, `retention_analysis`, `detailed_description`, and the audio sections.\n\n`subject_definitions` defines each piece of referenced content that must be tracked separately later, such as a person, an environment, a source video's structure, or an audio track. Give each item its own line and explain what its label denotes, its reference role, and the main features to follow; name the corresponding source asset when its provenance needs to be made explicit. If `<Picture N>` or `<Video N>` only identifies the source of another referenced item and will not be analyzed or used separately later, cite it inside that item's definition without adding a separate line. `retention_analysis` records where each referenced item appears and whether it is fully preserved, partially preserved, transferred, or reused.\n\n### 2.1 `<Subject N>`\n\n`<Subject N>` is used for reusable visible content, including:\n\n- People, animals, or objects\n- Scenes, backgrounds, or environments\n- Clothing, props, interfaces, or visual effects\n- Styles, actions, expressions, or poses\n\nIt represents a content unit that will actually be used in the target video, rather than the source file itself. One subject may be defined by multiple reference assets, and one reference asset may provide multiple subjects.\n\n```text\n<Subject 1> is the young woman in <Picture 1>, with long dark hair, a blue cardigan, and a thin silver necklace.\n```\n\nWhen the same subject comes from multiple assets, combine the sources and state what each asset provides:\n\n```text\n<Subject 1> is the woman whose appearance comes from <Picture 1> and whose walking motion comes from <Video 1>.\n```\n\n### 2.2 `<Picture N>`\n\nUse a standalone `<Picture N>` when the reference image itself serves as a shot's first frame, keyframe, last frame, edited keyframe, or composition anchor:\n\n```text\n<Picture 2> is the first frame of [Shot 1], showing a woman seated beside a caf\xE9 window.\n```\n\nIf an image is used only to define a character, scene, costume, or style, do not create a standalone picture entry. Instead, cite the image source inside the corresponding `<Subject N>` definition.\n\nWhen an image acts as a storyboard or shot-planning reference, state which shots it maps to and what planning information it provides:\n\n```text\n<Picture 3> is a storyboard reference for [Shot 1] and [Shot 2], defining their viewpoint, subject placement, and shot order.\n```\n\n### 2.3 `<Video N>`\n\n`<Video N>` is reserved for whole-video relationships, such as:\n\n- Editing an original video\n- Continuing from the end of an original video\n- Referencing the original video's camera movement, cuts, rhythm, or temporal structure\n\n```text\n<Video 1> is the source video for the target video edit.\n```\n\nIf a person, object, scene, action, or effect from a reference video is reused as visible content, it still belongs under `<Subject N>`. `<Video N>` identifies the asset or structural source and does not replace subject labels.\n\n### 2.4 `<Audio N>`\n\n`<Audio N>` represents a standalone audio asset or an enabled synchronized audio track from a reference video. Common uses include:\n\n- Copying all or part of an audio signal\n- Referencing a background-music style\n- Referencing a speaker's voice timbre and delivery\n- Using dialogue, lyrics, or sound effects from the original audio\n- Referencing beat, rhythm, or audio continuity\n\nWhen an `<Audio N>` explicitly corresponds to a target speaker, reuse that speaker's global ID in the definition: write `<Subject N> (Sx)` when the speaker maps to a defined subject, or use a stable voice description followed by `(Sx)` otherwise. The ID comes from the target video's global speaker order and is not independently assigned or renumbered in the audio definition. See Section 5.4 for the speaker-numbering rules:\n\n```text\n<Audio 1> is the voice-timbre reference for <Subject 1> (S1).\n```\n\nWhen one audio asset serves multiple roles, describe those roles in one natural sentence rather than creating additional subsections.\n\n### 2.5 Visual and Audio Tracks from the Same Reference Video\n\n`<Video N>` and `<Audio N>` are numbered independently. Each index indicates only the label's order within its own category and does not encode a pairing between the two categories. The same reference video may therefore correspond to `<Video 1>` and `<Audio 2>`; different indices do not prevent them from coming from the same source asset.\n\nAn ordinary reference video does not create `<Audio N>` merely because the file contains sound.\n\nAn `<Audio N>` definition primarily states the audio's role and does not have to name the `<Video N>` it comes from. State the shared source only when needed to remove provenance ambiguity, for example:\n\n```text\n<Video 1> is the source video for the target video edit.\n<Audio 2> is the synchronized audio track of <Video 1> and is reused in the target video.\n```\n\n## 3. `summary`\n\nThis section uses one short English paragraph to summarize the target video and its reference relationships. It begins with a square-bracketed task-type prefix:\n\n```text\n[reference generation] ...\n[video editing + reference generation + audio reuse] ...\n```\n\nChoose task types according to the actual role each reference asset plays in the target video:\n\n| Task type | When to use it |\n| --- | --- |\n| `keyframe completion` | An image serves as the target video's first frame, keyframe, last frame, edited keyframe, or another concrete frame anchor |\n| `reference generation` | An image, video, or audio asset provides generation guidance for a character, scene, style, action, camera movement, storyboard, and so on, without serving as a concrete frame or as the source video being edited or continued |\n| `video editing` | An existing source video is directly modified; editing an image or generating between still keyframes does not belong to this type |\n| `video continuation` | New content continues, extends, resumes, or transitions from an existing source video |\n| `audio reuse` | The same audio signal is reused in full or in part |\n| `audio reference` | The audio signal is not copied directly; only its music style, timbre, dialogue or lyric content, sound-effect texture, beat, or continuity is referenced |\n\nWhen a task satisfies multiple relationships, combine the task types with ` + ` and do not repeat a type. For example, continuing from a source video while using an image as the last frame is written as `[video continuation + keyframe completion]`. Editing a source video while retaining its original audio may be written as `[video editing + audio reuse]`.\n\nThe mere presence of video or audio does not automatically create a corresponding task type. If a reference video provides only camera movement, cuts, or rhythm, it normally belongs to `reference generation`. Use `video editing` or `video continuation` only when that video is directly edited or continued.\n\nWhen editing a source video, use `audio reuse` as well if its original audio remains audible. When continuing a source video without directly copying the audio signal, use `audio reference` if the new audio only continues the original track's audible characteristics.\n\nThe summary uses the previously defined `<Subject N>`, `<Picture N>`, `<Video N>`, and `<Audio N>` labels to describe the main subjects, shot flow, and roles of the reference assets. Do not introduce new reference labels in this section.\n\nFor video-editing tasks, begin the summary after the task-type prefix with:\n\n```text\nThe target video is an edited version of <Video 1>.\n```\n\n## 4. `retention_analysis`\n\nThis section describes how each piece of referenced content is preserved, transferred, copied, or referenced in the target video. Use one line for each reference label and preserve the meaning established in `subject_definitions`.\n\n### 4.1 Visible Content\n\n`<Subject N>`, `<Picture N>`, and `<Video N>` use the following relationship markers. These markers are fixed English values in the output format:\n\n| Relationship marker | Meaning |\n| --- | --- |\n| `fully_preserved` | The defined role of the referenced content is fully preserved |\n| `partially_preserved` | The referenced content is still used, but some defined characteristics are changed or only partially retained |\n| `attribute_transfer` | Referenced characteristics are transferred to a different identifiable target subject |\n| `weak_reference` | Only broad similarity in style, category, composition, or atmosphere is retained |\n\nSubject entry:\n\n```text\n<Subject 1> (appears in [Shot 1], [Shot 3]): fully_preserved - ...\n```\n\nPicture entry:\n\n```text\n<Picture 2> ([Shot 1] first frame): fully_preserved - ...\n```\n\nVideo-structure entry:\n\n```text\n<Video 1> (cut and pacing structure): weak_reference - ...\n```\n\n### 4.2 Audio\n\n`<Audio N>` uses the following relationship markers:\n\n| Relationship marker | Meaning |\n| --- | --- |\n| `fully_copy` | The complete source audio serves as the target video's complete final audio track |\n| `partially_copy` | Only part of the timeline or selected audio layers are copied, or other sounds are added, removed, or replaced after copying |\n| `reference` | The signal is not copied directly; only timbre, rhythm, music style, dialogue content, or sound texture is referenced |\n| `weak_reference` | Only broad similarity in category or atmosphere is retained |\n\n```text\n<Audio 1>: fully_copy - <Audio 1> is reused 1:1 as the target video's complete final audio track.\n```\n\n```text\n<Audio 2>: reference - the target speaker follows <Audio 2>'s voice timbre and measured delivery without copying the original signal.\n```\n\nChoose each relationship marker only within the reference role already defined for that label in `subject_definitions`. Do not treat newly added actions, backgrounds, or plot events in the target video as losses of reference fidelity.\n\n## 5. `detailed_description`\n\nThis is the main body of a full-reference rewrite. It describes visuals, actions, sound, and dialogue shot by shot in target-video playback order and inserts reference labels where they apply.\n\n### 5.1 Basic Format\n\nThe basic format follows the Video Prompt Writing Guide (T2VA / I2VA / FL2VA / L2VA):\n\n- Write the body in English. Preserve the original language of dialogue, lyrics, and visible text.\n- `[Shot 1]` marks the opening shot and has no timestamp. Later shots use `[Shot N] At MM:SS.mmm, ...` to mark cut times.\n- Write camera movement as natural English within the current shot, including movement type, amplitude, and speed when they need to be expressed.\n- Give vocal sources stable `(S1)`, `(S2)`, and subsequent IDs. Write dialogue and lyrics as `<d>[Language] ...</d>`.\n- Use `<scenetrans>`, `<cutoff>`, and the corresponding continuity descriptions for dialogue crossing a cut, speech truncated by the video ending, and continuous audio across shots.\n\nFor complete rules and examples covering camera vocabulary, group speech, voice-over, dialogue across cuts, and visible text, see the Video Prompt Writing Guide (T2VA / I2VA / FL2VA / L2VA).\n\n### 5.2 Full-Reference Mode Differences\n\n| Dimension | T2VA | Full-reference mode |\n| --- | --- | --- |\n| Main field | `integrated_multimodal_description` | `detailed_description` |\n| Style opening | Written after `[Shot 1]` | Established in one or two English sentences before `[Shot 1]` |\n| Reference information | Does not use full-reference labels | Inserts `<Subject N>`, `<Picture N>`, `<Video N>`, and `<Audio N>` at their first appearance and where their roles apply |\n| Audio relationships | Describes the target video's own sound | Cites `<Audio N>` in the corresponding shot or audio phase and states whether the signal is copied or referenced |\n\nOpening example:\n\n```text\nThe target video is in a cinematic, literary music-video style with soft lighting and a slightly desaturated color palette.\n[Shot 1] The scene opens in a crowded urban street...\n[Shot 2] At 00:09.000, the shot cuts to an extreme close-up...\n```\n\nFor generation tasks, `detailed_description` is normally 350-500 English words. Dialogue-dense content prioritizes fitting the complete spoken timeline rather than mechanically reaching a word count. Video-editing descriptions scale with the complexity of the source video and do not have to follow the generation-task range. A single shot does not automatically justify a shorter description; distribute detail across multiple shots according to their information load.\n\n### 5.3 Using Reference Labels in Shots\n\nAt the first clear appearance of an important `<Subject N>`, describe its referenced characteristics, position in the frame, and current action within what is actually visible in the shot. Continue using the same label in later shots without redefining what the label represents.\n\nUse natural phrasing for concrete frame anchors:\n\n```text\nthe shot begins from <Picture 1>\nthe shot's keyframe corresponds to <Picture 2>\nthe shot ends on <Picture 3>\n```\n\nWhen editing or continuing an original video, cite `<Video N>` naturally where its source state, structure, or continuation relationship applies. Cite `<Audio N>` in the shot or semantic phase where the audio relationship is active.\n\n### 5.4 Speakers, Audio Sources, and Dialogue\n\nThe basic speaker-ID and `<d>` formats follow T2VA. When a referenced subject physically speaks, retain both the visual reference label and the speaker ID:\n\n```text\n<Subject 2> (S1) turns toward the woman and says, <d>[English] Last summer, I went to my grandfather's house. He talked about you.</d>\n```\n\n`<Subject N>` identifies the referenced subject, while `(Sx)` identifies the actual speaker. When the subject speaks, write `<Subject N> (Sx)`. If the same subject speaks off-screen, keep the same form and mark it as `off-screen`. When the speaker does not correspond to a defined subject, use a stable voice description followed by `(Sx)`.\n\nWhen verbal content is only a cue within a directly reused BGM or complete soundtrack, and no person, character, narrator, or other independent vocal source physically produces it, use `<Audio N>` as the audible source and do not invent an additional `(Sx)`. If a concrete person, character, narrator, or other independent vocal source produces the voice, assign and reuse `(Sx)` for that source:\n\n```text\nWhen <Audio 1> reaches the phrase <d>[English] I'm lonely lonely lonely lonely lonely I'm lonely</d>, <Subject 1> performs the corresponding hand gesture without becoming a separate speaker source.\n```\n\nWhen dialogue, narration, or lyrics from reference audio are directly reused, or when the input prompt explicitly requests their reperformance, preserve the exact source words and original language inside `<d>`. Write `[unclear]` for unintelligible spans instead of guessing or paraphrasing them. Standardize punctuation to the basic written marks needed to express the sentence, such as `,`, `.`, `?`, and `!`; remove repeated tildes, emoji, bullets, and repeated or decorative punctuation. End complete statements, questions, and exclamations with `.`, `?`, or `!` respectively before `</d>`.\n\nWhen only timbre, rhythm, emotion, or delivery is referenced, do not carry the original dialogue from the reference audio into the target video.\n\nAssign `(Sx)` once according to the order of actual vocal events in the target video. Reuse the corresponding ID at every actual vocal event in `detailed_description`; an `<Audio N>` definition bound to a target speaker in `subject_definitions` also reuses the same `(Sx)` but never assigns a new one independently. Do not write `(Sx)` in `retention_analysis`. Verbal cues that exist only within a directly reused BGM or complete soundtrack use `<Audio N>`; voices physically produced by a concrete person, character, narrator, or other independent vocal source use `(Sx)`.\n\n## 6. `overall_soundscape` and `non_diegetic_music`\n\nThe definitions of these two sound categories follow the Video Prompt Writing Guide (T2VA / I2VA / FL2VA / L2VA).\n\n`overall_soundscape` summarizes ambience and physical sounds across the full video. Dialogue, singing, and sound events synchronized to a particular shot remain in `detailed_description`:\n\n```text\noverall_soundscape: Quiet indoor room tone and a low ventilation hum continue throughout the video.\n```\n\n`non_diegetic_music` describes background music that the characters cannot hear and that is audible only to the audience. When music is present, state its instrumentation, tempo, and dynamic development:\n\n```text\nnon_diegetic_music: A restrained solo-piano score at a slow tempo, with sustained low cello underneath and no swell.\n```\n\nWhen reference audio is used, state its copy or reference relationship only in the section that matches the audible layer: ambience and sound effects belong in `overall_soundscape`, while audience-only score belongs in `non_diegetic_music`. If the same audio provides both kinds of content, describe the corresponding relationship in each section:\n\n```text\noverall_soundscape: The copied ambience layer from <Audio 1> continues throughout the target video.\nnon_diegetic_music: <Audio 2> is directly reused as the complete audience-only score.\n```\n\nWrite complete dialogue and lyrics only inside `<d>` in `detailed_description`; do not repeat them in these two sections.\n\n## 7. Complete Example\n\n<details>\n<summary>Show the complete example</summary>\n\n```text\nsubject_definitions:\n<Subject 1> is the coffee-shop environment in <Picture 1>, featuring an exposed brick wall, an orange tufted sofa with patterned pillows, a neon sign, and a wooden coffee table.\n<Subject 2> is the fluffy white Samoyed in <Picture 2>, <Picture 3>, and <Picture 4>, with thick white fur, pointed ears, a dark nose, and a curved tail.\n<Subject 3> is the young blonde woman in <Video 1>, with long blonde hair and a light-pink button-down shirt with rolled-up sleeves.\n<Subject 4> is the young man in <Video 2>, with short wavy brown hair and a dark-grey hoodie with drawstrings.\n<Audio 1> is the voice-timbre reference for <Subject 3> (S1), containing a spoken English vocal layer.\n\nsummary:\n[reference generation + audio reference] The target video shows <Subject 3> eating a cookie in <Subject 1>. <Subject 4> enters with <Subject 2>, which lunges toward the cookie. The three-shot exchange uses <Audio 1> as the voice-timbre reference for <Subject 3> and ends with a canned audience laugh.\n\nretention_analysis:\n<Subject 1> (appears in [Shot 1], [Shot 2], [Shot 3]): fully_preserved - the exposed brick wall, orange tufted sofa, patterned pillows, neon sign, and wooden coffee table are retained.\n<Subject 2> (appears in [Shot 1], [Shot 2]): fully_preserved - the Samoyed's thick white fur, pointed ears, dark nose, and curved tail are retained.\n<Subject 3> (appears in [Shot 1], [Shot 2], [Shot 3]): fully_preserved - the blonde woman's identity, long hair, and light-pink shirt are retained.\n<Subject 4> (appears in [Shot 1], [Shot 2]): fully_preserved - the young man's short wavy brown hair and dark-grey hoodie are retained.\n<Audio 1>: reference - its vocal timbre guides the dialogue delivery of <Subject 3> without copying the original signal.\n\ndetailed_description:\nThe target video uses a realistic multi-camera sitcom style with warm indoor lighting.\n[Shot 1] A medium shot establishes <Subject 1>, the coffee shop with its exposed brick wall, orange tufted sofa, patterned pillows, neon sign, and wooden coffee table. <Subject 3> (S1), the young woman with long blonde hair and a light-pink button-down shirt with rolled-up sleeves, sits on the sofa holding a chocolate-chip cookie. From the left, <Subject 4>, the young man with short wavy brown hair and a dark-grey hoodie with drawstrings, enters holding the leash of <Subject 2>, the thick-furred white Samoyed with pointed ears, a dark nose, and a curved tail. The dog lunges toward the cookie and pulls the leash taut. <Subject 3> (S1) jerks her hand back and, using the clear youthful voice timbre referenced from <Audio 1>, exclaims with light annoyance, <d>[English] Hey! Watch your dog!</d> She closes her lips and guards the cookie while <Subject 4> pulls the dog back.\n[Shot 2] At 00:03.000, the shot cuts to a close-up of <Subject 4> (S2), the young man in the dark-grey hoodie from Shot 1, sitting beside <Subject 3> on the sofa and holding <Subject 2> securely in his arms. <Subject 4> (S2) says in a casual young male voice with a playful tone and an easy conversational pace, <d>[English] He just likes cookies more than me.</d> He closes his mouth into an apologetic smile and strokes the dog's thick white fur.\n[Shot 3] At 00:05.000, the shot cuts to a close-up of <Subject 3> (S1), the blonde woman in the light-pink shirt from Shot 1. Her annoyance softens as she looks toward the Samoyed. <Subject 3> (S1) replies in the same clear youthful voice referenced from <Audio 1> with an amused cadence, <d>[English] Well, he has good taste at least.</d> She smiles and raises the cookie in a small toast-like gesture. A classic canned audience laugh begins immediately after the line and continues through the final frame.\n\noverall_soundscape:\nSoft indoor coffee-shop room tone continues throughout the scene.\n\nnon_diegetic_music:\nN/A\n```\n\n</details>\n";
+
+// src/backend/ltxPrompt.ts
+var LTX_WRITE_PLAIN_SYSTEM = `You write prompts for the LTX-2.5 video model, following the official LTX-2.5 prompt guide. LTX-2.5 wants a complete picture of the shot that flows from beginning to end, written as natural cinematic prose - never tags, keyword lists, quality boosters ("masterpiece", "4k") or negative phrasing.
+
+You plan a video made of CLIPS. A clip is one continuous camera take that is rendered on its own and has a fixed length in seconds.
+
+Return ONLY a JSON object - no markdown fence, no commentary - of exactly this shape:
+{
+  "global": "...",
+  "clips": [ { "prompt": "..." } ]
+}
+
+"global" - shared by every clip. One flowing present-tense paragraph: the setting and time of day, ONE coherent lighting logic, the colour palette, textures and atmosphere, the visual style, every recurring character fixed once (age, hair, clothing, distinguishing features) and the overall sound world (ambient sound, music). Look and identity stay identical in every clip.
+
+"clips[i].prompt" - the whole clip as one flowing present-tense paragraph, 4-8 sentences, scaled to the clip length: shot scale and angle, the action as one natural sequence from start to finish, the camera movement (how and when it moves, and how the subject appears after the move) and the audio. Do not repeat the global description; name characters with the same identifiers used in "global". Never write timestamps.
+
+Rules for every prompt: present tense; emotion through physical cues, never labels like "sad"; one coherent light logic per shot; concrete visual and audio language only; spoken dialogue in quotation marks; keep the scene focused on a few clear characters and actions; camera movement described relative to the subject; match the amount of detail to the shot scale.
+
+Continuity: unless the brief says otherwise, each clip starts exactly where the previous clip ended (same position, pose and framing), so write each clip's opening to match the previous clip's ending. When a first and/or last frame image is described, the clip opens on the first image and ends on the last one.`;
+var LTX_VISION_SYSTEM = "Describe this image factually and concisely for a video director: subject appearance, pose, expression, setting, lighting. Plain prose, no formatting, no preamble, 2-4 sentences.";
+
+// src/backend/autoPrompt.ts
+var VISION = "Describe this image factually and concisely for a video director: subject appearance, pose, expression, setting, lighting. Plain prose, no formatting, no preamble, 2-4 sentences.";
+var secLabel = (s) => `${+s.toFixed(2)}s`;
+async function describe(images, system) {
+  const out = [];
+  for (const a of images) out.push((await runLlm({ system, prompt: "Describe this image.", images: [a], where: "bottom" }) || "").trim());
+  return out;
+}
+function oneTakeRules(lens, prevEnding = "") {
+  const cutoff = (l) => Math.max(0, l - 1.7).toFixed(1);
+  const lines = [
+    "ONE-TAKE MODE - the clips are chained into one continuous, unbroken take.",
+    "How it works: consecutive clips overlap by 39 frames (1.625 s). The first 1.625 s of clip N+1 re-renders the last 1.625 s of clip N, so the start of clip N+1 is a copy of the end state of clip N, not new content. New content of a clip begins at 2.0 s.",
+    "Rules:",
+    "1. Use exactly one [Shot 1] per clip. Never write [Shot 2] or higher - a shot number means a cut.",
+    '2. Write the development at 2.0 s in the same paragraph, as "At 00:02.000, ..." (later beats the same way, in the same paragraph).',
+    "3. End every clip by stating its exact final state, as if describing the last frame frozen: pose, direction, speed, camera position.",
+    '4. Open every clip after the first by copying that final state word for word - keep the noun phrases exactly, change only the verbs to "is already ...ing" / "still". Never rephrase it.',
+    "5. Finish fast or irreversible actions (strikes, jumps, throws, opening doors, sudden expressions) at least 1.7 s before the clip ends" + (lens.length ? ` (cut-off per clip: ${lens.map((l, i) => `clip ${i + 1} ${cutoff(l)} s`).join(", ")})` : "") + "; only slow, sustainable motion at the seam.",
+    "6. End each clip in motion (a moving vector), not stopped.",
+    "7. Describe every element on screen - supporting characters, VFX (and the direction they dissipate), props, performance, crowd - with identical wording on both sides of each seam.",
+    "8. State direction (left / right / clockwise) and speed (same steady pace) explicitly; the camera keeps moving too.",
+    '9. Start each clip with: "The entire clip is a single uninterrupted shot with no cuts." and, from clip 2 on, "The clip continues the same unbroken take; <the copied end state>."'
+  ];
+  if (prevEnding) lines.push("", `The clip before this one ends with: "${prevEnding}" - open this clip with that state, copied as rule 4 says.`);
+  return lines.join("\n");
+}
+async function autoPromptH3(o) {
+  const images = o.images.slice(0, 9);
+  if (!o.prompt.trim() && !images.length) return o.prompt;
+  const notes = images.length ? (await describe(images, VISION)).map((d, i) => `Image ${i + 1}: ${d}`).join("\n") : "";
+  const label = o.mode === "reference" ? "Reference" : o.mode === "firstlast" ? "First/Last frame" : "Text/Image \u2192 Brief";
+  const lines = [`Mode: ${label}`, `Target duration: ${o.seconds.toFixed(2)} seconds total, split into 1 shot(s) of ~${o.seconds.toFixed(2)}s each.`];
+  if (o.oneTake) lines.push("", oneTakeRules(Array.from({ length: Math.max(1, o.clips ?? 1) }, () => o.seconds)));
+  lines.push("", "Reference manifest:");
+  lines.push(o.assetRef ? "Asset Library references are named by @name in the creative brief." : o.mode === "reference" && images.length ? `${images.length} reference image(s) supplied; refer to them as <Picture 1>\u2026<Picture ${images.length}>.` : "None");
+  if (notes) {
+    lines.push("", o.mode === "firstlast" ? "The following images were analyzed in order: image 1 is the STARTING frame, the last one is the ENDING frame. Write the brief as a first/last-frame shot that moves from the starting description to the ending one." : `The following images were analyzed in order and are the <Picture 1>\u2026<Picture ${images.length}> references for this brief.`, "", notes);
+  }
+  lines.push(
+    "",
+    "Creative brief:",
+    o.prompt || "(no text supplied \u2014 base the brief on the image analysis above)",
+    "",
+    "Final grounding check: stay grounded in what the request and any images/video/audio actually show \u2014 invent only the minimum needed to connect frames or fulfill the request, never unrelated actions, props, on-screen text, dialogue, or locations. An explicit user instruction always outranks a default assumption. Treat every explicitly assigned reference role (voice, motion, style, etc.) as exclusive \u2014 use only that role's content, do not also pull in its other visible traits. Do not invent music or ambient sound beyond what the request asks for or clearly implies. Never pad solely to reach a length \u2014 use only what the target duration above actually needs. Return only the complete brief text, no commentary outside it."
+  );
+  const text3 = (await runLlm({ system: o.mode === "reference" ? H3_SYSTEM_PROMPT_REF : H3_SYSTEM_PROMPT_BASE, prompt: lines.join("\n"), where: "bottom" })).trim();
+  if (!text3) throw new Error("empty response");
+  return text3;
+}
+async function autoPromptLtx(o) {
+  const images = o.images.slice(0, 2);
+  if (!o.prompt.trim() && !images.length) return o.prompt;
+  const notes = images.length ? (await describe(images, LTX_VISION_SYSTEM)).map((d, i) => `Image ${i + 1}: ${d}`).join("\n") : "";
+  const lines = [`Total length: ${secLabel(o.seconds)} in 1 clip: clip 1 = ${secLabel(o.seconds)}.`, "Write exactly 1 clip with these lengths."];
+  if (notes) lines.push("", "Images given to this clip (in order; the time is when each one appears):", notes);
+  lines.push("", "Brief:", o.prompt || "(no text supplied - base the plan on the images above)", "", "Return only the JSON object.");
+  const text3 = await runLlm({ system: LTX_WRITE_PLAIN_SYSTEM, prompt: lines.join("\n"), where: "bottom" });
+  const a = text3.indexOf("{"), b = text3.lastIndexOf("}");
+  if (a < 0 || b <= a) throw new Error("the model did not return a plan (no JSON found)");
+  let raw;
+  try {
+    raw = JSON.parse(text3.slice(a, b + 1));
+  } catch {
+    throw new Error("the model's plan is not valid JSON");
+  }
+  const clip2 = String(raw?.clips?.[0]?.prompt ?? "").trim();
+  if (!clip2) throw new Error("the plan has no clips");
+  return [String(raw.global ?? "").trim(), clip2].filter(Boolean).join("\n\n");
 }
 
 // src/engine/run.ts
@@ -7736,6 +7913,27 @@ function imageRunner(mode) {
     return runGraph(c, built.graph);
   };
 }
+async function putIntoPromptCard(c, text3) {
+  try {
+    const { useGraph: useGraph2 } = await Promise.resolve().then(() => (init_graph(), graph_exports));
+    const g = useGraph2.getState();
+    const e = g.edges.find((x) => x.target === c.node.id && x.targetHandle === "prompt");
+    const src = g.nodes.find((n2) => n2.id === e?.source);
+    if (src?.defId === "prompt") g.setParam(src.id, "text", text3);
+  } catch {
+  }
+}
+async function autoWrite(c, write, current) {
+  c.progress(1, "writing the prompt\u2026");
+  let out;
+  try {
+    out = await write();
+  } catch (e) {
+    throw new Error(`Auto Prompt failed: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  if (out && out !== current) await putIntoPromptCard(c, out);
+  return out || current;
+}
 var textOnlySystem = (c) => str(c.p.system);
 function enhanceInstruction(purpose, style, english = true) {
   const forVideo = purpose === "Video";
@@ -7770,9 +7968,11 @@ async function runH3(c) {
   const sv = si ? num2(si.text, -1) : num2(p.seed, -1);
   const seed0 = sv < 0 ? Math.floor(Math.random() * 2 ** 40) : sv;
   const settings = useSettings.getState();
-  const prompts = c.text("prompt").split(/\n\s*-{3,}\s*\n/).map((x) => x.trim()).filter(Boolean);
-  if (!prompts.length) throw new Error("Prompt is empty");
   const imgs = c.inputs("image"), lastA = c.inputs("last")[0];
+  let promptSrc = c.text("prompt");
+  if (p.auto_prompt) promptSrc = await autoWrite(c, () => autoPromptH3({ prompt: promptSrc, seconds: num2(p.seconds, 8), mode: ref ? "reference" : imgs[0] || lastA ? "firstlast" : "t2v", images: ref ? imgs : [imgs[0], lastA].filter((x) => !!x), assetRef: !!assetRef, oneTake: !ref && str(p.continuity, "lastframe") === "onetake", clips: promptSrc.split(/\n\s*-{3,}\s*\n/).filter((x) => x.trim()).length }), promptSrc);
+  const prompts = promptSrc.split(/\n\s*-{3,}\s*\n/).map((x) => x.trim()).filter(Boolean);
+  if (!prompts.length) throw new Error("Prompt is empty");
   const cards = h3Cards(c);
   let size;
   if (str(p.aspect) === "auto" && imgs[0]) {
@@ -7849,6 +8049,76 @@ If this happened on the last step of 7+1, H3 Memory Optimization does not work w
   if (clips.length > 1 && p.stitch !== false) {
     c.progress(98, "stitching\u2026");
     const st = await stitchClips(clips, `${settings.saveSubfolder}/MMH3_full`, continuity === "onetake" ? ONE_TAKE_OVERLAP_SEC : void 0);
+    if (!st.ok || !st.filename) throw new Error(`stitch failed: ${st.error ?? "unknown"}`);
+    return [assetFromFile({ filename: st.filename, subfolder: st.subfolder ?? "", type: "output" }, "video", "video"), ...assets];
+  }
+  return assets;
+}
+async function runLtx(c) {
+  const p = c.p;
+  const si = c.inputs("seed_in")[0];
+  const sv = si ? num2(si.text, -1) : num2(p.seed, -1);
+  const seed0 = sv < 0 ? Math.floor(Math.random() * 2 ** 40) : sv;
+  const settings = useSettings.getState();
+  const first = c.inputs("image")[0], last = c.inputs("last")[0];
+  const seconds = num2(p.seconds, 5);
+  const split = (t2) => t2.split(/\n\s*-{3,}\s*\n/).map((x) => x.trim()).filter(Boolean);
+  let promptSrc = c.text("prompt");
+  if (p.auto_prompt) {
+    promptSrc = await autoWrite(c, async () => {
+      const out = [];
+      for (const part of split(promptSrc).length ? split(promptSrc) : [promptSrc]) out.push(await autoPromptLtx({ prompt: part, seconds, images: out.length ? [] : [first, last].filter((x) => !!x) }));
+      return out.join("\n---\n");
+    }, promptSrc);
+  }
+  const prompts = split(promptSrc);
+  if (!prompts.length) throw new Error("Prompt is empty");
+  let size;
+  if (first && str(p.aspect) === "auto") {
+    const bm = await loadBitmap(first);
+    size = ltxSize(`${bm.width}:${bm.height}`, num2(p.megapixels, 1));
+  }
+  const lora = (n2, s2) => ({ name: str(p[n2], "none"), strength: num2(p[s2], 1) });
+  let firstFile = first ? await ensureInput(first) : void 0;
+  const lastFile = last ? await ensureInput(last) : void 0;
+  const chain2 = p.chain_last !== false;
+  const clips = [];
+  for (let i = 0; i < prompts.length; i++) {
+    if (c.signal?.aborted) throw new Error("cancelled");
+    const graph = await buildLtxGraph({
+      prompt: prompts[i],
+      seconds,
+      aspect: str(p.aspect, "16:9"),
+      megapixels: num2(p.megapixels, 1),
+      first: firstFile,
+      last: i === prompts.length - 1 ? lastFile : void 0,
+      seed: seed0 + i,
+      steps: num2(p.steps, 12),
+      cfg: num2(p.cfg, 1),
+      sampler: str(p.sampler, "euler_ancestral"),
+      scheduler: str(p.scheduler, "linear_quadratic"),
+      stage2Sigmas: str(p.stage2, "0.85, 0.7250, 0.4219, 0.0"),
+      loras: [lora("lora1", "lora1_strength"), lora("lora2", "lora2_strength"), ...cardLoras(c)],
+      models: settings.video,
+      saveSubfolder: settings.saveSubfolder,
+      size
+    });
+    if (prompts.length === 1) return runGraph(c, graph);
+    const base2 = i / prompts.length;
+    const res = await runPrompt(graph, { onProgress: (pct, label) => c.progress(Math.round((base2 + pct / 100 / prompts.length) * 100), `clip ${i + 1}/${prompts.length} ${label ?? ""}`), signal: c.signal });
+    const vf = [...res.videos, ...res.images].find((f) => VIDEO_EXT.test(f.filename));
+    if (!vf) throw new Error(`clip ${i + 1}: ComfyUI returned no video`);
+    clips.push({ filename: vf.filename, subfolder: vf.subfolder ?? "" });
+    if (chain2 && i < prompts.length - 1) {
+      const lf = await clipLastFrame(vf.filename, vf.subfolder ?? "");
+      if (!lf.ok || !lf.filename) throw new Error(`clip ${i + 1}: could not take the last frame (${lf.error ?? "unknown"})`);
+      firstFile = lf.filename;
+    }
+  }
+  const assets = clips.map((f) => assetFromFile({ filename: f.filename, subfolder: f.subfolder, type: "output" }, "video", "video"));
+  if (p.stitch !== false) {
+    c.progress(98, "stitching\u2026");
+    const st = await stitchClips(clips, `${settings.saveSubfolder}/LTX25_full`);
     if (!st.ok || !st.filename) throw new Error(`stitch failed: ${st.error ?? "unknown"}`);
     return [assetFromFile({ filename: st.filename, subfolder: st.subfolder ?? "", type: "output" }, "video", "video"), ...assets];
   }
@@ -8013,35 +8283,7 @@ var RUNNERS = {
   },
   "video-generate": async (c) => {
     if (c.engineId === "h3" || c.engineId === "h3-ref") return runH3(c);
-    const p = c.p;
-    const si = c.inputs("seed_in")[0];
-    const sv = si ? num2(si.text, -1) : num2(p.seed, -1);
-    const first = c.inputs("image")[0], last = c.inputs("last")[0];
-    let size;
-    if (first && str(p.aspect) === "auto") {
-      const bm = await loadBitmap(first);
-      size = ltxSize(`${bm.width}:${bm.height}`, num2(p.megapixels, 1));
-    }
-    const lora = (n2, s2) => ({ name: str(p[n2], "none"), strength: num2(p[s2], 1) });
-    const graph = await buildLtxGraph({
-      prompt: c.text("prompt"),
-      seconds: num2(p.seconds, 5),
-      aspect: str(p.aspect, "16:9"),
-      megapixels: num2(p.megapixels, 1),
-      first: first ? await ensureInput(first) : void 0,
-      last: last ? await ensureInput(last) : void 0,
-      seed: sv < 0 ? Math.floor(Math.random() * 2 ** 40) : sv,
-      steps: num2(p.steps, 12),
-      cfg: num2(p.cfg, 1),
-      sampler: str(p.sampler, "euler_ancestral"),
-      scheduler: str(p.scheduler, "linear_quadratic"),
-      stage2Sigmas: str(p.stage2, "0.85, 0.7250, 0.4219, 0.0"),
-      loras: [lora("lora1", "lora1_strength"), lora("lora2", "lora2_strength"), ...cardLoras(c)],
-      models: useSettings.getState().video,
-      saveSubfolder: useSettings.getState().saveSubfolder,
-      size
-    });
-    return runGraph(c, graph);
+    return runLtx(c);
   },
   // ---- browser-side edits
   crop: opRunner("crop"),
@@ -8102,6 +8344,7 @@ function opRunner(op) {
 }
 
 // mcp/server.ts
+init_registry();
 init_comfy();
 useSettings.getState().set({ comfyUrl: process.env.COMFY_URL ?? "http://127.0.0.1:8188" });
 var text2 = (t2) => ({ content: [{ type: "text", text: t2 }] });
@@ -8228,7 +8471,7 @@ var send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 async function handle(msg) {
   const { id, method, params } = msg;
   try {
-    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.20.0" } } });
+    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.21.0" } } });
     if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS.map(({ run: _r, ...t2 }) => t2) } });
     if (method === "tools/call") {
       const tool = TOOLS.find((t2) => t2.name === params?.name);

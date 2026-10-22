@@ -77,6 +77,7 @@ const h3Params = (ref: boolean): ParamDef[] => [
   ...(ref ? [] : [sel('continuity', 'Several clips (separate prompts with ---)', ['none', 'lastframe', 'onetake'], 'lastframe'), toggle('stitch', 'Stitch clips into one video', true)]),
   slider('steps', 'Steps (no turbo)', 1, 60, 1, 20, { advanced: true }), dyn('sampler', 'Sampler', 'samplers', 'er_sde', { advanced: true }), dyn('scheduler', 'Scheduler', 'schedulers', 'simple', { advanced: true }),
   dyn('upscale_model', 'Upscale model (after render)', 'upscalers', 'none', { advanced: true }),
+  toggle('auto_prompt', 'Auto Prompt (write the prompt with the LLM before generating)', false),
   seed,
 ];
 
@@ -227,7 +228,7 @@ export const REGISTRY: NodeDef[] = [
     engines: [
       { id: 'h3', label: 'MiniMax H3 — text / first-last frame (local)', family: 'h3', default: true, params: h3Params(false) },
       { id: 'h3-ref', label: 'MiniMax H3 — multi-reference (local)', family: 'h3', params: h3Params(true) },
-      { id: 'ltx25', label: 'LTX 2.5 (local, with audio)', family: 'ltx25', params: [sel('aspect', 'Aspect ratio', [...ASPECTS, 'auto'], '16:9'), megapixels(1), slider('seconds', 'Length (s)', 2, 20, 1, 5), slider('steps', 'Steps', 1, 40, 1, 12, { advanced: true }), slider('cfg', 'Guidance', 0, 10, 0.1, 1, { advanced: true }), dyn('sampler', 'Sampler', 'samplers', 'euler_ancestral', { advanced: true }), dyn('scheduler', 'Scheduler', 'schedulers', 'linear_quadratic', { advanced: true }), text('stage2', 'Stage-2 sigmas', '0.85, 0.7250, 0.4219, 0.0', false, { advanced: true }), ...loras('ltx25'), seed] }],
+      { id: 'ltx25', label: 'LTX 2.5 (local, with audio)', family: 'ltx25', params: [sel('aspect', 'Aspect ratio', [...ASPECTS, 'auto'], '16:9'), megapixels(1), slider('seconds', 'Length (s)', 2, 20, 1, 5), toggle('chain_last', "Several clips (separate prompts with ---): start each clip from the last frame of the one before", true), toggle('stitch', 'Stitch clips into one video', true), slider('steps', 'Steps', 1, 40, 1, 12, { advanced: true }), slider('cfg', 'Guidance', 0, 10, 0.1, 1, { advanced: true }), dyn('sampler', 'Sampler', 'samplers', 'euler_ancestral', { advanced: true }), dyn('scheduler', 'Scheduler', 'schedulers', 'linear_quadratic', { advanced: true }), text('stage2', 'Stage-2 sigmas', '0.85, 0.7250, 0.4219, 0.0', false, { advanced: true }), ...loras('ltx25'), toggle('auto_prompt', 'Auto Prompt (write the prompt with the LLM before generating)', false), seed] }],
     description: 'Text → video, or first/last frame → video (LTX 2.5). LTX 2.5 or MiniMax H3. Other models: ComfyUI Workflow node.' },
 
   // ============================================================ Edit (runs in the browser)

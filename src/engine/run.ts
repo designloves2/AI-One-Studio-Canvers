@@ -10,13 +10,14 @@ import { loadOptions } from '../backend/options';
 import { getJson } from '../backend/http';
 import { buildMusicGraph } from '../backend/music';
 import { buildLtxGraph, ltxSize } from '../backend/ltx';
-import { buildH3Graph, h3Size, h3Frames, pickChainFrame, copyToInput, stitchClips, ONE_TAKE_OVERLAP_FRAMES, ONE_TAKE_OVERLAP_SEC } from '../backend/h3';
+import { buildH3Graph, h3Size, h3Frames, pickChainFrame, copyToInput, clipLastFrame, stitchClips, ONE_TAKE_OVERLAP_FRAMES, ONE_TAKE_OVERLAP_SEC } from '../backend/h3';
 import { parseWorkflow, setField, VIDEO_EXT } from '../backend/workflow';
 import { useSettings } from '../store/settings';
 import { textAsset, num, str, need } from './util';
 import { EXTRA_RUNNERS, cardLoras, h3Cards, h3Opt } from './more';
 import { downstreamImages, enhanceWithImages } from '../backend/refEnhance';
 import { styleOf, formatFor, NO_AESTHETIC } from '../backend/promptStyle';
+import { autoPromptH3, autoPromptLtx } from '../backend/autoPrompt';
 import { applyOp, blendOp, canvasToAsset, channelOp, invertMask, loadBitmap, maskGrow, palette, videoFrame } from '../editing/ops';
 
 export interface GraphLike { nodes: GraphNode[]; edges: GraphEdge[] }
@@ -220,6 +221,25 @@ function imageRunner(mode: (c: Ctx) => ImageMode): Runner {
   };
 }
 
+/** Auto Prompt: the written prompt goes back into the Prompt card wired to this card (when there is one). */
+async function putIntoPromptCard(c: Ctx, text: string) {
+  try {
+    const { useGraph } = await import('../store/graph');
+    const g = useGraph.getState();
+    const e = g.edges.find((x) => x.target === c.node.id && x.targetHandle === 'prompt');
+    const src = g.nodes.find((n) => n.id === e?.source);
+    if (src?.defId === 'prompt') g.setParam(src.id, 'text', text);
+  } catch { /* headless: nothing to update */ }
+}
+
+async function autoWrite(c: Ctx, write: () => Promise<string>, current: string): Promise<string> {
+  c.progress(1, 'writing the prompt…');
+  let out: string;
+  try { out = await write(); } catch (e) { throw new Error(`Auto Prompt failed: ${e instanceof Error ? e.message : String(e)}`); }
+  if (out && out !== current) await putIntoPromptCard(c, out);
+  return out || current;
+}
+
 const textOnlySystem = (c: Ctx) => str(c.p.system);
 
 export function enhanceInstruction(purpose: string, style: string, english = true): string {
@@ -253,9 +273,11 @@ async function runH3(c: Ctx): Promise<Asset[]> {
   const si = c.inputs('seed_in')[0]; const sv = si ? num(si.text, -1) : num(p.seed, -1);
   const seed0 = sv < 0 ? Math.floor(Math.random() * 2 ** 40) : sv;
   const settings = useSettings.getState();
-  const prompts = c.text('prompt').split(/\n\s*-{3,}\s*\n/).map((x) => x.trim()).filter(Boolean);
-  if (!prompts.length) throw new Error('Prompt is empty');
   const imgs = c.inputs('image'), lastA = c.inputs('last')[0];
+  let promptSrc = c.text('prompt');
+  if (p.auto_prompt) promptSrc = await autoWrite(c, () => autoPromptH3({ prompt: promptSrc, seconds: num(p.seconds, 8), mode: ref ? 'reference' : (imgs[0] || lastA) ? 'firstlast' : 't2v', images: ref ? imgs : [imgs[0], lastA].filter((x): x is Asset => !!x), assetRef: !!assetRef, oneTake: !ref && str(p.continuity, 'lastframe') === 'onetake', clips: promptSrc.split(/\n\s*-{3,}\s*\n/).filter((x) => x.trim()).length }), promptSrc);
+  const prompts = promptSrc.split(/\n\s*-{3,}\s*\n/).map((x) => x.trim()).filter(Boolean);
+  if (!prompts.length) throw new Error('Prompt is empty');
   const cards = h3Cards(c);
   let size: { width: number; height: number } | undefined;
   if (str(p.aspect) === 'auto' && imgs[0]) { const bm = await loadBitmap(imgs[0]); size = h3Size(`${bm.width}:${bm.height}`, num(p.megapixels, 0.9)); }
@@ -308,6 +330,64 @@ If this happened on the last step of 7+1, H3 Memory Optimization does not work w
   if (clips.length > 1 && p.stitch !== false) {
     c.progress(98, 'stitching…');
     const st = await stitchClips(clips, `${settings.saveSubfolder}/MMH3_full`, continuity === 'onetake' ? ONE_TAKE_OVERLAP_SEC : undefined);
+    if (!st.ok || !st.filename) throw new Error(`stitch failed: ${st.error ?? 'unknown'}`);
+    return [assetFromFile({ filename: st.filename, subfolder: st.subfolder ?? '', type: 'output' }, 'video', 'video'), ...assets];
+  }
+  return assets;
+}
+
+/** LTX 2.5: one clip per `---` block of the prompt; each clip can start from the last frame of the one before; the clips are stitched at the end. */
+async function runLtx(c: Ctx): Promise<Asset[]> {
+  const p = c.p; const si = c.inputs('seed_in')[0]; const sv = si ? num(si.text, -1) : num(p.seed, -1);
+  const seed0 = sv < 0 ? Math.floor(Math.random() * 2 ** 40) : sv;
+  const settings = useSettings.getState();
+  const first = c.inputs('image')[0], last = c.inputs('last')[0];
+  const seconds = num(p.seconds, 5);
+  const split = (t: string) => t.split(/\n\s*-{3,}\s*\n/).map((x) => x.trim()).filter(Boolean);
+  let promptSrc = c.text('prompt');
+  if (p.auto_prompt) {
+    // one request per clip: each `---` block is written on its own
+    promptSrc = await autoWrite(c, async () => {
+      const out: string[] = [];
+      for (const part of split(promptSrc).length ? split(promptSrc) : [promptSrc]) out.push(await autoPromptLtx({ prompt: part, seconds, images: out.length ? [] : [first, last].filter((x): x is Asset => !!x) }));
+      return out.join('\n---\n');
+    }, promptSrc);
+  }
+  const prompts = split(promptSrc);
+  if (!prompts.length) throw new Error('Prompt is empty');
+  let size: { width: number; height: number } | undefined;
+  if (first && str(p.aspect) === 'auto') { const bm = await loadBitmap(first); size = ltxSize(`${bm.width}:${bm.height}`, num(p.megapixels, 1)); }
+  const lora = (n: string, s2: string) => ({ name: str(p[n], 'none'), strength: num(p[s2], 1) });
+  let firstFile = first ? await ensureInput(first) : undefined;
+  const lastFile = last ? await ensureInput(last) : undefined;
+  const chain = p.chain_last !== false;
+  const clips: { filename: string; subfolder: string }[] = [];
+  for (let i = 0; i < prompts.length; i++) {
+    if (c.signal?.aborted) throw new Error('cancelled');
+    const graph = await buildLtxGraph({
+      prompt: prompts[i], seconds, aspect: str(p.aspect, '16:9'), megapixels: num(p.megapixels, 1),
+      first: firstFile, last: i === prompts.length - 1 ? lastFile : undefined,
+      seed: seed0 + i, steps: num(p.steps, 12), cfg: num(p.cfg, 1),
+      sampler: str(p.sampler, 'euler_ancestral'), scheduler: str(p.scheduler, 'linear_quadratic'), stage2Sigmas: str(p.stage2, '0.85, 0.7250, 0.4219, 0.0'),
+      loras: [lora('lora1', 'lora1_strength'), lora('lora2', 'lora2_strength'), ...cardLoras(c)], models: settings.video, saveSubfolder: settings.saveSubfolder, size,
+    });
+    if (prompts.length === 1) return runGraph(c, graph);
+    const base = i / prompts.length;
+    const res = await runPrompt(graph, { onProgress: (pct, label) => c.progress(Math.round((base + pct / 100 / prompts.length) * 100), `clip ${i + 1}/${prompts.length} ${label ?? ''}`), signal: c.signal });
+    const vf = [...res.videos, ...res.images].find((f) => VIDEO_EXT.test(f.filename));
+    if (!vf) throw new Error(`clip ${i + 1}: ComfyUI returned no video`);
+    clips.push({ filename: vf.filename, subfolder: vf.subfolder ?? '' });
+    if (chain && i < prompts.length - 1) {
+      // the next clip starts from this one's last frame
+      const lf = await clipLastFrame(vf.filename, vf.subfolder ?? '');
+      if (!lf.ok || !lf.filename) throw new Error(`clip ${i + 1}: could not take the last frame (${lf.error ?? 'unknown'})`);
+      firstFile = lf.filename;
+    }
+  }
+  const assets = clips.map((f) => assetFromFile({ filename: f.filename, subfolder: f.subfolder, type: 'output' }, 'video', 'video'));
+  if (p.stitch !== false) {
+    c.progress(98, 'stitching…');
+    const st = await stitchClips(clips, `${settings.saveSubfolder}/LTX25_full`);
     if (!st.ok || !st.filename) throw new Error(`stitch failed: ${st.error ?? 'unknown'}`);
     return [assetFromFile({ filename: st.filename, subfolder: st.subfolder ?? '', type: 'output' }, 'video', 'video'), ...assets];
   }
@@ -448,19 +528,7 @@ const RUNNERS: Record<string, Runner> = {
   },
   'video-generate': async (c) => {
     if (c.engineId === 'h3' || c.engineId === 'h3-ref') return runH3(c);
-    const p = c.p; const si = c.inputs('seed_in')[0]; const sv = si ? num(si.text, -1) : num(p.seed, -1);
-    const first = c.inputs('image')[0], last = c.inputs('last')[0];
-    let size: { width: number; height: number } | undefined;
-    if (first && str(p.aspect) === 'auto') { const bm = await loadBitmap(first); size = ltxSize(`${bm.width}:${bm.height}`, num(p.megapixels, 1)); }
-    const lora = (n: string, s2: string) => ({ name: str(p[n], 'none'), strength: num(p[s2], 1) });
-    const graph = await buildLtxGraph({
-      prompt: c.text('prompt'), seconds: num(p.seconds, 5), aspect: str(p.aspect, '16:9'), megapixels: num(p.megapixels, 1),
-      first: first ? await ensureInput(first) : undefined, last: last ? await ensureInput(last) : undefined,
-      seed: sv < 0 ? Math.floor(Math.random() * 2 ** 40) : sv, steps: num(p.steps, 12), cfg: num(p.cfg, 1),
-      sampler: str(p.sampler, 'euler_ancestral'), scheduler: str(p.scheduler, 'linear_quadratic'), stage2Sigmas: str(p.stage2, '0.85, 0.7250, 0.4219, 0.0'),
-      loras: [lora('lora1', 'lora1_strength'), lora('lora2', 'lora2_strength'), ...cardLoras(c)], models: useSettings.getState().video, saveSubfolder: useSettings.getState().saveSubfolder, size,
-    });
-    return runGraph(c, graph);
+    return runLtx(c);
   },
 
   // ---- browser-side edits

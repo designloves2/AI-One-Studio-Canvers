@@ -2,6 +2,17 @@
 
 형식: 버전 · 날짜 / 추가 · 변경 · 수정. 버전은 `package.json`, `mcp/server.ts`와 같습니다.
 
+## 2.21.0 — 2026-10-22
+
+### 추가
+- **Auto Prompt (영상 카드)**: MiniMax H3 와 LTX 2.5 카드에 'Auto Prompt' 토글(기본 꺼짐). 켜면 생성 직전에 카드의 프롬프트를 LLM 으로 먼저 쓰고, 결과를 연결된 프롬프트 카드에 넣은 뒤 생성합니다(확인·분할 없음, 실패하면 "Auto Prompt failed: ..." 로 중단).
+  - **H3**: 프롬프트 전체를 한 번에 요청. Reference(Ref2VA)는 H3_SYSTEM_PROMPT_REF, 그 외(텍스트·첫/끝 프레임)는 H3_SYSTEM_PROMPT_BASE (노드 파일 그대로). 요청문은 노드의 Mode / Target duration / Reference manifest / 이미지 분석 / Creative brief / 마지막 확인 문구 형식이고, 연속이 One-Take 이면 One-Take 규칙 문구가 들어갑니다.
+  - **LTX**: LTX_WRITE_PLAIN_SYSTEM 으로 계획(JSON)을 받아 클립 프롬프트를 씁니다. `---` 블록마다 따로 씁니다.
+- **LTX 여러 클립**: 프롬프트를 `---` 로 나누면 블록마다 클립을 만들고, '이전 클립의 마지막 프레임을 다음 클립의 첫 프레임으로' 토글(기본 켜짐)과 '클립을 하나로 이어 붙이기' 토글(기본 켜짐)이 생겼습니다(마지막 클립에만 연결한 끝 이미지 사용). 한 블록이면 예전과 같습니다.
+
+### 변경
+- `graphify-out` 은 Claude 데스크탑 graphify 플러그인의 로컬 데이터라 저장소 추적에서 뺐습니다(`.gitignore`).
+
 ## 2.20.0 — 2026-10-22
 
 ### 추가
