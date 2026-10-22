@@ -6,7 +6,7 @@ import { enhanceInstruction } from '../engine/run';
 import type { PromptStyle } from './promptStyle';
 import { useGraph } from '../store/graph';
 import { byId } from '../registry';
-import { activeAsset } from '../canvas/helpers';
+import { shownAsset } from '../canvas/helpers';
 import type { Asset } from '../types';
 
 export interface RefImage { asset: Asset; from: string }
@@ -22,7 +22,7 @@ export function downstreamImages(nodeId: string): { images: RefImage[]; purpose:
     if (def.category === 'Video') purpose = 'Video';
     for (const inp of def.inputs.filter((i) => i.type === 'image')) {
       for (const ie of edges.filter((x) => x.target === target.id && x.targetHandle === inp.id)) {
-        const src = nodes.find((n) => n.id === ie.source); const a = src && activeAsset(src, ie.sourceHandle);
+        const src = nodes.find((n) => n.id === ie.source); const a = src && shownAsset(nodes, edges, src, ie.sourceHandle);
         if (src && a && a.type === 'image' && !seen.has(a.id)) { seen.add(a.id); images.push({ asset: a, from: src.id }); }
       }
     }

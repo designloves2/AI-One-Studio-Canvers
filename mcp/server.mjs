@@ -7666,6 +7666,13 @@ function activeAsset(node, port) {
   const list = portAssets(node, port);
   return list[Math.min(node.activeResult, list.length - 1)] ?? list[0];
 }
+function shownAsset(nodes, edges, src, handle2, depth = 0) {
+  const a = activeAsset(src, handle2);
+  if (a || depth > 6 || !["preview", "export", "router"].includes(src.defId)) return a;
+  const up = edges.find((e) => e.target === src.id);
+  const from = up && nodes.find((n2) => n2.id === up.source);
+  return from ? shownAsset(nodes, edges, from, up.sourceHandle, depth + 1) : void 0;
+}
 
 // src/backend/refEnhance.ts
 function downstreamImages(nodeId) {
@@ -7681,7 +7688,7 @@ function downstreamImages(nodeId) {
     for (const inp of def.inputs.filter((i) => i.type === "image")) {
       for (const ie of edges.filter((x) => x.target === target.id && x.targetHandle === inp.id)) {
         const src = nodes.find((n2) => n2.id === ie.source);
-        const a = src && activeAsset(src, ie.sourceHandle);
+        const a = src && shownAsset(nodes, edges, src, ie.sourceHandle);
         if (src && a && a.type === "image" && !seen.has(a.id)) {
           seen.add(a.id);
           images.push({ asset: a, from: src.id });
@@ -8680,7 +8687,7 @@ var send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 async function handle(msg) {
   const { id, method, params } = msg;
   try {
-    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.23.0" } } });
+    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.23.1" } } });
     if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS.map(({ run: _r, ...t2 }) => t2) } });
     if (method === "tools/call") {
       const tool = TOOLS.find((t2) => t2.name === params?.name);

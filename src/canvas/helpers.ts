@@ -15,6 +15,15 @@ export function activeAsset(node: GraphNode, port?: string): Asset | undefined {
   return list[Math.min(node.activeResult, list.length - 1)] ?? list[0];
 }
 
+/** The image a connection really carries: a Result Viewer / Export / Router card keeps no result of its own, it passes on what is connected to it, so follow it upward. */
+export function shownAsset(nodes: GraphNode[], edges: { source: string; sourceHandle: string; target: string; targetHandle: string }[], src: GraphNode, handle?: string, depth = 0): Asset | undefined {
+  const a = activeAsset(src, handle);
+  if (a || depth > 6 || !['preview', 'export', 'router'].includes(src.defId)) return a;
+  const up = edges.find((e) => e.target === src.id);
+  const from = up && nodes.find((n) => n.id === up.source);
+  return from ? shownAsset(nodes, edges, from, up!.sourceHandle, depth + 1) : undefined;
+}
+
 /** the asset currently arriving at an input port (first connection) */
 export function useUpstream(nodeId: string, handle: string): Asset | undefined {
   return useGraph((s) => {

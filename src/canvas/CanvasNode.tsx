@@ -7,7 +7,7 @@ import { byId, engineFor, paramsFor } from '../registry';
 import { PORT_COLORS, type Asset, type GraphNode, type PortDef } from '../types';
 import { Field, AutoText, ImeTextarea } from '../ui/Controls';
 import { AssetView } from './AssetView';
-import { activeAsset, portAssets, useUpstream } from './helpers';
+import { activeAsset, portAssets, shownAsset, useUpstream } from './helpers';
 import { runNode, stopNode, addImports, download } from '../engine/actions';
 import { importFile, enhanceInstruction } from '../engine/run';
 import { runLlm } from '../backend/llm';
@@ -49,7 +49,7 @@ function RefOrder({ nodeId, inp }: { nodeId: string; inp: PortDef }) {
         return { e, first: k === 0, aid, thumb: ran[k]?.url || (ids[k] !== undefined ? libThumb(ids[k]) : '') };
       });
     }
-    const a = activeAsset(src, e.sourceHandle);
+    const a = shownAsset(nodes, edges, src, e.sourceHandle);
     return [{ e, first: true, thumb: a?.url ?? '', aid: (a?.meta as { assetId?: number } | undefined)?.assetId }];
   });
   return (
