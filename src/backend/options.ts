@@ -23,6 +23,8 @@ async function load(source: string): Promise<string[]> {
     return ['none', ...new Set(lists.flat().filter((x) => x && x !== 'none'))];
   }
   if (source === 'h3unets') { const l = await getJson<{ diffusion_models?: string[] }>('/minimax_h3_one/models'); return ['none', ...(l.diffusion_models ?? []).filter((x) => x && x !== 'none')]; }
+  if (source === 'tinyvaes') { const i = await objectInfo('ModelPreviewOverrideKJ'); return i?.ModelPreviewOverrideKJ?.input?.optional?.tiny_vae?.[1]?.options ?? ['none']; }
+  if (source === 'tinyvaes+auto') return ['auto', ...(await loadOptions('tinyvaes'))];
   if (source === 'seedvr2dit') { const i = await objectInfo('SeedVR2LoadDiTModel'); return ['none', ...(i?.SeedVR2LoadDiTModel?.input?.required?.model?.[0] ?? [])]; }
   if (source === 'seedvr2vae') { const i = await objectInfo('SeedVR2LoadVAEModel'); return ['none', ...(i?.SeedVR2LoadVAEModel?.input?.required?.model?.[0] ?? [])]; }
   if (source === 'preprocessors') { const i = await objectInfo('AIO_Preprocessor'); return i?.AIO_Preprocessor?.input?.required?.preprocessor?.[0] ?? ['DepthAnythingPreprocessor']; }

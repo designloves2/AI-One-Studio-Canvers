@@ -2288,9 +2288,9 @@ var init_settings = __esm({
     useSettings = create((set2, get) => {
       const saved = load();
       const persist = () => {
-        const { comfyUrl, llm, live, models, saveSubfolder, music, video, hostPanels, h3Turbo } = get();
+        const { comfyUrl, llm, live, models, saveSubfolder, music, video, hostPanels, h3Turbo, lastParams } = get();
         try {
-          localStorage.setItem(KEY, JSON.stringify({ comfyUrl, llm, live, models, saveSubfolder, music, video, hostPanels, h3Turbo }));
+          localStorage.setItem(KEY, JSON.stringify({ comfyUrl, llm, live, models, saveSubfolder, music, video, hostPanels, h3Turbo, lastParams }));
         } catch {
         }
       };
@@ -2305,6 +2305,11 @@ var init_settings = __esm({
         music: saved.music ?? {},
         video: saved.video ?? {},
         h3Turbo: { fl: saved.h3Turbo?.fl ?? "", ref: saved.h3Turbo?.ref ?? "" },
+        lastParams: saved.lastParams ?? {},
+        rememberParam: (defId, key, v) => {
+          set2({ lastParams: { ...get().lastParams, [defId]: { ...get().lastParams[defId], [key]: v } } });
+          persist();
+        },
         setH3Turbo: (patch) => {
           set2({ h3Turbo: { ...get().h3Turbo, ...patch } });
           persist();
@@ -2749,7 +2754,7 @@ var init_registry = __esm({
         category: "Video",
         kind: "generate",
         inputs: [P.textIn("prompt", "Prompt", false), P.imgIn("image", "First frame / references", true, true), P.imgIn("last", "Last frame", true), P.cardIn("H3 option cards"), P.loraIn(), { id: "assets", label: "Asset Library", type: "pipe", optional: true }, P.seedIn()],
-        outputs: [{ id: "video", label: "Video", type: "video" }],
+        outputs: [{ id: "video", label: "Video", type: "video" }, { id: "preview", label: "Live preview", type: "pipe" }],
         params: [],
         engines: [
           { id: "h3", label: "MiniMax H3 \u2014 text / first-last frame (local)", family: "h3", default: true, params: h3Params(false) },
@@ -2856,6 +2861,23 @@ var init_registry = __esm({
           text("boxes", 'Boxes (JSON \u2014 edit with "Edit boxes")', "[]", true, { advanced: true })
         ],
         description: "Draw boxes on a canvas: each is an OBJECT or exact TEXT. Wire into Image Generate \u2192 Moss Image R2I. Draw the background first, foreground last."
+      },
+      {
+        id: "video-preview",
+        title: "Generation Video Preview (live)",
+        category: "Cards",
+        kind: "source",
+        inputs: [{ id: "video", label: "Video Generate \u2192 Live preview", type: "pipe", optional: true }],
+        outputs: [],
+        params: [
+          num("max_resolution", "Preview max size (px, 0 = full)", 512, { advanced: true }, 0, 8192, 8),
+          num("jpeg_quality", "JPEG quality", 85, { advanced: true }, 30, 100, 1),
+          num("preview_frames", "Frames per preview (1 = still)", 8, { advanced: true }, 1, 1024, 1),
+          num("preview_fps", "Preview FPS", 12, { advanced: true }, 1, 60, 1),
+          dyn("tiny_vae", "Tiny VAE (auto = the one of the model)", "tinyvaes+auto", "auto", { advanced: true }),
+          toggle("with_audio", "Preview with audio (H3: decodes the audio each step)", false, { advanced: true })
+        ],
+        description: "Shows the video while it is being generated. Put it below a Video Generate card and wire the Live preview output of that card into it."
       },
       {
         id: "h3-speed",
@@ -3346,6 +3368,9 @@ var init_i18n_cards = __esm({
       "Motion video starts at (s)": "\uBAA8\uC158 \uC601\uC0C1 \uC2DC\uC791 (\uCD08)",
       "Motion strength": "\uBAA8\uC158 \uAC15\uB3C4",
       LoRA: "LoRA",
+      "Generation Video Preview (live)": "\uC0DD\uC131 \uC601\uC0C1 \uBBF8\uB9AC\uBCF4\uAE30 (live)",
+      "Live preview": "\uC0DD\uC131 \uC601\uC0C1 \uBBF8\uB9AC\uBCF4\uAE30",
+      "Video Generate \u2192 Live preview": "\uBE44\uB514\uC624 \uC0DD\uC131 \u2192 \uBBF8\uB9AC\uBCF4\uAE30",
       "H3 Turbo \xB7 7+1": "H3 \uD130\uBCF4 \xB7 7+1",
       "H3 Speed & Attention": "H3 \uC18D\uB3C4 \xB7 \uC5B4\uD150\uC158",
       "H3 Audio Lock": "H3 \uC624\uB514\uC624 \uC7A0\uAE08",
@@ -4187,10 +4212,14 @@ async function runPrompt(graph, opts = {}) {
       for (const a of output?.audio ?? []) out.audios.push({ filename: a.filename, subfolder: a.subfolder ?? "", type: a.type ?? "output" });
       for (const tx of output?.text ?? []) out.texts.push(String(tx));
     };
+    let seen = false;
     const off = onSocket((m) => {
       const d = m.data ?? {};
       if (d.prompt_id && d.prompt_id !== promptId) return;
-      if (m.type === "progress" && d.max) opts.onProgress?.(Math.round(d.value / d.max * 100), `${d.value}/${d.max}`);
+      if (d.prompt_id === promptId && m.type !== "execution_success") seen = true;
+      if (m.type === "kj_preview_override") {
+        if (opts.previewKey && seen && typeof d.image === "string") opts.onPreview?.(`data:${d.mime ?? "image/jpeg"};base64,${d.image}`);
+      } else if (m.type === "progress" && d.max) opts.onProgress?.(Math.round(d.value / d.max * 100), `${d.value}/${d.max}`);
       else if (m.type === "executing" && d.node === null) finish();
       else if (m.type === "executed") collect(String(d.node), d.output);
       else if (m.type === "execution_success") finish();
@@ -4344,7 +4373,7 @@ function restoreAutosave() {
     return false;
   }
 }
-var MODE_KEY, RUNS_KEY, readMode, readRuns, writeRuns, hostSerializer, setHostSerializer, useGraph, quiet, AUTO_KEY, timer;
+var MODE_KEY, RUNS_KEY, readMode, readRuns, writeRuns, hostSerializer, setHostSerializer, useGraph, REMEMBER_ADVANCED, quiet, AUTO_KEY, timer;
 var init_graph = __esm({
   "src/store/graph.ts"() {
     "use strict";
@@ -4438,7 +4467,7 @@ var init_graph = __esm({
           results: [],
           activeResult: 0,
           engineId: engine?.id,
-          params: { ...defaultParams(def, engine?.id), ...defId === "h3-turbo" ? rememberedTurbo() : {} },
+          params: { ...defaultParams(def, engine?.id), ...defId === "h3-turbo" ? rememberedTurbo() : {}, ...REMEMBER_ADVANCED.has(defId) ? useSettings.getState().lastParams[defId] : {} },
           ...defId === "note" ? { w: 240, h: 160 } : {},
           ...init
         };
@@ -4473,6 +4502,8 @@ var init_graph = __esm({
       },
       setSize: (id, w, h) => set2({ nodes: get().nodes.map((n2) => n2.id === id ? { ...n2, w, h } : n2) }),
       setParam: (id, key, v) => {
+        const defId = get().nodes.find((n2) => n2.id === id)?.defId;
+        if (defId && REMEMBER_ADVANCED.has(defId) && byId.get(defId)?.params.find((p) => p.id === key)?.advanced) useSettings.getState().rememberParam(defId, key, v);
         set2({ nodes: get().nodes.map((n2) => n2.id === id ? { ...n2, params: { ...n2.params, [key]: v } } : n2) });
         if (get().nodes.find((n2) => n2.id === id)?.defId === "h3-turbo" && typeof v === "string" && v !== "none" && v !== "") {
           if (key === "turbo_lora") {
@@ -4624,6 +4655,7 @@ var init_graph = __esm({
         set2({ composerRuns: runs });
       }
     }));
+    REMEMBER_ADVANCED = /* @__PURE__ */ new Set(["video-preview"]);
     useGraph.subscribe((s) => {
       const f = fillTurbo(s.nodes);
       if (f !== s.nodes) useGraph.setState({ nodes: f });
@@ -5614,6 +5646,11 @@ async function load2(source) {
     const l = await getJson("/minimax_h3_one/models");
     return ["none", ...(l.diffusion_models ?? []).filter((x) => x && x !== "none")];
   }
+  if (source === "tinyvaes") {
+    const i = await objectInfo("ModelPreviewOverrideKJ");
+    return i?.ModelPreviewOverrideKJ?.input?.optional?.tiny_vae?.[1]?.options ?? ["none"];
+  }
+  if (source === "tinyvaes+auto") return ["auto", ...await loadOptions("tinyvaes")];
   if (source === "seedvr2dit") {
     const i = await objectInfo("SeedVR2LoadDiTModel");
     return ["none", ...i?.SeedVR2LoadDiTModel?.input?.required?.model?.[0] ?? []];
@@ -5798,6 +5835,18 @@ async function buildMusicGraph(job) {
 
 // src/backend/ltx.ts
 init_http();
+
+// src/backend/preview.ts
+function addPreview(g, model, pv, has, audioVae) {
+  if (!pv || !has("ModelPreviewOverrideKJ")) return model;
+  const inputs = { model, max_resolution: pv.maxResolution, jpeg_quality: pv.quality, suppress_default_preview: true, preview_frames: Math.max(1, pv.frames), preview_fps: pv.fps };
+  if (pv.tinyVae && pv.tinyVae !== "none") inputs.tiny_vae = pv.tinyVae;
+  if (pv.audio && audioVae) inputs.audio_vae = audioVae;
+  g[pv.key] = { class_type: "ModelPreviewOverrideKJ", inputs };
+  return [pv.key, 0];
+}
+
+// src/backend/ltx.ts
 var FPS = 24;
 var cache3 = null;
 function ltxModelLists() {
@@ -5888,6 +5937,7 @@ async function buildLtxGraph(job) {
     g[`lora${i}`] = { class_type: "LoraLoaderModelOnly", inputs: { model, lora_name: l.name, strength_model: l.strength } };
     model = [`lora${i}`, 0];
   });
+  model = addPreview(g, model, job.preview, has, ["vaeA", 0]);
   if (has("LTXVChunkFeedForward")) {
     g.chunkFF = { class_type: "LTXVChunkFeedForward", inputs: { model, chunks: 2, dim_threshold: 4096 } };
     model = ["chunkFF", 0];
@@ -6163,6 +6213,7 @@ async function buildH3Graph(job) {
   g.unet = m.unet.toLowerCase().endsWith(".gguf") ? { class_type: "UnetLoaderGGUF", inputs: { unet_name: m.unet } } : { class_type: "UNETLoader", inputs: { unet_name: m.unet, weight_dtype: "default" } };
   let model = ["unet", 0];
   model = h3ModelChain(g, model, o, turbo, job.loras, has);
+  model = addPreview(g, model, job.preview, has, ["vaeA", 0]);
   g.clip = { class_type: "CLIPLoader", inputs: { clip_name: m.clip, type: "minimax", device: "default" } };
   g.vaeV = { class_type: "VAELoader", inputs: { vae_name: m.vaeVideo } };
   g.vaeA = { class_type: "VAELoader", inputs: { vae_name: m.vaeAudio } };
@@ -7278,6 +7329,7 @@ var EXTRA_RUNNERS = {
     return [textAsset(JSON.stringify({ kind: "lora", items: [...upstream2, ...real4(mine) ? [mine] : []] }), "lora")];
   },
   "h3-turbo": async (c) => [textAsset(JSON.stringify({ kind: "turbo", ...c.p }), "card")],
+  "video-preview": async (c) => [textAsset(JSON.stringify({ kind: "vpreview", ...c.p }), "card")],
   "h3-speed": async (c) => [textAsset(JSON.stringify({ kind: "speed", ...c.p }), "card")],
   "moss-bboxes": async (c) => [textAsset(JSON.stringify({ kind: "mossboxes", ...c.p }), "card")],
   "h3-audiolock": async (c) => {
@@ -7789,7 +7841,8 @@ async function executeGraph(g, targetId, hooks, signal) {
         inputs,
         signal,
         text: (h) => inputs(h).map((a) => a.text ?? "").filter(Boolean).join(", "),
-        progress: (pct, label) => hooks.progress?.(node.id, pct, label)
+        progress: (pct, label) => hooks.progress?.(node.id, pct, label),
+        preview: (u) => hooks.preview?.(node.id, u)
       };
       let cacheKey = "";
       if (def.kind === "edit") {
@@ -7823,8 +7876,8 @@ function sizeFrom(aspect2, mp) {
   const round16 = (v) => Math.max(256, Math.round(v / 16) * 16);
   return { w: round16(Math.sqrt(px * r)), h: round16(Math.sqrt(px / r)) };
 }
-async function runGraph(c, graph) {
-  const res = await runPrompt(graph, { onProgress: c.progress, signal: c.signal });
+async function runGraph(c, graph, previewKey) {
+  const res = await runPrompt(graph, { onProgress: c.progress, signal: c.signal, previewKey, onPreview: c.preview });
   const files = [...res.images, ...res.videos];
   if (!files.length && !res.audios.length) throw new Error("ComfyUI finished but returned no image, video or audio");
   const audios = res.audios.map((f) => assetFromFile(f, "audio", "audio"));
@@ -7913,6 +7966,19 @@ function imageRunner(mode) {
     return runGraph(c, built.graph);
   };
 }
+async function previewOf(c, tiny) {
+  let j;
+  try {
+    const { useGraph: useGraph2 } = await Promise.resolve().then(() => (init_graph(), graph_exports));
+    const g = useGraph2.getState();
+    const to = g.edges.find((e) => e.source === c.node.id && e.sourceHandle === "preview" && g.nodes.find((n2) => n2.id === e.target)?.defId === "video-preview")?.target;
+    j = g.nodes.find((n2) => n2.id === to)?.params;
+  } catch {
+  }
+  const have = await loadOptions("tinyvaes");
+  const auto = have.find((x) => x.startsWith(tiny)) ?? "none";
+  return j ? { key: `cvprev_${c.node.id}`, maxResolution: num2(j.max_resolution, 512), quality: num2(j.jpeg_quality, 85), frames: num2(j.preview_frames, 8), fps: num2(j.preview_fps, 12), tinyVae: str(j.tiny_vae, "auto") === "auto" ? auto : str(j.tiny_vae, "none"), audio: !!j.with_audio } : void 0;
+}
 async function putIntoPromptCard(c, text3) {
   try {
     const { useGraph: useGraph2 } = await Promise.resolve().then(() => (init_graph(), graph_exports));
@@ -7989,6 +8055,7 @@ async function runH3(c) {
   const seconds = num2(p.seconds, 8);
   const runId = uid("ot").slice(0, 10);
   const opt = await h3Opt(cards, ref);
+  const pvCfg = await previewOf(c, "taeh3");
   const clips = [];
   let prevCheckpoint;
   for (let i = 0; i < prompts.length; i++) {
@@ -8019,10 +8086,11 @@ async function runH3(c) {
       prevCheckpoint,
       checkpoint,
       saveLastFrame: continuity === "lastframe" && i < prompts.length - 1,
-      stem: "MMH3"
+      stem: "MMH3",
+      preview: pvCfg
     });
     const base2 = i / prompts.length;
-    const res = await runPrompt(built.graph, { onProgress: (pct, label) => c.progress(Math.round((base2 + pct / 100 / prompts.length) * 100), `clip ${i + 1}/${prompts.length} ${label ?? ""}`), signal: c.signal }).catch((e) => {
+    const res = await runPrompt(built.graph, { onProgress: (pct, label) => c.progress(Math.round((base2 + pct / 100 / prompts.length) * 100), `clip ${i + 1}/${prompts.length} ${label ?? ""}`), signal: c.signal, previewKey: pvCfg?.key, onPreview: c.preview }).catch((e) => {
       const msg = e instanceof Error ? e.message : String(e);
       throw /doesn't match the broadcast shape/.test(msg) && opt.hires ? new Error(`${msg}
 If this happened on the last step of 7+1, H3 Memory Optimization does not work with this model: tick "Bypass H3 Memory Optimization on the last step" on the H3 Turbo card and run again.`) : e;
@@ -8082,6 +8150,7 @@ async function runLtx(c) {
   let firstFile = first ? await ensureInput(first) : void 0;
   const lastFile = last ? await ensureInput(last) : void 0;
   const chain2 = p.chain_last !== false;
+  const pvCfg = await previewOf(c, "taeltx2_3");
   const clips = [];
   for (let i = 0; i < prompts.length; i++) {
     if (c.signal?.aborted) throw new Error("cancelled");
@@ -8101,11 +8170,12 @@ async function runLtx(c) {
       loras: [lora("lora1", "lora1_strength"), lora("lora2", "lora2_strength"), ...cardLoras(c)],
       models: settings.video,
       saveSubfolder: settings.saveSubfolder,
-      size
+      size,
+      preview: pvCfg
     });
-    if (prompts.length === 1) return runGraph(c, graph);
+    if (prompts.length === 1) return runGraph(c, graph, pvCfg?.key);
     const base2 = i / prompts.length;
-    const res = await runPrompt(graph, { onProgress: (pct, label) => c.progress(Math.round((base2 + pct / 100 / prompts.length) * 100), `clip ${i + 1}/${prompts.length} ${label ?? ""}`), signal: c.signal });
+    const res = await runPrompt(graph, { onProgress: (pct, label) => c.progress(Math.round((base2 + pct / 100 / prompts.length) * 100), `clip ${i + 1}/${prompts.length} ${label ?? ""}`), signal: c.signal, previewKey: pvCfg?.key, onPreview: c.preview });
     const vf = [...res.videos, ...res.images].find((f) => VIDEO_EXT.test(f.filename));
     if (!vf) throw new Error(`clip ${i + 1}: ComfyUI returned no video`);
     clips.push({ filename: vf.filename, subfolder: vf.subfolder ?? "" });
@@ -8471,7 +8541,7 @@ var send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 async function handle(msg) {
   const { id, method, params } = msg;
   try {
-    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.21.0" } } });
+    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.22.0" } } });
     if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS.map(({ run: _r, ...t2 }) => t2) } });
     if (method === "tools/call") {
       const tool = TOOLS.find((t2) => t2.name === params?.name);

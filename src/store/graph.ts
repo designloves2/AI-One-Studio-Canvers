@@ -148,7 +148,7 @@ export const useGraph = create<State>((set, get) => ({
     const engine = engineFor(def);
     const node: GraphNode = {
       id: uid('n'), defId, x, y, results: [], activeResult: 0,
-      engineId: engine?.id, params: { ...defaultParams(def, engine?.id), ...(defId === 'h3-turbo' ? rememberedTurbo() : {}) },
+      engineId: engine?.id, params: { ...defaultParams(def, engine?.id), ...(defId === 'h3-turbo' ? rememberedTurbo() : {}), ...(REMEMBER_ADVANCED.has(defId) ? useSettings.getState().lastParams[defId] : {}) },
       ...(defId === 'note' ? { w: 240, h: 160 } : {}), ...init,
     };
     set({ nodes: [...get().nodes, node], selected: [node.id] });
@@ -176,6 +176,8 @@ export const useGraph = create<State>((set, get) => ({
   moveMany: (deltas) => { const m = new Map(deltas.map((d) => [d.id, d])); set({ nodes: get().nodes.map((n) => (m.has(n.id) ? { ...n, x: m.get(n.id)!.x, y: m.get(n.id)!.y } : n)) }); },
   setSize: (id, w, h) => set({ nodes: get().nodes.map((n) => (n.id === id ? { ...n, w, h } : n)) }),
   setParam: (id, key, v) => {
+    const defId = get().nodes.find((n) => n.id === id)?.defId;
+    if (defId && REMEMBER_ADVANCED.has(defId) && byId.get(defId)?.params.find((p) => p.id === key)?.advanced) useSettings.getState().rememberParam(defId, key, v);
     set({ nodes: get().nodes.map((n) => (n.id === id ? { ...n, params: { ...n.params, [key]: v } } : n)) });
     // a 7+1 Turbo LoRA picked once stays the choice until it is changed again
     if (get().nodes.find((n) => n.id === id)?.defId === 'h3-turbo' && typeof v === 'string' && v !== 'none' && v !== '') {
@@ -308,6 +310,9 @@ function fillTurbo(nodes: GraphNode[]): GraphNode[] {
   });
   return changed ? out : nodes;
 }
+
+/** cards whose advanced settings keep the value the user changed last (new cards start with it) */
+const REMEMBER_ADVANCED = new Set(['video-preview']);
 
 function rememberedTurbo(): Record<string, string> {
   const t = useSettings.getState().h3Turbo; const out: Record<string, string> = {};

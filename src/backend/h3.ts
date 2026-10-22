@@ -4,6 +4,7 @@
 // (latent continuation), plus clip chaining and stitching.
 import { getJson, postJson } from './http';
 import { FPS } from './ltx';
+import { addPreview, type PreviewCfg } from './preview';
 
 export type Continuity = 'none' | 'lastframe' | 'onetake';
 
@@ -41,6 +42,7 @@ export interface H3Job {
   clipIndex: number; prevCheckpoint?: string; checkpoint?: string;
   saveLastFrame: boolean;
   stem: string;
+  preview?: PreviewCfg;
 }
 
 export const DEFAULT_OPT: H3Options = {
@@ -169,6 +171,8 @@ export async function buildH3Graph(job: H3Job): Promise<H3Graph> {
   let model: L = ['unet', 0];
 
   model = h3ModelChain(g, model, o, turbo, job.loras, has);
+  // shortcut: placed after the chain, so SLA attention is no longer the very last patch while the preview is on
+  model = addPreview(g, model, job.preview, has, ['vaeA', 0]);
 
   g.clip = { class_type: 'CLIPLoader', inputs: { clip_name: m.clip, type: 'minimax', device: 'default' } };
   g.vaeV = { class_type: 'VAELoader', inputs: { vae_name: m.vaeVideo } };

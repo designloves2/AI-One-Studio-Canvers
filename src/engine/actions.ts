@@ -13,12 +13,13 @@ export async function runNode(id: string): Promise<void> {
   const s = useGraph.getState();
   if (controllers.has(id)) return;
   const ac = new AbortController(); controllers.set(id, ac);
-  s.setRuntime(id, { status: 'running', pct: 0, error: undefined, label: undefined });
+  s.setRuntime(id, { status: 'running', pct: 0, error: undefined, label: undefined, preview: undefined });
   try {
     await executeGraph({ nodes: s.nodes, edges: s.edges }, id, {
       start: (nid) => { runContext.set(ac.signal, { node: nid }); useGraph.getState().setRuntime(nid, { status: 'running', pct: 0, error: undefined }); },
       progress: (nid, pct, label) => useGraph.getState().setRuntime(nid, { status: 'running', pct, label }),
-      done: (nid, assets, mode) => { const g = useGraph.getState(); g.setResults(nid, assets, mode); g.setRuntime(nid, { status: 'idle', pct: 100, label: undefined }); },
+      preview: (nid, u) => { const g = useGraph.getState(); for (const e of g.edges) if (e.source === nid && e.sourceHandle === 'preview') g.setRuntime(e.target, { preview: u }); },
+      done: (nid, assets, mode) => { const g = useGraph.getState(); g.setResults(nid, assets, mode); g.setRuntime(nid, { status: 'idle', pct: 100, label: undefined, preview: undefined }); },
       error: (nid, message) => useGraph.getState().setRuntime(nid, { status: 'error', error: message === 'cancelled' ? 'cancelled' : message }),
     }, ac.signal);
     useGraph.getState().setRuntime(id, { status: 'idle', pct: 100 });

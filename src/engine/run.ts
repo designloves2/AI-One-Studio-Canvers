@@ -10,6 +10,7 @@ import { loadOptions } from '../backend/options';
 import { getJson } from '../backend/http';
 import { buildMusicGraph } from '../backend/music';
 import { buildLtxGraph, ltxSize } from '../backend/ltx';
+import type { PreviewCfg } from '../backend/preview';
 import { buildH3Graph, h3Size, h3Frames, pickChainFrame, copyToInput, clipLastFrame, stitchClips, ONE_TAKE_OVERLAP_FRAMES, ONE_TAKE_OVERLAP_SEC } from '../backend/h3';
 import { parseWorkflow, setField, VIDEO_EXT } from '../backend/workflow';
 import { useSettings } from '../store/settings';
@@ -25,6 +26,7 @@ export interface GraphLike { nodes: GraphNode[]; edges: GraphEdge[] }
 export interface Hooks {
   start?(id: string): void;
   progress?(id: string, pct: number, label?: string): void;
+  preview?(id: string, dataUrl: string): void;
   done?(id: string, assets: Asset[], mode: 'append' | 'replace'): void;
   error?(id: string, message: string): void;
 }
@@ -37,6 +39,7 @@ export interface Ctx {
   inputs(handle: string): Asset[];
   text(handle: string): string;
   progress(pct: number, label?: string): void;
+  preview(dataUrl: string): void;
   signal?: AbortSignal;
 }
 
@@ -104,6 +107,7 @@ export async function executeGraph(g: GraphLike, targetId: string, hooks: Hooks,
         node, def, p: node.params, engineId: node.engineId, inputs, signal,
         text: (h) => inputs(h).map((a) => a.text ?? '').filter(Boolean).join(', '),
         progress: (pct, label) => hooks.progress?.(node.id, pct, label),
+        preview: (u) => hooks.preview?.(node.id, u),
       };
 
       // cheap, deterministic nodes: reuse when nothing changed
@@ -145,8 +149,8 @@ function sizeFrom(aspect: string, mp: number): { w: number; h: number } {
   return { w: round16(Math.sqrt(px * r)), h: round16(Math.sqrt(px / r)) };
 }
 
-async function runGraph(c: Ctx, graph: Record<string, unknown>): Promise<Asset[]> {
-  const res = await runPrompt(graph, { onProgress: c.progress, signal: c.signal });
+async function runGraph(c: Ctx, graph: Record<string, unknown>, previewKey?: string): Promise<Asset[]> {
+  const res = await runPrompt(graph, { onProgress: c.progress, signal: c.signal, previewKey, onPreview: c.preview });
   const files = [...res.images, ...res.videos];
   if (!files.length && !res.audios.length) throw new Error('ComfyUI finished but returned no image, video or audio');
   // SaveVideo reports mp4 files under `images`; sort by extension
@@ -221,6 +225,22 @@ function imageRunner(mode: (c: Ctx) => ImageMode): Runner {
   };
 }
 
+/** The Model Preview card wired into this video card (if any): the settings for ModelPreviewOverrideKJ, with a socket key made from the card's id. */
+async function previewOf(c: Ctx, tiny: 'taeh3' | 'taeltx2_3'): Promise<PreviewCfg | undefined> {
+  // the Model Preview card hangs off this card's Live preview output (it only holds the settings)
+  let j: Record<string, any> | undefined;
+  try {
+    const { useGraph } = await import('../store/graph');
+    const g = useGraph.getState();
+    const to = g.edges.find((e) => e.source === c.node.id && e.sourceHandle === 'preview' && g.nodes.find((n) => n.id === e.target)?.defId === 'video-preview')?.target;
+    j = g.nodes.find((n) => n.id === to)?.params;
+  } catch { /* headless: no preview */ }
+  // 'auto': the tiny decoder of the model family (without one the video latent has no colour preview)
+  const have = await loadOptions('tinyvaes');
+  const auto = have.find((x) => x.startsWith(tiny)) ?? 'none';
+  return j ? { key: `cvprev_${c.node.id}`, maxResolution: num(j.max_resolution, 512), quality: num(j.jpeg_quality, 85), frames: num(j.preview_frames, 8), fps: num(j.preview_fps, 12), tinyVae: str(j.tiny_vae, 'auto') === 'auto' ? auto : str(j.tiny_vae, 'none'), audio: !!j.with_audio } : undefined;
+}
+
 /** Auto Prompt: the written prompt goes back into the Prompt card wired to this card (when there is one). */
 async function putIntoPromptCard(c: Ctx, text: string) {
   try {
@@ -290,6 +310,7 @@ async function runH3(c: Ctx): Promise<Asset[]> {
   const seconds = num(p.seconds, 8);
   const runId = uid('ot').slice(0, 10);
   const opt = await h3Opt(cards, ref);
+  const pvCfg = await previewOf(c, 'taeh3');
   const clips: { filename: string; subfolder: string }[] = [];
   let prevCheckpoint: string | undefined;
   for (let i = 0; i < prompts.length; i++) {
@@ -304,10 +325,10 @@ async function runH3(c: Ctx): Promise<Asset[]> {
       assetRef,
       opt: { ...opt, audioLock: lockFile ? { file: lockFile, startSec: i * (h3Frames(seconds) / 24), mode: str(cards.lock.mode, 'lock'), strength: num(cards.lock.strength, 0.5), fit: str(cards.lock.fit, 'pad_silence') } : undefined },
       models: settings.video, saveSubfolder: settings.saveSubfolder, size, upscaleModel: str(p.upscale_model, 'none'),
-      clipIndex: i, prevCheckpoint, checkpoint, saveLastFrame: continuity === 'lastframe' && i < prompts.length - 1, stem: 'MMH3',
+      clipIndex: i, prevCheckpoint, checkpoint, saveLastFrame: continuity === 'lastframe' && i < prompts.length - 1, stem: 'MMH3', preview: pvCfg,
     });
     const base = i / prompts.length;
-    const res = await runPrompt(built.graph, { onProgress: (pct, label) => c.progress(Math.round((base + pct / 100 / prompts.length) * 100), `clip ${i + 1}/${prompts.length} ${label ?? ''}`), signal: c.signal }).catch((e) => {
+    const res = await runPrompt(built.graph, { onProgress: (pct, label) => c.progress(Math.round((base + pct / 100 / prompts.length) * 100), `clip ${i + 1}/${prompts.length} ${label ?? ''}`), signal: c.signal, previewKey: pvCfg?.key, onPreview: c.preview }).catch((e) => {
       const msg = e instanceof Error ? e.message : String(e);
       throw /doesn't match the broadcast shape/.test(msg) && opt.hires ? new Error(`${msg}
 If this happened on the last step of 7+1, H3 Memory Optimization does not work with this model: tick "Bypass H3 Memory Optimization on the last step" on the H3 Turbo card and run again.`) : e;
@@ -361,6 +382,7 @@ async function runLtx(c: Ctx): Promise<Asset[]> {
   let firstFile = first ? await ensureInput(first) : undefined;
   const lastFile = last ? await ensureInput(last) : undefined;
   const chain = p.chain_last !== false;
+  const pvCfg = await previewOf(c, 'taeltx2_3');
   const clips: { filename: string; subfolder: string }[] = [];
   for (let i = 0; i < prompts.length; i++) {
     if (c.signal?.aborted) throw new Error('cancelled');
@@ -369,11 +391,11 @@ async function runLtx(c: Ctx): Promise<Asset[]> {
       first: firstFile, last: i === prompts.length - 1 ? lastFile : undefined,
       seed: seed0 + i, steps: num(p.steps, 12), cfg: num(p.cfg, 1),
       sampler: str(p.sampler, 'euler_ancestral'), scheduler: str(p.scheduler, 'linear_quadratic'), stage2Sigmas: str(p.stage2, '0.85, 0.7250, 0.4219, 0.0'),
-      loras: [lora('lora1', 'lora1_strength'), lora('lora2', 'lora2_strength'), ...cardLoras(c)], models: settings.video, saveSubfolder: settings.saveSubfolder, size,
+      loras: [lora('lora1', 'lora1_strength'), lora('lora2', 'lora2_strength'), ...cardLoras(c)], models: settings.video, saveSubfolder: settings.saveSubfolder, size, preview: pvCfg,
     });
-    if (prompts.length === 1) return runGraph(c, graph);
+    if (prompts.length === 1) return runGraph(c, graph, pvCfg?.key);
     const base = i / prompts.length;
-    const res = await runPrompt(graph, { onProgress: (pct, label) => c.progress(Math.round((base + pct / 100 / prompts.length) * 100), `clip ${i + 1}/${prompts.length} ${label ?? ''}`), signal: c.signal });
+    const res = await runPrompt(graph, { onProgress: (pct, label) => c.progress(Math.round((base + pct / 100 / prompts.length) * 100), `clip ${i + 1}/${prompts.length} ${label ?? ''}`), signal: c.signal, previewKey: pvCfg?.key, onPreview: c.preview });
     const vf = [...res.videos, ...res.images].find((f) => VIDEO_EXT.test(f.filename));
     if (!vf) throw new Error(`clip ${i + 1}: ComfyUI returned no video`);
     clips.push({ filename: vf.filename, subfolder: vf.subfolder ?? '' });

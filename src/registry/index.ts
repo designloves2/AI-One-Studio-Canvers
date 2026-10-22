@@ -224,7 +224,7 @@ export const REGISTRY: NodeDef[] = [
     params: [text('workflow', 'Workflow JSON', '', true, { advanced: true }), text('prompt_target', 'Prompt field', '', false, { advanced: true }), text('image_target', 'Image 1 field', '', false, { advanced: true }), text('image2_target', 'Image 2 field', '', false, { advanced: true }), text('video_target', 'Video field', '', false, { advanced: true }), text('seed_target', 'Seed field', '', false, { advanced: true }), { id: 'seed', label: 'Seed', control: { kind: 'seed' }, default: -1, advanced: true }],
     description: 'Run any API-format ComfyUI workflow (video, LTX, H3, Wan…). Load the JSON, pick which fields take the prompt / images / seed.' },
   { id: 'video-generate', title: 'Video Generate', category: 'Video', kind: 'generate',
-    inputs: [P.textIn('prompt', 'Prompt', false), P.imgIn('image', 'First frame / references', true, true), P.imgIn('last', 'Last frame', true), P.cardIn('H3 option cards'), P.loraIn(), { id: 'assets', label: 'Asset Library', type: 'pipe', optional: true }, P.seedIn()], outputs: [{ id: 'video', label: 'Video', type: 'video' }], params: [],
+    inputs: [P.textIn('prompt', 'Prompt', false), P.imgIn('image', 'First frame / references', true, true), P.imgIn('last', 'Last frame', true), P.cardIn('H3 option cards'), P.loraIn(), { id: 'assets', label: 'Asset Library', type: 'pipe', optional: true }, P.seedIn()], outputs: [{ id: 'video', label: 'Video', type: 'video' }, { id: 'preview', label: 'Live preview', type: 'pipe' }], params: [],
     engines: [
       { id: 'h3', label: 'MiniMax H3 — text / first-last frame (local)', family: 'h3', default: true, params: h3Params(false) },
       { id: 'h3-ref', label: 'MiniMax H3 — multi-reference (local)', family: 'h3', params: h3Params(true) },
@@ -280,6 +280,12 @@ export const REGISTRY: NodeDef[] = [
       text('characters', 'Characters (box numbers, e.g. 1, 3)', ''),
       text('boxes', 'Boxes (JSON — edit with "Edit boxes")', '[]', true, { advanced: true }),
     ], description: 'Draw boxes on a canvas: each is an OBJECT or exact TEXT. Wire into Image Generate → Moss Image R2I. Draw the background first, foreground last.' },
+  { id: 'video-preview', title: 'Generation Video Preview (live)', category: 'Cards', kind: 'source', inputs: [{ id: 'video', label: 'Video Generate → Live preview', type: 'pipe', optional: true }], outputs: [],
+    params: [
+      num('max_resolution', 'Preview max size (px, 0 = full)', 512, { advanced: true }, 0, 8192, 8), num('jpeg_quality', 'JPEG quality', 85, { advanced: true }, 30, 100, 1),
+      num('preview_frames', 'Frames per preview (1 = still)', 8, { advanced: true }, 1, 1024, 1), num('preview_fps', 'Preview FPS', 12, { advanced: true }, 1, 60, 1),
+      dyn('tiny_vae', 'Tiny VAE (auto = the one of the model)', 'tinyvaes+auto', 'auto', { advanced: true }), toggle('with_audio', 'Preview with audio (H3: decodes the audio each step)', false, { advanced: true }),
+    ], description: 'Shows the video while it is being generated. Put it below a Video Generate card and wire the Live preview output of that card into it.' },
   { id: 'h3-speed', title: 'H3 Speed & Attention', category: 'Cards', kind: 'source', inputs: [], outputs: [{ id: 'card', label: 'Speed', type: 'pipe' }],
     params: [
       sel('attn_backend', 'Attention backend', ['none', 'ck', 'sage', 'solattn_kijai', 'sla'], 'none'), sel('attn_forward', 'Attention forward patch', ['none', 'memeff_sage', 'solattn_sag'], 'none'),

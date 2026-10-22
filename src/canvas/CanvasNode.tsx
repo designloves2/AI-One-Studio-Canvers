@@ -297,6 +297,11 @@ export const CanvasNode = memo(function CanvasNode(props: NodeProps) {
   return isHost ? <HostCard id={props.id} selected={props.selected} /> : <PlainNode {...props} />;
 });
 
+/** the live preview: an animated clip (video/mp4) while a video is being sampled, a still image otherwise */
+function PreviewMedia({ src, className }: { src: string; className: string }) {
+  return src.startsWith('data:video') ? <video className={className} src={src} autoPlay loop muted playsInline /> : <img className={className} src={src} alt="" />;
+}
+
 const boxCount = (s: unknown): number => { try { const j = JSON.parse(String(s || '[]')); return Array.isArray(j) ? j.length : 0; } catch { return 0; } };
 
 const PlainNode = memo(function PlainNode({ id, selected }: NodeProps) {
@@ -378,6 +383,7 @@ const PlainNode = memo(function PlainNode({ id, selected }: NodeProps) {
       {def.id === 'asset-library' && <AssetLibBody id={id} />}
       {def.id === 'face-refine' && <FacePickBody id={id} />}
       {def.id === 'painter' && <button className="btn nodrag open-painter" onClick={() => openPainter(id)}>{T('Open painter')}</button>}
+      {def.id === 'video-preview' && (rt?.preview ? <PreviewMedia src={rt.preview} className="vp-img nodrag" /> : <div className="vp-empty">{T('The live video appears here while it is generated')}</div>)}
       {def.id === 'moss-bboxes' && <button className="btn nodrag open-painter" onClick={() => openBoxEditor(id)}>{T('Edit boxes')} ({boxCount(node.params.boxes)})</button>}
 
       {running && <div className="bar"><b style={{ width: `${Math.max(4, rt!.pct)}%` }} /><em>{rt!.label ?? `${rt!.pct}%`}</em></div>}

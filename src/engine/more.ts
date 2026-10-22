@@ -145,6 +145,7 @@ export const EXTRA_RUNNERS: Record<string, Runner> = {
     return [textAsset(JSON.stringify({ kind: 'lora', items: [...upstream, ...(real(mine) ? [mine] : [])] }), 'lora')];
   },
   'h3-turbo': async (c) => [textAsset(JSON.stringify({ kind: 'turbo', ...c.p }), 'card')],
+  'video-preview': async (c) => [textAsset(JSON.stringify({ kind: 'vpreview', ...c.p }), 'card')],
   'h3-speed': async (c) => [textAsset(JSON.stringify({ kind: 'speed', ...c.p }), 'card')],
   'moss-bboxes': async (c) => [textAsset(JSON.stringify({ kind: 'mossboxes', ...c.p }), 'card')],
   'h3-audiolock': async (c) => {

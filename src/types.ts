@@ -124,6 +124,8 @@ export interface NodeRuntime {
   pct: number;
   label?: string;
   error?: string;
+  /** live sampling preview (animated image) of a video card that has a Model Preview card wired in */
+  preview?: string;
 }
 
 export const PORT_COLORS: Record<PortType, string> = {

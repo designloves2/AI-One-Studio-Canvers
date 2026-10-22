@@ -39,7 +39,7 @@ export const KO_CARDS: Record<string, string> = {
   'Width %': '가로 %', 'Height %': '세로 %', 'Rotate': '회전', 'Flip horizontal': '좌우 뒤집기', 'Flip vertical': '상하 뒤집기', 'Pixels (− shrink)': '픽셀 (− 축소)', 'Invert Mask': '마스크 반전', 'Result': '결과',
   'Speed': '속도', 'Audio lock': '오디오 잠금', 'Picked faces (manual)': '선택한 얼굴 (수동)', 'Pick mode': '선택 방식', 'Canvas W': '캔버스 가로', 'Canvas H': '캔버스 세로', 'Cut threshold': '컷 감지 임계값', 'Upscale model (ESRGAN…)': '업스케일 모델 (ESRGAN…)', 'Upscale model (ComfyUI core)': '업스케일 모델 (ComfyUI 기본)', 'Media': '미디어', 'Attention': '어텐션',
   'Audio (custom track)': '오디오 (커스텀 트랙)', 'Motion video (guide)': '모션 영상 (가이드)', 'Audio starts at (s)': '오디오 시작 (초)', 'Motion video starts at (s)': '모션 영상 시작 (초)', 'Motion strength': '모션 강도',
-  LoRA: 'LoRA', 'H3 Turbo · 7+1': 'H3 터보 · 7+1', 'H3 Speed & Attention': 'H3 속도 · 어텐션', 'H3 Audio Lock': 'H3 오디오 잠금', 'Asset Library': '에셋 라이브러리',
+  LoRA: 'LoRA', 'Generation Video Preview (live)': '생성 영상 미리보기 (live)', 'Live preview': '생성 영상 미리보기', 'Video Generate → Live preview': '비디오 생성 → 미리보기', 'H3 Turbo · 7+1': 'H3 터보 · 7+1', 'H3 Speed & Attention': 'H3 속도 · 어텐션', 'H3 Audio Lock': 'H3 오디오 잠금', 'Asset Library': '에셋 라이브러리',
   'Load Image': '이미지 불러오기', 'Load Video': '영상 불러오기', 'Import Audio': '오디오 불러오기', 'Result Viewer': '결과 보기',
   // postprocess + video
   'Deblur (RTX)': '디블러 (RTX)', 'Denoise (RTX)': '디노이즈 (RTX)', 'Video Upscale': '영상 업스케일', 'Skin Retouch': '피부 보정', 'Film Grain': '필름 그레인',

@@ -3,7 +3,10 @@
 import { getJson } from './http';
 
 export const FPS = 24;
+import { addPreview, type PreviewCfg } from './preview';
+
 export interface LtxJob {
+  preview?: PreviewCfg;
   prompt: string; seconds: number; aspect: string; megapixels: number;
   /** ComfyUI input filenames */
   first?: string; last?: string;
@@ -89,6 +92,7 @@ export async function buildLtxGraph(job: LtxJob): Promise<Record<string, any>> {
     if (!l.name || l.name === 'none' || !(l.strength > 0)) return;
     g[`lora${i}`] = { class_type: 'LoraLoaderModelOnly', inputs: { model, lora_name: l.name, strength_model: l.strength } }; model = [`lora${i}`, 0];
   });
+  model = addPreview(g, model, job.preview, has, ['vaeA', 0]);
   if (has('LTXVChunkFeedForward')) { g.chunkFF = { class_type: 'LTXVChunkFeedForward', inputs: { model, chunks: 2, dim_threshold: 4096 } }; model = ['chunkFF', 0]; }
 
   // first / last frame join the Director timeline as image segments

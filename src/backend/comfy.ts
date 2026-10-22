@@ -152,6 +152,8 @@ export async function recoverPrompt(promptId: string): Promise<RunResult | 'pend
 }
 
 export interface RunOptions {
+  /** Model Preview card: the node id of ModelPreviewOverrideKJ in the graph, and where its frames go */
+  previewKey?: string; onPreview?: (dataUrl: string) => void;
   onProgress?: (pct: number, label?: string) => void;
   signal?: AbortSignal;
 }
@@ -206,10 +208,15 @@ export async function runPrompt(graph: Record<string, unknown>, opts: RunOptions
       for (const a of output?.audio ?? []) out.audios.push({ filename: a.filename, subfolder: a.subfolder ?? '', type: a.type ?? 'output' });
       for (const tx of output?.text ?? []) out.texts.push(String(tx));
     };
+    let seen = false;   // this prompt has started executing
     const off = onSocket((m) => {
       const d = m.data ?? {};
       if (d.prompt_id && d.prompt_id !== promptId) return;
-      if (m.type === 'progress' && d.max) opts.onProgress?.(Math.round((d.value / d.max) * 100), `${d.value}/${d.max}`);
+      // The preview frames carry the id of the preview node as ComfyUI first ran it: a cached model keeps the id of an earlier run, so the key cannot be matched.
+      // Only one prompt runs at a time, so every preview frame that arrives while this prompt is executing is ours.
+      if (d.prompt_id === promptId && m.type !== 'execution_success') seen = true;
+      if (m.type === 'kj_preview_override') { if (opts.previewKey && seen && typeof d.image === 'string') opts.onPreview?.(`data:${d.mime ?? 'image/jpeg'};base64,${d.image}`); }
+      else if (m.type === 'progress' && d.max) opts.onProgress?.(Math.round((d.value / d.max) * 100), `${d.value}/${d.max}`);
       else if (m.type === 'executing' && d.node === null) finish();          // finished (older servers)
       else if (m.type === 'executed') collect(String(d.node), d.output);
       else if (m.type === 'execution_success') finish();
