@@ -51,6 +51,9 @@ interface State {
   assetPicker: string | null;
   facePicker: string | null;
   fitTick: number;
+  /** bring a card to the middle of the screen and select it (the canvas reacts to focusTick) */
+  focusId: string | null; focusTick: number;
+  focusNode(id: string): void;
   composerRuns: ComposerRun[];
 
   setMode(m: AppMode): void;
@@ -125,7 +128,7 @@ export const useGraph = create<State>((set, get) => ({
   canvasFile: null,
   dirty: false,
   nodes: [], edges: [], runtime: {}, selected: [], past: [], future: [],
-  mode: readMode(), panel: null, viewer: null, painter: null, boxEditor: null, melody: null, assetPicker: null, facePicker: null, fitTick: 0,
+  mode: readMode(), panel: null, viewer: null, painter: null, boxEditor: null, melody: null, assetPicker: null, facePicker: null, fitTick: 0, focusId: null, focusTick: 0,
   composerRuns: readRuns(),
 
   setMode: (mode) => { try { localStorage.setItem(MODE_KEY, mode); } catch { /* ignore */ } set({ mode, ...(mode === 'simple' && (get().panel === 'decks' || get().panel === 'nodes') ? { panel: null } : {}) }); },
@@ -291,6 +294,7 @@ export const useGraph = create<State>((set, get) => ({
   loadProject: (p, file = null, dirty = false) => quietly(() => set({ canvasFile: file, dirty, projectId: p.id ?? uid('p'), projectName: p.name || 'untitled', nodes: fillTurbo(p.nodes ?? []), edges: p.edges ?? [], runtime: {}, selected: [], past: [], future: [], fitTick: get().fitTick + 1 })),
   newProject: () => quietly(() => set({ canvasFile: null, dirty: false, projectId: uid('p'), projectName: 'untitled', nodes: [], edges: [], runtime: {}, selected: [], past: [], future: [] })),
   requestFit: () => set({ fitTick: get().fitTick + 1 }),
+  focusNode: (id) => set({ selected: [id], focusId: id, focusTick: get().focusTick + 1 }),
 
   addComposerRun: (r) => { const runs = [r, ...get().composerRuns]; writeRuns(runs); set({ composerRuns: runs }); },
   patchComposerRun: (id, patch) => { const runs = get().composerRuns.map((r) => (r.id === id ? { ...r, ...patch } : r)); writeRuns(runs); set({ composerRuns: runs }); },

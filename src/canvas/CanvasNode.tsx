@@ -1,5 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { parseWorkflow, candidates } from '../backend/workflow';
+import { libThumb } from '../backend/assetlib';
 import { Handle, Position, NodeResizer, type NodeProps } from '@xyflow/react';
 import { useGraph } from '../store/graph';
 import { byId, engineFor, paramsFor } from '../registry';
@@ -26,16 +27,42 @@ function RefOrder({ nodeId, inp }: { nodeId: string; inp: PortDef }) {
   const hiddenSet = useSensitive((st) => st.items);
   const revealAll = useSensitive((st) => st.revealAll);
   const list = edges.filter((e) => e.target === nodeId && e.targetHandle === inp.id);
+  // Asset Library images are named by their @name, plain images by @image1, @image2 …
+  const [libNames, setLibNames] = useState<Record<string, string>>({});
+  const hasLib = list.some((e) => nodes.find((n) => n.id === e.source)?.defId === 'asset-library');
+  // the tag a library image answers to is the alias / name the library can read, else its id (a name with "-" is not readable, so that asset is @<id>)
+  const libIds = list.flatMap((e) => { const n = nodes.find((x) => x.id === e.source); return n?.defId === 'asset-library' ? String(n.params.ids ?? '').split(/[,\s]+/).filter(Boolean) : []; });
+  const libKey = libIds.join(',');
+  useEffect(() => { if (libIds.length) void import('../backend/assetlib').then((m) => m.resolveRefs('assets', undefined, libIds)).then((r) => setLibNames(Object.fromEntries((r.attached ?? []).map((a) => [String(a.id), String(a.mention || a.alias || a.id)])))).catch(() => undefined); }, [libKey]);
   if (!list.length) return null;
+  // one chip per image: an Asset Library card hands over every picked image, other cards their shown result
+  type Chip = { e: (typeof list)[number]; thumb: string; aid?: number; first: boolean };
+  const chips: Chip[] = list.flatMap((e): Chip[] => {
+    const src = nodes.find((n) => n.id === e.source);
+    if (!src) return [{ e, thumb: '', first: true }];
+    if (src.defId === 'asset-library') {
+      const ran = portAssets(src, e.sourceHandle).filter((x) => x.type === 'image');
+      const ids = String(src.params.ids ?? '').split(/[,\s]+/).filter(Boolean);   // not run yet: the picked library images
+      const n = Math.max(ran.length, ran.length ? 0 : ids.length, 1);
+      return Array.from({ length: n }, (_, k) => {
+        const aid = (ran[k]?.meta as { assetId?: number } | undefined)?.assetId ?? (ids[k] !== undefined ? Number(ids[k]) : undefined);
+        return { e, first: k === 0, aid, thumb: ran[k]?.url || (ids[k] !== undefined ? libThumb(ids[k]) : '') };
+      });
+    }
+    const a = activeAsset(src, e.sourceHandle);
+    return [{ e, first: true, thumb: a?.url ?? '', aid: (a?.meta as { assetId?: number } | undefined)?.assetId }];
+  });
   return (
     <div className="ref-order" title={T('Order of the connected images — use @image1, @image2 … in the prompt')}>
-      {list.map((e, i) => {
-        const src = nodes.find((n) => n.id === e.source); const a = src && activeAsset(src, e.sourceHandle);
+      {chips.map((c, i) => {
+        const ei = list.findIndex((x) => x.id === c.e.id);
+        const lib = c.aid !== undefined && nodes.find((n) => n.id === c.e.source)?.defId === 'asset-library';
+        const plainNo = chips.slice(0, i + 1).filter((x) => !(x.aid !== undefined && nodes.find((n) => n.id === x.e.source)?.defId === 'asset-library')).length;
         return (
-          <div key={e.id} className="ref-chip nodrag">
-            {a?.url ? <img className={(a.meta as { assetId?: number } | undefined)?.assetId !== undefined && hiddenSet.has(`reflib/${(a.meta as { assetId: number }).assetId}`) && !revealAll ? 'blurred' : ''} src={a.url} alt="" /> : <i />}
-            <b>@image{i + 1}</b>
-            {list.length > 1 && <span className="mv"><button disabled={i === 0} onClick={() => useGraph.getState().moveEdge(e.id, -1)}>◀</button><button disabled={i === list.length - 1} onClick={() => useGraph.getState().moveEdge(e.id, 1)}>▶</button></span>}
+          <div key={`${c.e.id}:${i}`} className="ref-chip nodrag">
+            {c.thumb ? <img className={c.aid !== undefined && hiddenSet.has(`reflib/${c.aid}`) && !revealAll ? 'blurred' : ''} src={c.thumb} alt="" onError={(ev) => { ev.currentTarget.style.visibility = 'hidden'; }} /> : <i />}
+            <b className="goto" title={T('Go to this image card')} onClick={() => useGraph.getState().focusNode(c.e.source)}>{lib ? `@${libNames[String(c.aid)] ?? c.aid}` : `@image${plainNo}`}</b>
+            {list.length > 1 && c.first && <span className="mv"><button disabled={ei === 0} onClick={() => useGraph.getState().moveEdge(c.e.id, -1)}>◀</button><button disabled={ei === list.length - 1} onClick={() => useGraph.getState().moveEdge(c.e.id, 1)}>▶</button></span>}
           </div>
         );
       })}
@@ -333,7 +360,7 @@ const PlainNode = memo(function PlainNode({ id, selected }: NodeProps) {
   const runnable = def.kind === 'generate' || def.kind === 'llm' || def.kind === 'edit' && def.id !== 'router';
   const engine = engineFor(def, node.engineId);
   // result cards can be made as big or as small as you like
-  const viewerCard = def.id === 'preview' || def.id === 'compare' || def.id === 'export';
+  const viewerCard = def.id === 'preview' || def.id === 'compare' || def.id === 'export' || def.id === 'prompt';
 
   if (def.kind === 'note') {
     return (
@@ -347,7 +374,7 @@ const PlainNode = memo(function PlainNode({ id, selected }: NodeProps) {
   }
 
   return (
-    <div className={`cnode ${viewerCard ? 'vc' : ''} ${selected ? 'sel' : ''} ${running ? 'running' : ''} ${rt?.status === 'error' ? 'err' : ''}`} style={{ width: node.w ?? 300, ...(viewerCard && node.h ? { height: node.h } : {}), ['--k' as string]: color, ...(node.color ? { background: node.color } : {}), ...(node.textColor ? { color: node.textColor, ['--fg' as string]: node.textColor, ['--muted' as string]: `color-mix(in srgb, ${node.textColor} 68%, transparent)` } : {}) }}>
+    <div className={`cnode ${viewerCard ? 'vc' : ''} ${def.id === 'prompt' && node.h ? 'pc' : ''} ${selected ? 'sel' : ''} ${running ? 'running' : ''} ${rt?.status === 'error' ? 'err' : ''}`} style={{ width: node.w ?? 300, ...(viewerCard && node.h ? { height: node.h } : {}), ['--k' as string]: color, ...(node.color ? { background: node.color } : {}), ...(node.textColor ? { color: node.textColor, ['--fg' as string]: node.textColor, ['--muted' as string]: `color-mix(in srgb, ${node.textColor} 68%, transparent)` } : {}) }}>
       {running && <div className="run-overlay"><span className="spin" /><b>RUNNING…</b>{rt?.label && <em>{rt.label}</em>}</div>}
       <div className="cnode-head">
         <i className="dot" />

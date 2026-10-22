@@ -41,6 +41,8 @@ export interface Settings {
   llm: LlmSettings;
   /** Live Canvas chat LLM: same = follow the main LLM above, otherwise use `llm` here */
   live: { same: boolean; llm: LlmSettings };
+  /** LLM (Vision): describes images; same = follow the Brief LLM. Canvers' own setting, separate from the ONE STUDIO nodes. */
+  vision: { same: boolean; llm: LlmSettings };
   /** API keys live in memory only; they are sent to the backend once (never persisted here). */
   keys: { custom: string; openrouter: string };
   /** per image family overrides picked in Settings → Image models (blank = backend default) */
@@ -62,6 +64,8 @@ export interface Settings {
   setMusic: (k: string, v: string) => void;
   set: (patch: Partial<Pick<Settings, 'comfyUrl' | 'saveSubfolder' | 'hostPanels'>>) => void;
   setLlm: (patch: Partial<LlmSettings>) => void;
+  setVision: (patch: Partial<{ same: boolean }>) => void;
+  setVisionLlm: (patch: Partial<LlmSettings>) => void;
   setLive: (patch: Partial<{ same: boolean }>) => void;
   setLiveLlm: (patch: Partial<LlmSettings>) => void;
   setKey: (which: 'custom' | 'openrouter', v: string) => void;
@@ -77,12 +81,13 @@ function load(): Partial<Settings> {
 export const useSettings = create<Settings>((set, get) => {
   const saved = load();
   const persist = () => {
-    const { comfyUrl, llm, live, models, saveSubfolder, music, video, hostPanels, h3Turbo, lastParams } = get();
-    try { localStorage.setItem(KEY, JSON.stringify({ comfyUrl, llm, live, models, saveSubfolder, music, video, hostPanels, h3Turbo, lastParams })); } catch { /* ignore */ }
+    const { comfyUrl, llm, live, vision, models, saveSubfolder, music, video, hostPanels, h3Turbo, lastParams } = get();
+    try { localStorage.setItem(KEY, JSON.stringify({ comfyUrl, llm, live, vision, models, saveSubfolder, music, video, hostPanels, h3Turbo, lastParams })); } catch { /* ignore */ }
   };
   return {
     comfyUrl: saved.comfyUrl ?? '',
     llm: { ...DEFAULT_LLM, ...(saved.llm ?? {}) },
+    vision: { same: saved.vision?.same ?? true, llm: { ...DEFAULT_LLM, ...(saved.vision?.llm ?? {}) } },
     live: { same: saved.live?.same ?? true, llm: { ...DEFAULT_LLM, temperature: 0.5, max_tokens: 3500, ...(saved.live?.llm ?? {}) } },
     keys: { custom: '', openrouter: '' },
     models: saved.models ?? {},
@@ -98,6 +103,8 @@ export const useSettings = create<Settings>((set, get) => {
     setMusic: (k, v) => { set({ music: { ...get().music, [k]: v } }); persist(); },
     set: (patch) => { set(patch); persist(); },
     setLlm: (patch) => { set({ llm: { ...get().llm, ...patch } }); persist(); },
+    setVision: (patch) => { set({ vision: { ...get().vision, ...patch } }); persist(); },
+    setVisionLlm: (patch) => { set({ vision: { ...get().vision, llm: { ...get().vision.llm, ...patch } } }); persist(); },
     setLive: (patch) => { set({ live: { ...get().live, ...patch } }); persist(); },
     setLiveLlm: (patch) => { set({ live: { ...get().live, llm: { ...get().live.llm, ...patch } } }); persist(); },
     setKey: (which, v) => set({ keys: { ...get().keys, [which]: v } }),

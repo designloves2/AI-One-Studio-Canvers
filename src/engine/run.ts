@@ -19,6 +19,9 @@ import { EXTRA_RUNNERS, cardLoras, h3Cards, h3Opt } from './more';
 import { downstreamImages, enhanceWithImages } from '../backend/refEnhance';
 import { styleOf, formatFor, NO_AESTHETIC } from '../backend/promptStyle';
 import { autoPromptH3, autoPromptLtx } from '../backend/autoPrompt';
+import { deleteAsset, listAssets, registerAsset } from '../backend/assetlib';
+
+const TEMP_MARK = 'canvers-temp';   // subcategory of the temporary library assets made for mixed image + asset references
 import { applyOp, blendOp, canvasToAsset, channelOp, invertMask, loadBitmap, maskGrow, palette, videoFrame } from '../editing/ops';
 
 export interface GraphLike { nodes: GraphNode[]; edges: GraphEdge[] }
@@ -285,17 +288,53 @@ const TASKS: Record<string, string> = {
 
 const parseCard = (a: Asset | undefined): any => { try { return a?.text ? JSON.parse(a.text) : null; } catch { return null; } };
 
+/** Reference clips accept either Asset Library assets or image files, never both at once. To mix them (image 1, asset, asset, image 2 ...) the plain images are registered as temporary library assets for the run, in the order of the chips, and removed afterwards. */
 async function runH3(c: Ctx): Promise<Asset[]> {
+  const temp: number[] = [];
+  try { return await runH3Core(c, temp); }
+  finally { for (const id of temp) { try { await deleteAsset(id); } catch { /* the temporary asset stays in the library */ } } }
+}
+
+async function runH3Core(c: Ctx, temp: number[]): Promise<Asset[]> {
   const p = c.p;
   const assetCard = parseCard(c.inputs('assets')[0]);
-  const assetRef = assetCard?.kind === 'assetlib' ? { project: assetCard.project as string | undefined, ids: (assetCard.ids ?? []) as string[] } : undefined;
+  let assetRef = assetCard?.kind === 'assetlib' ? { project: assetCard.project as string | undefined, ids: (assetCard.ids ?? []) as string[] } : undefined;
   const ref = c.engineId === 'h3-ref' || !!assetRef;
   const si = c.inputs('seed_in')[0]; const sv = si ? num(si.text, -1) : num(p.seed, -1);
   const seed0 = sv < 0 ? Math.floor(Math.random() * 2 ** 40) : sv;
   const settings = useSettings.getState();
-  const imgs = c.inputs('image'), lastA = c.inputs('last')[0];
+  let imgs = c.inputs('image'); const lastA = c.inputs('last')[0];
+  const tempImages: Record<string, Asset> = {};   // temporary library id -> the plain image it stands for (described for the prompt writer)
+  const libOf = (a: Asset) => (a.meta as { assetId?: number } | undefined)?.assetId;
+  if (ref && imgs.some((a) => libOf(a) === undefined) && (imgs.some((a) => libOf(a) !== undefined) || assetRef)) {
+    if (assetRef?.project) throw new Error('A library project cannot be mixed with image cards: pick the assets one by one, or remove the image cards');
+    // temporary assets left by an earlier run that was cut short (page reload) are removed first
+    for (const old of (await listAssets()).filter((x) => x.subcategory === TEMP_MARK)) { try { await deleteAsset(old.id); } catch { /* stays */ } }
+    const ids: string[] = []; let k = 0;
+    // a library card hands over only its shown image through the port: take every picked asset of it, in the order of the connections
+    const { useGraph } = await import('../store/graph');
+    const gs = useGraph.getState();
+    const plainLeft = imgs.filter((a) => libOf(a) === undefined);
+    const order: ({ lib: string[] } | { plain: Asset })[] = [];
+    for (const e of gs.edges.filter((x) => x.target === c.node.id && x.targetHandle === 'image')) {
+      const src = gs.nodes.find((n) => n.id === e.source);
+      if (src?.defId === 'asset-library') order.push({ lib: String(src.params.ids ?? '').split(/[,\s]+/).filter(Boolean) });
+      else { const a = plainLeft.shift(); if (a) order.push({ plain: a }); }
+    }
+    for (const item of order) {
+      if ('lib' in item) { ids.push(...item.lib); continue; }
+      const a = item.plain;
+      k++;
+      const blob = await fetchBlob(a);
+      const reg = await registerAsset(new File([blob], `image${k}.png`, { type: blob.type || 'image/png' }), 'etc', `image${k}`, TEMP_MARK);   // named image1, image2 ... so @image1 works in the prompt
+      temp.push(reg.id); tempImages[String(reg.id)] = a; ids.push(String(reg.id));
+    }
+    ids.push(...(assetRef?.ids ?? []));
+    if (ids.length > 9) throw new Error('At most 9 references (images + library assets) fit in one reference clip');
+    assetRef = { project: undefined, ids }; imgs = [];
+  }
   let promptSrc = c.text('prompt');
-  if (p.auto_prompt) promptSrc = await autoWrite(c, () => autoPromptH3({ prompt: promptSrc, seconds: num(p.seconds, 8), mode: ref ? 'reference' : (imgs[0] || lastA) ? 'firstlast' : 't2v', images: ref ? imgs : [imgs[0], lastA].filter((x): x is Asset => !!x), assetRef: !!assetRef, oneTake: !ref && str(p.continuity, 'lastframe') === 'onetake', clips: promptSrc.split(/\n\s*-{3,}\s*\n/).filter((x) => x.trim()).length }), promptSrc);
+  if (p.auto_prompt) promptSrc = await autoWrite(c, () => autoPromptH3({ prompt: promptSrc, seconds: num(p.seconds, 8), mode: ref ? 'reference' : (imgs[0] || lastA) ? 'firstlast' : 't2v', images: ref ? imgs : [imgs[0], lastA].filter((x): x is Asset => !!x), assetRef, tempImages, warn: (m) => c.progress(2, m), oneTake: !ref && str(p.continuity, 'lastframe') === 'onetake', clips: promptSrc.split(/\n\s*-{3,}\s*\n/).filter((x) => x.trim()).length }), promptSrc);
   const prompts = promptSrc.split(/\n\s*-{3,}\s*\n/).map((x) => x.trim()).filter(Boolean);
   if (!prompts.length) throw new Error('Prompt is empty');
   const cards = h3Cards(c);

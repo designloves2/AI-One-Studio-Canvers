@@ -2288,15 +2288,16 @@ var init_settings = __esm({
     useSettings = create((set2, get) => {
       const saved = load();
       const persist = () => {
-        const { comfyUrl, llm, live, models, saveSubfolder, music, video, hostPanels, h3Turbo, lastParams } = get();
+        const { comfyUrl, llm, live, vision, models, saveSubfolder, music, video, hostPanels, h3Turbo, lastParams } = get();
         try {
-          localStorage.setItem(KEY, JSON.stringify({ comfyUrl, llm, live, models, saveSubfolder, music, video, hostPanels, h3Turbo, lastParams }));
+          localStorage.setItem(KEY, JSON.stringify({ comfyUrl, llm, live, vision, models, saveSubfolder, music, video, hostPanels, h3Turbo, lastParams }));
         } catch {
         }
       };
       return {
         comfyUrl: saved.comfyUrl ?? "",
         llm: { ...DEFAULT_LLM, ...saved.llm ?? {} },
+        vision: { same: saved.vision?.same ?? true, llm: { ...DEFAULT_LLM, ...saved.vision?.llm ?? {} } },
         live: { same: saved.live?.same ?? true, llm: { ...DEFAULT_LLM, temperature: 0.5, max_tokens: 3500, ...saved.live?.llm ?? {} } },
         keys: { custom: "", openrouter: "" },
         models: saved.models ?? {},
@@ -2328,6 +2329,14 @@ var init_settings = __esm({
         },
         setLlm: (patch) => {
           set2({ llm: { ...get().llm, ...patch } });
+          persist();
+        },
+        setVision: (patch) => {
+          set2({ vision: { ...get().vision, ...patch } });
+          persist();
+        },
+        setVisionLlm: (patch) => {
+          set2({ vision: { ...get().vision, llm: { ...get().vision.llm, ...patch } } });
           persist();
         },
         setLive: (patch) => {
@@ -4428,6 +4437,8 @@ var init_graph = __esm({
       assetPicker: null,
       facePicker: null,
       fitTick: 0,
+      focusId: null,
+      focusTick: 0,
       composerRuns: readRuns(),
       setMode: (mode) => {
         try {
@@ -4639,6 +4650,7 @@ var init_graph = __esm({
       loadProject: (p, file = null, dirty = false) => quietly(() => set2({ canvasFile: file, dirty, projectId: p.id ?? uid("p"), projectName: p.name || "untitled", nodes: fillTurbo(p.nodes ?? []), edges: p.edges ?? [], runtime: {}, selected: [], past: [], future: [], fitTick: get().fitTick + 1 })),
       newProject: () => quietly(() => set2({ canvasFile: null, dirty: false, projectId: uid("p"), projectName: "untitled", nodes: [], edges: [], runtime: {}, selected: [], past: [], future: [] })),
       requestFit: () => set2({ fitTick: get().fitTick + 1 }),
+      focusNode: (id) => set2({ selected: [id], focusId: id, focusTick: get().focusTick + 1 }),
       addComposerRun: (r) => {
         const runs = [r, ...get().composerRuns];
         writeRuns(runs);
@@ -5334,6 +5346,7 @@ init_http();
 init_comfy();
 init_settings();
 var PREFIX = "canvers_llm_";
+var VPREFIX = "canvers_vision_";
 async function loadServerSettings() {
   try {
     const { settings } = await getJson("/tj_shared/llm_settings");
@@ -5343,6 +5356,13 @@ async function loadServerSettings() {
       if (v !== void 0 && typeof v === typeof DEFAULT_LLM[k]) patch[k] = v;
     }
     if (Object.keys(patch).length) useSettings.getState().setLlm(patch);
+    const vp = {};
+    for (const k of Object.keys(DEFAULT_LLM)) {
+      const v = settings?.[VPREFIX + k];
+      if (v !== void 0 && typeof v === typeof DEFAULT_LLM[k]) vp[k] = v;
+    }
+    if (Object.keys(vp).length) useSettings.getState().setVisionLlm(vp);
+    if (typeof settings?.[VPREFIX + "same"] === "boolean") useSettings.getState().setVision({ same: settings[VPREFIX + "same"] });
   } catch {
   }
 }
@@ -5415,11 +5435,16 @@ async function warmUpServer() {
   } catch {
   }
 }
+function llmFor(req) {
+  if (req.llm) return req.llm;
+  const { llm, vision } = useSettings.getState();
+  return req.images?.length && !vision.same ? vision.llm : llm;
+}
 async function runLlm(req) {
-  const l = req.llm ?? useSettings.getState().llm;
+  const l = llmFor(req);
   const release = await acquireLocalLlm(l.backend, req.where);
   try {
-    return await runLlmNow(req, false);
+    return await runLlmNow({ ...req, llm: l }, false);
   } finally {
     release();
   }
@@ -5427,6 +5452,10 @@ async function runLlm(req) {
 async function runLlmNow(req, retried) {
   const l = req.llm ?? useSettings.getState().llm;
   const images = req.images ?? [];
+  if (l.backend === "comfy" && !l.text_encoder_name) {
+    const vis = !!images.length && l === useSettings.getState().vision.llm;
+    throw new Error(`ComfyUI TextGenerate has no text encoder: pick one in Settings \u2192 ${vis ? "LLM (Vision)" : "LLM (Brief)"} backend and save.`);
+  }
   if (l.backend === "custom") {
     if (!l.custom_base.trim()) throw new Error("Connect Custom: set the base URL in Settings \u2192 LLM");
     if (!l.custom_model.trim()) throw new Error("Connect Custom: pick a model in Settings \u2192 LLM");
@@ -7181,6 +7210,19 @@ async function listAssets(q = {}) {
   return r.assets ?? [];
 }
 var resolveRefs = (mode, project, assets, prompt = "") => postJson(`${BASE}/resolve`, { mode, project: project ? Number(project) : void 0, assets: assets.map(Number), prompt });
+var safeAssetName = (n2) => n2.replace(/[^\wㄱ-힝]+/g, "_").replace(/^_+|_+$/g, "");
+async function registerAsset(file, category, name, subcategory) {
+  const fd = new FormData();
+  if (subcategory) fd.append("subcategory", subcategory);
+  fd.append("file", file, file.name);
+  fd.append("category", category);
+  fd.append("name", safeAssetName(name || file.name.replace(/\.[^.]+$/, "")) || "asset");
+  const r = await fetch(url(`${BASE}/assets`), { method: "POST", body: fd });
+  const j = await r.json();
+  if (!j.ok) throw new Error(j.detail ?? j.code ?? "register failed");
+  return j.asset;
+}
+var deleteAsset = (id) => postJson(`${BASE}/assets/${id}/delete`, { force: false });
 
 // src/engine/more.ts
 init_settings();
@@ -7700,9 +7742,7 @@ var LTX_VISION_SYSTEM = "Describe this image factually and concisely for a video
 var VISION = "Describe this image factually and concisely for a video director: subject appearance, pose, expression, setting, lighting. Plain prose, no formatting, no preamble, 2-4 sentences.";
 var secLabel = (s) => `${+s.toFixed(2)}s`;
 async function describe(images, system) {
-  const out = [];
-  for (const a of images) out.push((await runLlm({ system, prompt: "Describe this image.", images: [a], where: "bottom" }) || "").trim());
-  return out;
+  return (await Promise.all(images.map((a) => runLlm({ system, prompt: "Describe this image.", images: [a], where: "bottom" })))).map((d) => (d || "").trim());
 }
 function oneTakeRules(lens, prevEnding = "") {
   const cutoff = (l) => Math.max(0, l - 1.7).toFixed(1);
@@ -7723,15 +7763,56 @@ function oneTakeRules(lens, prevEnding = "") {
   if (prevEnding) lines.push("", `The clip before this one ends with: "${prevEnding}" - open this clip with that state, copied as rule 4 says.`);
   return lines.join("\n");
 }
+async function libraryContext(ref, described = {}) {
+  const [rep, listing] = await Promise.all([resolveRefs(ref.project ? "project" : "assets", ref.project, ref.ids), listAssets()]);
+  if (!rep.ok) throw new Error(`could not resolve the library references: ${rep.errors?.[0]?.message ?? "unknown"}`);
+  const meta = new Map(listing.map((a) => [a.id, a]));
+  const items = (rep.attached ?? []).map((a) => {
+    const m = meta.get(a.id);
+    return { token: `@${a.mention || a.alias || a.id}`, kind: a.kind, name: a.name, category: m?.category, tags: m?.tags ? String(m.tags) : "", note: [m?.note, described[String(a.id)]].filter(Boolean).join(" / ") };
+  });
+  if (!items.length) throw new Error("the library references are empty");
+  const lines = items.map((it, i) => [`<Picture ${i + 1}> = ${it.token} \u2014 ${it.name} (${it.kind}${it.category ? `, ${it.category}` : ""})`, it.tags && `tags: ${it.tags}`, it.note && `note: ${it.note}`].filter(Boolean).join(" \xB7 "));
+  const text3 = 'Reference images attached to this clip, in this order (<Picture N> is what you write; the @name after it is what the creative brief calls it, so "' + items[0].token + '" in the brief means <Picture 1>). There are no videos and no audio: never write <Video N> or <Audio N>. EVERY <Picture N> listed below must appear in the prompt at least once, as its own subject doing what the creative brief says it does; a picture the brief does not describe still gets a fitting, natural place in the scene. Never leave one out and never invent a picture that is not listed.\n' + lines.join("\n");
+  return { text: text3, items: items.map((it) => ({ token: it.token, name: it.name })) };
+}
+function linkSubjects(text3, pictures) {
+  const lines = text3.split("\n");
+  const idx = lines.map((l, i) => /^<Subject \d+> /.test(l) ? i : -1).filter((i) => i >= 0);
+  if (idx.length !== pictures) return text3;
+  idx.forEach((i, k) => {
+    if (!/<Picture \d+>/.test(lines[i])) lines[i] = lines[i].replace(/\s*$/, "").replace(/\.?$/, ` in <Picture ${k + 1}>.`);
+  });
+  return lines.join("\n");
+}
+async function checkLibraryTags(text3, ref, items, warn) {
+  let out = text3;
+  items.forEach((it, i) => {
+    for (const form of /* @__PURE__ */ new Set([it.token, `@${it.name}`])) out = out.replace(new RegExp(form.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![\\w-])", "gi"), `<Picture ${i + 1}>`);
+  });
+  out = linkSubjects(out, items.length);
+  const chk = await resolveRefs(ref.project ? "project" : "assets", ref.project, ref.ids, out);
+  const errs = (chk.errors ?? []).filter((e) => e.code !== "NOT_ATTACHED");
+  for (const e of new Set(errs.map((x) => x.message))) warn?.(e);
+  for (const w of chk.warnings ?? []) warn?.(w.message);
+  return out;
+}
 async function autoPromptH3(o) {
-  const images = o.images.slice(0, 9);
-  if (!o.prompt.trim() && !images.length) return o.prompt;
+  const images = o.assetRef ? [] : o.images.slice(0, 9);
+  const described = {};
+  const tmpIds = Object.keys(o.tempImages ?? {});
+  (await describe(tmpIds.map((id) => o.tempImages[id]), VISION)).forEach((d, i) => {
+    described[tmpIds[i]] = d;
+  });
+  const libCtx = o.assetRef ? await libraryContext(o.assetRef, described) : null;
+  const lib = libCtx?.text ?? "";
+  if (!o.prompt.trim() && !images.length && !lib) return o.prompt;
   const notes = images.length ? (await describe(images, VISION)).map((d, i) => `Image ${i + 1}: ${d}`).join("\n") : "";
   const label = o.mode === "reference" ? "Reference" : o.mode === "firstlast" ? "First/Last frame" : "Text/Image \u2192 Brief";
   const lines = [`Mode: ${label}`, `Target duration: ${o.seconds.toFixed(2)} seconds total, split into 1 shot(s) of ~${o.seconds.toFixed(2)}s each.`];
   if (o.oneTake) lines.push("", oneTakeRules(Array.from({ length: Math.max(1, o.clips ?? 1) }, () => o.seconds)));
   lines.push("", "Reference manifest:");
-  lines.push(o.assetRef ? "Asset Library references are named by @name in the creative brief." : o.mode === "reference" && images.length ? `${images.length} reference image(s) supplied; refer to them as <Picture 1>\u2026<Picture ${images.length}>.` : "None");
+  lines.push(lib ? lib : o.mode === "reference" && images.length ? `${images.length} reference image(s) supplied; refer to them as <Picture 1>\u2026<Picture ${images.length}>.` : "None");
   if (notes) {
     lines.push("", o.mode === "firstlast" ? "The following images were analyzed in order: image 1 is the STARTING frame, the last one is the ENDING frame. Write the brief as a first/last-frame shot that moves from the starting description to the ending one." : `The following images were analyzed in order and are the <Picture 1>\u2026<Picture ${images.length}> references for this brief.`, "", notes);
   }
@@ -7742,9 +7823,10 @@ async function autoPromptH3(o) {
     "",
     "Final grounding check: stay grounded in what the request and any images/video/audio actually show \u2014 invent only the minimum needed to connect frames or fulfill the request, never unrelated actions, props, on-screen text, dialogue, or locations. An explicit user instruction always outranks a default assumption. Treat every explicitly assigned reference role (voice, motion, style, etc.) as exclusive \u2014 use only that role's content, do not also pull in its other visible traits. Do not invent music or ambient sound beyond what the request asks for or clearly implies. Never pad solely to reach a length \u2014 use only what the target duration above actually needs. Return only the complete brief text, no commentary outside it."
   );
-  const text3 = (await runLlm({ system: o.mode === "reference" ? H3_SYSTEM_PROMPT_REF : H3_SYSTEM_PROMPT_BASE, prompt: lines.join("\n"), where: "bottom" })).trim();
+  const text3 = (await runLlm({ system: o.mode === "reference" ? H3_SYSTEM_PROMPT_REF : H3_SYSTEM_PROMPT_BASE, prompt: lines.join("\n"), where: "bottom", max_tokens: 16e3 })).trim();
   if (!text3) throw new Error("empty response");
-  return text3;
+  if (!o.assetRef || !libCtx) return text3;
+  return checkLibraryTags(text3, o.assetRef, libCtx.items, o.warn);
 }
 async function autoPromptLtx(o) {
   const images = o.images.slice(0, 2);
@@ -7753,7 +7835,7 @@ async function autoPromptLtx(o) {
   const lines = [`Total length: ${secLabel(o.seconds)} in 1 clip: clip 1 = ${secLabel(o.seconds)}.`, "Write exactly 1 clip with these lengths."];
   if (notes) lines.push("", "Images given to this clip (in order; the time is when each one appears):", notes);
   lines.push("", "Brief:", o.prompt || "(no text supplied - base the plan on the images above)", "", "Return only the JSON object.");
-  const text3 = await runLlm({ system: LTX_WRITE_PLAIN_SYSTEM, prompt: lines.join("\n"), where: "bottom" });
+  const text3 = await runLlm({ system: LTX_WRITE_PLAIN_SYSTEM, prompt: lines.join("\n"), where: "bottom", max_tokens: 8e3 });
   const a = text3.indexOf("{"), b = text3.lastIndexOf("}");
   if (a < 0 || b <= a) throw new Error("the model did not return a plan (no JSON found)");
   let raw;
@@ -7768,6 +7850,7 @@ async function autoPromptLtx(o) {
 }
 
 // src/engine/run.ts
+var TEMP_MARK = "canvers-temp";
 var portOf = (def, a) => a.port ?? def.outputs[0]?.id;
 function nodeAssets(node, handle2, local) {
   const def = byId.get(node.defId);
@@ -8026,17 +8109,73 @@ var parseCard = (a) => {
   }
 };
 async function runH3(c) {
+  const temp = [];
+  try {
+    return await runH3Core(c, temp);
+  } finally {
+    for (const id of temp) {
+      try {
+        await deleteAsset(id);
+      } catch {
+      }
+    }
+  }
+}
+async function runH3Core(c, temp) {
   const p = c.p;
   const assetCard = parseCard(c.inputs("assets")[0]);
-  const assetRef = assetCard?.kind === "assetlib" ? { project: assetCard.project, ids: assetCard.ids ?? [] } : void 0;
+  let assetRef = assetCard?.kind === "assetlib" ? { project: assetCard.project, ids: assetCard.ids ?? [] } : void 0;
   const ref = c.engineId === "h3-ref" || !!assetRef;
   const si = c.inputs("seed_in")[0];
   const sv = si ? num2(si.text, -1) : num2(p.seed, -1);
   const seed0 = sv < 0 ? Math.floor(Math.random() * 2 ** 40) : sv;
   const settings = useSettings.getState();
-  const imgs = c.inputs("image"), lastA = c.inputs("last")[0];
+  let imgs = c.inputs("image");
+  const lastA = c.inputs("last")[0];
+  const tempImages = {};
+  const libOf = (a) => a.meta?.assetId;
+  if (ref && imgs.some((a) => libOf(a) === void 0) && (imgs.some((a) => libOf(a) !== void 0) || assetRef)) {
+    if (assetRef?.project) throw new Error("A library project cannot be mixed with image cards: pick the assets one by one, or remove the image cards");
+    for (const old of (await listAssets()).filter((x) => x.subcategory === TEMP_MARK)) {
+      try {
+        await deleteAsset(old.id);
+      } catch {
+      }
+    }
+    const ids = [];
+    let k = 0;
+    const { useGraph: useGraph2 } = await Promise.resolve().then(() => (init_graph(), graph_exports));
+    const gs = useGraph2.getState();
+    const plainLeft = imgs.filter((a) => libOf(a) === void 0);
+    const order = [];
+    for (const e of gs.edges.filter((x) => x.target === c.node.id && x.targetHandle === "image")) {
+      const src = gs.nodes.find((n2) => n2.id === e.source);
+      if (src?.defId === "asset-library") order.push({ lib: String(src.params.ids ?? "").split(/[,\s]+/).filter(Boolean) });
+      else {
+        const a = plainLeft.shift();
+        if (a) order.push({ plain: a });
+      }
+    }
+    for (const item of order) {
+      if ("lib" in item) {
+        ids.push(...item.lib);
+        continue;
+      }
+      const a = item.plain;
+      k++;
+      const blob = await fetchBlob(a);
+      const reg = await registerAsset(new File([blob], `image${k}.png`, { type: blob.type || "image/png" }), "etc", `image${k}`, TEMP_MARK);
+      temp.push(reg.id);
+      tempImages[String(reg.id)] = a;
+      ids.push(String(reg.id));
+    }
+    ids.push(...assetRef?.ids ?? []);
+    if (ids.length > 9) throw new Error("At most 9 references (images + library assets) fit in one reference clip");
+    assetRef = { project: void 0, ids };
+    imgs = [];
+  }
   let promptSrc = c.text("prompt");
-  if (p.auto_prompt) promptSrc = await autoWrite(c, () => autoPromptH3({ prompt: promptSrc, seconds: num2(p.seconds, 8), mode: ref ? "reference" : imgs[0] || lastA ? "firstlast" : "t2v", images: ref ? imgs : [imgs[0], lastA].filter((x) => !!x), assetRef: !!assetRef, oneTake: !ref && str(p.continuity, "lastframe") === "onetake", clips: promptSrc.split(/\n\s*-{3,}\s*\n/).filter((x) => x.trim()).length }), promptSrc);
+  if (p.auto_prompt) promptSrc = await autoWrite(c, () => autoPromptH3({ prompt: promptSrc, seconds: num2(p.seconds, 8), mode: ref ? "reference" : imgs[0] || lastA ? "firstlast" : "t2v", images: ref ? imgs : [imgs[0], lastA].filter((x) => !!x), assetRef, tempImages, warn: (m) => c.progress(2, m), oneTake: !ref && str(p.continuity, "lastframe") === "onetake", clips: promptSrc.split(/\n\s*-{3,}\s*\n/).filter((x) => x.trim()).length }), promptSrc);
   const prompts = promptSrc.split(/\n\s*-{3,}\s*\n/).map((x) => x.trim()).filter(Boolean);
   if (!prompts.length) throw new Error("Prompt is empty");
   const cards = h3Cards(c);
@@ -8541,7 +8680,7 @@ var send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 async function handle(msg) {
   const { id, method, params } = msg;
   try {
-    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.22.2" } } });
+    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.23.0" } } });
     if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS.map(({ run: _r, ...t2 }) => t2) } });
     if (method === "tools/call") {
       const tool = TOOLS.find((t2) => t2.name === params?.name);

@@ -118,6 +118,13 @@ export function Flow({ tool, onMenu }: { tool: 'select' | 'hand'; onMenu(at: { x
     return !!sp && !!tp && compatible(sp.type, tp.type);
   }, []);
 
+  const focusTick = useGraph((s) => s.focusTick);
+  useEffect(() => {
+    if (!focusTick) return;
+    const n = rf.getNode(useGraph.getState().focusId ?? '');
+    if (n) { const el = document.querySelector<HTMLElement>(`.react-flow__node[data-id="${n.id}"]`); rf.setCenter(n.position.x + (el?.offsetWidth ?? 300) / 2, n.position.y + (el?.offsetHeight ?? 200) / 2, { zoom: Math.max(rf.getZoom(), 0.6), duration: 350 }); }
+  }, [focusTick]);
+
   useEffect(() => { if (fitTick) setTimeout(() => rf.fitView({ padding: 0.2, duration: 250 }), 30); }, [fitTick]);
 
   const onDrop = useCallback((e: React.DragEvent) => {

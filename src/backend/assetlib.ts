@@ -23,9 +23,13 @@ export interface Resolved { ok: boolean; errors?: { code: string; message: strin
 export const resolveRefs = (mode: 'project' | 'assets', project: string | undefined, assets: string[], prompt = '') =>
   postJson<Resolved>(`${BASE}/resolve`, { mode, project: project ? Number(project) : undefined, assets: assets.map(Number), prompt });
 
-export async function registerAsset(file: File, category: string, name?: string): Promise<LibAsset> {
+/** An @name only works when it is letters / digits / _ (the library cannot read "girl-1"), so those characters are what a name may contain. */
+export const safeAssetName = (n: string) => n.replace(/[^\wㄱ-힝]+/g, '_').replace(/^_+|_+$/g, '');
+
+export async function registerAsset(file: File, category: string, name?: string, subcategory?: string): Promise<LibAsset> {
   const fd = new FormData();
-  fd.append('file', file, file.name); fd.append('category', category); fd.append('name', name || file.name.replace(/\.[^.]+$/, ''));
+  if (subcategory) fd.append('subcategory', subcategory);
+  fd.append('file', file, file.name); fd.append('category', category); fd.append('name', safeAssetName(name || file.name.replace(/\.[^.]+$/, '')) || 'asset');
   const r = await fetch(url(`${BASE}/assets`), { method: 'POST', body: fd });
   const j = await r.json();
   if (!j.ok) throw new Error(j.detail ?? j.code ?? 'register failed');

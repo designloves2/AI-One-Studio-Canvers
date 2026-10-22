@@ -1,6 +1,6 @@
 // Asset Library popups: register a new asset (upload or pick from the gallery, name, category, tags) and edit / delete an existing one.
 import { useEffect, useRef, useState } from 'react';
-import { deleteAsset, libPreview, registerAsset, replaceAssetMedia, updateAsset, type LibAsset } from '../backend/assetlib';
+import { deleteAsset, libPreview, registerAsset, safeAssetName, replaceAssetMedia, updateAsset, type LibAsset } from '../backend/assetlib';
 import { getGallery, type GalleryItem } from '../backend/studio';
 import { fetchBlob, viewUrl } from '../backend/comfy';
 import { assetKey, mediaKey, useIsBlurred, useSensitive } from '../backend/sensitive';
@@ -107,7 +107,7 @@ export function AssetDialog({ asset, cats, onClose, onChanged }: { asset?: LibAs
               {editing && asset && !file && <small className="muted">{asset.kind} · {asset.width && asset.height ? `${asset.width}×${asset.height}` : ''}{asset.duration ? ` · ${asset.duration.toFixed?.(1) ?? asset.duration}s` : ''} · #{asset.id}</small>}
             </div>
             <div className="ad-form">
-              <label className="field-label">{T('Name')} <small className="muted">(@{name.trim() || '…'})</small><input value={name} onChange={(e) => setName(e.target.value)} autoFocus /></label>
+              <label className="field-label">{T('Name')} <small className="muted">(@{name.trim() || '…'})</small><input value={name} onChange={(e) => setName(safeAssetName(e.target.value))} autoFocus /></label>
               <label className="field-label">{T('Category')}<select value={category} onChange={(e) => setCategory(e.target.value)}>{catList.map((c) => <option key={c}>{c}</option>)}</select></label>
               <label className="field-label">{T('Tags')}<input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="a, b" /></label>
               <label className="field-label">{T('Note')}<textarea value={note} onChange={(e) => setNote(e.target.value)} /></label>

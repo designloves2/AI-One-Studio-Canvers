@@ -40,6 +40,9 @@ export const ImeTextarea = forwardRef<HTMLTextAreaElement, Omit<TextareaHTMLAttr
       onBlur={(e) => { flush(); onBlur?.(e); }} />;
   });
 
+/** a card nobody resized grows with its text up to this height, then the box scrolls (a card the user sized by hand ignores it) */
+const AUTO_MAX_H = 420;
+
 /** textarea that grows with its content and stops canvas shortcuts while typing */
 export function AutoText({ value, onChange, placeholder, rows = 3 }: { value: string; onChange(v: string): void; placeholder?: string; rows?: number }) {
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -49,7 +52,7 @@ export function AutoText({ value, onChange, placeholder, rows = 3 }: { value: st
   const native = typeof CSS !== 'undefined' && CSS.supports?.('field-sizing', 'content');
   useEffect(() => {
     const el = ref.current; if (!el || native) return;
-    el.style.height = 'auto'; el.style.height = `${Math.min(360, Math.max(el.scrollHeight, rows * 18))}px`;
+    el.style.height = 'auto'; el.style.height = `${Math.min(AUTO_MAX_H, Math.max(el.scrollHeight, rows * 18))}px`;
   }, [value, rows, native]);
   useEffect(() => { let live = true; void import('../backend/assetlib').then((m) => m.mentionNames()).then((n) => { if (live) setNames(n); }); return () => { live = false; }; }, []);
   // typing @ opens the Asset Library names
@@ -68,7 +71,7 @@ export function AutoText({ value, onChange, placeholder, rows = 3 }: { value: st
   return (
     <div className="mention-wrap">
       <ImeTextarea ref={ref} className="nodrag nowheel" rows={rows} value={value} placeholder={placeholder} spellCheck={false}
-        style={native ? ({ fieldSizing: 'content', minHeight: rows * 18, maxHeight: 360 } as React.CSSProperties) : undefined}
+        style={native ? ({ fieldSizing: 'content', minHeight: rows * 18, maxHeight: AUTO_MAX_H } as React.CSSProperties) : undefined}
         onChange={onChange} onLive={(v) => { const el = ref.current; if (el) look(v, el.selectionStart); }}
         onBlur={() => setTimeout(() => setSug(null), 150)}
         onKeyDown={(e) => {

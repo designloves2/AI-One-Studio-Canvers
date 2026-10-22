@@ -35,6 +35,7 @@ export const fetchCatalog = (): Promise<LlmCatalog> => getJson('/tj_studio_one/l
 
 // ---- settings kept on the server so every browser sees the same ones (own key prefix; no secrets)
 const PREFIX = 'canvers_llm_';
+const VPREFIX = 'canvers_vision_';
 
 export async function loadServerSettings(): Promise<void> {
   try {
@@ -45,6 +46,14 @@ export async function loadServerSettings(): Promise<void> {
       if (v !== undefined && typeof v === typeof DEFAULT_LLM[k]) (patch as any)[k] = v;
     }
     if (Object.keys(patch).length) useSettings.getState().setLlm(patch);
+    // LLM (Vision): kept on the server too, so every browser / port of this canvas shares it
+    const vp: Partial<LlmSettings> = {};
+    for (const k of Object.keys(DEFAULT_LLM) as (keyof LlmSettings)[]) {
+      const v = settings?.[VPREFIX + k];
+      if (v !== undefined && typeof v === typeof DEFAULT_LLM[k]) (vp as any)[k] = v;
+    }
+    if (Object.keys(vp).length) useSettings.getState().setVisionLlm(vp);
+    if (typeof settings?.[VPREFIX + 'same'] === 'boolean') useSettings.getState().setVision({ same: settings[VPREFIX + 'same'] });
   } catch { /* backend without the route: browser copy is used */ }
 }
 
@@ -52,6 +61,9 @@ export async function saveServerSettings(): Promise<void> {
   const llm = useSettings.getState().llm;
   const flat: Record<string, string | number | boolean> = {};
   for (const [k, v] of Object.entries(llm)) flat[PREFIX + k] = v as any;
+  const { vision } = useSettings.getState();
+  for (const [k, v] of Object.entries(vision.llm)) flat[VPREFIX + k] = v as any;
+  flat[VPREFIX + 'same'] = vision.same;
   await postJson('/tj_shared/llm_settings', { settings: flat });
 }
 
@@ -152,15 +164,26 @@ async function warmUpServer(): Promise<void> {
 }
 
 /** A local LLM never runs together with a generation or another local LLM (that can crash ComfyUI): it waits its turn, with a yellow notice. */
+/** the settings a request runs with: a request with images uses the LLM (Vision) when it is set apart from the Brief LLM */
+function llmFor(req: LlmRequest): LlmSettings {
+  if (req.llm) return req.llm;
+  const { llm, vision } = useSettings.getState();
+  return req.images?.length && !vision.same ? vision.llm : llm;
+}
+
 export async function runLlm(req: LlmRequest): Promise<string> {
-  const l = req.llm ?? useSettings.getState().llm;
+  const l = llmFor(req);
   const release = await acquireLocalLlm(l.backend, req.where);
-  try { return await runLlmNow(req, false); } finally { release(); }
+  try { return await runLlmNow({ ...req, llm: l }, false); } finally { release(); }
 }
 
 async function runLlmNow(req: LlmRequest, retried: boolean): Promise<string> {
   const l = req.llm ?? useSettings.getState().llm;
   const images = req.images ?? [];
+  if (l.backend === 'comfy' && !l.text_encoder_name) {
+    const vis = !!images.length && l === useSettings.getState().vision.llm;
+    throw new Error(`ComfyUI TextGenerate has no text encoder: pick one in Settings → ${vis ? 'LLM (Vision)' : 'LLM (Brief)'} backend and save.`);
+  }
 
   if (l.backend === 'custom') {
     if (!l.custom_base.trim()) throw new Error('Connect Custom: set the base URL in Settings → LLM');

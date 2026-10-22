@@ -89,16 +89,20 @@ function ImageModels() {
 }
 
 // ------------------------------------------------------------------ LLM (the four TJ backends)
-function Llm({ target = 'main' }: { target?: 'main' | 'live' }) {
+function Llm({ target = 'main' }: { target?: 'main' | 'live' | 'vision' }) {
   const T = useT();
   const live = target === 'live';
+  const vis = target === 'vision';
+  const alt = target !== 'main';   // Live Canvas and Vision have their own settings
+  const visSet = useSettings((s) => s.vision);
   const mainLlm = useSettings((s) => s.llm);
   const liveSet = useSettings((s) => s.live);
-  const llm = live ? liveSet.llm : mainLlm;
+  const llm = live ? liveSet.llm : vis ? visSet.llm : mainLlm;
   const keys = useSettings((s) => s.keys);
   const setMainLlm = useSettings((s) => s.setLlm);
   const setLiveLlm = useSettings((s) => s.setLiveLlm);
-  const setLlm = live ? setLiveLlm : setMainLlm;
+  const setVisLlm = useSettings((s) => s.setVisionLlm);
+  const setLlm = live ? setLiveLlm : vis ? setVisLlm : setMainLlm;
   const setKey = useSettings((s) => s.setKey);
   const [cat, setCat] = useState<LlmCatalog | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -113,7 +117,7 @@ function Llm({ target = 'main' }: { target?: 'main' | 'live' }) {
   };
 
   const connect = () => wrap(async () => {
-    const r = await connectCustom('img_enhance', live ? llm : undefined); await connectCustom('img_i2p', live ? llm : undefined);
+    const r = await connectCustom('img_enhance', alt ? llm : undefined); await connectCustom('img_i2p', alt ? llm : undefined);
     if (!r.ok) throw new Error(r.error || 'failed');
     setModels(r.models ?? []);
     const found = r.modelFound === false ? ' — model id not in the list' : '';
@@ -127,19 +131,23 @@ function Llm({ target = 'main' }: { target?: 'main' | 'live' }) {
   const test = () => wrap(async () => {
     if (llm.backend === 'openrouter') await saveOpenRouter(keys.openrouter || undefined);
     const t0 = performance.now();
-    const out = await runLlm({ system: 'Reply with the single word OK.', prompt: 'ping', max_tokens: 400, ...(live ? { llm } : {}) });
+    const out = await runLlm({ system: 'Reply with the single word OK.', prompt: 'ping', max_tokens: 400, ...(alt ? { llm } : {}) });
     return `“${out.slice(0, 60)}” · ${Math.round(performance.now() - t0)} ms`;
   });
-  const saveAll = () => wrap(async () => { if (!live) await saveServerSettings(); if (llm.backend === 'openrouter') await saveOpenRouter(keys.openrouter || undefined); return T('Saved'); });
+  const saveAll = () => wrap(async () => { if (target !== 'live') await saveServerSettings(); if (llm.backend === 'openrouter') await saveOpenRouter(keys.openrouter || undefined); return T('Saved'); });
 
   return (
     <section>
-      <h3>{T(live ? 'Live Canvas LLM' : 'LLM backend')}</h3>
+      <h3>{T(live ? 'Live Canvas LLM' : vis ? 'LLM (Vision) backend' : 'LLM (Brief) backend')}</h3>
+      {vis && (
+        <label className="srow"><span className="field-label">{T('Use the Brief LLM')}</span><input type="checkbox" checked={visSet.same} onChange={(e) => useSettings.getState().setVision({ same: e.target.checked })} /></label>
+      )}
+      {vis && visSet.same ? <p className="muted">{T('Image descriptions follow the Brief LLM above. Untick to pick another backend / model for them (for example a local vision model).')}</p> : null}
+      {live && !liveSet.same && llm.backend === 'local' && llm.n_ctx < 8192 && <p className="status bad">{T('Live Canvas needs a context of 8192 or more for a local model.')}</p>}
       {live && (
         <label className="srow"><span className="field-label">{T('Use the main LLM')}</span><input type="checkbox" checked={liveSet.same} onChange={(e) => useSettings.getState().setLive({ same: e.target.checked })} /></label>
       )}
-      {live && !liveSet.same && llm.backend === 'local' && llm.n_ctx < 8192 && <p className="status bad">{T('Live Canvas needs a context of 8192 or more for a local model.')}</p>}
-      {live && liveSet.same ? <p className="muted">{T('Live Canvas follows the LLM above. Untick to pick another backend / model for it (a stronger model writes better plans).')}</p> : <>
+      {vis && visSet.same ? null : live && liveSet.same ? <p className="muted">{T('Live Canvas follows the LLM above. Untick to pick another backend / model for it (a stronger model writes better plans).')}</p> : <>
       <div className="backends">
         {BACKENDS.map((b) => (
           <button key={b.id} className={`bk ${llm.backend === b.id ? 'on' : ''}`} onClick={() => setLlm({ backend: b.id as LlmBackend })} title={b.hint}>
@@ -147,6 +155,7 @@ function Llm({ target = 'main' }: { target?: 'main' | 'live' }) {
           </button>
         ))}
       </div>
+      
 
       {llm.backend === 'local' && <>
         {cat && cat.local_available === false && <p className="status bad">ComfyUI-TJ_NODE (llama-cpp) {cat.error ? `— ${cat.error}` : 'not available'}</p>}
@@ -237,5 +246,5 @@ function VideoModels() {
 }
 
 export function SettingsPanel() {
-  return <div className="panel-body settings"><Connection /><Llm /><Llm target="live" /><ImageModels /><VideoModels /><MusicModels /></div>;
+  return <div className="panel-body settings"><Connection /><Llm /><Llm target="vision" /><Llm target="live" /><ImageModels /><VideoModels /><MusicModels /></div>;
 }
