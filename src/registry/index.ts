@@ -266,8 +266,12 @@ export const REGISTRY: NodeDef[] = [
     params: [
       { id: 'turbo', label: 'Turbo', control: { kind: 'select', options: ['pdd', 'larryvrh', 'lightx2v', 'none'], labels: { pdd: 'Turbo LoRA (Basic)', larryvrh: 'Turbo LoRA (larryvrh)', lightx2v: 'SLA Turbo (lightx2v)', none: 'None' } }, default: 'pdd' }, dyn('turbo_lora', 'Turbo LoRA (first / last frame)', 'loras:h3', 'none', { when: (p) => p.turbo !== 'none' }), dyn('turbo_lora_ref', 'Turbo LoRA (reference)', 'loras:h3', 'none', { when: (p) => p.turbo !== 'none' }),
       slider('turbo_strength', 'Turbo strength', 0, 2, 0.05, 1, { when: (p) => p.turbo !== 'none' }), slider('turbo_steps', 'Turbo steps', 1, 16, 1, 8, { advanced: true, when: (p) => p.turbo !== 'none' }),
-      toggle('hires', '7+1 hi-res finish (7 steps small → upscale → 1 step big)', true, { when: (p) => p.turbo === 'pdd' }),
-      slider('hires_start_mp', 'Start size (MP)', 0.2, 1, 0.05, 0.5, { when: (p) => p.turbo === 'pdd' && !!p.hires }), slider('hires_final_mp', 'Final size (MP)', 0.4, 3, 0.05, 0.9, { when: (p) => p.turbo === 'pdd' && !!p.hires }),
+      toggle('hires', '7+1 hi-res finish (7 steps small → upscale → 1 step big)', true, { when: (p) => p.turbo === 'pdd' || p.turbo === 'none' }),
+      slider('hires_start_mp', 'Start size (MP)', 0.2, 1, 0.05, 0.7, { when: (p) => (p.turbo === 'pdd' || p.turbo === 'none') && !!p.hires }), slider('hires_final_mp', 'Final size (MP)', 0.4, 3, 0.05, 1.6, { when: (p) => (p.turbo === 'pdd' || p.turbo === 'none') && !!p.hires }),
+      { id: 'hires_last', label: '7+1 last step model', control: { kind: 'select', options: ['same', 'fixed'], labels: { same: 'Same as generation', fixed: 'Fixed model' } }, default: 'same', when: (p) => (p.turbo === 'pdd' || p.turbo === 'none') && !!p.hires },
+      dyn('hires_last_model', '7+1 last step model (none = One Studio setting)', 'h3unets', 'none', { when: (p) => (p.turbo === 'pdd' || p.turbo === 'none') && !!p.hires && p.hires_last === 'fixed' }),
+      toggle('hires_no_opt', 'Bypass H3 Memory Optimization on the last step', false, { advanced: true, when: (p) => (p.turbo === 'pdd' || p.turbo === 'none') && !!p.hires }),
+      num('hires_chunk_rows', 'Last step chunk rows', 2048, { advanced: true, when: (p) => (p.turbo === 'pdd' || p.turbo === 'none') && !!p.hires && !p.hires_no_opt }, 256, 16384, 256),
     ], description: 'H3 speed-up: Turbo LoRA and the 7+1 hi-res finish. Wire into Video Generate → H3 option cards.' },
   { id: 'moss-bboxes', title: 'Moss Boxes (R2I)', category: 'Cards', kind: 'source', inputs: [P.imgIn('image', 'Background (optional)', true)], outputs: [{ id: 'card', label: 'Boxes', type: 'pipe' }],
     params: [

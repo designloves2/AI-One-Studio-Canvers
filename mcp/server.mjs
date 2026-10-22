@@ -3935,9 +3935,13 @@ var REGISTRY = [
       dyn("turbo_lora_ref", "Turbo LoRA (reference)", "loras:h3", "none", { when: (p) => p.turbo !== "none" }),
       slider("turbo_strength", "Turbo strength", 0, 2, 0.05, 1, { when: (p) => p.turbo !== "none" }),
       slider("turbo_steps", "Turbo steps", 1, 16, 1, 8, { advanced: true, when: (p) => p.turbo !== "none" }),
-      toggle("hires", "7+1 hi-res finish (7 steps small \u2192 upscale \u2192 1 step big)", true, { when: (p) => p.turbo === "pdd" }),
-      slider("hires_start_mp", "Start size (MP)", 0.2, 1, 0.05, 0.5, { when: (p) => p.turbo === "pdd" && !!p.hires }),
-      slider("hires_final_mp", "Final size (MP)", 0.4, 3, 0.05, 0.9, { when: (p) => p.turbo === "pdd" && !!p.hires })
+      toggle("hires", "7+1 hi-res finish (7 steps small \u2192 upscale \u2192 1 step big)", true, { when: (p) => p.turbo === "pdd" || p.turbo === "none" }),
+      slider("hires_start_mp", "Start size (MP)", 0.2, 1, 0.05, 0.7, { when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires }),
+      slider("hires_final_mp", "Final size (MP)", 0.4, 3, 0.05, 1.6, { when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires }),
+      { id: "hires_last", label: "7+1 last step model", control: { kind: "select", options: ["same", "fixed"], labels: { same: "Same as generation", fixed: "Fixed model" } }, default: "same", when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires },
+      dyn("hires_last_model", "7+1 last step model (none = One Studio setting)", "h3unets", "none", { when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && p.hires_last === "fixed" }),
+      toggle("hires_no_opt", "Bypass H3 Memory Optimization on the last step", false, { advanced: true, when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires }),
+      num("hires_chunk_rows", "Last step chunk rows", 2048, { advanced: true, when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && !p.hires_no_opt }, 256, 16384, 256)
     ],
     description: "H3 speed-up: Turbo LoRA and the 7+1 hi-res finish. Wire into Video Generate \u2192 H3 option cards."
   },
@@ -5532,6 +5536,10 @@ async function load2(source) {
     const lists = await Promise.all([...Object.keys(FAMILIES).map((f) => getModels(f).then((m) => m.loras ?? []).catch(() => [])), getJson("/minimax_h3_one/models").then((l) => l.loras ?? []).catch(() => [])]);
     return ["none", ...new Set(lists.flat().filter((x) => x && x !== "none"))];
   }
+  if (source === "h3unets") {
+    const l = await getJson("/minimax_h3_one/models");
+    return ["none", ...(l.diffusion_models ?? []).filter((x) => x && x !== "none")];
+  }
   if (source === "seedvr2dit") {
     const i = await objectInfo("SeedVR2LoadDiTModel");
     return ["none", ...i?.SeedVR2LoadDiTModel?.input?.required?.model?.[0] ?? []];
@@ -5949,8 +5957,8 @@ var DEFAULT_OPT = {
   turboStrength: 1,
   turboSteps: 8,
   hires: false,
-  hiresStartMp: 0.5,
-  hiresFinalMp: 0.9,
+  hiresStartMp: 0.7,
+  hiresFinalMp: 1.6,
   shiftVideo: 12,
   shiftAudio: 3
 };
@@ -6073,7 +6081,7 @@ async function buildH3Graph(job) {
   };
   const frames = h3Frames(job.seconds);
   const turbo = effectiveTurbo(o, has);
-  const hires = o.hires && turbo === "pdd";
+  const hires = o.hires && (turbo === "pdd" || o.turbo === "none");
   const final = job.size ?? h3Size(job.aspect, hires ? o.hiresFinalMp : job.megapixels);
   const start = hires ? h3Size(job.aspect, o.hiresStartMp) : final;
   const steps = hires ? 8 : turbo === "none" ? Math.max(1, Math.round(job.steps)) : Math.max(1, Math.round(o.turboSteps));
@@ -6168,7 +6176,7 @@ async function buildH3Graph(job) {
   if (job.checkpoint && has("TJ_H3_SaveLatentCheckpoint")) g.chkSave = { class_type: "TJ_H3_SaveLatentCheckpoint", inputs: { latent: hires ? ["samp", 1] : ["samp", 0], checkpoint_name: job.checkpoint } };
   let samples = ["samp", 0];
   if (hires) {
-    for (const n2 of ["MinimaxH3LatentUpscaler3D", "H3MemoryOptimization", "BlockSparseAttention"]) needNode(n2, "7+1 hi-res finish");
+    for (const n2 of ["MinimaxH3LatentUpscaler3D", ...o.hiresNoOpt ? [] : ["H3MemoryOptimization"], "BlockSparseAttention"]) needNode(n2, "7+1 hi-res finish");
     g.hrSep = { class_type: "LTXVSeparateAVLatent", inputs: { av_latent: ["samp", 1] } };
     g.hrUp = { class_type: "MinimaxH3LatentUpscaler3D", inputs: { latent: ["hrSep", 0], model_name: "minimax_h3_latent_upscaler_3d_bf16.safetensors", mode: "target dimensions", "mode.width": final.width, "mode.height": final.height, align: 32, enable_temporal_chunking: true, force_unload: true, device: "cuda", precision: "fp16" } };
     g.hrCat = { class_type: "LTXVConcatAVLatent", inputs: { video_latent: ["hrUp", 0], audio_latent: ["hrSep", 1] } };
@@ -6177,16 +6185,27 @@ async function buildH3Graph(job) {
       g.hrLock = { class_type: "TJ_H3_AudioLock", inputs: { ...g.audioLock.inputs, av_latent: hl } };
       hl = ["hrLock", 0];
     }
-    let hm = ["unet", 0];
+    if (o.hiresLastFixed) {
+      if (!o.hiresLastModel || o.hiresLastModel === "none") throw new Error("7+1 last step is set to a fixed model but none is selected");
+      g.hr_unet = o.hiresLastModel.toLowerCase().endsWith(".gguf") ? { class_type: "UnetLoaderGGUF", inputs: { unet_name: o.hiresLastModel } } : { class_type: "UNETLoader", inputs: { unet_name: o.hiresLastModel, weight_dtype: "default" } };
+    }
+    let hm = [o.hiresLastFixed ? "hr_unet" : "unet", 0];
     job.loras.forEach((l, i) => {
       if (!l.name || l.name === "none" || !(l.strength > 0)) return;
       g[`hrLora${i}`] = { class_type: "LoraLoaderModelOnly", inputs: { model: hm, lora_name: l.name, strength_model: l.strength } };
       hm = [`hrLora${i}`, 0];
     });
-    g.hrPdd = { class_type: "LoraLoaderModelOnly", inputs: { model: hm, lora_name: o.turboLora, strength_model: o.turboStrength } };
-    g.hrShift = { class_type: "MiniMaxH3SigmaShift", inputs: { model: ["hrPdd", 0], shift_video: 12, shift_audio: 3 } };
-    g.hrMem = { class_type: "H3MemoryOptimization", inputs: { model: ["hrShift", 0], fused_qkv: "auto", preserve_precision: true, embedding_memory_mode: "Auto", mlp_memory: "auto", chunk_rows: 2048, precision_mode: "Preserve native", qkv_streaming_mode: "Forced", kitchen_v_memory_mode: "Lower VRAM (slower)" } };
-    g.hrSparse = { class_type: "BlockSparseAttention", inputs: { model: ["hrMem", 0], selection: "sol-attn", "selection.tau": 1.3, start_percent: 0.2, end_percent: 1, dense_blocks: "", min_tokens: 12288, extra_tokens: 256, sink_conditioning: "exact_kv_and_rows", verbose: false } };
+    if (turbo === "pdd") {
+      g.hrPdd = { class_type: "LoraLoaderModelOnly", inputs: { model: hm, lora_name: o.turboLora, strength_model: o.turboStrength } };
+      hm = ["hrPdd", 0];
+    }
+    g.hrShift = { class_type: "MiniMaxH3SigmaShift", inputs: { model: hm, shift_video: turbo === "pdd" ? 12 : o.shiftVideo, shift_audio: turbo === "pdd" ? 3 : o.shiftAudio } };
+    let stage = ["hrShift", 0];
+    if (!o.hiresNoOpt) {
+      g.hrMem = { class_type: "H3MemoryOptimization", inputs: { model: stage, fused_qkv: "auto", preserve_precision: true, embedding_memory_mode: "Auto", mlp_memory: "auto", chunk_rows: Math.round(o.hiresChunkRows ?? 2048), precision_mode: "Preserve native", qkv_streaming_mode: "Forced", kitchen_v_memory_mode: "Lower VRAM (slower)" } };
+      stage = ["hrMem", 0];
+    }
+    g.hrSparse = { class_type: "BlockSparseAttention", inputs: { model: stage, selection: "sol-attn", "selection.tau": 1.3, start_percent: 0.2, end_percent: 1, dense_blocks: "", min_tokens: 12288, extra_tokens: 256, sink_conditioning: "exact_kv_and_rows", verbose: true } };
     g.hrGuider = { class_type: "BasicGuider", inputs: { model: ["hrSparse", 0], conditioning: hrCondLink } };
     g.hrSamp = { class_type: "SamplerCustomAdvanced", inputs: { noise: ["noise", 0], guider: ["hrGuider", 0], sampler: ["sel", 0], sigmas: ["split", 1], latent_image: hl } };
     samples = ["hrSamp", 0];
@@ -7066,19 +7085,21 @@ function optFromCards(cards) {
   return {
     ...DEFAULT_OPT,
     ...s ? { attnBackend: s.attn_backend, attnForward: s.attn_forward, optimizer: s.optimizer, blockCache: s.block_cache, spectrum: !!s.spectrum, fusedModulation: !!s.fused_mod, shiftVideo: s.shift_video, shiftAudio: s.shift_audio } : {},
-    ...t2 ? { turbo: t2.turbo, turboLora: t2.turbo_lora, turboStrength: t2.turbo_strength, turboSteps: t2.turbo_steps, hires: !!t2.hires, hiresStartMp: t2.hires_start_mp, hiresFinalMp: t2.hires_final_mp } : {}
+    ...t2 ? { turbo: t2.turbo, turboLora: t2.turbo_lora, turboStrength: t2.turbo_strength, turboSteps: t2.turbo_steps, hires: !!t2.hires, hiresStartMp: t2.hires_start_mp, hiresFinalMp: t2.hires_final_mp, hiresLastFixed: t2.hires_last === "fixed", hiresLastModel: t2.hires_last_model, hiresNoOpt: !!t2.hires_no_opt, hiresChunkRows: t2.hires_chunk_rows } : {}
   };
 }
 async function h3Opt(cards, ref = false) {
   const o = optFromCards(cards);
-  if (!cards.turbo || o.turbo === "none") return o;
-  const own = String((ref ? cards.turbo.turbo_lora_ref : cards.turbo.turbo_lora) ?? "");
-  if (own && own !== "none") return { ...o, turboLora: own };
-  const mem = useSettings.getState().h3Turbo[ref ? "ref" : "fl"];
-  if (o.turbo === "pdd" && mem) return { ...o, turboLora: mem };
+  if (!cards.turbo) return o;
   const cfg = await getJson("/minimax_h3_one/config").catch(() => ({}));
+  const last = o.hiresLastFixed && (!o.hiresLastModel || o.hiresLastModel === "none") && cfg.hires_last_model ? { hiresLastModel: String(cfg.hires_last_model) } : {};
+  if (o.turbo === "none") return { ...o, ...last };
+  const own = String((ref ? cards.turbo.turbo_lora_ref : cards.turbo.turbo_lora) ?? "");
+  if (own && own !== "none") return { ...o, ...last, turboLora: own };
+  const mem = useSettings.getState().h3Turbo[ref ? "ref" : "fl"];
+  if (o.turbo === "pdd" && mem) return { ...o, ...last, turboLora: mem };
   const pick = o.turbo === "pdd" ? [ref ? cfg.pdd_file_reference || cfg.pdd_file : cfg.pdd_file, cfg.pdd_lora_strength] : o.turbo === "lightx2v" ? [cfg.sla_turbo_lora, cfg.sla_turbo_strength] : [cfg.turbo_lora, cfg.turbo_lora_strength];
-  return pick[0] ? { ...o, turboLora: String(pick[0]), turboStrength: typeof pick[1] === "number" ? pick[1] : o.turboStrength } : o;
+  return pick[0] ? { ...o, ...last, turboLora: String(pick[0]), turboStrength: typeof pick[1] === "number" ? pick[1] : o.turboStrength } : { ...o, ...last };
 }
 async function asOutputClip(a, c) {
   if (a.file?.type === "output") return { filename: a.file.filename, subfolder: a.file.subfolder };
@@ -7801,7 +7822,11 @@ async function runH3(c) {
       stem: "MMH3"
     });
     const base2 = i / prompts.length;
-    const res = await runPrompt(built.graph, { onProgress: (pct, label) => c.progress(Math.round((base2 + pct / 100 / prompts.length) * 100), `clip ${i + 1}/${prompts.length} ${label ?? ""}`), signal: c.signal });
+    const res = await runPrompt(built.graph, { onProgress: (pct, label) => c.progress(Math.round((base2 + pct / 100 / prompts.length) * 100), `clip ${i + 1}/${prompts.length} ${label ?? ""}`), signal: c.signal }).catch((e) => {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw /doesn't match the broadcast shape/.test(msg) && opt.hires ? new Error(`${msg}
+If this happened on the last step of 7+1, H3 Memory Optimization does not work with this model: tick "Bypass H3 Memory Optimization on the last step" on the H3 Turbo card and run again.`) : e;
+    });
     const vout = res.raw[built.videoNode];
     const vf = (vout?.gifs ?? vout?.images ?? vout?.videos ?? [])[0];
     if (!vf) throw new Error(`clip ${i + 1}: ComfyUI returned no video`);
@@ -8203,7 +8228,7 @@ var send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 async function handle(msg) {
   const { id, method, params } = msg;
   try {
-    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.10.3" } } });
+    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.20.0" } } });
     if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS.map(({ run: _r, ...t2 }) => t2) } });
     if (method === "tools/call") {
       const tool = TOOLS.find((t2) => t2.name === params?.name);

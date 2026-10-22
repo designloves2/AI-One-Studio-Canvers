@@ -22,6 +22,7 @@ async function load(source: string): Promise<string[]> {
     const lists = await Promise.all([...Object.keys(FAMILIES).map((f) => getModels(f as Family).then((m) => m.loras ?? []).catch(() => [] as string[])), getJson<{ loras: string[] }>('/minimax_h3_one/models').then((l) => l.loras ?? []).catch(() => [] as string[])]);
     return ['none', ...new Set(lists.flat().filter((x) => x && x !== 'none'))];
   }
+  if (source === 'h3unets') { const l = await getJson<{ diffusion_models?: string[] }>('/minimax_h3_one/models'); return ['none', ...(l.diffusion_models ?? []).filter((x) => x && x !== 'none')]; }
   if (source === 'seedvr2dit') { const i = await objectInfo('SeedVR2LoadDiTModel'); return ['none', ...(i?.SeedVR2LoadDiTModel?.input?.required?.model?.[0] ?? [])]; }
   if (source === 'seedvr2vae') { const i = await objectInfo('SeedVR2LoadVAEModel'); return ['none', ...(i?.SeedVR2LoadVAEModel?.input?.required?.model?.[0] ?? [])]; }
   if (source === 'preprocessors') { const i = await objectInfo('AIO_Preprocessor'); return i?.AIO_Preprocessor?.input?.required?.preprocessor?.[0] ?? ['DepthAnythingPreprocessor']; }

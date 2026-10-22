@@ -44,23 +44,26 @@ export function optFromCards(cards: H3Cards): H3Options {
   return {
     ...DEFAULT_OPT,
     ...(s ? { attnBackend: s.attn_backend, attnForward: s.attn_forward, optimizer: s.optimizer, blockCache: s.block_cache, spectrum: !!s.spectrum, fusedModulation: !!s.fused_mod, shiftVideo: s.shift_video, shiftAudio: s.shift_audio } : {}),
-    ...(t ? { turbo: t.turbo, turboLora: t.turbo_lora, turboStrength: t.turbo_strength, turboSteps: t.turbo_steps, hires: !!t.hires, hiresStartMp: t.hires_start_mp, hiresFinalMp: t.hires_final_mp } : {}),
+    ...(t ? { turbo: t.turbo, turboLora: t.turbo_lora, turboStrength: t.turbo_strength, turboSteps: t.turbo_steps, hires: !!t.hires, hiresStartMp: t.hires_start_mp, hiresFinalMp: t.hires_final_mp, hiresLastFixed: t.hires_last === 'fixed', hiresLastModel: t.hires_last_model, hiresNoOpt: !!t.hires_no_opt, hiresChunkRows: t.hires_chunk_rows } : {}),
   };
 }
 
 /** optFromCards + the turbo LoRA saved in One Studio: a Turbo card whose LoRA is still "none" would silently run the slow full-step path (no 7+1). */
 export async function h3Opt(cards: H3Cards, ref = false): Promise<H3Options> {
   const o = optFromCards(cards);
-  if (!cards.turbo || o.turbo === 'none') return o;
+  if (!cards.turbo) return o;
+  const cfg = await getJson<Record<string, any>>('/minimax_h3_one/config').catch(() => ({} as Record<string, any>));
+  // "Fixed model" with no file picked on the card: use the 7+1 last-step model saved in One Studio's settings
+  const last = o.hiresLastFixed && (!o.hiresLastModel || o.hiresLastModel === 'none') && cfg.hires_last_model ? { hiresLastModel: String(cfg.hires_last_model) } : {};
+  if (o.turbo === 'none') return { ...o, ...last };
   // two LoRA types: first/last-frame videos use `turbo_lora`, multi-reference videos use `turbo_lora_ref`
   const own = String((ref ? cards.turbo.turbo_lora_ref : cards.turbo.turbo_lora) ?? '');
-  if (own && own !== 'none') return { ...o, turboLora: own };
+  if (own && own !== 'none') return { ...o, ...last, turboLora: own };
   const mem = useSettings.getState().h3Turbo[ref ? 'ref' : 'fl'];
-  if (o.turbo === 'pdd' && mem) return { ...o, turboLora: mem };
-  const cfg = await getJson<Record<string, any>>('/minimax_h3_one/config').catch(() => ({} as Record<string, any>));
+  if (o.turbo === 'pdd' && mem) return { ...o, ...last, turboLora: mem };
   const pick = o.turbo === 'pdd' ? [ref ? cfg.pdd_file_reference || cfg.pdd_file : cfg.pdd_file, cfg.pdd_lora_strength]
     : o.turbo === 'lightx2v' ? [cfg.sla_turbo_lora, cfg.sla_turbo_strength] : [cfg.turbo_lora, cfg.turbo_lora_strength];
-  return pick[0] ? { ...o, turboLora: String(pick[0]), turboStrength: typeof pick[1] === 'number' ? pick[1] : o.turboStrength } : o;
+  return pick[0] ? { ...o, ...last, turboLora: String(pick[0]), turboStrength: typeof pick[1] === 'number' ? pick[1] : o.turboStrength } : { ...o, ...last };
 }
 
 // ---- helpers

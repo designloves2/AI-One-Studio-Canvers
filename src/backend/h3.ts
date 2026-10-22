@@ -18,6 +18,8 @@ export interface H3Options {
   turbo: 'none' | 'larryvrh' | 'pdd' | 'lightx2v';
   turboLora: string; turboStrength: number; turboSteps: number;
   hires: boolean; hiresStartMp: number; hiresFinalMp: number;
+  /** 7+1 last step: its own UNET (hiresLastFixed + hiresLastModel), and bypass of H3 Memory Optimization on that step */
+  hiresLastFixed?: boolean; hiresLastModel?: string; hiresNoOpt?: boolean; hiresChunkRows?: number;
   shiftVideo: number; shiftAudio: number;
   audioLock?: { file: string; startSec: number; mode: string; strength: number; fit: string };
 }
@@ -43,7 +45,7 @@ export interface H3Job {
 
 export const DEFAULT_OPT: H3Options = {
   attnBackend: 'none', attnForward: 'none', optimizer: 'none', blockCache: 'none', spectrum: false, fusedModulation: false,
-  turbo: 'none', turboLora: 'none', turboStrength: 1, turboSteps: 8, hires: false, hiresStartMp: 0.5, hiresFinalMp: 0.9,
+  turbo: 'none', turboLora: 'none', turboStrength: 1, turboSteps: 8, hires: false, hiresStartMp: 0.7, hiresFinalMp: 1.6,
   shiftVideo: 12, shiftAudio: 3,
 };
 
@@ -156,7 +158,8 @@ export async function buildH3Graph(job: H3Job): Promise<H3Graph> {
 
   const frames = h3Frames(job.seconds);
   const turbo = effectiveTurbo(o, has);
-  const hires = o.hires && turbo === 'pdd';
+  // 7+1 also works with Turbo None (an 8-step checkpoint with the turbo baked in); larryvrh / lightx2v keep it off
+  const hires = o.hires && (turbo === 'pdd' || o.turbo === 'none');
   const final = job.size ?? h3Size(job.aspect, hires ? o.hiresFinalMp : job.megapixels);
   const start = hires ? h3Size(job.aspect, o.hiresStartMp) : final;
   const steps = hires ? 8 : turbo === 'none' ? Math.max(1, Math.round(job.steps)) : Math.max(1, Math.round(o.turboSteps));
@@ -237,18 +240,27 @@ export async function buildH3Graph(job: H3Job): Promise<H3Graph> {
 
   let samples: L = ['samp', 0];
   if (hires) {
-    for (const n of ['MinimaxH3LatentUpscaler3D', 'H3MemoryOptimization', 'BlockSparseAttention']) needNode(n, '7+1 hi-res finish');
+    for (const n of ['MinimaxH3LatentUpscaler3D', ...(o.hiresNoOpt ? [] : ['H3MemoryOptimization']), 'BlockSparseAttention']) needNode(n, '7+1 hi-res finish');
     g.hrSep = { class_type: 'LTXVSeparateAVLatent', inputs: { av_latent: ['samp', 1] } };
     g.hrUp = { class_type: 'MinimaxH3LatentUpscaler3D', inputs: { latent: ['hrSep', 0], model_name: 'minimax_h3_latent_upscaler_3d_bf16.safetensors', mode: 'target dimensions', 'mode.width': final.width, 'mode.height': final.height, align: 32, enable_temporal_chunking: true, force_unload: true, device: 'cuda', precision: 'fp16' } };
     g.hrCat = { class_type: 'LTXVConcatAVLatent', inputs: { video_latent: ['hrUp', 0], audio_latent: ['hrSep', 1] } };
     let hl: L = ['hrCat', 0];
     if (locked) { g.hrLock = { class_type: 'TJ_H3_AudioLock', inputs: { ...g.audioLock.inputs, av_latent: hl } }; hl = ['hrLock', 0]; }
-    let hm: L = ['unet', 0];
+    if (o.hiresLastFixed) {
+      if (!o.hiresLastModel || o.hiresLastModel === 'none') throw new Error('7+1 last step is set to a fixed model but none is selected');
+      g.hr_unet = o.hiresLastModel.toLowerCase().endsWith('.gguf') ? { class_type: 'UnetLoaderGGUF', inputs: { unet_name: o.hiresLastModel } } : { class_type: 'UNETLoader', inputs: { unet_name: o.hiresLastModel, weight_dtype: 'default' } };
+    }
+    let hm: L = [o.hiresLastFixed ? 'hr_unet' : 'unet', 0];
     job.loras.forEach((l, i) => { if (!l.name || l.name === 'none' || !(l.strength > 0)) return; g[`hrLora${i}`] = { class_type: 'LoraLoaderModelOnly', inputs: { model: hm, lora_name: l.name, strength_model: l.strength } }; hm = [`hrLora${i}`, 0]; });
-    g.hrPdd = { class_type: 'LoraLoaderModelOnly', inputs: { model: hm, lora_name: o.turboLora, strength_model: o.turboStrength } };
-    g.hrShift = { class_type: 'MiniMaxH3SigmaShift', inputs: { model: ['hrPdd', 0], shift_video: 12, shift_audio: 3 } };
-    g.hrMem = { class_type: 'H3MemoryOptimization', inputs: { model: ['hrShift', 0], fused_qkv: 'auto', preserve_precision: true, embedding_memory_mode: 'Auto', mlp_memory: 'auto', chunk_rows: 2048, precision_mode: 'Preserve native', qkv_streaming_mode: 'Forced', kitchen_v_memory_mode: 'Lower VRAM (slower)' } };
-    g.hrSparse = { class_type: 'BlockSparseAttention', inputs: { model: ['hrMem', 0], selection: 'sol-attn', 'selection.tau': 1.3, start_percent: 0.2, end_percent: 1, dense_blocks: '', min_tokens: 12288, extra_tokens: 256, sink_conditioning: 'exact_kv_and_rows', verbose: false } };
+    // Turbo None: the checkpoint is already the 8-step model, so no turbo LoRA and the user's own shift
+    if (turbo === 'pdd') { g.hrPdd = { class_type: 'LoraLoaderModelOnly', inputs: { model: hm, lora_name: o.turboLora, strength_model: o.turboStrength } }; hm = ['hrPdd', 0]; }
+    g.hrShift = { class_type: 'MiniMaxH3SigmaShift', inputs: { model: hm, shift_video: turbo === 'pdd' ? 12 : o.shiftVideo, shift_audio: turbo === 'pdd' ? 3 : o.shiftAudio } };
+    let stage: L = ['hrShift', 0];
+    if (!o.hiresNoOpt) {
+      g.hrMem = { class_type: 'H3MemoryOptimization', inputs: { model: stage, fused_qkv: 'auto', preserve_precision: true, embedding_memory_mode: 'Auto', mlp_memory: 'auto', chunk_rows: Math.round(o.hiresChunkRows ?? 2048), precision_mode: 'Preserve native', qkv_streaming_mode: 'Forced', kitchen_v_memory_mode: 'Lower VRAM (slower)' } };
+      stage = ['hrMem', 0];
+    }
+    g.hrSparse = { class_type: 'BlockSparseAttention', inputs: { model: stage, selection: 'sol-attn', 'selection.tau': 1.3, start_percent: 0.2, end_percent: 1, dense_blocks: '', min_tokens: 12288, extra_tokens: 256, sink_conditioning: 'exact_kv_and_rows', verbose: true } };
     g.hrGuider = { class_type: 'BasicGuider', inputs: { model: ['hrSparse', 0], conditioning: hrCondLink } };
     g.hrSamp = { class_type: 'SamplerCustomAdvanced', inputs: { noise: ['noise', 0], guider: ['hrGuider', 0], sampler: ['sel', 0], sigmas: ['split', 1], latent_image: hl } };
     samples = ['hrSamp', 0];
