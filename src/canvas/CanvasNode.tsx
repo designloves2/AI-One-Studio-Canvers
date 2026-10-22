@@ -328,6 +328,8 @@ const PlainNode = memo(function PlainNode({ id, selected }: NodeProps) {
   const running = rt?.status === 'running';
   const runnable = def.kind === 'generate' || def.kind === 'llm' || def.kind === 'edit' && def.id !== 'router';
   const engine = engineFor(def, node.engineId);
+  // result cards can be made as big or as small as you like
+  const viewerCard = def.id === 'preview' || def.id === 'compare' || def.id === 'export';
 
   if (def.kind === 'note') {
     return (
@@ -341,7 +343,7 @@ const PlainNode = memo(function PlainNode({ id, selected }: NodeProps) {
   }
 
   return (
-    <div className={`cnode ${selected ? 'sel' : ''} ${running ? 'running' : ''} ${rt?.status === 'error' ? 'err' : ''}`} style={{ width: node.w ?? 300, ['--k' as string]: color, ...(node.color ? { background: node.color } : {}), ...(node.textColor ? { color: node.textColor, ['--fg' as string]: node.textColor, ['--muted' as string]: `color-mix(in srgb, ${node.textColor} 68%, transparent)` } : {}) }}>
+    <div className={`cnode ${viewerCard ? 'vc' : ''} ${selected ? 'sel' : ''} ${running ? 'running' : ''} ${rt?.status === 'error' ? 'err' : ''}`} style={{ width: node.w ?? 300, ...(viewerCard && node.h ? { height: node.h } : {}), ['--k' as string]: color, ...(node.color ? { background: node.color } : {}), ...(node.textColor ? { color: node.textColor, ['--fg' as string]: node.textColor, ['--muted' as string]: `color-mix(in srgb, ${node.textColor} 68%, transparent)` } : {}) }}>
       {running && <div className="run-overlay"><span className="spin" /><b>RUNNING…</b>{rt?.label && <em>{rt.label}</em>}</div>}
       <div className="cnode-head">
         <i className="dot" />
@@ -390,7 +392,7 @@ const PlainNode = memo(function PlainNode({ id, selected }: NodeProps) {
       {rt?.status === 'error' && <div className="error">{rt.error}</div>}
 
       {def.kind !== 'output' && (def.kind !== 'source' || def.id === 'import' || def.id === 'import-audio' || def.id === 'import-video') && <Results id={id} />}
-      <NodeResizer minWidth={240} maxWidth={720} isVisible={selected} handleStyle={{ width: 8, height: 8 }} lineStyle={{ opacity: 0 }} onResizeEnd={(_, p) => useGraph.getState().setSize(id, p.width, p.height)} keepAspectRatio={false} />
+      <NodeResizer minWidth={viewerCard ? 120 : 240} maxWidth={viewerCard ? undefined : 720} isVisible={selected} handleStyle={{ width: 8, height: 8 }} lineStyle={{ opacity: 0 }} onResizeEnd={(_, p) => useGraph.getState().setSize(id, p.width, p.height)} keepAspectRatio={false} />
     </div>
   );
 });

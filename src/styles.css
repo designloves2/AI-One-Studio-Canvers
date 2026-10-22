@@ -425,3 +425,4 @@ button.save-state.dirty { cursor: pointer; } button.save-state.dirty:hover { bac
 .box-row { border: 1px solid var(--line2); border-radius: 6px; padding: 6px; display: flex; flex-direction: column; gap: 4px; } .box-row.on { border-color: #7612da; }
 .box-row .row { display: flex; align-items: center; gap: 6px; } .box-row input { width: 100%; }
 .vp-img { width: 100%; border-radius: 6px; display: block; margin-top: 6px; } .vp-empty { margin-top: 6px; padding: 18px 8px; text-align: center; font-size: 11px; opacity: .6; border: 1px dashed var(--line2); border-radius: 6px; }
+.cnode.vc { display: flex; flex-direction: column; } .cnode.vc .result-frame { flex: 1; min-height: 60px; display: flex; } .cnode.vc .result-frame img, .cnode.vc .result-frame video { max-height: none; height: 100%; width: 100%; object-fit: contain; }
