@@ -31,11 +31,11 @@ export function cardLoras(c: Ctx): Lora[] {
   return c.inputs('loras').flatMap((a) => (parse(a)?.items ?? []) as Lora[]).filter(real);
 }
 
-export interface H3Cards { turbo?: any; speed?: any; lock?: any }
+export interface H3Cards { turbo?: any; speed?: any; lock?: any; cont?: any }
 /** the H3 option cards wired into this node, merged by kind */
 export function h3Cards(c: Ctx): H3Cards {
   const out: H3Cards = {};
-  for (const a of c.inputs('cards')) { const j = parse(a); if (j?.kind === 'turbo') out.turbo = j; else if (j?.kind === 'speed') out.speed = j; else if (j?.kind === 'lock') out.lock = j; }
+  for (const a of c.inputs('cards')) { const j = parse(a); if (j?.kind === 'turbo') out.turbo = j; else if (j?.kind === 'speed') out.speed = j; else if (j?.kind === 'lock') out.lock = j; else if (j?.kind === 'cont') out.cont = j; }
   return out;
 }
 
@@ -146,6 +146,11 @@ export const EXTRA_RUNNERS: Record<string, Runner> = {
   },
   'h3-turbo': async (c) => [textAsset(JSON.stringify({ kind: 'turbo', ...c.p }), 'card')],
   'video-preview': async (c) => [textAsset(JSON.stringify({ kind: 'vpreview', ...c.p }), 'card')],
+  'clip-continuity': async (c) => {
+    const v = need(c.inputs('video')[0], 'Previous video');
+    const f = v.file; if (!f) throw new Error('The previous video has no file');
+    return [textAsset(JSON.stringify({ kind: 'cont', mode: str(c.p.mode, 'lastframe'), filename: f.filename, subfolder: f.subfolder ?? '', checkpoint: (v.meta as { checkpoint?: string } | undefined)?.checkpoint }), 'card')];
+  },
   'h3-speed': async (c) => [textAsset(JSON.stringify({ kind: 'speed', ...c.p }), 'card')],
   'moss-bboxes': async (c) => [textAsset(JSON.stringify({ kind: 'mossboxes', ...c.p }), 'card')],
   'h3-audiolock': async (c) => {

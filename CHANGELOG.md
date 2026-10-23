@@ -2,6 +2,11 @@
 
 형식: 버전 · 날짜 / 추가 · 변경 · 수정. 버전은 `package.json`, `mcp/server.ts`와 같습니다.
 
+## 2.24.0 — 2026-10-23
+
+### 추가
+- **Continuity between clips 카드**: Video Generate 카드끼리 이어서 영상을 만듭니다. 이전 Video Generate의 `Video` 출력을 이 카드에 연결하고, 이 카드를 다음 Video Generate의 옵션 카드 입력에 연결하면 됩니다(영상 1 → 카드 → 영상 2 → 카드 → 영상 3 …). 모드: **Last frame → first frame**(H3 · LTX) 또는 **Latent**(H3 One-Take 전용, 이전 카드가 이 세션에서 실행된 경우). LTX는 마지막 프레임만 사용합니다.
+
 ## 2.23.4 — 2026-10-23
 
 ### 추가

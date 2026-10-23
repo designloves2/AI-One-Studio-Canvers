@@ -344,14 +344,18 @@ async function runH3Core(c: Ctx, temp: number[]): Promise<Asset[]> {
   let first = !ref && imgs[0] ? await ensureInput(imgs[0]) : undefined;
   const lastFile = !ref && lastA ? await ensureInput(lastA) : undefined;
   const lockFile: string | undefined = cards.lock?.file;
-  const continuity: string = ref ? 'none' : str(p.continuity, 'lastframe');
+  const cont = ref ? undefined : cards.cont;   // "Continuity between clips" card: carry on from the previous Video Generate card
+  const continuity: string = ref ? 'none' : cont ? (cont.mode === 'latent' ? 'onetake' : 'lastframe') : str(p.continuity, 'lastframe');
+  let prevCheckpoint: string | undefined;
+  if (cont?.mode === 'latent') { if (!cont.checkpoint) throw new Error('Continuity (latent): the previous card has no saved latent. Run it first in this session, or pick "Last frame"'); prevCheckpoint = cont.checkpoint; }
+  else if (cont) { const lf = await clipLastFrame(cont.filename, cont.subfolder); if (!lf.ok || !lf.filename) throw new Error(`Continuity: could not take the last frame (${lf.error ?? 'unknown'})`); first = lf.filename; }
+  const startAt = prevCheckpoint ? 1 : 0;
   const lora = (n: string, s2: string) => ({ name: str(p[n], 'none'), strength: num(p[s2], 1) });
   const seconds = num(p.seconds, 8);
   const runId = uid('ot').slice(0, 10);
   const opt = await h3Opt(cards, ref);
   const pvCfg = await previewOf(c, 'taeh3');
   const clips: { filename: string; subfolder: string }[] = [];
-  let prevCheckpoint: string | undefined;
   for (let i = 0; i < prompts.length; i++) {
     if (c.signal?.aborted) throw new Error('cancelled');
     const checkpoint = continuity === 'onetake' ? `canvers_${runId}_${i}` : undefined;
@@ -364,7 +368,7 @@ async function runH3Core(c: Ctx, temp: number[]): Promise<Asset[]> {
       assetRef,
       opt: { ...opt, audioLock: lockFile ? { file: lockFile, startSec: i * (h3Frames(seconds) / 24), mode: str(cards.lock.mode, 'lock'), strength: num(cards.lock.strength, 0.5), fit: str(cards.lock.fit, 'pad_silence') } : undefined },
       models: settings.video, saveSubfolder: settings.saveSubfolder, size, upscaleModel: str(p.upscale_model, 'none'),
-      clipIndex: i, prevCheckpoint, checkpoint, saveLastFrame: continuity === 'lastframe' && i < prompts.length - 1, stem: 'MMH3', preview: pvCfg,
+      clipIndex: i + startAt, prevCheckpoint, checkpoint, saveLastFrame: continuity === 'lastframe' && i < prompts.length - 1, stem: 'MMH3', preview: pvCfg,
     });
     const base = i / prompts.length;
     const res = await runPrompt(built.graph, { onProgress: (pct, label) => c.progress(Math.round((base + pct / 100 / prompts.length) * 100), `clip ${i + 1}/${prompts.length} ${label ?? ''}`), signal: c.signal, previewKey: pvCfg?.key, onPreview: c.preview }).catch((e) => {
@@ -387,13 +391,14 @@ If this happened on the last step of 7+1, H3 Memory Optimization does not work w
     }
   }
   const assets = clips.map((f) => assetFromFile({ filename: f.filename, subfolder: f.subfolder, type: 'output' }, 'video', 'video'));
+  const tag = (a: Asset[]) => { if (prevCheckpoint && a[0]) a[0].meta = { ...a[0].meta, checkpoint: prevCheckpoint }; return a; };   // lets a Continuity card pick up the latent
   if (clips.length > 1 && p.stitch !== false) {
     c.progress(98, 'stitching…');
     const st = await stitchClips(clips, `${settings.saveSubfolder}/MMH3_full`, continuity === 'onetake' ? ONE_TAKE_OVERLAP_SEC : undefined);
     if (!st.ok || !st.filename) throw new Error(`stitch failed: ${st.error ?? 'unknown'}`);
-    return [assetFromFile({ filename: st.filename, subfolder: st.subfolder ?? '', type: 'output' }, 'video', 'video'), ...assets];
+    return tag([assetFromFile({ filename: st.filename, subfolder: st.subfolder ?? '', type: 'output' }, 'video', 'video'), ...assets]);
   }
-  return assets;
+  return tag(assets);
 }
 
 /** LTX 2.5: one clip per `---` block of the prompt; each clip can start from the last frame of the one before; the clips are stitched at the end. */
@@ -420,6 +425,8 @@ async function runLtx(c: Ctx): Promise<Asset[]> {
   const lora = (n: string, s2: string) => ({ name: str(p[n], 'none'), strength: num(p[s2], 1) });
   let firstFile = first ? await ensureInput(first) : undefined;
   const lastFile = last ? await ensureInput(last) : undefined;
+  const cont = parseCard(c.inputs('cards').find((a) => parseCard(a)?.kind === 'cont'));   // Continuity card: LTX only continues from the last frame
+  if (cont) { const lf = await clipLastFrame(cont.filename, cont.subfolder); if (!lf.ok || !lf.filename) throw new Error(`Continuity: could not take the last frame (${lf.error ?? 'unknown'})`); firstFile = lf.filename; }
   const chain = p.chain_last !== false;
   const pvCfg = await previewOf(c, 'taeltx2_3');
   const clips: { filename: string; subfolder: string }[] = [];

@@ -2889,6 +2889,16 @@ var init_registry = __esm({
         description: "Shows the video while it is being generated. Put it below a Video Generate card and wire the Live preview output of that card into it."
       },
       {
+        id: "clip-continuity",
+        title: "Continuity between clips",
+        category: "Cards",
+        kind: "source",
+        inputs: [{ id: "video", label: "Previous video", type: "video" }],
+        outputs: [{ id: "card", label: "Continuity", type: "pipe" }],
+        params: [{ id: "mode", label: "Continue from the previous video", control: { kind: "select", options: ["lastframe", "latent"], labels: { lastframe: "Last frame \u2192 first frame", latent: "Latent (One-Take, H3 only)" } }, default: "lastframe" }],
+        description: "Chain Video Generate cards: wire the Video output of the previous card in, and this card into the option cards of the next card. The next clip starts from the last frame (H3 and LTX) or from the saved latent (H3 One-Take; the previous card must have run in this session)."
+      },
+      {
         id: "h3-speed",
         title: "H3 Speed & Attention",
         category: "Cards",
@@ -7245,6 +7255,7 @@ function h3Cards(c) {
     if (j?.kind === "turbo") out.turbo = j;
     else if (j?.kind === "speed") out.speed = j;
     else if (j?.kind === "lock") out.lock = j;
+    else if (j?.kind === "cont") out.cont = j;
   }
   return out;
 }
@@ -7372,6 +7383,12 @@ var EXTRA_RUNNERS = {
   },
   "h3-turbo": async (c) => [textAsset(JSON.stringify({ kind: "turbo", ...c.p }), "card")],
   "video-preview": async (c) => [textAsset(JSON.stringify({ kind: "vpreview", ...c.p }), "card")],
+  "clip-continuity": async (c) => {
+    const v = need(c.inputs("video")[0], "Previous video");
+    const f = v.file;
+    if (!f) throw new Error("The previous video has no file");
+    return [textAsset(JSON.stringify({ kind: "cont", mode: str(c.p.mode, "lastframe"), filename: f.filename, subfolder: f.subfolder ?? "", checkpoint: v.meta?.checkpoint }), "card")];
+  },
   "h3-speed": async (c) => [textAsset(JSON.stringify({ kind: "speed", ...c.p }), "card")],
   "moss-bboxes": async (c) => [textAsset(JSON.stringify({ kind: "mossboxes", ...c.p }), "card")],
   "h3-audiolock": async (c) => {
@@ -8196,14 +8213,24 @@ async function runH3Core(c, temp) {
   let first = !ref && imgs[0] ? await ensureInput(imgs[0]) : void 0;
   const lastFile = !ref && lastA ? await ensureInput(lastA) : void 0;
   const lockFile = cards.lock?.file;
-  const continuity = ref ? "none" : str(p.continuity, "lastframe");
+  const cont = ref ? void 0 : cards.cont;
+  const continuity = ref ? "none" : cont ? cont.mode === "latent" ? "onetake" : "lastframe" : str(p.continuity, "lastframe");
+  let prevCheckpoint;
+  if (cont?.mode === "latent") {
+    if (!cont.checkpoint) throw new Error('Continuity (latent): the previous card has no saved latent. Run it first in this session, or pick "Last frame"');
+    prevCheckpoint = cont.checkpoint;
+  } else if (cont) {
+    const lf = await clipLastFrame(cont.filename, cont.subfolder);
+    if (!lf.ok || !lf.filename) throw new Error(`Continuity: could not take the last frame (${lf.error ?? "unknown"})`);
+    first = lf.filename;
+  }
+  const startAt = prevCheckpoint ? 1 : 0;
   const lora = (n2, s2) => ({ name: str(p[n2], "none"), strength: num2(p[s2], 1) });
   const seconds = num2(p.seconds, 8);
   const runId = uid("ot").slice(0, 10);
   const opt = await h3Opt(cards, ref);
   const pvCfg = await previewOf(c, "taeh3");
   const clips = [];
-  let prevCheckpoint;
   for (let i = 0; i < prompts.length; i++) {
     if (c.signal?.aborted) throw new Error("cancelled");
     const checkpoint = continuity === "onetake" ? `canvers_${runId}_${i}` : void 0;
@@ -8228,7 +8255,7 @@ async function runH3Core(c, temp) {
       saveSubfolder: settings.saveSubfolder,
       size,
       upscaleModel: str(p.upscale_model, "none"),
-      clipIndex: i,
+      clipIndex: i + startAt,
       prevCheckpoint,
       checkpoint,
       saveLastFrame: continuity === "lastframe" && i < prompts.length - 1,
@@ -8260,13 +8287,17 @@ If this happened on the last step of 7+1, H3 Memory Optimization does not work w
     }
   }
   const assets = clips.map((f) => assetFromFile({ filename: f.filename, subfolder: f.subfolder, type: "output" }, "video", "video"));
+  const tag = (a) => {
+    if (prevCheckpoint && a[0]) a[0].meta = { ...a[0].meta, checkpoint: prevCheckpoint };
+    return a;
+  };
   if (clips.length > 1 && p.stitch !== false) {
     c.progress(98, "stitching\u2026");
     const st = await stitchClips(clips, `${settings.saveSubfolder}/MMH3_full`, continuity === "onetake" ? ONE_TAKE_OVERLAP_SEC : void 0);
     if (!st.ok || !st.filename) throw new Error(`stitch failed: ${st.error ?? "unknown"}`);
-    return [assetFromFile({ filename: st.filename, subfolder: st.subfolder ?? "", type: "output" }, "video", "video"), ...assets];
+    return tag([assetFromFile({ filename: st.filename, subfolder: st.subfolder ?? "", type: "output" }, "video", "video"), ...assets]);
   }
-  return assets;
+  return tag(assets);
 }
 async function runLtx(c) {
   const p = c.p;
@@ -8295,6 +8326,12 @@ async function runLtx(c) {
   const lora = (n2, s2) => ({ name: str(p[n2], "none"), strength: num2(p[s2], 1) });
   let firstFile = first ? await ensureInput(first) : void 0;
   const lastFile = last ? await ensureInput(last) : void 0;
+  const cont = parseCard(c.inputs("cards").find((a) => parseCard(a)?.kind === "cont"));
+  if (cont) {
+    const lf = await clipLastFrame(cont.filename, cont.subfolder);
+    if (!lf.ok || !lf.filename) throw new Error(`Continuity: could not take the last frame (${lf.error ?? "unknown"})`);
+    firstFile = lf.filename;
+  }
   const chain2 = p.chain_last !== false;
   const pvCfg = await previewOf(c, "taeltx2_3");
   const clips = [];
@@ -8687,7 +8724,7 @@ var send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 async function handle(msg) {
   const { id, method, params } = msg;
   try {
-    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.23.4" } } });
+    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.24.0" } } });
     if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS.map(({ run: _r, ...t2 }) => t2) } });
     if (method === "tools/call") {
       const tool = TOOLS.find((t2) => t2.name === params?.name);

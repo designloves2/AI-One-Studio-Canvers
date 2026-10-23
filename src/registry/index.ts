@@ -286,6 +286,10 @@ export const REGISTRY: NodeDef[] = [
       num('preview_frames', 'Frames per preview (1 = still)', 243, { advanced: true }, 1, 1024, 1), num('preview_fps', 'Preview FPS', 12, { advanced: true }, 1, 60, 1),
       dyn('tiny_vae', 'Tiny VAE (auto = the one of the model)', 'tinyvaes+auto', 'auto', { advanced: true }), toggle('with_audio', 'Preview with audio (H3: decodes the audio each step)', false, { advanced: true }),
     ], description: 'Shows the video while it is being generated. Put it below a Video Generate card and wire the Live preview output of that card into it.' },
+  { id: 'clip-continuity', title: 'Continuity between clips', category: 'Cards', kind: 'source',
+    inputs: [{ id: 'video', label: 'Previous video', type: 'video' }], outputs: [{ id: 'card', label: 'Continuity', type: 'pipe' }],
+    params: [{ id: 'mode', label: 'Continue from the previous video', control: { kind: 'select', options: ['lastframe', 'latent'], labels: { lastframe: 'Last frame → first frame', latent: 'Latent (One-Take, H3 only)' } }, default: 'lastframe' }],
+    description: 'Chain Video Generate cards: wire the Video output of the previous card in, and this card into the option cards of the next card. The next clip starts from the last frame (H3 and LTX) or from the saved latent (H3 One-Take; the previous card must have run in this session).' },
   { id: 'h3-speed', title: 'H3 Speed & Attention', category: 'Cards', kind: 'source', inputs: [], outputs: [{ id: 'card', label: 'Speed', type: 'pipe' }],
     params: [
       sel('attn_backend', 'Attention backend', ['none', 'ck', 'sage', 'solattn_kijai', 'sla'], 'none'), sel('attn_forward', 'Attention forward patch', ['none', 'memeff_sage', 'solattn_sag'], 'none'),
