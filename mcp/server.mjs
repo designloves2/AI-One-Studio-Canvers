@@ -3386,6 +3386,12 @@ var init_i18n_cards = __esm({
       "Motion video starts at (s)": "\uBAA8\uC158 \uC601\uC0C1 \uC2DC\uC791 (\uCD08)",
       "Motion strength": "\uBAA8\uC158 \uAC15\uB3C4",
       LoRA: "LoRA",
+      "Continuity between clips": "\uD074\uB9BD \uC774\uC5B4\uC11C \uC0DD\uC131",
+      "Previous video": "\uC774\uC804 \uC601\uC0C1",
+      Continuity: "\uC774\uC5B4\uC11C \uC0DD\uC131",
+      "Continue from the previous video": "\uC774\uC804 \uC601\uC0C1\uC5D0\uC11C \uC774\uC5B4\uAC00\uAE30",
+      "Last frame \u2192 first frame": "\uB9C8\uC9C0\uB9C9 \uD504\uB808\uC784 \u2192 \uCCAB \uD504\uB808\uC784",
+      "Latent (One-Take, H3 only)": "\uB798\uD134\uD2B8 (\uC6D0\uD14C\uC774\uD06C, H3 \uC804\uC6A9)",
       "Generation Video Preview (live)": "\uC0DD\uC131 \uC601\uC0C1 \uBBF8\uB9AC\uBCF4\uAE30 (live)",
       "Live preview": "\uC0DD\uC131 \uC601\uC0C1 \uBBF8\uB9AC\uBCF4\uAE30",
       "Video Generate \u2192 Live preview": "\uBE44\uB514\uC624 \uC0DD\uC131 \u2192 \uBBF8\uB9AC\uBCF4\uAE30",
@@ -8724,7 +8730,7 @@ var send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 async function handle(msg) {
   const { id, method, params } = msg;
   try {
-    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.24.0" } } });
+    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.24.1" } } });
     if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS.map(({ run: _r, ...t2 }) => t2) } });
     if (method === "tools/call") {
       const tool = TOOLS.find((t2) => t2.name === params?.name);
