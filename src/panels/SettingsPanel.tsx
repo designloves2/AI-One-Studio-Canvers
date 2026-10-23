@@ -1,3 +1,4 @@
+import { postJson } from '../backend/http';
 import { useEffect, useState } from 'react';
 import { useSettings, type LlmBackend } from '../store/settings';
 import { useLang } from '../i18n';
@@ -26,6 +27,8 @@ function Connection() {
   const [state, setState] = useState<{ ok: boolean; text: string } | null>(null);
   const test = async () => {
     set({ comfyUrl: draft.trim() });
+    // the address is handed to the built-in proxy (never fetched directly, so no CORS / https problems)
+    try { await postJson('/canvers/target', { url: draft.trim() }); } catch { /* dev server has no such route */ }
     clearStudioCache(); resetOptions();
     setState({ ok: false, text: '…' });
     try {

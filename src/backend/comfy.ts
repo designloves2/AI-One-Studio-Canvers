@@ -164,7 +164,8 @@ export async function runPrompt(graph: Record<string, unknown>, opts: RunOptions
   await openSocket();
   const res = await fetch(url('/prompt'), {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt: graph, client_id: clientId }),
+    // VHS_VideoCombine reads these from the workflow extra: without them it leaves a silent video and a first-frame PNG next to the "-audio" file
+    body: JSON.stringify({ prompt: graph, client_id: clientId, extra_data: { extra_pnginfo: { workflow: { extra: { VHS_KeepIntermediate: false, VHS_MetadataImage: false } } } } }),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok || data.error) {

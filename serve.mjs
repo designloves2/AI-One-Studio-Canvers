@@ -9,7 +9,8 @@ import { handleDownloads } from './server-lib/downloads.mjs';
 import { handleCanvases } from './server-lib/canvases.mjs';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), 'dist');
-const target = new URL(process.env.COMFY_URL ?? 'http://127.0.0.1:8188');
+const defaultTarget = new URL(process.env.COMFY_URL ?? 'http://127.0.0.1:8188');
+let target = defaultTarget;   // changed from the Settings panel (POST /canvers/target), empty = back to COMFY_URL
 const port = Number(process.env.PORT ?? 8765);
 
 const PROXIED = ['/prompt', '/history', '/queue', '/upload', '/view', '/object_info', '/system_stats', '/interrupt', '/free', '/ws',
@@ -23,10 +24,25 @@ const server = http.createServer(async (req, res) => {
   const p = new URL(req.url, 'http://x').pathname;
   if (await handleDownloads(req, res)) return;
   if (await handleCanvases(req, res)) return;
+  if (p === '/canvers/target') {
+    const json = (code, o) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(o)); };
+    if (req.method === 'GET') return json(200, { url: target.origin });
+    // only from the machine running the server: a tunnelled visitor must not be able to redirect the proxy
+    if (!/^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(req.headers.host ?? '')) return json(403, { error: 'only from localhost' });
+    let body = ''; for await (const c of req) body += c;
+    try {
+      const u = JSON.parse(body || '{}').url?.trim();
+      target = u ? new URL(/^https?:\/\//.test(u) ? u : `http://${u}`) : defaultTarget;
+      return json(200, { url: target.origin });
+    } catch { return json(400, { error: 'invalid address' }); }
+  }
   if (isProxied(p)) {
     const up = http.request({ host: target.hostname, port: target.port || 80, path: req.url, method: req.method, headers: { ...req.headers, host: target.host, ...(req.headers.origin ? { origin: target.origin } : {}), ...(req.headers.referer ? { referer: target.origin + '/' } : {}) } }, (r) => {
       res.writeHead(r.statusCode ?? 502, r.headers); r.pipe(res);
+      r.on('error', () => res.destroy());
     });
+    // a closed tab / aborted video range request must release the upstream socket, or they pile up until the proxy stalls
+    res.on('close', () => { if (!res.writableFinished) up.destroy(); });
     up.on('error', (e) => { res.writeHead(502, { 'content-type': 'application/json' }); res.end(JSON.stringify({ error: `ComfyUI unreachable at ${target.origin}: ${e.message}` })); });
     req.pipe(up); return;
   }

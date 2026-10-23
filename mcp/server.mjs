@@ -3179,8 +3179,7 @@ var base, url;
 var init_http = __esm({
   "src/backend/http.ts"() {
     "use strict";
-    init_settings();
-    base = () => useSettings.getState().comfyUrl.replace(/\/+$/, "");
+    base = () => "";
     url = (path2) => base() + path2;
   }
 });
@@ -4172,7 +4171,8 @@ async function runPrompt(graph, opts = {}) {
   const res = await fetch(url("/prompt"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt: graph, client_id: clientId })
+    // VHS_VideoCombine reads these from the workflow extra: without them it leaves a silent video and a first-frame PNG next to the "-audio" file
+    body: JSON.stringify({ prompt: graph, client_id: clientId, extra_data: { extra_pnginfo: { workflow: { extra: { VHS_KeepIntermediate: false, VHS_MetadataImage: false } } } } })
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok || data.error) {
@@ -8687,7 +8687,7 @@ var send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 async function handle(msg) {
   const { id, method, params } = msg;
   try {
-    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.23.1" } } });
+    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.23.2" } } });
     if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS.map(({ run: _r, ...t2 }) => t2) } });
     if (method === "tools/call") {
       const tool = TOOLS.find((t2) => t2.name === params?.name);

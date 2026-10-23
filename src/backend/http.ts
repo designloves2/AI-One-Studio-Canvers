@@ -1,6 +1,7 @@
 import { useSettings } from '../store/settings';
 
-export const base = () => useSettings.getState().comfyUrl.replace(/\/+$/, '');
+// A typed address used to bypass the proxy and fail on CORS / https mixed content / tunnels: ComfyUI is always reached through the built-in proxy now (target = COMFY_URL of serve.mjs).
+export const base = () => '';
 export const url = (path: string) => base() + path;
 
 export function wsUrl(clientId: string): string {
