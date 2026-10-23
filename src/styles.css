@@ -219,6 +219,7 @@ kbd { background: var(--bg3); border: 1px solid var(--line2); border-radius: 4px
 
 /* gallery lightbox */
 .lightbox { position: fixed; inset: 0; z-index: 900; background: rgba(6,7,10,.92); display: flex; align-items: center; justify-content: center; cursor: zoom-out; }
+.lightbox-host { overflow: hidden; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: default; }
 .lightbox img, .lightbox video { max-width: 92vw; max-height: 86vh; display: block; border-radius: 8px; cursor: default; }
 .lightbox-bar { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; align-items: center; background: var(--bg2); border: 1px solid var(--line2); border-radius: 10px; padding: 6px 10px; max-width: 92vw; }
 .lightbox-bar span { max-width: 40vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
