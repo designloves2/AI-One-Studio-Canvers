@@ -100,6 +100,10 @@ function Thumb({ it, url, video, selectMode, picked, onPick, onClick, onDouble, 
   // streamed while the pointer is on its card, so a big gallery never holds dozens of decoders or /view streams.
   const [thumbFailed, setThumbFailed] = useState(false);
   const [hover, setHover] = useState(false);
+  // size / length for the tooltip: a clip reports them once its hover preview loads, an image is measured on first hover
+  const [info, setInfo] = useState('');
+  const sizeInfo = () => { if (video || info) return; const im = new Image(); im.onload = () => setInfo(`${im.naturalWidth}×${im.naturalHeight}`); im.src = url; };
+  const tip = `${it.filename}${info ? ` — ${info}` : ''} — ${T('Click: enlarge · Double-click: add to canvas')}`;
   // drag a card out of the gallery onto the canvas: it becomes a Load Image / Load Video card where it is dropped
   const dragOut = (e: React.DragEvent) => { e.dataTransfer.setData('application/x-canvers-asset', JSON.stringify({ filename: it.filename, subfolder: it.subfolder, type: 'output' })); e.dataTransfer.setData('text/uri-list', url); e.dataTransfer.effectAllowed = 'copy'; };
   const vidThumb = `/ltx25_one/thumb?filename=${encodeURIComponent(it.filename)}&subfolder=${encodeURIComponent(it.subfolder)}`;
@@ -108,12 +112,12 @@ function Thumb({ it, url, video, selectMode, picked, onPick, onClick, onDouble, 
     <figure className={`thumb${blurred ? ' blurred' : ''}${selectMode && picked ? ' picked' : ''}`}>
       {video
         ? <div className="vthumb" draggable={!blurred && !selectMode} onDragStart={(e) => { setHover(false); dragOut(e); }} onMouseEnter={() => { if (!blurred && !selectMode) setHover(true); }} onMouseLeave={() => setHover(false)}
-            onClick={selectMode ? onPick : blurred ? undefined : onClick} onDoubleClick={selectMode || blurred ? undefined : onDouble} title={`${it.filename} — ${T('Click: enlarge · Double-click: add to canvas')}`}>
+            onClick={selectMode ? onPick : blurred ? undefined : onClick} onDoubleClick={selectMode || blurred ? undefined : onDouble} title={tip}>
             <img src={vidThumb} alt="" loading="lazy" draggable={false} />
-            {hover && !selectMode && <video src={url} muted loop autoPlay playsInline />}
+            {hover && !selectMode && <video src={url} muted loop autoPlay playsInline onLoadedMetadata={(e) => { const v = e.currentTarget; setInfo(`${v.videoWidth}×${v.videoHeight} · ${v.duration.toFixed(1)}s`); }} />}
           </div>
-        : <img src={thumbFailed ? url : thumbUrl} onError={() => setThumbFailed(true)} alt="" loading="lazy" draggable={!blurred && !selectMode} onDragStart={(e) => dragOut(e)}
-            onClick={selectMode ? onPick : blurred ? undefined : onClick} onDoubleClick={selectMode || blurred ? undefined : onDouble} title={`${it.filename} — ${T('Click: enlarge · Double-click: add to canvas')}`} />}
+        : <img src={thumbFailed ? url : thumbUrl} onError={() => setThumbFailed(true)} alt="" loading="lazy" draggable={!blurred && !selectMode} onDragStart={(e) => dragOut(e)} onMouseEnter={() => { if (!blurred && !selectMode) sizeInfo(); }}
+            onClick={selectMode ? onPick : blurred ? undefined : onClick} onDoubleClick={selectMode || blurred ? undefined : onDouble} title={tip} />}
       {selectMode && <span className="pick-box" onClick={onPick}>{picked ? '✓' : ''}</span>}
       <button className="eye" title={T(marked ? 'Reveal this item' : 'Hide this item')} onClick={() => useSensitive.getState().toggle(key)}>{marked ? '⊘' : '👁︎'}</button>
       {!selectMode && <figcaption>
