@@ -10,6 +10,7 @@ export interface H3LatJob {
   turbo: 'pdd' | 'none'; pddFile: string; pddStrength: number; lastFixed: boolean; lastModel: string;
   upscaler: 'h3' | 'kimchy'; kimUp: 'neural' | 'bicubic' | 'trilinear'; noOpt: boolean; chunkRows: number;
   models: Record<string, string>; saveSubfolder: string; stem: string;
+  skip?: number;   // Split mode: this piece starts at frame `skip` of the source (frames = the piece length)
 }
 export interface H3LatGraph { graph: Record<string, any>; save: string; start: { w: number; h: number }; final: { w: number; h: number } }
 
@@ -38,7 +39,7 @@ export async function buildH3LatGraph(j: H3LatJob): Promise<H3LatGraph> {
   const final = { width: snap(fh * ratio), height: snap(fh) }, src = { width: j.srcW, height: j.srcH };
 
   const g: Record<string, any> = {};
-  await addVideoLoad(g, j.file, 'P:load', 0, j.frames);
+  await addVideoLoad(g, j.file, 'P:load', j.skip ?? 0, j.frames);
   const images: L = ['P:load', 0], audio: L = ['P:load', 2];
   g.unet = unetName.toLowerCase().endsWith('.gguf') ? { class_type: 'UnetLoaderGGUF', inputs: { unet_name: unetName } } : { class_type: 'UNETLoader', inputs: { unet_name: unetName, weight_dtype: 'default' } };
   g.clip = { class_type: 'CLIPLoader', inputs: { clip_name: m.clip, type: 'minimax', device: 'default' } };
@@ -94,4 +95,21 @@ export async function buildH3LatGraph(j: H3LatJob): Promise<H3LatGraph> {
   g.hrDecode = { class_type: 'VAEDecode', inputs: { samples, vae: ['vaeV', 0] } };
   const save = await addVideoSave(g, ['hrDecode', 0], j.hasAudio ? audio : undefined, j.fps || FPS, `${j.saveSubfolder}/${j.stem}_h3lat`, 'U');
   return { graph: g, save, start: { w: src.width, h: src.height }, final: { w: final.width, h: final.height } };
+}
+
+/** Split mode (spec 1, node h3SegmentPasses): an H3 piece is 17k+5 frames; pieces overlap by `overlap` frames and the join trims that stretch off the later piece */
+export function h3SegmentPlan(mode: 'seconds' | 'count', seconds: number, count: number, total: number, fps: number): { passes: { skip: number; cap: number }[]; overlap: number } {
+  const sSec = Math.max(0, Number(seconds) || 0), segCount = Math.max(1, Math.round(Number(count) || 1));
+  const maxPieces = Math.max(1, Math.floor((total - 5) / 22));
+  let n = 1;
+  if (mode === 'count') n = Math.min(segCount, maxPieces);
+  else if (sSec > 0) n = Math.min(maxPieces, Math.max(1, Math.round(total / Math.max(22, sSec * fps))));
+  if (n < 2) return { passes: [], overlap: 0 };
+  let blocks = Math.max(n, Math.ceil((total - 5 * n) / 17));
+  while ((17 * blocks + 5 * n - total) % (n - 1)) blocks++;
+  const overlap = (17 * blocks + 5 * n - total) / (n - 1);
+  const passes: { skip: number; cap: number }[] = [];
+  let skip = 0;
+  for (let k = 0; k < n; k++) { const cap = 17 * (Math.floor(blocks / n) + (k < blocks % n ? 1 : 0)) + 5; passes.push({ skip, cap }); skip += cap - overlap; }
+  return { passes, overlap };
 }

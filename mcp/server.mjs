@@ -2977,6 +2977,10 @@ var init_registry = __esm({
               slider("h3_final_mp", "Final MP", 0.4, 3, 0.05, 1.6, { when: (p) => p.h3_upscaler !== "kimchy" }),
               slider("h3_kim_final_mp", "Final MP", 1, 8.5, 0.1, 2, { when: (p) => p.h3_upscaler === "kimchy" }),
               num("h3_chunk_rows", "Activation chunk rows", 2048, { advanced: true }, 256, 16384, 256),
+              toggle("h3_split", "Split mode (long clips)", false, { note: "cut a long clip into pieces, upscale each on its own queue turn, then join them" }),
+              { id: "h3_split_mode", label: "Split mode", control: { kind: "select", options: ["seconds", "count"], labels: { seconds: "By seconds", count: "By count" } }, default: "seconds", when: (p) => !!p.h3_split },
+              num("h3_split_sec", "Seconds per piece (0 = whole clip)", 5, { when: (p) => !!p.h3_split && p.h3_split_mode !== "count" }, 0, 600, 1),
+              num("h3_split_cnt", "Piece count (1 = whole clip)", 2, { when: (p) => !!p.h3_split && p.h3_split_mode === "count" }, 1, 40, 1),
               toggle("h3_audio", "The clip has sound", true, { note: "carry it into the result", advanced: true }),
               seed
             ] },
@@ -3449,6 +3453,10 @@ var init_i18n_cards = __esm({
       "First / Last frame": "\uCCAB / \uB05D \uD504\uB808\uC784",
       "Clip type": "\uD074\uB9BD \uC885\uB958",
       "None (8-step checkpoint)": "\uC5C6\uC74C (8\uC2A4\uD15D \uCCB4\uD06C\uD3EC\uC778\uD2B8)",
+      "Split mode (long clips)": "\uBD84\uD560 \uBAA8\uB4DC (\uAE34 \uD074\uB9BD)",
+      "cut a long clip into pieces, upscale each on its own queue turn, then join them": "\uAE34 \uD074\uB9BD\uC744 \uC870\uAC01\uC73C\uB85C \uC798\uB77C \uC870\uAC01\uB9C8\uB2E4 \uB530\uB85C \uC5C5\uC2A4\uCF00\uC77C\uD55C \uB4A4 \uC774\uC5B4 \uBD99\uC774\uAE30",
+      "Seconds per piece (0 = whole clip)": "\uC870\uAC01\uB2F9 \uCD08 (0 = \uD074\uB9BD \uC804\uCCB4)",
+      "Piece count (1 = whole clip)": "\uC870\uAC01 \uC218 (1 = \uD074\uB9BD \uC804\uCCB4)",
       "Seconds per piece / number of pieces": "\uC870\uAC01\uB2F9 \uCD08 / \uC870\uAC01 \uC218",
       "By count": "\uAC1C\uC218 \uB2E8\uC704",
       "By seconds": "\uCD08 \uB2E8\uC704",
@@ -6562,6 +6570,7 @@ async function buildH3Graph(job) {
 }
 var pickChainFrame = (images) => postJson("/minimax_h3_one/pick_chain_frame", { images });
 var copyToInput = (f) => postJson("/minimax_h3_one/copy_to_input", f);
+var deleteOutput = (filename, subfolder) => postJson("/minimax_h3_one/delete", { filename, subfolder });
 var clipLastFrame = (filename, subfolder) => postJson("/minimax_h3_one/clip_last_frame", { filename, subfolder });
 var stitchClips = (clips, filenamePrefix, overlapSeconds, overrideAudio) => postJson("/minimax_h3_one/stitch", { clips, filename_prefix: filenamePrefix, ...overlapSeconds ? { overlap_seconds: overlapSeconds } : {}, ...overrideAudio ? { override_audio: { type: "input", subfolder: "", start: 0, ...overrideAudio } } : {} });
 
@@ -7423,7 +7432,7 @@ async function buildH3LatGraph(j) {
   const ratio = j.srcW / j.srcH, fh = Math.sqrt(j.finalMp * 1e6 / ratio);
   const final = { width: snap(fh * ratio), height: snap(fh) }, src = { width: j.srcW, height: j.srcH };
   const g = {};
-  await addVideoLoad(g, j.file, "P:load", 0, j.frames);
+  await addVideoLoad(g, j.file, "P:load", j.skip ?? 0, j.frames);
   const images = ["P:load", 0], audio = ["P:load", 2];
   g.unet = unetName.toLowerCase().endsWith(".gguf") ? { class_type: "UnetLoaderGGUF", inputs: { unet_name: unetName } } : { class_type: "UNETLoader", inputs: { unet_name: unetName, weight_dtype: "default" } };
   g.clip = { class_type: "CLIPLoader", inputs: { clip_name: m.clip, type: "minimax", device: "default" } };
@@ -7492,6 +7501,25 @@ async function buildH3LatGraph(j) {
   const save = await addVideoSave(g, ["hrDecode", 0], j.hasAudio ? audio : void 0, j.fps || FPS, `${j.saveSubfolder}/${j.stem}_h3lat`, "U");
   return { graph: g, save, start: { w: src.width, h: src.height }, final: { w: final.width, h: final.height } };
 }
+function h3SegmentPlan(mode, seconds, count, total, fps) {
+  const sSec = Math.max(0, Number(seconds) || 0), segCount = Math.max(1, Math.round(Number(count) || 1));
+  const maxPieces = Math.max(1, Math.floor((total - 5) / 22));
+  let n2 = 1;
+  if (mode === "count") n2 = Math.min(segCount, maxPieces);
+  else if (sSec > 0) n2 = Math.min(maxPieces, Math.max(1, Math.round(total / Math.max(22, sSec * fps))));
+  if (n2 < 2) return { passes: [], overlap: 0 };
+  let blocks = Math.max(n2, Math.ceil((total - 5 * n2) / 17));
+  while ((17 * blocks + 5 * n2 - total) % (n2 - 1)) blocks++;
+  const overlap = (17 * blocks + 5 * n2 - total) / (n2 - 1);
+  const passes = [];
+  let skip = 0;
+  for (let k = 0; k < n2; k++) {
+    const cap = 17 * (Math.floor(blocks / n2) + (k < blocks % n2 ? 1 : 0)) + 5;
+    passes.push({ skip, cap });
+    skip += cap - overlap;
+  }
+  return { passes, overlap };
+}
 
 // src/engine/ppLat.ts
 init_settings();
@@ -7526,11 +7554,19 @@ var sizeAndFps = async (url2) => {
 var isH3Brief = (t2) => /\[Shot|<Picture|subject_definitions|technical_settings|integrated_multimodal_description/.test(t2);
 var isBaseBrief = (t2) => /integrated_multimodal_description|\[Shot 1\]/.test(t2) && !/<Picture|<Video|<Audio|@\w/.test(t2);
 async function runH3Lat(c) {
+  try {
+    return await runH3LatCore(c);
+  } finally {
+    clearPlan(c.node.id);
+  }
+}
+async function runH3LatCore(c) {
+  const resume = takeResume(c.node.id);
   const p = c.p;
   const s = useSettings.getState();
   const v = need(c.inputs("video")[0], "Video");
   const metaPrompt = String(v.meta?.prompt ?? "");
-  const prompt = c.text("prompt").trim() || (isBaseBrief(metaPrompt) ? metaPrompt : "");
+  const prompt = resume ? String(resume.prompt) : c.text("prompt").trim() || (isBaseBrief(metaPrompt) ? metaPrompt : "");
   if (!prompt) throw new Error("Latent Upscale (Use H3): connect the clip's H3 prompt to the Prompt input (this clip carries no usable prompt of its own).");
   c.progress(2, "uploading video\u2026");
   const file = await ensureInput(v);
@@ -7545,12 +7581,12 @@ async function runH3Lat(c) {
   const upscaler = str(p.h3_upscaler, "h3") === "kimchy" ? "kimchy" : "h3";
   const finalMp = upscaler === "kimchy" ? num2(p.h3_kim_final_mp, 2) : num2(p.h3_final_mp, 1.6);
   const sv = num2(p.seed, -1);
+  const seed2 = typeof resume?.seed === "number" ? resume.seed : sv < 0 ? Math.floor(Math.random() * 2 ** 40) : sv;
   const ratio = Math.sqrt(finalMp * 1e6 / (info.w * info.h));
   if (ratio < 1.3 && (upscaler === "h3" || str(p.h3_kim_up, "neural") === "neural")) c.progress(3, `This is a \xD7${ratio.toFixed(2)} upscale. The neural upscaler is made for about \xD72 and leaves a diagonal grid on fine textures (hair, fabric) near \xD71. Raise Final MP, or use the Kimchy upscaler with Bicubic for a small ratio.`);
   if (upscaler === "h3" && finalMp > 1.6) c.progress(3, "On a 16 GB VRAM card, above 1.6 MP the H3 Latent Upscaler can run out of VRAM and spill to the CPU (an hour or more). 1.6 is its sweet spot; the Kimchy upscaler handles 2.0.");
-  const g = await buildH3LatGraph({
+  const job = {
     file,
-    frames: h3LatFrames(info.total),
     fps: info.fps,
     srcW: info.w,
     srcH: info.h,
@@ -7558,7 +7594,7 @@ async function runH3Lat(c) {
     prompt,
     kind,
     hasAudio: p.h3_audio !== false,
-    seed: sv < 0 ? Math.floor(Math.random() * 2 ** 40) : sv,
+    seed: seed2,
     turbo,
     pddFile,
     pddStrength: num2(p.h3_pdd_strength, 1),
@@ -7569,14 +7605,60 @@ async function runH3Lat(c) {
     noOpt: !!p.h3_no_opt,
     chunkRows: num2(p.h3_chunk_rows, 2048),
     models: s.video,
-    saveSubfolder: s.saveSubfolder,
-    stem: "canvers"
-  });
-  const meta = { ...v.meta, postProcess: true, postUpscale: { method: "h3lat", upscaler, finalMp }, postPrompt: prompt, hires: { startW: g.start.w, startH: g.start.h, scale: g.final.w / g.start.w } };
-  const res = await runPrompt(g.graph, { onProgress: c.progress, signal: c.signal, meta });
-  const f = (res.raw[g.save]?.gifs ?? res.raw[g.save]?.images ?? res.raw[g.save]?.videos ?? [])[0];
-  if (!f) throw new Error("ComfyUI returned no video");
-  const out = assetFromFile({ filename: f.filename, subfolder: f.subfolder ?? "", type: "output" }, "video", "video");
+    saveSubfolder: s.saveSubfolder
+  };
+  const plan = p.h3_split && info.total > 0 ? h3SegmentPlan(str(p.h3_split_mode, "seconds") === "count" ? "count" : "seconds", num2(p.h3_split_sec, 5), num2(p.h3_split_cnt, 2), info.total, info.fps) : { passes: [], overlap: 0 };
+  const runOne = async (frames, skip, suffix, label, pid) => {
+    const g = await buildH3LatGraph({ ...job, frames, skip, stem: `canvers${suffix}` });
+    const meta2 = { ...v.meta, postProcess: true, postUpscale: { method: "h3lat", upscaler, finalMp }, postPrompt: prompt, hires: { startW: g.start.w, startH: g.start.h, scale: g.final.w / g.start.w } };
+    const res = await runPrompt(g.graph, { onProgress: (pct, l) => c.progress(pct, `${label}${l ?? ""}`), signal: c.signal, meta: meta2, ...pid });
+    const f = (res.raw[g.save]?.gifs ?? res.raw[g.save]?.images ?? res.raw[g.save]?.videos ?? [])[0];
+    if (!f) throw new Error("ComfyUI returned no video");
+    return { file: { filename: f.filename, subfolder: f.subfolder ?? "" }, meta: meta2 };
+  };
+  let result;
+  let meta;
+  if (plan.passes.length < 2) {
+    ({ file: result, meta } = await runOne(h3LatFrames(info.total), 0, "", ""));
+  } else {
+    const N = plan.passes.length;
+    const parts = resume?.parts ?? [];
+    const save = (promptId) => writePlan(c.node.id, { kind: "h3latseg", prompt, seed: seed2, parts, promptId });
+    let m0 = {};
+    let follow = resume?.promptId ? String(resume.promptId) : "";
+    for (let i = parts.length; i < N; i++) {
+      if (c.signal?.aborted) throw new Error("cancelled");
+      const w = plan.passes[i];
+      let attach;
+      if (follow) {
+        const r2 = await recoverPrompt(follow);
+        if (r2 === "failed") throw new Error(`piece ${i + 1} failed while the page was closed`);
+        attach = r2 === null ? void 0 : follow;
+        follow = "";
+      }
+      save();
+      const label = `H3 segment ${i + 1}/${N} (frames ${w.skip}\u2013${w.skip + w.cap}) `;
+      c.progress(2 + Math.round(96 * i / N), label);
+      const r = await runOne(w.cap, w.skip, `_seg${String(i).padStart(2, "0")}`, label, { attach, onQueued: (id) => save(id) });
+      parts.push(r.file);
+      m0 = r.meta;
+      save();
+      await freeModels();
+    }
+    if (!Object.keys(m0).length) m0 = { ...v.meta, postProcess: true, postUpscale: { method: "h3lat", upscaler, finalMp }, postPrompt: prompt };
+    c.progress(98, `joining ${N} segments with ffmpeg\u2026`);
+    const st = await stitchClips(parts, `${s.saveSubfolder}/canvers_h3lat_full`, plan.overlap / info.fps, { filename: file, subfolder: "", type: "input", start: 0 });
+    if (!st.ok || !st.filename) throw new Error(`stitch failed: ${st.error ?? "unknown"}`);
+    result = { filename: st.filename, subfolder: st.subfolder ?? "" };
+    meta = m0;
+    for (const q of parts) {
+      try {
+        await deleteOutput(q.filename, q.subfolder);
+      } catch {
+      }
+    }
+  }
+  const out = assetFromFile({ filename: result.filename, subfolder: result.subfolder, type: "output" }, "video", "video");
   out.meta = meta;
   return [out];
 }
@@ -9182,7 +9264,7 @@ var send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 async function handle(msg) {
   const { id, method, params } = msg;
   try {
-    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.25.1" } } });
+    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.26.0" } } });
     if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS.map(({ run: _r, ...t2 }) => t2) } });
     if (method === "tools/call") {
       const tool = TOOLS.find((t2) => t2.name === params?.name);

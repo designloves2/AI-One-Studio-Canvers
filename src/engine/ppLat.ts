@@ -1,10 +1,10 @@
 // Postprocess → Video Upscale methods that need a prompt: "Latent Upscale (Use H3)" (h3lat) and "LTX 2.5 Upscale" (ltx, with Split mode).
 import type { Asset } from '../types';
 import type { Ctx } from './run';
-import { assetFromFile, clearPlan, ensureInput, recoverPrompt, runPrompt, takeResume, writePlan } from '../backend/comfy';
+import { assetFromFile, clearPlan, ensureInput, freeModels, recoverPrompt, runPrompt, takeResume, writePlan } from '../backend/comfy';
 import { getJson } from '../backend/http';
-import { buildH3LatGraph, h3LatFrames } from '../backend/h3Lat';
-import { clipLastFrame, copyToInput, stitchClips } from '../backend/h3';
+import { buildH3LatGraph, h3LatFrames, h3SegmentPlan } from '../backend/h3Lat';
+import { clipLastFrame, copyToInput, deleteOutput, stitchClips } from '../backend/h3';
 import { buildRefineGraph } from '../backend/ltxRefine';
 import { buildPostGraph, type RtxSize } from '../backend/post';
 import { useSettings } from '../store/settings';
@@ -30,14 +30,19 @@ const sizeAndFps = async (url: string): Promise<{ w: number; h: number; fps: num
 const isH3Brief = (t: string) => /\[Shot|<Picture|subject_definitions|technical_settings|integrated_multimodal_description/.test(t);
 const isBaseBrief = (t: string) => /integrated_multimodal_description|\[Shot 1\]/.test(t) && !/<Picture|<Video|<Audio|@\w/.test(t);
 
-/** Latent Upscale (Use H3): re-run the last step of a finished 8-step H3 clip at a bigger size */
+/** Latent Upscale (Use H3): re-run the last step of a finished 8-step H3 clip at a bigger size; Split mode does it piece by piece (spec 1) */
 export async function runH3Lat(c: Ctx): Promise<Asset[]> {
+  try { return await runH3LatCore(c); } finally { clearPlan(c.node.id); }
+}
+
+async function runH3LatCore(c: Ctx): Promise<Asset[]> {
+  const resume = takeResume(c.node.id) as Record<string, any> | undefined;   // set when the page was reloaded in the middle of this run
   const p = c.p; const s = useSettings.getState();
   const v = need(c.inputs('video')[0], 'Video');
   const metaPrompt = String((v.meta as { prompt?: string } | undefined)?.prompt ?? '');
-  const prompt = c.text('prompt').trim() || (isBaseBrief(metaPrompt) ? metaPrompt : '');
+  const prompt = resume ? String(resume.prompt) : c.text('prompt').trim() || (isBaseBrief(metaPrompt) ? metaPrompt : '');
   // shortcut: no per-clip meta for frames → vision → H3 brief yet; connect a Prompt card (or use a clip made by Video Generate), same as the node would write
-  if (!prompt) throw new Error('Latent Upscale (Use H3): connect the clip\'s H3 prompt to the Prompt input (this clip carries no usable prompt of its own).');
+  if (!prompt) throw new Error("Latent Upscale (Use H3): connect the clip's H3 prompt to the Prompt input (this clip carries no usable prompt of its own).");
   c.progress(2, 'uploading video…');
   const file = await ensureInput(v);
   const info = await sizeAndFps(v.url);
@@ -51,21 +56,56 @@ export async function runH3Lat(c: Ctx): Promise<Asset[]> {
   const upscaler = str(p.h3_upscaler, 'h3') === 'kimchy' ? 'kimchy' : 'h3';
   const finalMp = upscaler === 'kimchy' ? num(p.h3_kim_final_mp, 2) : num(p.h3_final_mp, 1.6);
   const sv = num(p.seed, -1);
+  const seed = typeof resume?.seed === 'number' ? resume.seed : sv < 0 ? Math.floor(Math.random() * 2 ** 40) : sv;
   // non-blocking notices (the run goes on): they prevent runs that can take over an hour
   const ratio = Math.sqrt((finalMp * 1e6) / (info.w * info.h));
   if (ratio < 1.3 && (upscaler === 'h3' || str(p.h3_kim_up, 'neural') === 'neural')) c.progress(3, `This is a ×${ratio.toFixed(2)} upscale. The neural upscaler is made for about ×2 and leaves a diagonal grid on fine textures (hair, fabric) near ×1. Raise Final MP, or use the Kimchy upscaler with Bicubic for a small ratio.`);
   if (upscaler === 'h3' && finalMp > 1.6) c.progress(3, 'On a 16 GB VRAM card, above 1.6 MP the H3 Latent Upscaler can run out of VRAM and spill to the CPU (an hour or more). 1.6 is its sweet spot; the Kimchy upscaler handles 2.0.');
-  const g = await buildH3LatGraph({
-    file, frames: h3LatFrames(info.total), fps: info.fps, srcW: info.w, srcH: info.h, finalMp, prompt, kind, hasAudio: p.h3_audio !== false, seed: sv < 0 ? Math.floor(Math.random() * 2 ** 40) : sv,
+  const job = {
+    file, fps: info.fps, srcW: info.w, srcH: info.h, finalMp, prompt, kind, hasAudio: p.h3_audio !== false, seed,
     turbo, pddFile, pddStrength: num(p.h3_pdd_strength, 1), lastFixed, lastModel, upscaler, kimUp: (['neural', 'bicubic', 'trilinear'].includes(str(p.h3_kim_up)) ? str(p.h3_kim_up) : 'neural') as 'neural',
-    noOpt: !!p.h3_no_opt, chunkRows: num(p.h3_chunk_rows, 2048), models: s.video, saveSubfolder: s.saveSubfolder, stem: 'canvers',
-  });
+    noOpt: !!p.h3_no_opt, chunkRows: num(p.h3_chunk_rows, 2048), models: s.video, saveSubfolder: s.saveSubfolder,
+  } as const;
+  const plan = p.h3_split && info.total > 0 ? h3SegmentPlan(str(p.h3_split_mode, 'seconds') === 'count' ? 'count' : 'seconds', num(p.h3_split_sec, 5), num(p.h3_split_cnt, 2), info.total, info.fps) : { passes: [], overlap: 0 };
   // marked like a 7+1 clip (hires border / badge) and as a postprocess result; never hiresFinish (Reuse would switch 7+1 on)
-  const meta = { ...v.meta, postProcess: true, postUpscale: { method: 'h3lat', upscaler, finalMp }, postPrompt: prompt, hires: { startW: g.start.w, startH: g.start.h, scale: g.final.w / g.start.w } };
-  const res = await runPrompt(g.graph, { onProgress: c.progress, signal: c.signal, meta });
-  const f = (res.raw[g.save]?.gifs ?? res.raw[g.save]?.images ?? res.raw[g.save]?.videos ?? [])[0];
-  if (!f) throw new Error('ComfyUI returned no video');
-  const out = assetFromFile({ filename: f.filename, subfolder: f.subfolder ?? '', type: 'output' }, 'video', 'video');
+  const runOne = async (frames: number, skip: number, suffix: string, label: string, pid?: { attach?: string; onQueued?: (id: string) => void }) => {
+    const g = await buildH3LatGraph({ ...job, frames, skip, stem: `canvers${suffix}` });
+    const meta = { ...v.meta, postProcess: true, postUpscale: { method: 'h3lat', upscaler, finalMp }, postPrompt: prompt, hires: { startW: g.start.w, startH: g.start.h, scale: g.final.w / g.start.w } };
+    const res = await runPrompt(g.graph, { onProgress: (pct, l) => c.progress(pct, `${label}${l ?? ''}`), signal: c.signal, meta, ...pid });
+    const f = (res.raw[g.save]?.gifs ?? res.raw[g.save]?.images ?? res.raw[g.save]?.videos ?? [])[0];
+    if (!f) throw new Error('ComfyUI returned no video');
+    return { file: { filename: f.filename as string, subfolder: (f.subfolder ?? '') as string }, meta };
+  };
+  let result: { filename: string; subfolder: string }; let meta: Record<string, any>;
+  if (plan.passes.length < 2) {
+    ({ file: result, meta } = await runOne(h3LatFrames(info.total), 0, '', ''));
+  } else {
+    const N = plan.passes.length; const parts: { filename: string; subfolder: string }[] = resume?.parts ?? [];
+    const save = (promptId?: string) => writePlan(c.node.id, { kind: 'h3latseg', prompt, seed, parts, promptId });
+    let m0: Record<string, any> = {};
+    let follow = resume?.promptId ? String(resume.promptId) : '';
+    for (let i = parts.length; i < N; i++) {
+      if (c.signal?.aborted) throw new Error('cancelled');
+      const w = plan.passes[i];
+      // after a reload: follow the piece that was in flight (queued or already finished) instead of making it again
+      let attach: string | undefined;
+      if (follow) { const r = await recoverPrompt(follow); if (r === 'failed') throw new Error(`piece ${i + 1} failed while the page was closed`); attach = r === null ? undefined : follow; follow = ''; }
+      save();
+      const label = `H3 segment ${i + 1}/${N} (frames ${w.skip}–${w.skip + w.cap}) `;
+      c.progress(2 + Math.round((96 * i) / N), label);
+      const r = await runOne(w.cap, w.skip, `_seg${String(i).padStart(2, '0')}`, label, { attach, onQueued: (id) => save(id) });
+      parts.push(r.file); m0 = r.meta; save();
+      await freeModels();   // VRAM is freed between pieces
+    }
+    if (!Object.keys(m0).length) m0 = { ...v.meta, postProcess: true, postUpscale: { method: 'h3lat', upscaler, finalMp }, postPrompt: prompt };
+    c.progress(98, `joining ${N} segments with ffmpeg…`);
+    // the pieces are cut from the source, so its own soundtrack goes under the joined clip (joining the pieces' sound leaves AAC padding at every join)
+    const st = await stitchClips(parts, `${s.saveSubfolder}/canvers_h3lat_full`, plan.overlap / info.fps, { filename: file, subfolder: '', type: 'input', start: 0 });
+    if (!st.ok || !st.filename) throw new Error(`stitch failed: ${st.error ?? 'unknown'}`);
+    result = { filename: st.filename, subfolder: st.subfolder ?? '' }; meta = m0;
+    for (const q of parts) { try { await deleteOutput(q.filename, q.subfolder); } catch { /* the piece stays in the gallery */ } }
+  }
+  const out = assetFromFile({ filename: result.filename, subfolder: result.subfolder, type: 'output' }, 'video', 'video');
   out.meta = meta;
   return [out];
 }

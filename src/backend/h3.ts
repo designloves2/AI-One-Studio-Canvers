@@ -327,6 +327,7 @@ export async function buildH3Graph(job: H3Job): Promise<H3Graph> {
 export interface FileRefLike { filename: string; subfolder: string; type: string }
 export const pickChainFrame = (images: FileRefLike[]) => postJson<{ ok: boolean; picked?: FileRefLike; error?: string }>('/minimax_h3_one/pick_chain_frame', { images });
 export const copyToInput = (f: FileRefLike) => postJson<{ ok: boolean; filename: string }>('/minimax_h3_one/copy_to_input', f);
+export const deleteOutput = (filename: string, subfolder: string) => postJson<{ ok?: boolean }>('/minimax_h3_one/delete', { filename, subfolder });
 export const clipLastFrame = (filename: string, subfolder: string) => postJson<{ ok: boolean; filename?: string; error?: string }>('/minimax_h3_one/clip_last_frame', { filename, subfolder });
 export const stitchClips = (clips: { filename: string; subfolder: string }[], filenamePrefix: string, overlapSeconds?: number, overrideAudio?: { filename: string; subfolder?: string; type?: 'input' | 'output'; start?: number }) =>
   postJson<{ ok: boolean; filename?: string; subfolder?: string; error?: string }>('/minimax_h3_one/stitch', { clips, filename_prefix: filenamePrefix, ...(overlapSeconds ? { overlap_seconds: overlapSeconds } : {}), ...(overrideAudio ? { override_audio: { type: 'input', subfolder: '', start: 0, ...overrideAudio } } : {}) });
