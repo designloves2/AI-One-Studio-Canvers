@@ -19,6 +19,8 @@ export interface H3Options {
   turbo: 'none' | 'larryvrh' | 'pdd' | 'lightx2v';
   turboLora: string; turboStrength: number; turboSteps: number;
   hires: boolean; hiresStartMp: number; hiresFinalMp: number;
+  /** 7+1 upscaler: the H3 Latent Upscaler (A) or the Kimchy up scaler (one node, tiles); hiresStartMp / hiresFinalMp already hold the selected upscaler's pair */
+  hiresUpscaler?: 'h3' | 'kimchy'; hiresKimUp?: 'neural' | 'bicubic' | 'trilinear';
   /** 7+1 last step: its own UNET (hiresLastFixed + hiresLastModel), and bypass of H3 Memory Optimization on that step */
   hiresLastFixed?: boolean; hiresLastModel?: string; hiresNoOpt?: boolean; hiresChunkRows?: number;
   shiftVideo: number; shiftAudio: number;
@@ -179,8 +181,8 @@ export async function buildH3Graph(job: H3Job): Promise<H3Graph> {
   g.vaeA = { class_type: 'VAELoader', inputs: { vae_name: m.vaeAudio } };
 
   // ── conditioning (at stage-1 size; hires adds a second one at the final size when images are involved) ──
-  const cond = (key: string, w: number, h: number) => {
-    if (job.mode === 'reference' && job.assetRef) {
+  const cond = (key: string, w: number, h: number, noKeys = false) => {
+    if (job.mode === 'reference' && job.assetRef && !noKeys) {
       needNode('TJ_H3Reference', 'Asset Library references');
       const lib: Record<string, any> = { clip: ['clip', 0], vae: ['vaeV', 0], audio_vae: ['vaeA', 0], prompt: job.prompt, width: w, height: h, length: frames, ref_image_size: 'match', match_check: 'warn' };
       if (job.assetRef.project) { lib.mode = 'project'; lib.project = String(job.assetRef.project); }
@@ -192,7 +194,7 @@ export async function buildH3Graph(job: H3Job): Promise<H3Graph> {
       g[key] = { class_type: 'MiniMaxH3ReferenceToVideo', inputs };
     } else {
       const inputs: Record<string, any> = { clip: ['clip', 0], vae: ['vaeV', 0], prompt: job.prompt, width: w, height: h, length: frames };
-      if (job.mode === 'firstlast') {
+      if (job.mode === 'firstlast' && !noKeys) {
         if (job.first) { g.first ??= { class_type: 'LoadImage', inputs: { image: job.first } }; inputs.first_frame = ['first', 0]; }
         if (job.last) { g.last ??= { class_type: 'LoadImage', inputs: { image: job.last } }; inputs.last_frame = ['last', 0]; }
       }
@@ -201,8 +203,11 @@ export async function buildH3Graph(job: H3Job): Promise<H3Graph> {
   };
   cond('cond', start.width, start.height);
   const imageCond = job.mode === 'reference' || (job.mode === 'firstlast' && (job.first || job.last));
-  const hrCond = hires && imageCond;
-  if (hrCond) cond('hrCond', final.width, final.height);
+  // Kimchy samples in tiles and a first/last keyframe block cannot be cut into tiles: stage 2 of a First/Last clip gets the prompt alone (references stay)
+  const kimchy = hires && o.hiresUpscaler === 'kimchy';
+  const kimFl = kimchy && job.mode === 'firstlast';
+  const hrCond = hires && (imageCond || kimFl);
+  if (hrCond) cond('hrCond', final.width, final.height, kimFl);
 
   g.noise = { class_type: 'RandomNoise', inputs: { noise_seed: job.seed } };
   g.sel = turbo === 'larryvrh' && has('MiniMaxH3TurboSampler') ? { class_type: 'MiniMaxH3TurboSampler', inputs: {} }
@@ -243,7 +248,28 @@ export async function buildH3Graph(job: H3Job): Promise<H3Graph> {
   if (job.checkpoint && has('TJ_H3_SaveLatentCheckpoint')) g.chkSave = { class_type: 'TJ_H3_SaveLatentCheckpoint', inputs: { latent: hires ? ['samp', 1] : ['samp', 0], checkpoint_name: job.checkpoint } };
 
   let samples: L = ['samp', 0];
-  if (hires) {
+  if (kimchy) {
+    if (!has('KimchyH3ZeroSplitMP')) throw new Error('7+1 H3 Kimchy Up Scaler needs the ComfyUI-Kimchy-Minimax-H3-Suite pack — install it (github.com/AI-KIMCHY/ComfyUI-Kimchy-Minimax-H3-Suite), or pick H3 Latent Upscaler.');
+    if (!o.hiresNoOpt) needNode('H3MemoryOptimization', '7+1 hi-res finish');
+    if (!(o.hiresFinalMp >= 1 && o.hiresFinalMp <= 8.5)) throw new Error('H3 Kimchy Up Scaler supports Final MP 1.0 – 8.5.');
+    if (o.hiresLastFixed) {
+      if (!o.hiresLastModel || o.hiresLastModel === 'none') throw new Error('7+1 last step is set to a fixed model but none is selected');
+      g.hr_unet = o.hiresLastModel.toLowerCase().endsWith('.gguf') ? { class_type: 'UnetLoaderGGUF', inputs: { unet_name: o.hiresLastModel } } : { class_type: 'UNETLoader', inputs: { unet_name: o.hiresLastModel, weight_dtype: 'default' } };
+    }
+    let hm: L = [o.hiresLastFixed ? 'hr_unet' : 'unet', 0];
+    job.loras.forEach((l, i) => { if (!l.name || l.name === 'none' || !(l.strength > 0)) return; g[`hrLora${i}`] = { class_type: 'LoraLoaderModelOnly', inputs: { model: hm, lora_name: l.name, strength_model: l.strength } }; hm = [`hrLora${i}`, 0]; });
+    if (turbo === 'pdd') { g.hrPdd = { class_type: 'LoraLoaderModelOnly', inputs: { model: hm, lora_name: o.turboLora, strength_model: o.turboStrength } }; hm = ['hrPdd', 0]; }
+    g.hrShift = { class_type: 'MiniMaxH3SigmaShift', inputs: { model: hm, shift_video: turbo === 'pdd' ? 12 : o.shiftVideo, shift_audio: turbo === 'pdd' ? 3 : o.shiftAudio } };
+    let stage: L = ['hrShift', 0];
+    // no Separate / Upscale / Concat / Audio Lock / BlockSparseAttention: the Kimchy node upscales and samples the whole stage-1 AV latent itself
+    if (!o.hiresNoOpt) {
+      g.hrMem = { class_type: 'H3MemoryOptimization', inputs: { model: stage, fused_qkv: 'auto', preserve_precision: true, embedding_memory_mode: 'Auto', mlp_memory: 'auto', chunk_rows: Math.round(o.hiresChunkRows ?? 2048), precision_mode: 'Preserve native', qkv_streaming_mode: 'Forced', kitchen_v_memory_mode: 'Lower VRAM (slower)' } };
+      stage = ['hrMem', 0];
+    }
+    g.hrNeg = { class_type: 'ConditioningZeroOut', inputs: { conditioning: hrCondLink } };
+    g.hrKim = { class_type: 'KimchyH3ZeroSplitMP', inputs: { model: stage, conditioning: hrCondLink, latent: ['samp', 1], noise: ['noise', 0], sampler: ['sel', 0], sigmas: ['split', 1], negative: ['hrNeg', 0], model_name: o.hiresKimUp === 'bicubic' ? 'None (Bicubic)' : o.hiresKimUp === 'trilinear' ? 'None (Trilinear)' : 'minimax_h3_latent_upscaler_3d_bf16.safetensors', upscale_by: 'megapixels', target_megapixels: o.hiresFinalMp, scale: 2, align: 32, precision: 'fp16', cfg: 1, color_match: true } };
+    samples = ['hrKim', 0];
+  } else if (hires) {
     for (const n of ['MinimaxH3LatentUpscaler3D', ...(o.hiresNoOpt ? [] : ['H3MemoryOptimization']), 'BlockSparseAttention']) needNode(n, '7+1 hi-res finish');
     g.hrSep = { class_type: 'LTXVSeparateAVLatent', inputs: { av_latent: ['samp', 1] } };
     g.hrUp = { class_type: 'MinimaxH3LatentUpscaler3D', inputs: { latent: ['hrSep', 0], model_name: 'minimax_h3_latent_upscaler_3d_bf16.safetensors', mode: 'target dimensions', 'mode.width': final.width, 'mode.height': final.height, align: 32, enable_temporal_chunking: true, force_unload: true, device: 'cuda', precision: 'fp16' } };
@@ -277,7 +303,7 @@ export async function buildH3Graph(job: H3Job): Promise<H3Graph> {
     g.upModel = { class_type: 'UpscaleModelLoader', inputs: { model_name: job.upscaleModel } };
     g.upApply = { class_type: 'ImageUpscaleWithModel', inputs: { upscale_model: ['upModel', 0], image: images } }; images = ['upApply', 0];
   }
-  const audio: L = locked ? ['audioLock', 1] : ['decA', 0];
+  const audio: L = locked && !kimchy ? ['audioLock', 1] : ['decA', 0];
   const tag = String(job.clipIndex + 1).padStart(3, '0');
   const prefix = `${job.saveSubfolder}/${job.stem}_clip${tag}`;
   if (has('VHS_VideoCombine')) g.save = { class_type: 'VHS_VideoCombine', inputs: { images, audio, frame_rate: FPS, loop_count: 0, filename_prefix: prefix, format: 'video/nvenc_h264-mp4', pingpong: false, save_output: true } };

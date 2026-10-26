@@ -56,6 +56,7 @@ export async function resumeInflight(): Promise<void> {
         let files = kind === 'video' ? r.videos : kind === 'audio' ? r.audios : kind === 'text' ? [] : r.images;
         if (kind === 'video' && files.some((f) => /-audio\.\w+$/i.test(f.filename))) files = files.filter((f) => /-audio\.\w+$/i.test(f.filename));
         const assets = kind === 'text' ? r.texts.map((x) => ({ id: uid('a'), type: 'text' as const, url: '', text: x })) : files.map((f) => assetFromFile(f, (kind === 'video' || kind === 'audio' ? kind : 'image')));
+        if (j.meta && assets[0]) (assets[0] as Asset).meta = { ...(assets[0] as Asset).meta, ...j.meta };
         if (assets.length) st.setResults(nodeId, assets, 'replace');
         st.setRuntime(nodeId, { status: 'idle', pct: 100, label: undefined });
         return;

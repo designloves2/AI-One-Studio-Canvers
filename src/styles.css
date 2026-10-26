@@ -429,3 +429,9 @@ button.save-state.dirty { cursor: pointer; } button.save-state.dirty:hover { bac
 .cnode.vc { display: flex; flex-direction: column; } .cnode.vc .result-frame { flex: 1; min-height: 60px; display: flex; } .cnode.vc .result-frame img, .cnode.vc .result-frame video { max-height: none; height: 100%; width: 100%; object-fit: contain; }
 .ref-chip b.goto { cursor: pointer; text-decoration: underline dotted; } .ref-chip b.goto:hover { color: var(--fg); }
 .cnode.pc .params { flex: 1; min-height: 0; display: flex; flex-direction: column; } .cnode.pc .field.wide { flex: 1; display: flex; flex-direction: column; min-height: 0; } .cnode.pc .mention-wrap { flex: 1; display: flex; min-height: 0; } .cnode.pc .mention-wrap textarea { flex: 1; height: 100% !important; max-height: none !important; field-sizing: fixed !important; }
+
+.switch-row { display: flex; align-items: center; gap: 8px; min-width: 0; } .switch-row .switch { flex: 0 0 34px; }
+.switch-note { color: var(--muted); font-size: 10px; line-height: 1.25; min-width: 0; }
+
+/* Korean breaks at spaces only (no word cut in the middle) in every card */
+.react-flow__node, .react-flow__node *:not(textarea):not(input) { word-break: keep-all; overflow-wrap: break-word; }

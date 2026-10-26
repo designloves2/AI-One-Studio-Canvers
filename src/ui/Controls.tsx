@@ -122,7 +122,7 @@ export function ParamControl({ def, value, onChange }: Props) {
       );
     case 'select': return <SelectControl def={def} value={value} onChange={onChange} />;
     case 'toggle':
-      return <button type="button" className={`switch nodrag ${value ? 'on' : ''}`} onClick={() => onChange(!value)} aria-pressed={!!value}><i /></button>;
+      return <div className="switch-row"><button type="button" className={`switch nodrag ${value ? 'on' : ''}`} onClick={() => onChange(!value)} aria-pressed={!!value}><i /></button>{def.note && <span className="switch-note">{t(def.note)}</span>}</div>;
     case 'seed': {
       const n = Number(value);
       return (

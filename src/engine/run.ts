@@ -344,8 +344,14 @@ async function runH3Core(c: Ctx, temp: number[]): Promise<Asset[]> {
   let first = !ref && imgs[0] ? await ensureInput(imgs[0]) : undefined;
   const lastFile = !ref && lastA ? await ensureInput(lastA) : undefined;
   const lockFile: string | undefined = cards.lock?.file;
-  const cont = ref ? undefined : cards.cont;   // "Continuity between clips" card: carry on from the previous Video Generate card
-  const continuity: string = ref ? 'none' : cont ? (cont.mode === 'latent' ? 'onetake' : 'lastframe') : str(p.continuity, 'lastframe');
+  // "Continuity between clips" card: carry on from the previous Video Generate card (a reference clip has no first frame, so only the latent route applies)
+  const cont = ref && cards.cont?.mode !== 'latent' ? undefined : cards.cont;
+  // when this card's Video output feeds a Continuity card set to Latent, the latent of its last clip is saved automatically (= One-Take)
+  const { useGraph: ug } = await import('../store/graph');
+  const gs0 = ug.getState();
+  const feedsLatent = gs0.edges.some((e) => e.source === c.node.id && e.sourceHandle === 'video' && gs0.nodes.some((n) => n.id === e.target && n.defId === 'clip-continuity' && n.params.mode === 'latent'));
+  const chosen = cont ? (cont.mode === 'latent' ? 'onetake' : 'lastframe') : str(p.continuity, 'lastframe');
+  const continuity: string = feedsLatent ? 'onetake' : ref && chosen === 'lastframe' ? 'none' : chosen;
   let prevCheckpoint: string | undefined;
   if (cont?.mode === 'latent') { if (!cont.checkpoint) throw new Error('Continuity (latent): the previous card has no saved latent. Run it first in this session, or pick "Last frame"'); prevCheckpoint = cont.checkpoint; }
   else if (cont) { const lf = await clipLastFrame(cont.filename, cont.subfolder); if (!lf.ok || !lf.filename) throw new Error(`Continuity: could not take the last frame (${lf.error ?? 'unknown'})`); first = lf.filename; }
@@ -391,7 +397,8 @@ If this happened on the last step of 7+1, H3 Memory Optimization does not work w
     }
   }
   const assets = clips.map((f) => assetFromFile({ filename: f.filename, subfolder: f.subfolder, type: 'output' }, 'video', 'video'));
-  const tag = (a: Asset[]) => { if (prevCheckpoint && a[0]) a[0].meta = { ...a[0].meta, checkpoint: prevCheckpoint }; return a; };   // lets a Continuity card pick up the latent
+  // the clip keeps its prompt (a later Latent Upscale (Use H3) reads it) and, for One-Take, its latent name
+  const tag = (a: Asset[]) => { if (a[0]) a[0].meta = { ...a[0].meta, ...(prevCheckpoint ? { checkpoint: prevCheckpoint } : {}), ...(prompts.length === 1 && !ref ? { prompt: prompts[0] } : {}) }; return a; };   // lets a Continuity card pick up the latent
   if (clips.length > 1 && p.stitch !== false) {
     c.progress(98, 'stitching…');
     const st = await stitchClips(clips, `${settings.saveSubfolder}/MMH3_full`, continuity === 'onetake' ? ONE_TAKE_OVERLAP_SEC : undefined);

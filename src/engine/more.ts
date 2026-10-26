@@ -17,6 +17,7 @@ import { buildFaceRefineGraph } from '../backend/faceRefine';
 import { CHARSHEET_PROMPT, CHARSHEET_DEFAULT_FRAMES, buildSheetGridGraph, buildSheetVideoGraph } from '../backend/charSheet';
 import { libFile, listAssets, resolveRefs, type LibAsset } from '../backend/assetlib';
 import { useSettings } from '../store/settings';
+import { runH3Lat, runLtxUpscale } from './ppLat';
 import { need, num, str, textAsset } from './util';
 import { uid } from '../backend/comfy';
 
@@ -44,7 +45,7 @@ export function optFromCards(cards: H3Cards): H3Options {
   return {
     ...DEFAULT_OPT,
     ...(s ? { attnBackend: s.attn_backend, attnForward: s.attn_forward, optimizer: s.optimizer, blockCache: s.block_cache, spectrum: !!s.spectrum, fusedModulation: !!s.fused_mod, shiftVideo: s.shift_video, shiftAudio: s.shift_audio } : {}),
-    ...(t ? { turbo: t.turbo, turboLora: t.turbo_lora, turboStrength: t.turbo_strength, turboSteps: t.turbo_steps, hires: !!t.hires, hiresStartMp: t.hires_start_mp, hiresFinalMp: t.hires_final_mp, hiresLastFixed: t.hires_last === 'fixed', hiresLastModel: t.hires_last_model, hiresNoOpt: !!t.hires_no_opt, hiresChunkRows: t.hires_chunk_rows } : {}),
+    ...(t ? { turbo: t.turbo, turboLora: t.turbo_lora, turboStrength: t.turbo_strength, turboSteps: t.turbo_steps, hires: !!t.hires, hiresUpscaler: t.hires_upscaler === 'kimchy' ? 'kimchy' : 'h3', hiresKimUp: t.hires_kim_up === 'bicubic' || t.hires_kim_up === 'trilinear' ? t.hires_kim_up : 'neural', hiresStartMp: t.hires_upscaler === 'kimchy' ? t.hires_kim_start_mp : t.hires_start_mp, hiresFinalMp: t.hires_upscaler === 'kimchy' ? t.hires_kim_final_mp : t.hires_final_mp, hiresLastFixed: t.hires_last === 'fixed', hiresLastModel: t.hires_last_model, hiresNoOpt: !!t.hires_no_opt, hiresChunkRows: t.hires_chunk_rows } : {}),
   };
 }
 
@@ -137,6 +138,13 @@ function post(stepOf: (c: Ctx, size: { w: number; h: number }) => PostStep): Run
 
 const withLegacySeed = (c: Ctx) => { const si = c.inputs('seed_in')[0]; const sv = si ? num(si.text, -1) : num(c.p.seed, -1); return sv < 0 ? Math.floor(Math.random() * 2 ** 40) : sv; };
 
+const ppUpscale = post((c, s) => {
+    const p = c.p; const method = (c.engineId ?? 'flashvsr') as 'flashvsr' | 'rtx' | 'model';
+    return { kind: 'upscale', method, srcW: s.w, srcH: s.h,
+      flashvsr: { model: str(p.fv_model, 'FlashVSR-v1.1'), mode: str(p.fv_mode, 'tiny'), scale: num(p.fv_scale, 2), colorFix: p.fv_color !== false, tileSize: num(p.fv_tile, 384), tileOverlap: num(p.fv_overlap, 32), seed: num(p.fv_seed, 42) },
+      rtx: rtxOf(p, 'rtx_'), modelName: str(p.model_name, 'none'), twoPass: !!p.two_pass, pass2: rtxOf(p, 'p2_') };
+});
+
 export const EXTRA_RUNNERS: Record<string, Runner> = {
   // ---------------- cards
   'lora-card': async (c) => {
@@ -175,12 +183,7 @@ export const EXTRA_RUNNERS: Record<string, Runner> = {
   // ---------------- postprocess steps
   'pp-deblur': post((c) => ({ kind: 'deblur', strength: str(c.p.strength, 'MEDIUM') })),
   'pp-denoise': post((c) => ({ kind: 'denoise', strength: str(c.p.strength, 'MEDIUM') })),
-  'pp-upscale': post((c, s) => {
-    const p = c.p; const method = (c.engineId ?? 'flashvsr') as 'flashvsr' | 'rtx' | 'model';
-    return { kind: 'upscale', method, srcW: s.w, srcH: s.h,
-      flashvsr: { model: str(p.fv_model, 'FlashVSR-v1.1'), mode: str(p.fv_mode, 'tiny'), scale: num(p.fv_scale, 2), colorFix: p.fv_color !== false, tileSize: num(p.fv_tile, 384), tileOverlap: num(p.fv_overlap, 32), seed: num(p.fv_seed, 42) },
-      rtx: rtxOf(p, 'rtx_'), modelName: str(p.model_name, 'none'), twoPass: !!p.two_pass, pass2: rtxOf(p, 'p2_') };
-  }),
+  'pp-upscale': async (c) => (c.engineId === 'h3lat' ? runH3Lat(c) : c.engineId === 'ltx' ? runLtxUpscale(c) : ppUpscale(c)),
   'pp-skin': post((c) => ({ kind: 'skin', evenness: num(c.p.evenness), smoothing: num(c.p.smoothing), redness: num(c.p.redness), shine: num(c.p.shine), blemish: str(c.p.blemish, 'off'), preserveMarks: c.p.preserve !== false, microtexture: num(c.p.microtexture) })),
   'pp-grain': post((c) => ({ kind: 'grain', amount: num(c.p.amount, 0.25), size: num(c.p.size, 1), color: num(c.p.color), lumBias: num(c.p.lum_bias), noise: str(c.p.noise, 'smooth') as 'smooth' })),
   'pp-interpolate': post((c) => ({ kind: 'interpolate', targetFps: num(c.p.target_fps, 48), scale: num(c.p.scale, 1), modelName: str(c.p.model_name, 'flownet.pkl'), batchSize: num(c.p.batch, 8), fp16: c.p.fp16 !== false })),

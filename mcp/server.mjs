@@ -2402,7 +2402,7 @@ var init_registry = __esm({
       dyn("lora2", "LoRA 2", `loras:${fam}`, "none", { advanced: true }),
       slider("lora2_strength", "LoRA 2 strength", 0, 2, 0.05, 1, { advanced: true, when: (p) => p.lora2 !== "none" })
     ];
-    autoEnhance = toggle("auto_enhance", "Auto enhance prompt (before generating)", false);
+    autoEnhance = toggle("auto_enhance", "Auto enhance prompt", false, { note: "before generating" });
     negative = text("negative", "Negative prompt", "", true, { advanced: true });
     sizeParams = (on) => on ? [
       { id: "size_mode", label: "Size", control: { kind: "select", options: ["mp", "wh"], labels: { mp: "Aspect + MP", wh: "Custom W \xD7 H" } }, default: "mp" },
@@ -2439,7 +2439,7 @@ var init_registry = __esm({
       id,
       label,
       family: "moss",
-      params: [...sizeParams(size), ...extra, autoEnhance, ...sampler(25, 2.5, "er_sde"), { ...negative, default: "nsfw, worst quality, bad anatomy, watermark, jpeg artifact" }, toggle("slg", "Skip layer guidance (layer 22)", false, { advanced: true }), ...loras("moss"), num("batch", "Batch", 1, { advanced: true }, 1, 4, 1), seed]
+      params: [...sizeParams(size), ...extra, autoEnhance, ...sampler(25, 2.5, "er_sde"), { ...negative, default: "nsfw, worst quality, bad anatomy, watermark, jpeg artifact" }, toggle("slg", "Skip layer guidance", false, { note: "layer 22", advanced: true }), ...loras("moss"), num("batch", "Batch", 1, { advanced: true }, 1, 4, 1), seed]
     });
     sdxl = (id, label, extra = [], size = false) => ({
       id,
@@ -2451,12 +2451,13 @@ var init_registry = __esm({
       sel("aspect", "Aspect ratio", [...ASPECTS, "auto"], "16:9"),
       megapixels(0.9),
       slider("seconds", "Clip length (s)", 5.2, 15, 0.5, 8),
-      ...ref ? [] : [sel("continuity", "Several clips (separate prompts with ---)", ["none", "lastframe", "onetake"], "lastframe"), toggle("stitch", "Stitch clips into one video", true)],
+      sel("continuity", "Several clips (separate prompts with ---)", ["none", "lastframe", "onetake"], "lastframe"),
+      toggle("stitch", "Stitch clips into one video", true, { note: "Joins only the --- clips of this card. To join several cards, use Video Stitch." }),
       slider("steps", "Steps (no turbo)", 1, 60, 1, 20, { advanced: true }),
       dyn("sampler", "Sampler", "samplers", "er_sde", { advanced: true }),
       dyn("scheduler", "Scheduler", "schedulers", "simple", { advanced: true }),
       dyn("upscale_model", "Upscale model (after render)", "upscalers", "none", { advanced: true }),
-      toggle("auto_prompt", "Auto Prompt (write the prompt with the LLM before generating)", false),
+      toggle("auto_prompt", "Auto Prompt", false, { note: "Write the prompt with the LLM before generating." }),
       seed
     ];
     klein = (id, label, extra = [], size = false) => ({
@@ -2768,7 +2769,7 @@ var init_registry = __esm({
         engines: [
           { id: "h3", label: "MiniMax H3 \u2014 text / first-last frame (local)", family: "h3", default: true, params: h3Params(false) },
           { id: "h3-ref", label: "MiniMax H3 \u2014 multi-reference (local)", family: "h3", params: h3Params(true) },
-          { id: "ltx25", label: "LTX 2.5 (local, with audio)", family: "ltx25", params: [sel("aspect", "Aspect ratio", [...ASPECTS, "auto"], "16:9"), megapixels(1), slider("seconds", "Length (s)", 2, 20, 1, 5), toggle("chain_last", "Several clips (separate prompts with ---): start each clip from the last frame of the one before", true), toggle("stitch", "Stitch clips into one video", true), slider("steps", "Steps", 1, 40, 1, 12, { advanced: true }), slider("cfg", "Guidance", 0, 10, 0.1, 1, { advanced: true }), dyn("sampler", "Sampler", "samplers", "euler_ancestral", { advanced: true }), dyn("scheduler", "Scheduler", "schedulers", "linear_quadratic", { advanced: true }), text("stage2", "Stage-2 sigmas", "0.85, 0.7250, 0.4219, 0.0", false, { advanced: true }), ...loras("ltx25"), toggle("auto_prompt", "Auto Prompt (write the prompt with the LLM before generating)", false), seed] }
+          { id: "ltx25", label: "LTX 2.5 (local, with audio)", family: "ltx25", params: [sel("aspect", "Aspect ratio", [...ASPECTS, "auto"], "16:9"), megapixels(1), slider("seconds", "Length (s)", 2, 20, 1, 5), toggle("chain_last", "Several clips", true, { note: "separate prompts with ---: start each clip from the last frame of the one before" }), toggle("stitch", "Stitch clips into one video", true, { note: "Joins only the --- clips of this card. To join several cards, use Video Stitch." }), slider("steps", "Steps", 1, 40, 1, 12, { advanced: true }), slider("cfg", "Guidance", 0, 10, 0.1, 1, { advanced: true }), dyn("sampler", "Sampler", "samplers", "euler_ancestral", { advanced: true }), dyn("scheduler", "Scheduler", "schedulers", "linear_quadratic", { advanced: true }), text("stage2", "Stage-2 sigmas", "0.85, 0.7250, 0.4219, 0.0", false, { advanced: true }), ...loras("ltx25"), toggle("auto_prompt", "Auto Prompt", false, { note: "Write the prompt with the LLM before generating." }), seed] }
         ],
         description: "Text \u2192 video, or first/last frame \u2192 video (LTX 2.5). LTX 2.5 or MiniMax H3. Other models: ComfyUI Workflow node."
       },
@@ -2846,15 +2847,19 @@ var init_registry = __esm({
           dyn("turbo_lora_ref", "Turbo LoRA (reference)", "loras:h3", "none", { when: (p) => p.turbo !== "none" }),
           slider("turbo_strength", "Turbo strength", 0, 2, 0.05, 1, { when: (p) => p.turbo !== "none" }),
           slider("turbo_steps", "Turbo steps", 1, 16, 1, 8, { advanced: true, when: (p) => p.turbo !== "none" }),
-          toggle("hires", "7+1 hi-res finish (7 steps small \u2192 upscale \u2192 1 step big)", true, { when: (p) => p.turbo === "pdd" || p.turbo === "none" }),
-          slider("hires_start_mp", "Start size (MP)", 0.2, 1, 0.05, 0.7, { when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires }),
-          slider("hires_final_mp", "Final size (MP)", 0.4, 3, 0.05, 1.6, { when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires }),
+          toggle("hires", "7+1 hi-res finish", true, { when: (p) => p.turbo === "pdd" || p.turbo === "none", note: "7 steps small \u2192 upscale \u2192 1 step big" }),
+          { id: "hires_upscaler", label: "Upscaler", control: { kind: "select", options: ["h3", "kimchy"], labels: { h3: "H3 Latent Upscaler", kimchy: "H3 Kimchy Up Scaler" } }, default: "h3", when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires },
+          slider("hires_start_mp", "Start size (MP)", 0.2, 1, 0.05, 0.7, { when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && p.hires_upscaler !== "kimchy" }),
+          slider("hires_final_mp", "Final size (MP)", 0.4, 3, 0.05, 1.6, { when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && p.hires_upscaler !== "kimchy" }),
+          { id: "hires_kim_up", label: "Latent upscale", control: { kind: "select", options: ["neural", "bicubic", "trilinear"], labels: { neural: "Neural (Kimchy's trained upscaler)", bicubic: "Bicubic (plain interpolation)", trilinear: "Trilinear (plain interpolation)" } }, default: "neural", when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && p.hires_upscaler === "kimchy" },
+          slider("hires_kim_start_mp", "Start size (MP)", 0.2, 1, 0.05, 0.5, { when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && p.hires_upscaler === "kimchy" }),
+          slider("hires_kim_final_mp", "Final size (MP)", 1, 8.5, 0.1, 2, { when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && p.hires_upscaler === "kimchy" }),
           { id: "hires_last", label: "7+1 last step model", control: { kind: "select", options: ["same", "fixed"], labels: { same: "Same as generation", fixed: "Fixed model" } }, default: "same", when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires },
           dyn("hires_last_model", "7+1 last step model (none = One Studio setting)", "h3unets", "none", { when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && p.hires_last === "fixed" }),
           toggle("hires_no_opt", "Bypass H3 Memory Optimization on the last step", false, { advanced: true, when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires }),
           num("hires_chunk_rows", "Last step chunk rows", 2048, { advanced: true, when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && !p.hires_no_opt }, 256, 16384, 256)
         ],
-        description: "H3 speed-up: Turbo LoRA and the 7+1 hi-res finish. Wire into Video Generate \u2192 H3 option cards."
+        description: "H3 speed-up: Turbo LoRA and the 7+1 hi-res finish. Upscaler A: H3 Latent Upscaler (the usual way, last step on the whole picture; 1.6 MP is its sweet spot on 16 GB). Upscaler B: H3 Kimchy Up Scaler (new; upscale and last step in one node, in tiles; Final MP 1.0 \u2013 8.5; needs the ComfyUI-Kimchy-Minimax-H3-Suite pack). Wire into Video Generate \u2192 H3 option cards."
       },
       {
         id: "moss-bboxes",
@@ -2884,7 +2889,7 @@ var init_registry = __esm({
           num("preview_frames", "Frames per preview (1 = still)", 243, { advanced: true }, 1, 1024, 1),
           num("preview_fps", "Preview FPS", 12, { advanced: true }, 1, 60, 1),
           dyn("tiny_vae", "Tiny VAE (auto = the one of the model)", "tinyvaes+auto", "auto", { advanced: true }),
-          toggle("with_audio", "Preview with audio (H3: decodes the audio each step)", false, { advanced: true })
+          toggle("with_audio", "Preview with audio", false, { note: "H3: decodes the audio each step", advanced: true })
         ],
         description: "Shows the video while it is being generated. Put it below a Video Generate card and wire the Live preview output of that card into it."
       },
@@ -2942,6 +2947,7 @@ var init_registry = __esm({
         const fpsParam = num("fps", "Source frame rate (fps, 0 = detect)", 0, { advanced: true }, 0, 240, 1);
         const previewParam = num("preview_frames", "Test on the first N frames (0 = whole video)", 0, { advanced: true }, 0, 600, 1);
         const vin = [{ id: "video", label: "Video", type: "video" }], vout = [{ id: "video", label: "Video", type: "video" }];
+        const withPrompt = (n2) => ({ ...n2, inputs: [...n2.inputs, P.textIn("prompt", "Prompt (Latent Upscale / LTX 2.5 Upscale)", true), P.loraIn()] });
         const pp = (id, title, params, description, engines) => ({ id, title, category: "Postprocess", kind: "generate", inputs: vin, outputs: vout, params: engines ? params : [...params, fpsParam, previewParam], engines: engines?.map((e) => ({ ...e, params: [...e.params ?? [], fpsParam, previewParam] })), description });
         const rtxP = (pre, whenOk = () => true) => [
           sel(`${pre}mode`, "Size by", ["scale", "short", "long", "wh"], "scale", { when: whenOk }),
@@ -2956,7 +2962,24 @@ var init_registry = __esm({
         return [
           pp("pp-deblur", "Deblur (RTX)", [sel("strength", "Strength", ["LOW", "MEDIUM", "HIGH", "ULTRA"], "MEDIUM")], "NVIDIA RTX Deblur on every frame."),
           pp("pp-denoise", "Denoise (RTX)", [sel("strength", "Strength", ["LOW", "MEDIUM", "HIGH", "ULTRA"], "MEDIUM")], "NVIDIA RTX Denoise on every frame."),
-          pp("pp-upscale", "Video Upscale", [], "Enlarge a video: FlashVSR, RTX VSR or an upscale model; optional second RTX pass.", [
+          withPrompt(pp("pp-upscale", "Video Upscale", [], "Enlarge a video: Latent Upscale (Use H3), FlashVSR, LTX 2.5 Upscale, RTX VSR or an upscale model; optional second RTX pass. The two latent methods take the prompt from the Prompt input, else from the clip itself (a clip made by Video Generate keeps its prompt).", [
+            { id: "h3lat", label: "Latent Upscale (Use H3)", family: "post", params: [
+              { id: "h3_turbo", label: "Turbo", control: { kind: "select", options: ["pdd", "none"], labels: { pdd: "Turbo LoRA (Basic)", none: "None (8-step checkpoint)" } }, default: "pdd" },
+              dyn("h3_pdd_file", "Turbo LoRA (Basic)", "loras:h3", "none", { when: (p) => p.h3_turbo !== "none" && p.h3_kind !== "ref" }),
+              dyn("h3_pdd_file_ref", "Turbo LoRA (Reference)", "loras:h3", "none", { when: (p) => p.h3_turbo !== "none" && p.h3_kind === "ref" }),
+              slider("h3_pdd_strength", "lora strength", 0, 2, 0.05, 1, { when: (p) => p.h3_turbo !== "none" }),
+              { id: "h3_kind", label: "Clip type", control: { kind: "select", options: ["fl", "ref"], labels: { fl: "First / Last frame", ref: "Reference" } }, default: "fl" },
+              { id: "h3_last", label: "Model", control: { kind: "select", options: ["same", "fixed"], labels: { same: "Same as generation", fixed: "Fixed model" } }, default: "same" },
+              dyn("h3_last_model", 'Fixed model (none = One Studio setting "UNET - 7+1 last step")', "h3unets", "none", { when: (p) => p.h3_last === "fixed" }),
+              { id: "h3_upscaler", label: "Upscaler", control: { kind: "select", options: ["h3", "kimchy"], labels: { h3: "H3 Latent Upscaler", kimchy: "H3 Kimchy Up Scaler" } }, default: "h3" },
+              { id: "h3_kim_up", label: "Latent upscale", control: { kind: "select", options: ["neural", "bicubic", "trilinear"], labels: { neural: "Neural (Kimchy's trained upscaler)", bicubic: "Bicubic (plain interpolation)", trilinear: "Trilinear (plain interpolation)" } }, default: "neural", when: (p) => p.h3_upscaler === "kimchy" },
+              toggle("h3_no_opt", "Bypass H3 Memory Optimization", false),
+              slider("h3_final_mp", "Final MP", 0.4, 3, 0.05, 1.6, { when: (p) => p.h3_upscaler !== "kimchy" }),
+              slider("h3_kim_final_mp", "Final MP", 1, 8.5, 0.1, 2, { when: (p) => p.h3_upscaler === "kimchy" }),
+              num("h3_chunk_rows", "Activation chunk rows", 2048, { advanced: true }, 256, 16384, 256),
+              toggle("h3_audio", "The clip has sound", true, { note: "carry it into the result", advanced: true }),
+              seed
+            ] },
             { id: "flashvsr", label: "FlashVSR", family: "post", default: true, params: [
               sel("fv_model", "Model", ["FlashVSR-v1.1", "FlashVSR"], "FlashVSR-v1.1"),
               sel("fv_mode", "Mode", ["tiny", "tiny-long", "full"], "tiny"),
@@ -2968,9 +2991,20 @@ var init_registry = __esm({
               toggle("two_pass", "2nd pass with RTX VSR", false),
               ...rtxP("p2_", (p) => !!p.two_pass)
             ] },
+            { id: "ltx", label: "LTX 2.5 Upscale", family: "post", params: [
+              slider("ltx_steps", "Steps", 1, 20, 1, 4),
+              slider("ltx_denoise", "Denoise", 0.05, 1, 0.05, 0.15),
+              dyn("ltx_sampler", "Sampler", "samplers", "euler_ancestral"),
+              dyn("ltx_scheduler", "Scheduler", "schedulers", "simple"),
+              { id: "split_mode", label: "Split mode", control: { kind: "select", options: ["off", "seconds", "count"], labels: { off: "Off (one pass)", seconds: "By seconds", count: "By count" } }, default: "off" },
+              num("split_value", "Seconds per piece / number of pieces", 5, { when: (p) => p.split_mode !== "off" }, 1, 600, 1),
+              toggle("two_pass", "2-pass", false, { note: "run RTX VSR (TJ) on the result" }),
+              ...rtxP("p2_", (p) => !!p.two_pass),
+              seed
+            ] },
             { id: "rtx", label: "RTX VSR (TJ)", family: "post", params: rtxP("rtx_") },
-            { id: "model", label: "Upscale model (ESRGAN\u2026)", family: "post", params: [dyn("model_name", "Model", "upscalers", "none"), toggle("two_pass", "2nd pass with RTX VSR", false), ...rtxP("p2_", (p) => !!p.two_pass)] }
-          ]),
+            { id: "model", label: "Model", family: "post", params: [dyn("model_name", "Model", "upscalers", "none"), toggle("two_pass", "2nd pass with RTX VSR", false), ...rtxP("p2_", (p) => !!p.two_pass)] }
+          ])),
           pp("pp-skin", "Skin Retouch", [slider("evenness", "Evenness", 0, 1, 0.01, 0.3), slider("smoothing", "Smoothing", 0, 1, 0.01, 0.2), slider("redness", "Redness", 0, 1, 0.01, 0), slider("shine", "Shine", 0, 1, 0.01, 0), sel("blemish", "Blemish fix", ["off", "subtle", "strong"], "off"), toggle("preserve", "Keep moles / scars", true, { advanced: true }), slider("microtexture", "Micro-texture", 0, 3, 0.05, 0, { advanced: true })], "Non-generative skin evening, de-shine and blemish fix."),
           pp("pp-grain", "Film Grain", [slider("amount", "Amount", 0, 1, 0.01, 0.25), slider("size", "Size", 0.3, 3, 0.05, 1), slider("color", "Colour grain", 0, 1, 0.01, 0), slider("lum_bias", "Shadow bias", 0, 1, 0.01, 0), sel("noise", "Noise", ["smooth", "grainy"], "smooth")], "Add film grain (ComfyUI core GLSL shader)."),
           pp("pp-interpolate", "Frame Interpolation", [slider("target_fps", "Target FPS", 24, 120, 1, 48), slider("scale", "Flow scale", 0.25, 2, 0.25, 1, { advanced: true }), text("model_name", "RIFE model", "flownet.pkl", false, { advanced: true }), num("batch", "Batch size", 8, { advanced: true }, 1, 64, 1), toggle("fp16", "FP16", true, { advanced: true })], "RIFE: smooth motion by adding in-between frames."),
@@ -3026,7 +3060,7 @@ var init_registry = __esm({
             params: [
               sel("aspect", "Aspect ratio", ASPECTS, "1:1"),
               slider("final_mp", "Final size (MP)", 0.25, 4, 0.25, 1.5),
-              toggle("final", "High quality 2nd pass (latent upscale)", true),
+              toggle("final", "High quality 2nd pass", true, { note: "latent upscale" }),
               slider("preview_mp", "First pass size (MP)", 0.1, 1.5, 0.05, 0.5, { advanced: true }),
               slider("steps", "Steps (no turbo)", 1, 60, 1, 20, { advanced: true }),
               slider("pass2", "2nd pass steps", 3, 5, 1, 3, { advanced: true, when: (p) => !!p.final }),
@@ -3053,7 +3087,7 @@ var init_registry = __esm({
               slider("pass2", "Second pass steps", 3, 5, 1, 3, { advanced: true, when: (p) => !!p.latent_up }),
               sel("deblur", "RTX Deblur", ["none", "LOW", "MEDIUM", "HIGH", "ULTRA"], "none", { advanced: true }),
               toggle("rtx", "RTX VSR", false, { advanced: true }),
-              toggle("supersample", "Scale back down (supersample)", false, { advanced: true, when: (p) => !!p.rtx }),
+              toggle("supersample", "Scale back down", false, { note: "supersample", advanced: true, when: (p) => !!p.rtx }),
               sel("ref_size", "Reference size", ["max", "match"], "max", { advanced: true }),
               num("max_dim", "Sheet max size px", 2048, { advanced: true }, 512, 8192, 64),
               seed
@@ -3346,6 +3380,7 @@ var init_i18n_cards = __esm({
       "Clip length (s)": "\uD074\uB9BD \uAE38\uC774 (\uCD08)",
       "Several clips (separate prompts with ---)": "\uC5EC\uB7EC \uD074\uB9BD (\uD504\uB86C\uD504\uD2B8\uB97C --- \uB85C \uAD6C\uBD84)",
       "Stitch clips into one video": "\uD074\uB9BD\uC744 \uD55C \uC601\uC0C1\uC73C\uB85C \uC774\uC5B4\uBD99\uC774\uAE30",
+      "Joins only the --- clips of this card. To join several cards, use Video Stitch.": "\uC774 \uCE74\uB4DC\uC758 --- \uD074\uB9BD\uB9CC \uD569\uCE69\uB2C8\uB2E4. \uC5EC\uB7EC \uCE74\uB4DC\uB294 \uC601\uC0C1 \uD569\uCE58\uAE30 \uCE74\uB4DC\uB85C.",
       "Steps (no turbo)": "\uC2A4\uD15D (\uD130\uBCF4 \uB054)",
       "Upscale model (after render)": "\uC5C5\uC2A4\uCF00\uC77C \uBAA8\uB378 (\uC0DD\uC131 \uD6C4)",
       "LoRA 1": "LoRA 1",
@@ -3386,6 +3421,50 @@ var init_i18n_cards = __esm({
       "Motion video starts at (s)": "\uBAA8\uC158 \uC601\uC0C1 \uC2DC\uC791 (\uCD08)",
       "Motion strength": "\uBAA8\uC158 \uAC15\uB3C4",
       LoRA: "LoRA",
+      "run RTX VSR (TJ) on the result": "\uACB0\uACFC\uC5D0 RTX VSR (TJ) \uC2E4\uD589",
+      "2-pass": "2\uD328\uC2A4",
+      "separate prompts with ---: start each clip from the last frame of the one before": "\uD504\uB86C\uD504\uD2B8\uB97C --- \uB85C \uAD6C\uBD84: \uAC01 \uD074\uB9BD\uC744 \uC55E \uD074\uB9BD\uC758 \uB9C8\uC9C0\uB9C9 \uD504\uB808\uC784\uC5D0\uC11C \uC2DC\uC791",
+      "Several clips": "\uC5EC\uB7EC \uD074\uB9BD",
+      "H3: decodes the audio each step": "H3: \uC2A4\uD15D\uB9C8\uB2E4 \uC624\uB514\uC624 \uB514\uCF54\uB529",
+      "Preview with audio": "\uC18C\uB9AC\uC640 \uD568\uAED8 \uBBF8\uB9AC\uBCF4\uAE30",
+      "layer 22": "22\uBC88 \uB808\uC774\uC5B4",
+      "Skip layer guidance": "\uB808\uC774\uC5B4 \uAC74\uB108\uB6F0\uAE30 \uAC00\uC774\uB358\uC2A4",
+      "before generating": "\uC0DD\uC131 \uC9C1\uC804",
+      "Auto enhance prompt": "\uD504\uB86C\uD504\uD2B8 \uC790\uB3D9 \uD5A5\uC0C1",
+      "The clip has sound": "\uD074\uB9BD\uC5D0 \uC18C\uB9AC\uAC00 \uC788\uC74C",
+      "carry it into the result": "\uACB0\uACFC\uC5D0 \uC774\uC5B4\uC11C \uB123\uAE30",
+      "High quality 2nd pass": "\uACE0\uD488\uC9C8 2\uCC28 \uD328\uC2A4",
+      "latent upscale": "\uB798\uD134\uD2B8 \uC5C5\uC2A4\uCF00\uC77C",
+      "Scale back down": "\uB2E4\uC2DC \uCD95\uC18C",
+      "supersample": "\uC288\uD37C\uC0D8\uD50C",
+      "7 steps small \u2192 upscale \u2192 1 step big": "\uC791\uAC8C 7\uC2A4\uD15D \u2192 \uC5C5\uC2A4\uCF00\uC77C \u2192 \uD06C\uAC8C 1\uC2A4\uD15D",
+      "The clip has sound (carry it into the result)": "\uD074\uB9BD\uC5D0 \uC18C\uB9AC\uAC00 \uC788\uC74C (\uACB0\uACFC\uC5D0 \uC774\uC5B4\uC11C \uB123\uAE30)",
+      "lora strength": "LoRA \uAC15\uB3C4",
+      "Activation chunk rows": "\uD65C\uC131\uD654 \uCCAD\uD06C \uD589 \uC218",
+      "Final MP": "\uCD5C\uC885 MP",
+      "Bypass H3 Memory Optimization": "H3 \uBA54\uBAA8\uB9AC \uCD5C\uC801\uD654 \uAC74\uB108\uB6F0\uAE30",
+      "Fixed model": "\uACE0\uC815 \uBAA8\uB378",
+      "Same as generation": "\uC0DD\uC131\uACFC \uB3D9\uC77C",
+      "Reference": "\uB808\uD37C\uB7F0\uC2A4",
+      "First / Last frame": "\uCCAB / \uB05D \uD504\uB808\uC784",
+      "Clip type": "\uD074\uB9BD \uC885\uB958",
+      "None (8-step checkpoint)": "\uC5C6\uC74C (8\uC2A4\uD15D \uCCB4\uD06C\uD3EC\uC778\uD2B8)",
+      "Seconds per piece / number of pieces": "\uC870\uAC01\uB2F9 \uCD08 / \uC870\uAC01 \uC218",
+      "By count": "\uAC1C\uC218 \uB2E8\uC704",
+      "By seconds": "\uCD08 \uB2E8\uC704",
+      "Off (one pass)": "\uB044\uAE30 (\uD55C \uBC88\uC5D0)",
+      "Split mode": "\uBD84\uD560 \uBAA8\uB4DC",
+      "LTX 2.5 Upscale": "LTX 2.5 \uC5C5\uC2A4\uCF00\uC77C",
+      "Latent Upscale (Use H3)": "\uB798\uD134\uD2B8 \uC5C5\uC2A4\uCF00\uC77C (H3 \uC0AC\uC6A9)",
+      "Trilinear (plain interpolation)": "\uD2B8\uB77C\uC774\uB9AC\uB2C8\uC5B4 (\uB2E8\uC21C \uBCF4\uAC04)",
+      "Bicubic (plain interpolation)": "\uBC14\uC774\uD050\uBE45 (\uB2E8\uC21C \uBCF4\uAC04)",
+      "Neural (Kimchy's trained upscaler)": "\uC2E0\uACBD\uB9DD (Kimchy \uD559\uC2B5 \uC5C5\uC2A4\uCF00\uC77C\uB7EC)",
+      "Latent upscale": "\uB798\uD134\uD2B8 \uC5C5\uC2A4\uCF00\uC77C",
+      "H3 Kimchy Up Scaler": "H3 \uAE40\uCE58 \uC5C5\uC2A4\uCF00\uC77C\uB7EC",
+      "H3 Latent Upscaler": "H3 \uB798\uD134\uD2B8 \uC5C5\uC2A4\uCF00\uC77C\uB7EC",
+      "Upscaler": "\uC5C5\uC2A4\uCF00\uC77C\uB7EC",
+      "Auto Prompt": "\uC790\uB3D9 \uD504\uB86C\uD504\uD2B8",
+      "Write the prompt with the LLM before generating.": "\uC0DD\uC131 \uC804\uC5D0 LLM\uC774 \uD504\uB86C\uD504\uD2B8\uB97C \uC791\uC131\uD569\uB2C8\uB2E4.",
       "Continuity between clips": "\uD074\uB9BD \uC774\uC5B4\uC11C \uC0DD\uC131",
       "Previous video": "\uC774\uC804 \uC601\uC0C1",
       Continuity: "\uC774\uC5B4\uC11C \uC0DD\uC131",
@@ -3417,8 +3496,8 @@ var init_i18n_cards = __esm({
       "Video Stitch": "\uC601\uC0C1 \uC2A4\uD2F0\uCE58",
       "LTX Director (timeline)": "LTX \uB514\uB809\uD130 (\uD0C0\uC784\uB77C\uC778)",
       "Image Generate (H3)": "\uC774\uBBF8\uC9C0 \uC0DD\uC131 (H3)",
-      "ControlNet Generate (Z-Image)": "\uCEE8\uD2B8\uB864\uB137 \uC0DD\uC131 (Z-Image)",
-      "Face Redraw (Z-Image)": "\uC5BC\uAD74 \uB2E4\uC2DC \uADF8\uB9AC\uAE30 (Z-Image)",
+      "ControlNet Generate (Z-Image)": "\uCEE8\uD2B8\uB864\uB137 \uC0DD\uC131 (Z\u2011Image)",
+      "Face Redraw (Z-Image)": "\uC5BC\uAD74 \uB2E4\uC2DC \uADF8\uB9AC\uAE30 (Z\u2011Image)",
       "Control image": "\uCEE8\uD2B8\uB864 \uC774\uBBF8\uC9C0",
       Portrait: "\uC778\uBB3C \uC0AC\uC9C4",
       "ControlNet model": "\uCEE8\uD2B8\uB864\uB137 \uBAA8\uB378",
@@ -4199,7 +4278,7 @@ async function runPrompt(graph, opts = {}) {
   const runNodeId = opts.signal ? runContext.get(opts.signal)?.node : void 0;
   if (runNodeId) {
     const v = readInflight();
-    v[runNodeId] = { promptId, t: Date.now() };
+    v[runNodeId] = { promptId, t: Date.now(), ...opts.meta ? { meta: opts.meta } : {} };
     writeInflight(v);
   }
   return new Promise((resolve, reject) => {
@@ -6262,8 +6341,8 @@ async function buildH3Graph(job) {
   g.clip = { class_type: "CLIPLoader", inputs: { clip_name: m.clip, type: "minimax", device: "default" } };
   g.vaeV = { class_type: "VAELoader", inputs: { vae_name: m.vaeVideo } };
   g.vaeA = { class_type: "VAELoader", inputs: { vae_name: m.vaeAudio } };
-  const cond = (key, w, h) => {
-    if (job.mode === "reference" && job.assetRef) {
+  const cond = (key, w, h, noKeys = false) => {
+    if (job.mode === "reference" && job.assetRef && !noKeys) {
       needNode("TJ_H3Reference", "Asset Library references");
       const lib = { clip: ["clip", 0], vae: ["vaeV", 0], audio_vae: ["vaeA", 0], prompt: job.prompt, width: w, height: h, length: frames, ref_image_size: "match", match_check: "warn" };
       if (job.assetRef.project) {
@@ -6287,7 +6366,7 @@ async function buildH3Graph(job) {
       g[key] = { class_type: "MiniMaxH3ReferenceToVideo", inputs };
     } else {
       const inputs = { clip: ["clip", 0], vae: ["vaeV", 0], prompt: job.prompt, width: w, height: h, length: frames };
-      if (job.mode === "firstlast") {
+      if (job.mode === "firstlast" && !noKeys) {
         if (job.first) {
           g.first ??= { class_type: "LoadImage", inputs: { image: job.first } };
           inputs.first_frame = ["first", 0];
@@ -6302,8 +6381,10 @@ async function buildH3Graph(job) {
   };
   cond("cond", start.width, start.height);
   const imageCond = job.mode === "reference" || job.mode === "firstlast" && (job.first || job.last);
-  const hrCond = hires && imageCond;
-  if (hrCond) cond("hrCond", final.width, final.height);
+  const kimchy = hires && o.hiresUpscaler === "kimchy";
+  const kimFl = kimchy && job.mode === "firstlast";
+  const hrCond = hires && (imageCond || kimFl);
+  if (hrCond) cond("hrCond", final.width, final.height, kimFl);
   g.noise = { class_type: "RandomNoise", inputs: { noise_seed: job.seed } };
   g.sel = turbo === "larryvrh" && has("MiniMaxH3TurboSampler") ? { class_type: "MiniMaxH3TurboSampler", inputs: {} } : { class_type: "KSamplerSelect", inputs: { sampler_name: turbo === "pdd" ? "euler" : job.sampler } };
   g.sched = { class_type: "BasicScheduler", inputs: { model, scheduler: job.scheduler, steps, denoise: 1 } };
@@ -6345,7 +6426,34 @@ async function buildH3Graph(job) {
   g.samp = { class_type: "SamplerCustomAdvanced", inputs: { noise: ["noise", 0], guider: ["guider", 0], sampler: ["sel", 0], sigmas, latent_image: latent } };
   if (job.checkpoint && has("TJ_H3_SaveLatentCheckpoint")) g.chkSave = { class_type: "TJ_H3_SaveLatentCheckpoint", inputs: { latent: hires ? ["samp", 1] : ["samp", 0], checkpoint_name: job.checkpoint } };
   let samples = ["samp", 0];
-  if (hires) {
+  if (kimchy) {
+    if (!has("KimchyH3ZeroSplitMP")) throw new Error("7+1 H3 Kimchy Up Scaler needs the ComfyUI-Kimchy-Minimax-H3-Suite pack \u2014 install it (github.com/AI-KIMCHY/ComfyUI-Kimchy-Minimax-H3-Suite), or pick H3 Latent Upscaler.");
+    if (!o.hiresNoOpt) needNode("H3MemoryOptimization", "7+1 hi-res finish");
+    if (!(o.hiresFinalMp >= 1 && o.hiresFinalMp <= 8.5)) throw new Error("H3 Kimchy Up Scaler supports Final MP 1.0 \u2013 8.5.");
+    if (o.hiresLastFixed) {
+      if (!o.hiresLastModel || o.hiresLastModel === "none") throw new Error("7+1 last step is set to a fixed model but none is selected");
+      g.hr_unet = o.hiresLastModel.toLowerCase().endsWith(".gguf") ? { class_type: "UnetLoaderGGUF", inputs: { unet_name: o.hiresLastModel } } : { class_type: "UNETLoader", inputs: { unet_name: o.hiresLastModel, weight_dtype: "default" } };
+    }
+    let hm = [o.hiresLastFixed ? "hr_unet" : "unet", 0];
+    job.loras.forEach((l, i) => {
+      if (!l.name || l.name === "none" || !(l.strength > 0)) return;
+      g[`hrLora${i}`] = { class_type: "LoraLoaderModelOnly", inputs: { model: hm, lora_name: l.name, strength_model: l.strength } };
+      hm = [`hrLora${i}`, 0];
+    });
+    if (turbo === "pdd") {
+      g.hrPdd = { class_type: "LoraLoaderModelOnly", inputs: { model: hm, lora_name: o.turboLora, strength_model: o.turboStrength } };
+      hm = ["hrPdd", 0];
+    }
+    g.hrShift = { class_type: "MiniMaxH3SigmaShift", inputs: { model: hm, shift_video: turbo === "pdd" ? 12 : o.shiftVideo, shift_audio: turbo === "pdd" ? 3 : o.shiftAudio } };
+    let stage = ["hrShift", 0];
+    if (!o.hiresNoOpt) {
+      g.hrMem = { class_type: "H3MemoryOptimization", inputs: { model: stage, fused_qkv: "auto", preserve_precision: true, embedding_memory_mode: "Auto", mlp_memory: "auto", chunk_rows: Math.round(o.hiresChunkRows ?? 2048), precision_mode: "Preserve native", qkv_streaming_mode: "Forced", kitchen_v_memory_mode: "Lower VRAM (slower)" } };
+      stage = ["hrMem", 0];
+    }
+    g.hrNeg = { class_type: "ConditioningZeroOut", inputs: { conditioning: hrCondLink } };
+    g.hrKim = { class_type: "KimchyH3ZeroSplitMP", inputs: { model: stage, conditioning: hrCondLink, latent: ["samp", 1], noise: ["noise", 0], sampler: ["sel", 0], sigmas: ["split", 1], negative: ["hrNeg", 0], model_name: o.hiresKimUp === "bicubic" ? "None (Bicubic)" : o.hiresKimUp === "trilinear" ? "None (Trilinear)" : "minimax_h3_latent_upscaler_3d_bf16.safetensors", upscale_by: "megapixels", target_megapixels: o.hiresFinalMp, scale: 2, align: 32, precision: "fp16", cfg: 1, color_match: true } };
+    samples = ["hrKim", 0];
+  } else if (hires) {
     for (const n2 of ["MinimaxH3LatentUpscaler3D", ...o.hiresNoOpt ? [] : ["H3MemoryOptimization"], "BlockSparseAttention"]) needNode(n2, "7+1 hi-res finish");
     g.hrSep = { class_type: "LTXVSeparateAVLatent", inputs: { av_latent: ["samp", 1] } };
     g.hrUp = { class_type: "MinimaxH3LatentUpscaler3D", inputs: { latent: ["hrSep", 0], model_name: "minimax_h3_latent_upscaler_3d_bf16.safetensors", mode: "target dimensions", "mode.width": final.width, "mode.height": final.height, align: 32, enable_temporal_chunking: true, force_unload: true, device: "cuda", precision: "fp16" } };
@@ -6388,7 +6496,7 @@ async function buildH3Graph(job) {
     g.upApply = { class_type: "ImageUpscaleWithModel", inputs: { upscale_model: ["upModel", 0], image: images } };
     images = ["upApply", 0];
   }
-  const audio = locked ? ["audioLock", 1] : ["decA", 0];
+  const audio = locked && !kimchy ? ["audioLock", 1] : ["decA", 0];
   const tag = String(job.clipIndex + 1).padStart(3, "0");
   const prefix = `${job.saveSubfolder}/${job.stem}_clip${tag}`;
   if (has("VHS_VideoCombine")) g.save = { class_type: "VHS_VideoCombine", inputs: { images, audio, frame_rate: FPS, loop_count: 0, filename_prefix: prefix, format: "video/nvenc_h264-mp4", pingpong: false, save_output: true } };
@@ -7092,7 +7200,7 @@ async function buildRefineGraph(j) {
   if (miss.length) throw new Error(`Pick the LTX 2.5 ${miss.join(", ")} in Settings \u2192 Video models.`);
   for (const n2 of ["LTXVLatentUpsampler", "LTXVImgToVideoInplace", "LTXVAudioVAEEncode", "LTXVDualCFGGuider"]) if (!await hasNode(n2)) throw new Error(`${n2} is not installed (needs the LTX 2.5 nodes).`);
   const g = {};
-  await addVideoLoad(g, j.file, "load");
+  await addVideoLoad(g, j.file, "load", j.skip ?? 0, j.cap ?? 0);
   const gguf = (s) => s.toLowerCase().endsWith(".gguf");
   g.unet = gguf(m.ltx_unet) ? { class_type: "UnetLoaderGGUF", inputs: { unet_name: m.ltx_unet } } : { class_type: "UNETLoader", inputs: { unet_name: m.ltx_unet, weight_dtype: "default" } };
   let model = ["unet", 0];
@@ -7116,7 +7224,7 @@ async function buildRefineGraph(j) {
   g.guider = { class_type: "LTXVDualCFGGuider", inputs: { video_cfg: 1, audio_cfg: 1, model, positive: ["cond", 0], negative: ["cond", 1] } };
   g.enc = { class_type: "VAEEncode", inputs: { pixels: ["load", 0], vae: ["vaeV", 0] } };
   g.ups = { class_type: "LTXVLatentUpsampler", inputs: { samples: ["enc", 0], upscale_model: ["upm", 0], vae: ["vaeV", 0] } };
-  g.first = { class_type: "ImageFromBatch", inputs: { image: ["load", 0], batch_index: 0, length: 1 } };
+  g.first = j.anchor ? { class_type: "LoadImage", inputs: { image: j.anchor } } : { class_type: "ImageFromBatch", inputs: { image: ["load", 0], batch_index: 0, length: 1 } };
   g.i2v = { class_type: "LTXVImgToVideoInplace", inputs: { strength: 1, bypass: false, vae: ["vaeV", 0], image: ["first", 0], latent: ["ups", 0] } };
   g.aenc = { class_type: "LTXVAudioVAEEncode", inputs: { audio: ["load", 2], audio_vae: ["vaeA", 0] } };
   g.cat = { class_type: "LTXVConcatAVLatent", inputs: { video_latent: ["i2v", 0], audio_latent: ["aenc", 0] } };
@@ -7242,6 +7350,250 @@ var deleteAsset = (id) => postJson(`${BASE}/assets/${id}/delete`, { force: false
 
 // src/engine/more.ts
 init_settings();
+
+// src/engine/ppLat.ts
+init_comfy();
+init_http();
+
+// src/backend/h3Lat.ts
+var h3LatFrames = (total) => total >= 22 ? Math.floor((total - 5) / 17) * 17 + 5 : 0;
+async function buildH3LatGraph(j) {
+  const kim = j.upscaler === "kimchy";
+  const m = await resolveH3Models(j.models, j.kind === "ref" ? "reference" : "firstlast");
+  const avail = await h3Availability();
+  const has = (n2) => !!avail[n2];
+  const unetName = j.lastFixed ? j.lastModel && j.lastModel !== "none" ? j.lastModel : "" : m.unet;
+  const miss = [["H3 diffusion model", unetName], ["text encoder", m.clip], ["video VAE", m.vaeVideo], ["audio VAE", m.vaeAudio]].filter(([, v]) => !v).map(([k]) => k);
+  if (miss.length) throw new Error(`Pick the MiniMax H3 ${miss.join(", ")} in Settings \u2192 Video models.`);
+  if (j.turbo === "pdd" && (!j.pddFile || j.pddFile === "none")) throw new Error("Latent Upscale (Use H3) needs an 8-step model: pick the Turbo LoRA, or set Turbo to None with an 8-step checkpoint.");
+  if (!j.prompt.trim()) throw new Error("Latent Upscale (Use H3): the prompt is empty.");
+  if (!j.frames) throw new Error("Latent Upscale (Use H3): the clip is too short (H3 needs at least 22 frames).");
+  if (kim && !has("KimchyH3ZeroSplitMP")) throw new Error("H3 Kimchy Up Scaler needs the ComfyUI-Kimchy-Minimax-H3-Suite pack \u2014 install it (github.com/AI-KIMCHY/ComfyUI-Kimchy-Minimax-H3-Suite), or pick H3 Latent Upscaler.");
+  if (!kim && !has("MinimaxH3LatentUpscaler3D")) throw new Error("Latent Upscale (Use H3) needs MinimaxH3LatentUpscaler3D \u2014 install it.");
+  if (!has("BlockSparseAttention")) throw new Error("Latent Upscale (Use H3) needs BlockSparseAttention \u2014 install it.");
+  if (!j.noOpt && !has("H3MemoryOptimization")) throw new Error('Latent Upscale (Use H3) needs H3MemoryOptimization \u2014 install it, or tick "Bypass H3 Memory Optimization".');
+  if (j.hasAudio && !has("TJ_H3_AudioLock")) throw new Error("Latent Upscale (Use H3) needs the TJ_H3_AudioLock node (TJ_NODE pack) to carry the clip's audio.");
+  if (kim && (j.srcW % 32 || j.srcH % 32)) throw new Error(`H3 Kimchy Up Scaler needs the clip's width and height to be multiples of 32 (this clip is ${j.srcW}\xD7${j.srcH}).`);
+  if (kim && !(j.finalMp >= 1 && j.finalMp <= 8.5)) throw new Error("H3 Kimchy Up Scaler supports Final MP 1.0 \u2013 8.5.");
+  const snap = (v) => Math.max(32, Math.round(v / 32) * 32);
+  const ratio = j.srcW / j.srcH, fh = Math.sqrt(j.finalMp * 1e6 / ratio);
+  const final = { width: snap(fh * ratio), height: snap(fh) }, src = { width: j.srcW, height: j.srcH };
+  const g = {};
+  await addVideoLoad(g, j.file, "P:load", 0, j.frames);
+  const images = ["P:load", 0], audio = ["P:load", 2];
+  g.unet = unetName.toLowerCase().endsWith(".gguf") ? { class_type: "UnetLoaderGGUF", inputs: { unet_name: unetName } } : { class_type: "UNETLoader", inputs: { unet_name: unetName, weight_dtype: "default" } };
+  g.clip = { class_type: "CLIPLoader", inputs: { clip_name: m.clip, type: "minimax", device: "default" } };
+  g.vaeV = { class_type: "VAELoader", inputs: { vae_name: m.vaeVideo } };
+  g.vaeA = { class_type: "VAELoader", inputs: { vae_name: m.vaeAudio } };
+  const cond = (key, size, keyframes) => {
+    g[key] = j.kind === "ref" ? { class_type: "MiniMaxH3ReferenceToVideo", inputs: { clip: ["clip", 0], vae: ["vaeV", 0], audio_vae: ["vaeA", 0], prompt: j.prompt, width: size.width, height: size.height, length: j.frames, ref_image_size: "match" } } : { class_type: "MiniMaxH3ImageToVideo", inputs: { clip: ["clip", 0], vae: ["vaeV", 0], prompt: j.prompt, width: size.width, height: size.height, length: j.frames } };
+    if (j.kind !== "ref" && keyframes) {
+      g[key].inputs.first_frame = ["hrFirst", 0];
+      g[key].inputs.last_frame = ["hrLast", 0];
+    }
+  };
+  g.hrFirst = { class_type: "ImageFromBatch", inputs: { image: images, batch_index: 0, length: 1 } };
+  g.hrLast = { class_type: "ImageFromBatch", inputs: { image: images, batch_index: 4095, length: 1 } };
+  cond("hrCond", kim ? src : final, true);
+  g.hrEnc = { class_type: "VAEEncode", inputs: { pixels: images, vae: ["vaeV", 0] } };
+  let avSource = ["hrCond", 1];
+  const lockInputs = { audio, audio_vae: ["vaeA", 0], mode: "lock", strength: 0.5, fit: "pad_silence", get_name_av_latent: "(none)", get_name_audio: "(none)", get_name_audio_vae: "(none)", auto_set: false };
+  if (j.hasAudio) {
+    g.audioLock = { class_type: "TJ_H3_AudioLock", inputs: { av_latent: avSource, ...lockInputs } };
+    avSource = ["audioLock", 0];
+  }
+  g.hrAudSep = { class_type: "LTXVSeparateAVLatent", inputs: { av_latent: avSource } };
+  g.hrAv0 = { class_type: "LTXVConcatAVLatent", inputs: { video_latent: ["hrEnc", 0], audio_latent: ["hrAudSep", 1] } };
+  let model = ["unet", 0];
+  if (j.turbo === "pdd") {
+    g.hrPdd = { class_type: "LoraLoaderModelOnly", inputs: { model, lora_name: j.pddFile, strength_model: j.pddStrength } };
+    model = ["hrPdd", 0];
+  }
+  g.hrShift = { class_type: "MiniMaxH3SigmaShift", inputs: { model, shift_video: 12, shift_audio: 3 } };
+  model = ["hrShift", 0];
+  if (!j.noOpt) {
+    g.hrMem = { class_type: "H3MemoryOptimization", inputs: { model, fused_qkv: "auto", preserve_precision: true, embedding_memory_mode: "Auto", mlp_memory: "auto", chunk_rows: Math.round(j.chunkRows || 2048), precision_mode: "Preserve native", qkv_streaming_mode: "Forced", kitchen_v_memory_mode: "Lower VRAM (slower)" } };
+    model = ["hrMem", 0];
+  }
+  const memModel = model;
+  g.hrSparse = { class_type: "BlockSparseAttention", inputs: { model, selection: "sol-attn", "selection.tau": 1.3, start_percent: 0.2, end_percent: 1, dense_blocks: "", min_tokens: 12288, extra_tokens: 256, sink_conditioning: "exact_kv_and_rows", verbose: true } };
+  g.sched = { class_type: "BasicScheduler", inputs: { model: ["hrShift", 0], scheduler: "simple", steps: 8, denoise: 1 } };
+  g.split = { class_type: "SplitSigmas", inputs: { sigmas: ["sched", 0], step: 7 } };
+  g.noise = { class_type: "RandomNoise", inputs: { noise_seed: j.seed } };
+  g.sel = { class_type: "KSamplerSelect", inputs: { sampler_name: "euler" } };
+  const step = (key, condLink, latent) => {
+    g[`${key}G`] = { class_type: "BasicGuider", inputs: { model: ["hrSparse", 0], conditioning: condLink } };
+    g[key] = { class_type: "SamplerCustomAdvanced", inputs: { noise: ["noise", 0], guider: [`${key}G`, 0], sampler: ["sel", 0], sigmas: ["split", 1], latent_image: latent } };
+    return [key, 0];
+  };
+  let samples;
+  if (!kim) {
+    g.hrSep = { class_type: "LTXVSeparateAVLatent", inputs: { av_latent: ["hrAv0", 0] } };
+    g.hrUp = { class_type: "MinimaxH3LatentUpscaler3D", inputs: { latent: ["hrSep", 0], model_name: "minimax_h3_latent_upscaler_3d_bf16.safetensors", mode: "target dimensions", "mode.width": final.width, "mode.height": final.height, align: 32, enable_temporal_chunking: true, force_unload: true, device: "cuda", precision: "fp16" } };
+    g.hrCat = { class_type: "LTXVConcatAVLatent", inputs: { video_latent: ["hrUp", 0], audio_latent: ["hrSep", 1] } };
+    let hl = ["hrCat", 0];
+    if (j.hasAudio) {
+      g.hrLock = { class_type: "TJ_H3_AudioLock", inputs: { av_latent: hl, ...lockInputs } };
+      hl = ["hrLock", 0];
+    }
+    samples = step("hrSamp", ["hrCond", 0], hl);
+  } else {
+    const s1 = step("hrSamp1", ["hrCond", 0], ["hrAv0", 0]);
+    cond("hrCond2", final, false);
+    g.hrNeg = { class_type: "ConditioningZeroOut", inputs: { conditioning: ["hrCond2", 0] } };
+    g.hrKim = { class_type: "KimchyH3ZeroSplitMP", inputs: { model: memModel, conditioning: ["hrCond2", 0], latent: s1, noise: ["noise", 0], sampler: ["sel", 0], sigmas: ["split", 1], negative: ["hrNeg", 0], model_name: j.kimUp === "neural" ? "minimax_h3_latent_upscaler_3d_bf16.safetensors" : j.kimUp === "bicubic" ? "None (Bicubic)" : "None (Trilinear)", upscale_by: "megapixels", target_megapixels: j.finalMp, scale: 2, align: 32, precision: "fp16", cfg: 1, color_match: true } };
+    samples = ["hrKim", 0];
+  }
+  g.hrDecode = { class_type: "VAEDecode", inputs: { samples, vae: ["vaeV", 0] } };
+  const save = await addVideoSave(g, ["hrDecode", 0], j.hasAudio ? audio : void 0, j.fps || FPS, `${j.saveSubfolder}/${j.stem}_h3lat`, "U");
+  return { graph: g, save, start: { w: src.width, h: src.height }, final: { w: final.width, h: final.height } };
+}
+
+// src/engine/ppLat.ts
+init_settings();
+function videoDuration(url2) {
+  return new Promise((resolve) => {
+    const v = document.createElement("video");
+    v.preload = "metadata";
+    v.muted = true;
+    const done = (d = 0) => {
+      v.removeAttribute("src");
+      resolve(Number.isFinite(d) ? d : 0);
+    };
+    v.onloadedmetadata = () => done(v.duration);
+    v.onerror = () => done();
+    setTimeout(() => done(), 6e3);
+    v.src = url2;
+  });
+}
+var sizeAndFps = async (url2) => {
+  const v = document.createElement("video");
+  v.preload = "metadata";
+  v.muted = true;
+  const wh = await new Promise((res) => {
+    v.onloadedmetadata = () => res({ w: v.videoWidth || 1280, h: v.videoHeight || 720 });
+    v.onerror = () => res({ w: 1280, h: 720 });
+    setTimeout(() => res({ w: 1280, h: 720 }), 6e3);
+    v.src = url2;
+  });
+  const dur = await videoDuration(url2);
+  return { ...wh, fps: 24, total: Math.floor(dur * 24) };
+};
+var isH3Brief = (t2) => /\[Shot|<Picture|subject_definitions|technical_settings|integrated_multimodal_description/.test(t2);
+var isBaseBrief = (t2) => /integrated_multimodal_description|\[Shot 1\]/.test(t2) && !/<Picture|<Video|<Audio|@\w/.test(t2);
+async function runH3Lat(c) {
+  const p = c.p;
+  const s = useSettings.getState();
+  const v = need(c.inputs("video")[0], "Video");
+  const metaPrompt = String(v.meta?.prompt ?? "");
+  const prompt = c.text("prompt").trim() || (isBaseBrief(metaPrompt) ? metaPrompt : "");
+  if (!prompt) throw new Error("Latent Upscale (Use H3): connect the clip's H3 prompt to the Prompt input (this clip carries no usable prompt of its own).");
+  c.progress(2, "uploading video\u2026");
+  const file = await ensureInput(v);
+  const info = await sizeAndFps(v.url);
+  const kind = str(p.h3_kind, "fl") === "ref" ? "ref" : "fl";
+  const cfg = await getJson("/minimax_h3_one/config").catch(() => ({}));
+  const turbo = str(p.h3_turbo, "pdd") === "none" ? "none" : "pdd";
+  const own = str(kind === "ref" ? p.h3_pdd_file_ref : p.h3_pdd_file, "none");
+  const pddFile = own !== "none" ? own : s.h3Turbo[kind] || String((kind === "ref" ? cfg.pdd_file_reference || cfg.pdd_file : cfg.pdd_file) ?? "");
+  const lastFixed = str(p.h3_last, "same") === "fixed";
+  const lastModel = str(p.h3_last_model, "none") !== "none" ? str(p.h3_last_model) : String(cfg.hires_last_model ?? "");
+  const upscaler = str(p.h3_upscaler, "h3") === "kimchy" ? "kimchy" : "h3";
+  const finalMp = upscaler === "kimchy" ? num2(p.h3_kim_final_mp, 2) : num2(p.h3_final_mp, 1.6);
+  const sv = num2(p.seed, -1);
+  const ratio = Math.sqrt(finalMp * 1e6 / (info.w * info.h));
+  if (ratio < 1.3 && (upscaler === "h3" || str(p.h3_kim_up, "neural") === "neural")) c.progress(3, `This is a \xD7${ratio.toFixed(2)} upscale. The neural upscaler is made for about \xD72 and leaves a diagonal grid on fine textures (hair, fabric) near \xD71. Raise Final MP, or use the Kimchy upscaler with Bicubic for a small ratio.`);
+  if (upscaler === "h3" && finalMp > 1.6) c.progress(3, "On a 16 GB VRAM card, above 1.6 MP the H3 Latent Upscaler can run out of VRAM and spill to the CPU (an hour or more). 1.6 is its sweet spot; the Kimchy upscaler handles 2.0.");
+  const g = await buildH3LatGraph({
+    file,
+    frames: h3LatFrames(info.total),
+    fps: info.fps,
+    srcW: info.w,
+    srcH: info.h,
+    finalMp,
+    prompt,
+    kind,
+    hasAudio: p.h3_audio !== false,
+    seed: sv < 0 ? Math.floor(Math.random() * 2 ** 40) : sv,
+    turbo,
+    pddFile,
+    pddStrength: num2(p.h3_pdd_strength, 1),
+    lastFixed,
+    lastModel,
+    upscaler,
+    kimUp: ["neural", "bicubic", "trilinear"].includes(str(p.h3_kim_up)) ? str(p.h3_kim_up) : "neural",
+    noOpt: !!p.h3_no_opt,
+    chunkRows: num2(p.h3_chunk_rows, 2048),
+    models: s.video,
+    saveSubfolder: s.saveSubfolder,
+    stem: "canvers"
+  });
+  const meta = { ...v.meta, postProcess: true, postUpscale: { method: "h3lat", upscaler, finalMp }, postPrompt: prompt, hires: { startW: g.start.w, startH: g.start.h, scale: g.final.w / g.start.w } };
+  const res = await runPrompt(g.graph, { onProgress: c.progress, signal: c.signal, meta });
+  const f = (res.raw[g.save]?.gifs ?? res.raw[g.save]?.images ?? res.raw[g.save]?.videos ?? [])[0];
+  if (!f) throw new Error("ComfyUI returned no video");
+  const out = assetFromFile({ filename: f.filename, subfolder: f.subfolder ?? "", type: "output" }, "video", "video");
+  out.meta = meta;
+  return [out];
+}
+var rtx2 = (p) => ({ mode: str(p.p2_mode, "scale"), scale: num2(p.p2_scale, 2), short: num2(p.p2_short, 1080), long: num2(p.p2_long, 1920), w: num2(p.p2_w, 1920), h: num2(p.p2_h, 1080), anchor: str(p.p2_anchor, "center"), quality: str(p.p2_quality, "ULTRA") });
+async function runLtxUpscale(c) {
+  const p = c.p;
+  const s = useSettings.getState();
+  const v = need(c.inputs("video")[0], "Video");
+  const metaPrompt = String(v.meta?.prompt ?? "");
+  const prompt = c.text("prompt").trim() || (metaPrompt && !isH3Brief(metaPrompt) ? metaPrompt : "");
+  if (!prompt) throw new Error("LTX 2.5 Upscale: connect an LTX prompt to the Prompt input (this clip carries none).");
+  c.progress(2, "uploading video\u2026");
+  const file = await ensureInput(v);
+  const info = await sizeAndFps(v.url);
+  const sv = num2(p.seed, -1);
+  const seed2 = sv < 0 ? Math.floor(Math.random() * 2 ** 40) : sv;
+  const job = { prompt, negative: "bad anatomy, inconsistent look, low resolution,", steps: num2(p.ltx_steps, 4), denoise: num2(p.ltx_denoise, 0.15), sampler: str(p.ltx_sampler, "euler_ancestral"), scheduler: str(p.ltx_scheduler, "simple"), seed: seed2, loras: cardLoras(c), models: s.video, saveSubfolder: s.saveSubfolder, stem: "canvers" };
+  const mode = str(p.split_mode, "off"), value = Math.max(1, num2(p.split_value, 5));
+  let pieces = info.total;
+  if (mode !== "off" && info.total > 0) {
+    const want = mode === "seconds" ? Math.round(value * info.fps) : Math.ceil(info.total / value);
+    pieces = Math.max(9, Math.floor((want - 1) / 8) * 8 + 1);
+  }
+  let result;
+  const runOne = async (extra, label) => {
+    const g = await buildRefineGraph({ file, ...job, ...extra });
+    const res = await runPrompt(g.graph, { onProgress: (pct, l) => c.progress(pct, `${label} ${l ?? ""}`), signal: c.signal });
+    const f = (res.raw[g.save]?.gifs ?? res.raw[g.save]?.images ?? res.raw[g.save]?.videos ?? [])[0];
+    if (!f) throw new Error("ComfyUI returned no video");
+    return { filename: f.filename, subfolder: f.subfolder ?? "" };
+  };
+  if (mode === "off" || info.total <= 0 || pieces >= info.total) result = await runOne({}, "");
+  else {
+    const outs = [];
+    let anchor;
+    for (let at = 0, i = 1; at < info.total; at += pieces, i++) {
+      if (c.signal?.aborted) throw new Error("cancelled");
+      const n2 = Math.ceil(info.total / pieces);
+      outs.push(await runOne({ skip: at, cap: Math.min(pieces, info.total - at), anchor }, `piece ${i}/${n2}`));
+      const lf = await clipLastFrame(outs[outs.length - 1].filename, outs[outs.length - 1].subfolder);
+      if (!lf.ok || !lf.filename) throw new Error(`piece ${i}: could not take the last frame (${lf.error ?? "unknown"})`);
+      anchor = lf.filename;
+    }
+    c.progress(98, "joining the pieces\u2026");
+    const st = await stitchClips(outs, `${s.saveSubfolder}/canvers_LTXUP_full`);
+    if (!st.ok || !st.filename) throw new Error(`stitch failed: ${st.error ?? "unknown"}`);
+    result = { filename: st.filename, subfolder: st.subfolder ?? "" };
+  }
+  if (p.two_pass) {
+    const inName = (await copyToInput({ filename: result.filename, subfolder: result.subfolder, type: "output" })).filename;
+    const g = await buildPostGraph({ fps: info.fps, file: inName, step: { kind: "upscale", method: "rtx", srcW: info.w * 2, srcH: info.h * 2, flashvsr: { model: "", mode: "", scale: 2, colorFix: true, tileSize: 384, tileOverlap: 32, seed: 42 }, rtx: rtx2(p), modelName: "none", twoPass: false, pass2: rtx2(p) }, folder: s.saveSubfolder, stem: "canvers" });
+    const res = await runPrompt(g.graph, { onProgress: c.progress, signal: c.signal });
+    const f = (res.raw[g.save]?.gifs ?? res.raw[g.save]?.images ?? res.raw[g.save]?.videos ?? [])[0];
+    if (f) result = { filename: f.filename, subfolder: f.subfolder ?? "" };
+  }
+  const out = assetFromFile({ filename: result.filename, subfolder: result.subfolder, type: "output" }, "video", "video");
+  out.meta = { ...v.meta, postProcess: true, postUpscale: { method: "ltx", split: mode }, postPrompt: prompt };
+  return [out];
+}
+
+// src/engine/more.ts
 init_comfy();
 var parse = (a) => {
   try {
@@ -7270,7 +7622,7 @@ function optFromCards(cards) {
   return {
     ...DEFAULT_OPT,
     ...s ? { attnBackend: s.attn_backend, attnForward: s.attn_forward, optimizer: s.optimizer, blockCache: s.block_cache, spectrum: !!s.spectrum, fusedModulation: !!s.fused_mod, shiftVideo: s.shift_video, shiftAudio: s.shift_audio } : {},
-    ...t2 ? { turbo: t2.turbo, turboLora: t2.turbo_lora, turboStrength: t2.turbo_strength, turboSteps: t2.turbo_steps, hires: !!t2.hires, hiresStartMp: t2.hires_start_mp, hiresFinalMp: t2.hires_final_mp, hiresLastFixed: t2.hires_last === "fixed", hiresLastModel: t2.hires_last_model, hiresNoOpt: !!t2.hires_no_opt, hiresChunkRows: t2.hires_chunk_rows } : {}
+    ...t2 ? { turbo: t2.turbo, turboLora: t2.turbo_lora, turboStrength: t2.turbo_strength, turboSteps: t2.turbo_steps, hires: !!t2.hires, hiresUpscaler: t2.hires_upscaler === "kimchy" ? "kimchy" : "h3", hiresKimUp: t2.hires_kim_up === "bicubic" || t2.hires_kim_up === "trilinear" ? t2.hires_kim_up : "neural", hiresStartMp: t2.hires_upscaler === "kimchy" ? t2.hires_kim_start_mp : t2.hires_start_mp, hiresFinalMp: t2.hires_upscaler === "kimchy" ? t2.hires_kim_final_mp : t2.hires_final_mp, hiresLastFixed: t2.hires_last === "fixed", hiresLastModel: t2.hires_last_model, hiresNoOpt: !!t2.hires_no_opt, hiresChunkRows: t2.hires_chunk_rows } : {}
   };
 }
 async function h3Opt(cards, ref = false) {
@@ -7380,6 +7732,21 @@ var withLegacySeed = (c) => {
   const sv = si ? num2(si.text, -1) : num2(c.p.seed, -1);
   return sv < 0 ? Math.floor(Math.random() * 2 ** 40) : sv;
 };
+var ppUpscale = post((c, s) => {
+  const p = c.p;
+  const method = c.engineId ?? "flashvsr";
+  return {
+    kind: "upscale",
+    method,
+    srcW: s.w,
+    srcH: s.h,
+    flashvsr: { model: str(p.fv_model, "FlashVSR-v1.1"), mode: str(p.fv_mode, "tiny"), scale: num2(p.fv_scale, 2), colorFix: p.fv_color !== false, tileSize: num2(p.fv_tile, 384), tileOverlap: num2(p.fv_overlap, 32), seed: num2(p.fv_seed, 42) },
+    rtx: rtxOf(p, "rtx_"),
+    modelName: str(p.model_name, "none"),
+    twoPass: !!p.two_pass,
+    pass2: rtxOf(p, "p2_")
+  };
+});
 var EXTRA_RUNNERS = {
   // ---------------- cards
   "lora-card": async (c) => {
@@ -7418,21 +7785,7 @@ var EXTRA_RUNNERS = {
   // ---------------- postprocess steps
   "pp-deblur": post((c) => ({ kind: "deblur", strength: str(c.p.strength, "MEDIUM") })),
   "pp-denoise": post((c) => ({ kind: "denoise", strength: str(c.p.strength, "MEDIUM") })),
-  "pp-upscale": post((c, s) => {
-    const p = c.p;
-    const method = c.engineId ?? "flashvsr";
-    return {
-      kind: "upscale",
-      method,
-      srcW: s.w,
-      srcH: s.h,
-      flashvsr: { model: str(p.fv_model, "FlashVSR-v1.1"), mode: str(p.fv_mode, "tiny"), scale: num2(p.fv_scale, 2), colorFix: p.fv_color !== false, tileSize: num2(p.fv_tile, 384), tileOverlap: num2(p.fv_overlap, 32), seed: num2(p.fv_seed, 42) },
-      rtx: rtxOf(p, "rtx_"),
-      modelName: str(p.model_name, "none"),
-      twoPass: !!p.two_pass,
-      pass2: rtxOf(p, "p2_")
-    };
-  }),
+  "pp-upscale": async (c) => c.engineId === "h3lat" ? runH3Lat(c) : c.engineId === "ltx" ? runLtxUpscale(c) : ppUpscale(c),
   "pp-skin": post((c) => ({ kind: "skin", evenness: num2(c.p.evenness), smoothing: num2(c.p.smoothing), redness: num2(c.p.redness), shine: num2(c.p.shine), blemish: str(c.p.blemish, "off"), preserveMarks: c.p.preserve !== false, microtexture: num2(c.p.microtexture) })),
   "pp-grain": post((c) => ({ kind: "grain", amount: num2(c.p.amount, 0.25), size: num2(c.p.size, 1), color: num2(c.p.color), lumBias: num2(c.p.lum_bias), noise: str(c.p.noise, "smooth") })),
   "pp-interpolate": post((c) => ({ kind: "interpolate", targetFps: num2(c.p.target_fps, 48), scale: num2(c.p.scale, 1), modelName: str(c.p.model_name, "flownet.pkl"), batchSize: num2(c.p.batch, 8), fp16: c.p.fp16 !== false })),
@@ -8219,8 +8572,12 @@ async function runH3Core(c, temp) {
   let first = !ref && imgs[0] ? await ensureInput(imgs[0]) : void 0;
   const lastFile = !ref && lastA ? await ensureInput(lastA) : void 0;
   const lockFile = cards.lock?.file;
-  const cont = ref ? void 0 : cards.cont;
-  const continuity = ref ? "none" : cont ? cont.mode === "latent" ? "onetake" : "lastframe" : str(p.continuity, "lastframe");
+  const cont = ref && cards.cont?.mode !== "latent" ? void 0 : cards.cont;
+  const { useGraph: ug } = await Promise.resolve().then(() => (init_graph(), graph_exports));
+  const gs0 = ug.getState();
+  const feedsLatent = gs0.edges.some((e) => e.source === c.node.id && e.sourceHandle === "video" && gs0.nodes.some((n2) => n2.id === e.target && n2.defId === "clip-continuity" && n2.params.mode === "latent"));
+  const chosen = cont ? cont.mode === "latent" ? "onetake" : "lastframe" : str(p.continuity, "lastframe");
+  const continuity = feedsLatent ? "onetake" : ref && chosen === "lastframe" ? "none" : chosen;
   let prevCheckpoint;
   if (cont?.mode === "latent") {
     if (!cont.checkpoint) throw new Error('Continuity (latent): the previous card has no saved latent. Run it first in this session, or pick "Last frame"');
@@ -8294,7 +8651,7 @@ If this happened on the last step of 7+1, H3 Memory Optimization does not work w
   }
   const assets = clips.map((f) => assetFromFile({ filename: f.filename, subfolder: f.subfolder, type: "output" }, "video", "video"));
   const tag = (a) => {
-    if (prevCheckpoint && a[0]) a[0].meta = { ...a[0].meta, checkpoint: prevCheckpoint };
+    if (a[0]) a[0].meta = { ...a[0].meta, ...prevCheckpoint ? { checkpoint: prevCheckpoint } : {}, ...prompts.length === 1 && !ref ? { prompt: prompts[0] } : {} };
     return a;
   };
   if (clips.length > 1 && p.stitch !== false) {
@@ -8730,7 +9087,7 @@ var send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 async function handle(msg) {
   const { id, method, params } = msg;
   try {
-    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.24.1" } } });
+    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.25.0" } } });
     if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS.map(({ run: _r, ...t2 }) => t2) } });
     if (method === "tools/call") {
       const tool = TOOLS.find((t2) => t2.name === params?.name);

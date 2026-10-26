@@ -3,7 +3,7 @@ import { hasNode, addVideoLoad, addVideoSave } from './post';
 import { FPS, resolveLtxModels } from './ltx';
 import type { L } from './h3';
 
-export interface RefineJob { file: string; prompt: string; negative: string; steps: number; denoise: number; sampler: string; scheduler: string; seed: number; loras: { name: string; strength: number }[]; models: Record<string, string>; saveSubfolder: string; stem: string }
+export interface RefineJob { file: string; prompt: string; negative: string; steps: number; denoise: number; sampler: string; scheduler: string; seed: number; loras: { name: string; strength: number }[]; models: Record<string, string>; saveSubfolder: string; stem: string; skip?: number; cap?: number; anchor?: string }
 
 export async function buildRefineGraph(j: RefineJob): Promise<{ graph: Record<string, any>; save: string }> {
   const r = await resolveLtxModels(j.models);
@@ -12,7 +12,7 @@ export async function buildRefineGraph(j: RefineJob): Promise<{ graph: Record<st
   if (miss.length) throw new Error(`Pick the LTX 2.5 ${miss.join(', ')} in Settings → Video models.`);
   for (const n of ['LTXVLatentUpsampler', 'LTXVImgToVideoInplace', 'LTXVAudioVAEEncode', 'LTXVDualCFGGuider']) if (!(await hasNode(n))) throw new Error(`${n} is not installed (needs the LTX 2.5 nodes).`);
   const g: Record<string, any> = {};
-  await addVideoLoad(g, j.file, 'load');
+  await addVideoLoad(g, j.file, 'load', j.skip ?? 0, j.cap ?? 0);
   const gguf = (s: string) => s.toLowerCase().endsWith('.gguf');
   g.unet = gguf(m.ltx_unet) ? { class_type: 'UnetLoaderGGUF', inputs: { unet_name: m.ltx_unet } } : { class_type: 'UNETLoader', inputs: { unet_name: m.ltx_unet, weight_dtype: 'default' } };
   let model: L = ['unet', 0];
@@ -28,7 +28,8 @@ export async function buildRefineGraph(j: RefineJob): Promise<{ graph: Record<st
   g.guider = { class_type: 'LTXVDualCFGGuider', inputs: { video_cfg: 1, audio_cfg: 1, model, positive: ['cond', 0], negative: ['cond', 1] } };
   g.enc = { class_type: 'VAEEncode', inputs: { pixels: ['load', 0], vae: ['vaeV', 0] } };
   g.ups = { class_type: 'LTXVLatentUpsampler', inputs: { samples: ['enc', 0], upscale_model: ['upm', 0], vae: ['vaeV', 0] } };
-  g.first = { class_type: 'ImageFromBatch', inputs: { image: ['load', 0], batch_index: 0, length: 1 } };
+  // a piece of a split run is anchored on the last frame of the piece before it
+  g.first = j.anchor ? { class_type: 'LoadImage', inputs: { image: j.anchor } } : { class_type: 'ImageFromBatch', inputs: { image: ['load', 0], batch_index: 0, length: 1 } };
   g.i2v = { class_type: 'LTXVImgToVideoInplace', inputs: { strength: 1, bypass: false, vae: ['vaeV', 0], image: ['first', 0], latent: ['ups', 0] } };
   g.aenc = { class_type: 'LTXVAudioVAEEncode', inputs: { audio: ['load', 2], audio_vae: ['vaeA', 0] } };
   g.cat = { class_type: 'LTXVConcatAVLatent', inputs: { video_latent: ['i2v', 0], audio_latent: ['aenc', 0] } };

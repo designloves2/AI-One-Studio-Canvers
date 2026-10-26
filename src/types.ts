@@ -28,6 +28,8 @@ export interface ParamDef {
   control: Control;
   default: Primitive;
   advanced?: boolean;
+  /** small grey text to the right of a switch */
+  note?: string;
   /** only show when predicate on the node's params is true */
   when?: (p: Record<string, Primitive>) => boolean;
 }

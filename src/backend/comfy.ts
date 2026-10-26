@@ -116,7 +116,8 @@ export interface RunResult { promptId: string; images: FileRef[]; videos: FileRe
 // ---- jobs that are running when the page is closed or refreshed: remembered per card, picked up again on the next start
 export const runContext = new WeakMap<AbortSignal, { node?: string }>();
 const INFLIGHT_KEY = 'canvers.inflight.v1';
-export type Inflight = Record<string, { promptId: string; t: number }>;
+/** `meta` = what the result must carry when it is picked up again after a reload (prompt, upscale marks) */
+export type Inflight = Record<string, { promptId: string; t: number; meta?: Record<string, unknown> }>;
 export function readInflight(): Inflight { try { return JSON.parse(localStorage.getItem(INFLIGHT_KEY) ?? '{}'); } catch { return {}; } }
 function writeInflight(v: Inflight) { try { localStorage.setItem(INFLIGHT_KEY, JSON.stringify(v)); } catch { /* quota */ } }
 export function forgetInflight(promptId: string) {
@@ -156,6 +157,8 @@ export interface RunOptions {
   previewKey?: string; onPreview?: (dataUrl: string) => void;
   onProgress?: (pct: number, label?: string) => void;
   signal?: AbortSignal;
+  /** stored with the in-flight record so a result re-attached after a reload gets the same meta */
+  meta?: Record<string, unknown>;
 }
 
 /** Queue an API-format graph and resolve with everything its output nodes produced. */
@@ -174,7 +177,7 @@ export async function runPrompt(graph: Record<string, unknown>, opts: RunOptions
   }
   const promptId: string = data.prompt_id;
   const runNodeId = opts.signal ? runContext.get(opts.signal)?.node : undefined;
-  if (runNodeId) { const v = readInflight(); v[runNodeId] = { promptId, t: Date.now() }; writeInflight(v); }
+  if (runNodeId) { const v = readInflight(); v[runNodeId] = { promptId, t: Date.now(), ...(opts.meta ? { meta: opts.meta } : {}) }; writeInflight(v); }
 
   return new Promise<RunResult>((resolve, reject) => {
     const out: RunResult = { promptId, images: [], videos: [], audios: [], texts: [], raw: {} };

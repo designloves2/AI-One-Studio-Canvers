@@ -35,7 +35,7 @@ const loras = (fam: string): ParamDef[] => [
 ];
 
 /** run the prompt through Prompt Enhance (the model's own phrasing) right before generating */
-const autoEnhance = toggle('auto_enhance', 'Auto enhance prompt (before generating)', false);
+const autoEnhance = toggle('auto_enhance', 'Auto enhance prompt', false, { note: 'before generating' });
 const negative = text('negative', 'Negative prompt', '', true, { advanced: true });
 
 /** Image size: aspect ratio + megapixels, or an exact width x height (snapped to a multiple of 16 at run time). */
@@ -63,7 +63,7 @@ const qwen21 = (id: string, label: string, extra: ParamDef[] = [], size = false)
 });
 const moss = (id: string, label: string, extra: ParamDef[] = [], size = false): EngineDef => ({
   id, label, family: 'moss',
-  params: [...sizeParams(size), ...extra, autoEnhance, ...sampler(25, 2.5, 'er_sde'), { ...negative, default: 'nsfw, worst quality, bad anatomy, watermark, jpeg artifact' }, toggle('slg', 'Skip layer guidance (layer 22)', false, { advanced: true }), ...loras('moss'), num('batch', 'Batch', 1, { advanced: true }, 1, 4, 1), seed],
+  params: [...sizeParams(size), ...extra, autoEnhance, ...sampler(25, 2.5, 'er_sde'), { ...negative, default: 'nsfw, worst quality, bad anatomy, watermark, jpeg artifact' }, toggle('slg', 'Skip layer guidance', false, { note: 'layer 22', advanced: true }), ...loras('moss'), num('batch', 'Batch', 1, { advanced: true }, 1, 4, 1), seed],
 });
 const sdxl = (id: string, label: string, extra: ParamDef[] = [], size = false): EngineDef => ({
   id, label, family: 'sdxl',
@@ -74,10 +74,10 @@ const sdxl = (id: string, label: string, extra: ParamDef[] = [], size = false): 
 // that plug into its "Option cards" / "LoRA cards" inputs.
 const h3Params = (ref: boolean): ParamDef[] => [
   sel('aspect', 'Aspect ratio', [...ASPECTS, 'auto'], '16:9'), megapixels(0.9), slider('seconds', 'Clip length (s)', 5.2, 15, 0.5, 8),
-  ...(ref ? [] : [sel('continuity', 'Several clips (separate prompts with ---)', ['none', 'lastframe', 'onetake'], 'lastframe'), toggle('stitch', 'Stitch clips into one video', true)]),
+  sel('continuity', 'Several clips (separate prompts with ---)', ['none', 'lastframe', 'onetake'], 'lastframe'), toggle('stitch', 'Stitch clips into one video', true, { note: 'Joins only the --- clips of this card. To join several cards, use Video Stitch.' }),
   slider('steps', 'Steps (no turbo)', 1, 60, 1, 20, { advanced: true }), dyn('sampler', 'Sampler', 'samplers', 'er_sde', { advanced: true }), dyn('scheduler', 'Scheduler', 'schedulers', 'simple', { advanced: true }),
   dyn('upscale_model', 'Upscale model (after render)', 'upscalers', 'none', { advanced: true }),
-  toggle('auto_prompt', 'Auto Prompt (write the prompt with the LLM before generating)', false),
+  toggle('auto_prompt', 'Auto Prompt', false, { note: 'Write the prompt with the LLM before generating.' }),
   seed,
 ];
 
@@ -228,7 +228,7 @@ export const REGISTRY: NodeDef[] = [
     engines: [
       { id: 'h3', label: 'MiniMax H3 — text / first-last frame (local)', family: 'h3', default: true, params: h3Params(false) },
       { id: 'h3-ref', label: 'MiniMax H3 — multi-reference (local)', family: 'h3', params: h3Params(true) },
-      { id: 'ltx25', label: 'LTX 2.5 (local, with audio)', family: 'ltx25', params: [sel('aspect', 'Aspect ratio', [...ASPECTS, 'auto'], '16:9'), megapixels(1), slider('seconds', 'Length (s)', 2, 20, 1, 5), toggle('chain_last', "Several clips (separate prompts with ---): start each clip from the last frame of the one before", true), toggle('stitch', 'Stitch clips into one video', true), slider('steps', 'Steps', 1, 40, 1, 12, { advanced: true }), slider('cfg', 'Guidance', 0, 10, 0.1, 1, { advanced: true }), dyn('sampler', 'Sampler', 'samplers', 'euler_ancestral', { advanced: true }), dyn('scheduler', 'Scheduler', 'schedulers', 'linear_quadratic', { advanced: true }), text('stage2', 'Stage-2 sigmas', '0.85, 0.7250, 0.4219, 0.0', false, { advanced: true }), ...loras('ltx25'), toggle('auto_prompt', 'Auto Prompt (write the prompt with the LLM before generating)', false), seed] }],
+      { id: 'ltx25', label: 'LTX 2.5 (local, with audio)', family: 'ltx25', params: [sel('aspect', 'Aspect ratio', [...ASPECTS, 'auto'], '16:9'), megapixels(1), slider('seconds', 'Length (s)', 2, 20, 1, 5), toggle('chain_last', 'Several clips', true, { note: 'separate prompts with ---: start each clip from the last frame of the one before' }), toggle('stitch', 'Stitch clips into one video', true, { note: 'Joins only the --- clips of this card. To join several cards, use Video Stitch.' }), slider('steps', 'Steps', 1, 40, 1, 12, { advanced: true }), slider('cfg', 'Guidance', 0, 10, 0.1, 1, { advanced: true }), dyn('sampler', 'Sampler', 'samplers', 'euler_ancestral', { advanced: true }), dyn('scheduler', 'Scheduler', 'schedulers', 'linear_quadratic', { advanced: true }), text('stage2', 'Stage-2 sigmas', '0.85, 0.7250, 0.4219, 0.0', false, { advanced: true }), ...loras('ltx25'), toggle('auto_prompt', 'Auto Prompt', false, { note: 'Write the prompt with the LLM before generating.' }), seed] }],
     description: 'Text → video, or first/last frame → video (LTX 2.5). LTX 2.5 or MiniMax H3. Other models: ComfyUI Workflow node.' },
 
   // ============================================================ Edit (runs in the browser)
@@ -267,13 +267,16 @@ export const REGISTRY: NodeDef[] = [
     params: [
       { id: 'turbo', label: 'Turbo', control: { kind: 'select', options: ['pdd', 'larryvrh', 'lightx2v', 'none'], labels: { pdd: 'Turbo LoRA (Basic)', larryvrh: 'Turbo LoRA (larryvrh)', lightx2v: 'SLA Turbo (lightx2v)', none: 'None' } }, default: 'pdd' }, dyn('turbo_lora', 'Turbo LoRA (first / last frame)', 'loras:h3', 'none', { when: (p) => p.turbo !== 'none' }), dyn('turbo_lora_ref', 'Turbo LoRA (reference)', 'loras:h3', 'none', { when: (p) => p.turbo !== 'none' }),
       slider('turbo_strength', 'Turbo strength', 0, 2, 0.05, 1, { when: (p) => p.turbo !== 'none' }), slider('turbo_steps', 'Turbo steps', 1, 16, 1, 8, { advanced: true, when: (p) => p.turbo !== 'none' }),
-      toggle('hires', '7+1 hi-res finish (7 steps small → upscale → 1 step big)', true, { when: (p) => p.turbo === 'pdd' || p.turbo === 'none' }),
-      slider('hires_start_mp', 'Start size (MP)', 0.2, 1, 0.05, 0.7, { when: (p) => (p.turbo === 'pdd' || p.turbo === 'none') && !!p.hires }), slider('hires_final_mp', 'Final size (MP)', 0.4, 3, 0.05, 1.6, { when: (p) => (p.turbo === 'pdd' || p.turbo === 'none') && !!p.hires }),
+      toggle('hires', '7+1 hi-res finish', true, { when: (p) => p.turbo === 'pdd' || p.turbo === 'none', note: '7 steps small → upscale → 1 step big' }),
+      { id: 'hires_upscaler', label: 'Upscaler', control: { kind: 'select', options: ['h3', 'kimchy'], labels: { h3: 'H3 Latent Upscaler', kimchy: 'H3 Kimchy Up Scaler' } }, default: 'h3', when: (p) => (p.turbo === 'pdd' || p.turbo === 'none') && !!p.hires },
+      slider('hires_start_mp', 'Start size (MP)', 0.2, 1, 0.05, 0.7, { when: (p) => (p.turbo === 'pdd' || p.turbo === 'none') && !!p.hires && p.hires_upscaler !== 'kimchy' }), slider('hires_final_mp', 'Final size (MP)', 0.4, 3, 0.05, 1.6, { when: (p) => (p.turbo === 'pdd' || p.turbo === 'none') && !!p.hires && p.hires_upscaler !== 'kimchy' }),
+      { id: 'hires_kim_up', label: 'Latent upscale', control: { kind: 'select', options: ['neural', 'bicubic', 'trilinear'], labels: { neural: "Neural (Kimchy's trained upscaler)", bicubic: 'Bicubic (plain interpolation)', trilinear: 'Trilinear (plain interpolation)' } }, default: 'neural', when: (p) => (p.turbo === 'pdd' || p.turbo === 'none') && !!p.hires && p.hires_upscaler === 'kimchy' },
+      slider('hires_kim_start_mp', 'Start size (MP)', 0.2, 1, 0.05, 0.5, { when: (p) => (p.turbo === 'pdd' || p.turbo === 'none') && !!p.hires && p.hires_upscaler === 'kimchy' }), slider('hires_kim_final_mp', 'Final size (MP)', 1, 8.5, 0.1, 2, { when: (p) => (p.turbo === 'pdd' || p.turbo === 'none') && !!p.hires && p.hires_upscaler === 'kimchy' }),
       { id: 'hires_last', label: '7+1 last step model', control: { kind: 'select', options: ['same', 'fixed'], labels: { same: 'Same as generation', fixed: 'Fixed model' } }, default: 'same', when: (p) => (p.turbo === 'pdd' || p.turbo === 'none') && !!p.hires },
       dyn('hires_last_model', '7+1 last step model (none = One Studio setting)', 'h3unets', 'none', { when: (p) => (p.turbo === 'pdd' || p.turbo === 'none') && !!p.hires && p.hires_last === 'fixed' }),
       toggle('hires_no_opt', 'Bypass H3 Memory Optimization on the last step', false, { advanced: true, when: (p) => (p.turbo === 'pdd' || p.turbo === 'none') && !!p.hires }),
       num('hires_chunk_rows', 'Last step chunk rows', 2048, { advanced: true, when: (p) => (p.turbo === 'pdd' || p.turbo === 'none') && !!p.hires && !p.hires_no_opt }, 256, 16384, 256),
-    ], description: 'H3 speed-up: Turbo LoRA and the 7+1 hi-res finish. Wire into Video Generate → H3 option cards.' },
+    ], description: 'H3 speed-up: Turbo LoRA and the 7+1 hi-res finish. Upscaler A: H3 Latent Upscaler (the usual way, last step on the whole picture; 1.6 MP is its sweet spot on 16 GB). Upscaler B: H3 Kimchy Up Scaler (new; upscale and last step in one node, in tiles; Final MP 1.0 – 8.5; needs the ComfyUI-Kimchy-Minimax-H3-Suite pack). Wire into Video Generate → H3 option cards.' },
   { id: 'moss-bboxes', title: 'Moss Boxes (R2I)', category: 'Cards', kind: 'source', inputs: [P.imgIn('image', 'Background (optional)', true)], outputs: [{ id: 'card', label: 'Boxes', type: 'pipe' }],
     params: [
       num('width', 'Canvas width (px)', 1024, {}, 256, 4096, 16), num('height', 'Canvas height (px)', 1024, {}, 256, 4096, 16),
@@ -284,7 +287,7 @@ export const REGISTRY: NodeDef[] = [
     params: [
       num('max_resolution', 'Preview max size (px, 0 = full)', 1024, { advanced: true }, 0, 8192, 8), num('jpeg_quality', 'JPEG quality', 85, { advanced: true }, 30, 100, 1),
       num('preview_frames', 'Frames per preview (1 = still)', 243, { advanced: true }, 1, 1024, 1), num('preview_fps', 'Preview FPS', 12, { advanced: true }, 1, 60, 1),
-      dyn('tiny_vae', 'Tiny VAE (auto = the one of the model)', 'tinyvaes+auto', 'auto', { advanced: true }), toggle('with_audio', 'Preview with audio (H3: decodes the audio each step)', false, { advanced: true }),
+      dyn('tiny_vae', 'Tiny VAE (auto = the one of the model)', 'tinyvaes+auto', 'auto', { advanced: true }), toggle('with_audio', 'Preview with audio', false, { note: 'H3: decodes the audio each step', advanced: true }),
     ], description: 'Shows the video while it is being generated. Put it below a Video Generate card and wire the Live preview output of that card into it.' },
   { id: 'clip-continuity', title: 'Continuity between clips', category: 'Cards', kind: 'source',
     inputs: [{ id: 'video', label: 'Previous video', type: 'video' }], outputs: [{ id: 'card', label: 'Continuity', type: 'pipe' }],
@@ -311,6 +314,7 @@ export const REGISTRY: NodeDef[] = [
     const fpsParam = num('fps', 'Source frame rate (fps, 0 = detect)', 0, { advanced: true }, 0, 240, 1);
     const previewParam = num('preview_frames', 'Test on the first N frames (0 = whole video)', 0, { advanced: true }, 0, 600, 1);
     const vin = [{ id: 'video', label: 'Video', type: 'video' as const }], vout = [{ id: 'video', label: 'Video', type: 'video' as const }];
+    const withPrompt = (n: NodeDef): NodeDef => ({ ...n, inputs: [...n.inputs, P.textIn('prompt', 'Prompt (Latent Upscale / LTX 2.5 Upscale)', true), P.loraIn()] });
     const pp = (id: string, title: string, params: ParamDef[], description: string, engines?: EngineDef[]): NodeDef =>
       ({ id, title, category: 'Postprocess', kind: 'generate', inputs: vin, outputs: vout, params: engines ? params : [...params, fpsParam, previewParam], engines: engines?.map((e) => ({ ...e, params: [...(e.params ?? []), fpsParam, previewParam] })), description });
     const rtxP = (pre: string, whenOk: (p: Record<string, any>) => boolean = () => true): ParamDef[] => [
@@ -324,14 +328,30 @@ export const REGISTRY: NodeDef[] = [
     return [
       pp('pp-deblur', 'Deblur (RTX)', [sel('strength', 'Strength', ['LOW', 'MEDIUM', 'HIGH', 'ULTRA'], 'MEDIUM')], 'NVIDIA RTX Deblur on every frame.'),
       pp('pp-denoise', 'Denoise (RTX)', [sel('strength', 'Strength', ['LOW', 'MEDIUM', 'HIGH', 'ULTRA'], 'MEDIUM')], 'NVIDIA RTX Denoise on every frame.'),
-      pp('pp-upscale', 'Video Upscale', [], 'Enlarge a video: FlashVSR, RTX VSR or an upscale model; optional second RTX pass.', [
+      withPrompt(pp('pp-upscale', 'Video Upscale', [], 'Enlarge a video: Latent Upscale (Use H3), FlashVSR, LTX 2.5 Upscale, RTX VSR or an upscale model; optional second RTX pass. The two latent methods take the prompt from the Prompt input, else from the clip itself (a clip made by Video Generate keeps its prompt).', [
+        { id: 'h3lat', label: 'Latent Upscale (Use H3)', family: 'post', params: [
+          { id: 'h3_turbo', label: 'Turbo', control: { kind: 'select', options: ['pdd', 'none'], labels: { pdd: 'Turbo LoRA (Basic)', none: 'None (8-step checkpoint)' } }, default: 'pdd' },
+          dyn('h3_pdd_file', 'Turbo LoRA (Basic)', 'loras:h3', 'none', { when: (p) => p.h3_turbo !== 'none' && p.h3_kind !== 'ref' }), dyn('h3_pdd_file_ref', 'Turbo LoRA (Reference)', 'loras:h3', 'none', { when: (p) => p.h3_turbo !== 'none' && p.h3_kind === 'ref' }),
+          slider('h3_pdd_strength', 'lora strength', 0, 2, 0.05, 1, { when: (p) => p.h3_turbo !== 'none' }),
+          { id: 'h3_kind', label: 'Clip type', control: { kind: 'select', options: ['fl', 'ref'], labels: { fl: 'First / Last frame', ref: 'Reference' } }, default: 'fl' },
+          { id: 'h3_last', label: 'Model', control: { kind: 'select', options: ['same', 'fixed'], labels: { same: 'Same as generation', fixed: 'Fixed model' } }, default: 'same' },
+          dyn('h3_last_model', 'Fixed model (none = One Studio setting "UNET - 7+1 last step")', 'h3unets', 'none', { when: (p) => p.h3_last === 'fixed' }),
+          { id: 'h3_upscaler', label: 'Upscaler', control: { kind: 'select', options: ['h3', 'kimchy'], labels: { h3: 'H3 Latent Upscaler', kimchy: 'H3 Kimchy Up Scaler' } }, default: 'h3' },
+          { id: 'h3_kim_up', label: 'Latent upscale', control: { kind: 'select', options: ['neural', 'bicubic', 'trilinear'], labels: { neural: "Neural (Kimchy's trained upscaler)", bicubic: 'Bicubic (plain interpolation)', trilinear: 'Trilinear (plain interpolation)' } }, default: 'neural', when: (p) => p.h3_upscaler === 'kimchy' },
+          toggle('h3_no_opt', 'Bypass H3 Memory Optimization', false),
+          slider('h3_final_mp', 'Final MP', 0.4, 3, 0.05, 1.6, { when: (p) => p.h3_upscaler !== 'kimchy' }), slider('h3_kim_final_mp', 'Final MP', 1, 8.5, 0.1, 2, { when: (p) => p.h3_upscaler === 'kimchy' }),
+          num('h3_chunk_rows', 'Activation chunk rows', 2048, { advanced: true }, 256, 16384, 256), toggle('h3_audio', 'The clip has sound', true, { note: 'carry it into the result', advanced: true }), seed] },
         { id: 'flashvsr', label: 'FlashVSR', family: 'post', default: true, params: [
           sel('fv_model', 'Model', ['FlashVSR-v1.1', 'FlashVSR'], 'FlashVSR-v1.1'), sel('fv_mode', 'Mode', ['tiny', 'tiny-long', 'full'], 'tiny'), slider('fv_scale', 'Scale', 2, 4, 1, 2), toggle('fv_color', 'Colour fix', true),
           num('fv_tile', 'Tile size', 384, { advanced: true }, 64, 2048, 32), num('fv_overlap', 'Tile overlap', 32, { advanced: true }, 0, 512, 8), num('fv_seed', 'Seed', 42, { advanced: true }),
           toggle('two_pass', '2nd pass with RTX VSR', false), ...rtxP('p2_', (p) => !!p.two_pass)] },
+        { id: 'ltx', label: 'LTX 2.5 Upscale', family: 'post', params: [
+          slider('ltx_steps', 'Steps', 1, 20, 1, 4), slider('ltx_denoise', 'Denoise', 0.05, 1, 0.05, 0.15), dyn('ltx_sampler', 'Sampler', 'samplers', 'euler_ancestral'), dyn('ltx_scheduler', 'Scheduler', 'schedulers', 'simple'),
+          { id: 'split_mode', label: 'Split mode', control: { kind: 'select', options: ['off', 'seconds', 'count'], labels: { off: 'Off (one pass)', seconds: 'By seconds', count: 'By count' } }, default: 'off' },
+          num('split_value', 'Seconds per piece / number of pieces', 5, { when: (p) => p.split_mode !== 'off' }, 1, 600, 1), toggle('two_pass', '2-pass', false, { note: 'run RTX VSR (TJ) on the result' }), ...rtxP('p2_', (p) => !!p.two_pass), seed] },
         { id: 'rtx', label: 'RTX VSR (TJ)', family: 'post', params: rtxP('rtx_') },
-        { id: 'model', label: 'Upscale model (ESRGAN…)', family: 'post', params: [dyn('model_name', 'Model', 'upscalers', 'none'), toggle('two_pass', '2nd pass with RTX VSR', false), ...rtxP('p2_', (p) => !!p.two_pass)] },
-      ]),
+        { id: 'model', label: 'Model', family: 'post', params: [dyn('model_name', 'Model', 'upscalers', 'none'), toggle('two_pass', '2nd pass with RTX VSR', false), ...rtxP('p2_', (p) => !!p.two_pass)] },
+      ])),
       pp('pp-skin', 'Skin Retouch', [slider('evenness', 'Evenness', 0, 1, 0.01, 0.3), slider('smoothing', 'Smoothing', 0, 1, 0.01, 0.2), slider('redness', 'Redness', 0, 1, 0.01, 0), slider('shine', 'Shine', 0, 1, 0.01, 0), sel('blemish', 'Blemish fix', ['off', 'subtle', 'strong'], 'off'), toggle('preserve', 'Keep moles / scars', true, { advanced: true }), slider('microtexture', 'Micro-texture', 0, 3, 0.05, 0, { advanced: true })], 'Non-generative skin evening, de-shine and blemish fix.'),
       pp('pp-grain', 'Film Grain', [slider('amount', 'Amount', 0, 1, 0.01, 0.25), slider('size', 'Size', 0.3, 3, 0.05, 1), slider('color', 'Colour grain', 0, 1, 0.01, 0), slider('lum_bias', 'Shadow bias', 0, 1, 0.01, 0), sel('noise', 'Noise', ['smooth', 'grainy'], 'smooth')], 'Add film grain (ComfyUI core GLSL shader).'),
       pp('pp-interpolate', 'Frame Interpolation', [slider('target_fps', 'Target FPS', 24, 120, 1, 48), slider('scale', 'Flow scale', 0.25, 2, 0.25, 1, { advanced: true }), text('model_name', 'RIFE model', 'flownet.pkl', false, { advanced: true }), num('batch', 'Batch size', 8, { advanced: true }, 1, 64, 1), toggle('fp16', 'FP16', true, { advanced: true })], 'RIFE: smooth motion by adding in-between frames.'),
@@ -354,7 +374,7 @@ export const REGISTRY: NodeDef[] = [
       { id: 'h3-image', title: 'Image Generate (H3)', category: 'Image', kind: 'generate',
     inputs: [P.textIn(), P.imgIn('image', 'Reference images (optional)', true, true), P.cardIn('H3 option cards'), P.loraIn(), P.seedIn()], outputs: [P.imgOut()],
     params: [
-      sel('aspect', 'Aspect ratio', ASPECTS, '1:1'), slider('final_mp', 'Final size (MP)', 0.25, 4, 0.25, 1.5), toggle('final', 'High quality 2nd pass (latent upscale)', true),
+      sel('aspect', 'Aspect ratio', ASPECTS, '1:1'), slider('final_mp', 'Final size (MP)', 0.25, 4, 0.25, 1.5), toggle('final', 'High quality 2nd pass', true, { note: 'latent upscale' }),
       slider('preview_mp', 'First pass size (MP)', 0.1, 1.5, 0.05, 0.5, { advanced: true }), slider('steps', 'Steps (no turbo)', 1, 60, 1, 20, { advanced: true }), slider('pass2', '2nd pass steps', 3, 5, 1, 3, { advanced: true, when: (p) => !!p.final }),
       toggle('fizgig', 'Fizgig single-frame latent', false, { advanced: true }), sel('ref_size', 'Reference size', ['max', 'match'], 'max', { advanced: true }), seed,
     ], description: 'A still image from the MiniMax H3 model — text to image, or add reference images (up to 9).' },
@@ -365,7 +385,7 @@ export const REGISTRY: NodeDef[] = [
           sel('aspect', 'Aspect ratio', ['3:4', '9:16', '1:1', '16:9', '4:3'], '3:4'), megapixels(0.9),
           text('frames', 'Frames for the 8 cells', '7, 22, 37, 52, 67, 82, 107, 118'), toggle('save_frames', 'Also save each frame', false, { advanced: true }),
           toggle('latent_up', 'Cheap first pass + latent upscale', false, { advanced: true }), slider('first_mp', 'First pass size (MP)', 0.2, 1, 0.05, 0.36, { advanced: true, when: (p) => !!p.latent_up }), slider('pass2', 'Second pass steps', 3, 5, 1, 3, { advanced: true, when: (p) => !!p.latent_up }),
-          sel('deblur', 'RTX Deblur', ['none', 'LOW', 'MEDIUM', 'HIGH', 'ULTRA'], 'none', { advanced: true }), toggle('rtx', 'RTX VSR', false, { advanced: true }), toggle('supersample', 'Scale back down (supersample)', false, { advanced: true, when: (p) => !!p.rtx }),
+          sel('deblur', 'RTX Deblur', ['none', 'LOW', 'MEDIUM', 'HIGH', 'ULTRA'], 'none', { advanced: true }), toggle('rtx', 'RTX VSR', false, { advanced: true }), toggle('supersample', 'Scale back down', false, { note: 'supersample', advanced: true, when: (p) => !!p.rtx }),
           sel('ref_size', 'Reference size', ['max', 'match'], 'max', { advanced: true }), num('max_dim', 'Sheet max size px', 2048, { advanced: true }, 512, 8192, 64), seed,
         ], description: 'H3 reference-to-video turnaround (front / back / profile / ¾ / expressions) assembled into a model sheet.' },
     ];
