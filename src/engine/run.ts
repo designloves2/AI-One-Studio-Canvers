@@ -2,7 +2,7 @@
 // Generators/LLMs run on the backend (ComfyUI + STUDIO_ONE); edit nodes run in the browser.
 import type { Asset, GraphEdge, GraphNode, NodeDef, Primitive } from '../types';
 import { byId, engineFor } from '../registry';
-import { assetFromFile, ensureInput, fetchBlob, runPrompt, uid, uploadToInput } from '../backend/comfy';
+import { assetFromFile, clearPlan, ensureInput, fetchBlob, recoverPrompt, runPrompt, takeResume, uid, uploadToInput, writePlan } from '../backend/comfy';
 import { buildImageGraph, type ImageJob, type ImageMode, type MossBox } from '../backend/imageGen';
 import { FAMILIES, pickModels, type Family } from '../backend/studio';
 import { runLlm } from '../backend/llm';
@@ -292,16 +292,17 @@ const parseCard = (a: Asset | undefined): any => { try { return a?.text ? JSON.p
 async function runH3(c: Ctx): Promise<Asset[]> {
   const temp: number[] = [];
   try { return await runH3Core(c, temp); }
-  finally { for (const id of temp) { try { await deleteAsset(id); } catch { /* the temporary asset stays in the library */ } } }
+  finally { clearPlan(c.node.id); for (const id of temp) { try { await deleteAsset(id); } catch { /* the temporary asset stays in the library */ } } }
 }
 
 async function runH3Core(c: Ctx, temp: number[]): Promise<Asset[]> {
   const p = c.p;
+  const resume = takeResume(c.node.id) as Record<string, any> | undefined;   // set when the page was reloaded in the middle of this run
   const assetCard = parseCard(c.inputs('assets')[0]);
   let assetRef = assetCard?.kind === 'assetlib' ? { project: assetCard.project as string | undefined, ids: (assetCard.ids ?? []) as string[] } : undefined;
   const ref = c.engineId === 'h3-ref' || !!assetRef;
   const si = c.inputs('seed_in')[0]; const sv = si ? num(si.text, -1) : num(p.seed, -1);
-  const seed0 = sv < 0 ? Math.floor(Math.random() * 2 ** 40) : sv;
+  const seed0 = typeof resume?.seed0 === 'number' ? resume.seed0 : sv < 0 ? Math.floor(Math.random() * 2 ** 40) : sv;
   const settings = useSettings.getState();
   let imgs = c.inputs('image'); const lastA = c.inputs('last')[0];
   const tempImages: Record<string, Asset> = {};   // temporary library id -> the plain image it stands for (described for the prompt writer)
@@ -333,8 +334,8 @@ async function runH3Core(c: Ctx, temp: number[]): Promise<Asset[]> {
     if (ids.length > 9) throw new Error('At most 9 references (images + library assets) fit in one reference clip');
     assetRef = { project: undefined, ids }; imgs = [];
   }
-  let promptSrc = c.text('prompt');
-  if (p.auto_prompt) promptSrc = await autoWrite(c, () => autoPromptH3({ prompt: promptSrc, seconds: num(p.seconds, 8), mode: ref ? 'reference' : (imgs[0] || lastA) ? 'firstlast' : 't2v', images: ref ? imgs : [imgs[0], lastA].filter((x): x is Asset => !!x), assetRef, tempImages, warn: (m) => c.progress(2, m), oneTake: !ref && str(p.continuity, 'lastframe') === 'onetake', clips: promptSrc.split(/\n\s*-{3,}\s*\n/).filter((x) => x.trim()).length }), promptSrc);
+  let promptSrc = resume ? String(resume.promptSrc) : c.text('prompt');
+  if (p.auto_prompt && !resume) promptSrc = await autoWrite(c, () => autoPromptH3({ prompt: promptSrc, seconds: num(p.seconds, 8), mode: ref ? 'reference' : (imgs[0] || lastA) ? 'firstlast' : 't2v', images: ref ? imgs : [imgs[0], lastA].filter((x): x is Asset => !!x), assetRef, tempImages, warn: (m) => c.progress(2, m), oneTake: !ref && str(p.continuity, 'lastframe') === 'onetake', clips: promptSrc.split(/\n\s*-{3,}\s*\n/).filter((x) => x.trim()).length }), promptSrc);
   const prompts = promptSrc.split(/\n\s*-{3,}\s*\n/).map((x) => x.trim()).filter(Boolean);
   if (!prompts.length) throw new Error('Prompt is empty');
   const cards = h3Cards(c);
@@ -355,15 +356,21 @@ async function runH3Core(c: Ctx, temp: number[]): Promise<Asset[]> {
   let prevCheckpoint: string | undefined;
   if (cont?.mode === 'latent') { if (!cont.checkpoint) throw new Error('Continuity (latent): the previous card has no saved latent. Run it first in this session, or pick "Last frame"'); prevCheckpoint = cont.checkpoint; }
   else if (cont) { const lf = await clipLastFrame(cont.filename, cont.subfolder); if (!lf.ok || !lf.filename) throw new Error(`Continuity: could not take the last frame (${lf.error ?? 'unknown'})`); first = lf.filename; }
-  const startAt = prevCheckpoint ? 1 : 0;
+  const startAt = resume ? Number(resume.startAt ?? 0) : prevCheckpoint ? 1 : 0;
+  if (resume) { if (resume.first) first = String(resume.first); prevCheckpoint = resume.prevCheckpoint ? String(resume.prevCheckpoint) : undefined; }
   const lora = (n: string, s2: string) => ({ name: str(p[n], 'none'), strength: num(p[s2], 1) });
   const seconds = num(p.seconds, 8);
-  const runId = uid('ot').slice(0, 10);
+  const runId = resume ? String(resume.runId) : uid('ot').slice(0, 10);
   const opt = await h3Opt(cards, ref);
   const pvCfg = await previewOf(c, 'taeh3');
-  const clips: { filename: string; subfolder: string }[] = [];
-  for (let i = 0; i < prompts.length; i++) {
+  const clips: { filename: string; subfolder: string }[] = resume?.clips ?? [];
+  const plan = (i: number, promptId?: string) => writePlan(c.node.id, { kind: 'h3', promptSrc, seed0, runId, startAt, i, clips, first, prevCheckpoint, promptId });
+  for (let i = Number(resume?.i ?? 0); i < prompts.length; i++) {
     if (c.signal?.aborted) throw new Error('cancelled');
+    // after a reload: follow the clip that was in flight (queued or already finished) instead of making it again
+    let attach: string | undefined;
+    if (resume && i === Number(resume.i) && resume.promptId) { const r = await recoverPrompt(String(resume.promptId)); if (r === 'failed') throw new Error(`clip ${i + 1} failed while the page was closed`); attach = r === null ? undefined : String(resume.promptId); }
+    plan(i);
     const checkpoint = continuity === 'onetake' ? `canvers_${runId}_${i}` : undefined;
     const mode = ref ? 'reference' : (first || (i === prompts.length - 1 && lastFile) ? 'firstlast' : 't2v');
     const built = await buildH3Graph({
@@ -377,7 +384,7 @@ async function runH3Core(c: Ctx, temp: number[]): Promise<Asset[]> {
       clipIndex: i + startAt, prevCheckpoint, checkpoint, saveLastFrame: continuity === 'lastframe' && i < prompts.length - 1, stem: 'MMH3', preview: pvCfg,
     });
     const base = i / prompts.length;
-    const res = await runPrompt(built.graph, { onProgress: (pct, label) => c.progress(Math.round((base + pct / 100 / prompts.length) * 100), `clip ${i + 1}/${prompts.length} ${label ?? ''}`), signal: c.signal, previewKey: pvCfg?.key, onPreview: c.preview }).catch((e) => {
+    const res = await runPrompt(built.graph, { onProgress: (pct, label) => c.progress(Math.round((base + pct / 100 / prompts.length) * 100), `clip ${i + 1}/${prompts.length} ${label ?? ''}`), signal: c.signal, previewKey: pvCfg?.key, onPreview: c.preview, attach, onQueued: (pid) => plan(i, pid) }).catch((e) => {
       const msg = e instanceof Error ? e.message : String(e);
       throw /doesn't match the broadcast shape/.test(msg) && opt.hires ? new Error(`${msg}
 If this happened on the last step of 7+1, H3 Memory Optimization does not work with this model: tick "Bypass H3 Memory Optimization on the last step" on the H3 Turbo card and run again.`) : e;
@@ -396,6 +403,7 @@ If this happened on the last step of 7+1, H3 Memory Optimization does not work w
       first = (await copyToInput(pick)).filename;
     }
   }
+  plan(prompts.length);   // every clip is done: a reload from here only has the stitch left
   const assets = clips.map((f) => assetFromFile({ filename: f.filename, subfolder: f.subfolder, type: 'output' }, 'video', 'video'));
   // the clip keeps its prompt (a later Latent Upscale (Use H3) reads it) and, for One-Take, its latent name
   const tag = (a: Asset[]) => { if (a[0]) a[0].meta = { ...a[0].meta, ...(prevCheckpoint ? { checkpoint: prevCheckpoint } : {}), ...(prompts.length === 1 && !ref ? { prompt: prompts[0] } : {}) }; return a; };   // lets a Continuity card pick up the latent
@@ -410,14 +418,19 @@ If this happened on the last step of 7+1, H3 Memory Optimization does not work w
 
 /** LTX 2.5: one clip per `---` block of the prompt; each clip can start from the last frame of the one before; the clips are stitched at the end. */
 async function runLtx(c: Ctx): Promise<Asset[]> {
+  try { return await runLtxCore(c); } finally { clearPlan(c.node.id); }
+}
+
+async function runLtxCore(c: Ctx): Promise<Asset[]> {
+  const resume = takeResume(c.node.id) as Record<string, any> | undefined;   // set when the page was reloaded in the middle of this run
   const p = c.p; const si = c.inputs('seed_in')[0]; const sv = si ? num(si.text, -1) : num(p.seed, -1);
-  const seed0 = sv < 0 ? Math.floor(Math.random() * 2 ** 40) : sv;
+  const seed0 = typeof resume?.seed0 === 'number' ? resume.seed0 : sv < 0 ? Math.floor(Math.random() * 2 ** 40) : sv;
   const settings = useSettings.getState();
   const first = c.inputs('image')[0], last = c.inputs('last')[0];
   const seconds = num(p.seconds, 5);
   const split = (t: string) => t.split(/\n\s*-{3,}\s*\n/).map((x) => x.trim()).filter(Boolean);
-  let promptSrc = c.text('prompt');
-  if (p.auto_prompt) {
+  let promptSrc = resume ? String(resume.promptSrc) : c.text('prompt');
+  if (p.auto_prompt && !resume) {
     // one request per clip: each `---` block is written on its own
     promptSrc = await autoWrite(c, async () => {
       const out: string[] = [];
@@ -436,9 +449,15 @@ async function runLtx(c: Ctx): Promise<Asset[]> {
   if (cont) { const lf = await clipLastFrame(cont.filename, cont.subfolder); if (!lf.ok || !lf.filename) throw new Error(`Continuity: could not take the last frame (${lf.error ?? 'unknown'})`); firstFile = lf.filename; }
   const chain = p.chain_last !== false;
   const pvCfg = await previewOf(c, 'taeltx2_3');
-  const clips: { filename: string; subfolder: string }[] = [];
-  for (let i = 0; i < prompts.length; i++) {
+  const clips: { filename: string; subfolder: string }[] = resume?.clips ?? [];
+  if (resume?.firstFile) firstFile = String(resume.firstFile);
+  const plan = (i: number, promptId?: string) => { if (prompts.length > 1) writePlan(c.node.id, { kind: 'ltx', promptSrc, seed0, i, clips, firstFile, promptId }); };
+  for (let i = Number(resume?.i ?? 0); i < prompts.length; i++) {
     if (c.signal?.aborted) throw new Error('cancelled');
+    // after a reload: follow the clip that was in flight (queued or already finished) instead of making it again
+    let attach: string | undefined;
+    if (resume && i === Number(resume.i) && resume.promptId) { const r = await recoverPrompt(String(resume.promptId)); if (r === 'failed') throw new Error(`clip ${i + 1} failed while the page was closed`); attach = r === null ? undefined : String(resume.promptId); }
+    plan(i);
     const graph = await buildLtxGraph({
       prompt: prompts[i], seconds, aspect: str(p.aspect, '16:9'), megapixels: num(p.megapixels, 1),
       first: firstFile, last: i === prompts.length - 1 ? lastFile : undefined,
@@ -448,7 +467,7 @@ async function runLtx(c: Ctx): Promise<Asset[]> {
     });
     if (prompts.length === 1) return runGraph(c, graph, pvCfg?.key);
     const base = i / prompts.length;
-    const res = await runPrompt(graph, { onProgress: (pct, label) => c.progress(Math.round((base + pct / 100 / prompts.length) * 100), `clip ${i + 1}/${prompts.length} ${label ?? ''}`), signal: c.signal, previewKey: pvCfg?.key, onPreview: c.preview });
+    const res = await runPrompt(graph, { onProgress: (pct, label) => c.progress(Math.round((base + pct / 100 / prompts.length) * 100), `clip ${i + 1}/${prompts.length} ${label ?? ''}`), signal: c.signal, previewKey: pvCfg?.key, onPreview: c.preview, attach, onQueued: (pid) => plan(i, pid) });
     const vf = [...res.videos, ...res.images].find((f) => VIDEO_EXT.test(f.filename));
     if (!vf) throw new Error(`clip ${i + 1}: ComfyUI returned no video`);
     clips.push({ filename: vf.filename, subfolder: vf.subfolder ?? '' });
@@ -459,6 +478,7 @@ async function runLtx(c: Ctx): Promise<Asset[]> {
       firstFile = lf.filename;
     }
   }
+  plan(prompts.length);   // every clip is done: a reload from here only has the stitch left
   const assets = clips.map((f) => assetFromFile({ filename: f.filename, subfolder: f.subfolder, type: 'output' }, 'video', 'video'));
   if (p.stitch !== false) {
     c.progress(98, 'stitching…');

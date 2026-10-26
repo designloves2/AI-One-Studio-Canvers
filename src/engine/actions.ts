@@ -5,7 +5,7 @@ import { canvasFileName, listCanvases, loadCanvas, saveCanvas } from '../backend
 import { useGraph, type ComposerRun } from '../store/graph';
 import { executeGraph, importFile } from './run';
 import { byId, defaultParams, engineFor } from '../registry';
-import { cancelPrompt, interrupt, readInflight, recoverPrompt, runContext, forgetInflight, assetFromFile, uid, viewUrl } from '../backend/comfy';
+import { cancelPrompt, interrupt, readInflight, recoverPrompt, runContext, forgetInflight, assetFromFile, uid, viewUrl, readPlans, clearPlan, markResume } from '../backend/comfy';
 
 const controllers = new Map<string, AbortController>();
 
@@ -39,7 +39,14 @@ export function stopNode(id: string): void {
 
 /** After a refresh: attach the results of jobs that finished while the page was away, and keep following the ones still running. */
 export async function resumeInflight(): Promise<void> {
+  // a multi-clip run (several clips / split pieces) carries a plan: run the card again from where it stopped, each run once
+  const planned = new Set<string>();
+  for (const nodeId of Object.keys(readPlans())) {
+    if (!useGraph.getState().nodes.some((n) => n.id === nodeId)) { clearPlan(nodeId); continue; }
+    planned.add(nodeId); markResume(nodeId); void runNode(nodeId);
+  }
   for (const [nodeId, j] of Object.entries(readInflight())) {
+    if (planned.has(nodeId)) continue;
     const g = useGraph.getState();
     const node = g.nodes.find((n) => n.id === nodeId);
     const def = node ? byId.get(node.defId) : undefined;

@@ -1,7 +1,7 @@
 // Postprocess → Video Upscale methods that need a prompt: "Latent Upscale (Use H3)" (h3lat) and "LTX 2.5 Upscale" (ltx, with Split mode).
 import type { Asset } from '../types';
 import type { Ctx } from './run';
-import { assetFromFile, ensureInput, runPrompt } from '../backend/comfy';
+import { assetFromFile, clearPlan, ensureInput, recoverPrompt, runPrompt, takeResume, writePlan } from '../backend/comfy';
 import { getJson } from '../backend/http';
 import { buildH3LatGraph, h3LatFrames } from '../backend/h3Lat';
 import { clipLastFrame, copyToInput, stitchClips } from '../backend/h3';
@@ -74,35 +74,45 @@ const rtx2 = (p: Record<string, any>): RtxSize => ({ mode: str(p.p2_mode, 'scale
 
 /** LTX 2.5 Upscale: 2× latent upscale + a light refine; Split mode cuts a long clip into 8n+1-frame pieces, each anchored on the last frame of the one before, then joins them */
 export async function runLtxUpscale(c: Ctx): Promise<Asset[]> {
+  try { return await runLtxUpscaleCore(c); } finally { clearPlan(c.node.id); }
+}
+
+async function runLtxUpscaleCore(c: Ctx): Promise<Asset[]> {
+  const resume = takeResume(c.node.id) as Record<string, any> | undefined;   // set when the page was reloaded in the middle of this run
   const p = c.p; const s = useSettings.getState();
   const v = need(c.inputs('video')[0], 'Video');
   const metaPrompt = String((v.meta as { prompt?: string } | undefined)?.prompt ?? '');
-  const prompt = c.text('prompt').trim() || (metaPrompt && !isH3Brief(metaPrompt) ? metaPrompt : '');
+  const prompt = resume ? String(resume.prompt) : c.text('prompt').trim() || (metaPrompt && !isH3Brief(metaPrompt) ? metaPrompt : '');
   // shortcut: an H3 brief is not rewritten as an LTX prompt here and there is no frames → vision step; give an LTX prompt
   if (!prompt) throw new Error('LTX 2.5 Upscale: connect an LTX prompt to the Prompt input (this clip carries none).');
   c.progress(2, 'uploading video…');
   const file = await ensureInput(v);
   const info = await sizeAndFps(v.url);
-  const sv = num(p.seed, -1); const seed = sv < 0 ? Math.floor(Math.random() * 2 ** 40) : sv;
+  const sv = num(p.seed, -1); const seed = typeof resume?.seed === 'number' ? resume.seed : sv < 0 ? Math.floor(Math.random() * 2 ** 40) : sv;
   const job = { prompt, negative: 'bad anatomy, inconsistent look, low resolution,', steps: num(p.ltx_steps, 4), denoise: num(p.ltx_denoise, 0.15), sampler: str(p.ltx_sampler, 'euler_ancestral'), scheduler: str(p.ltx_scheduler, 'simple'), seed, loras: cardLoras(c), models: s.video, saveSubfolder: s.saveSubfolder, stem: 'canvers' };
   const mode = str(p.split_mode, 'off'), value = Math.max(1, num(p.split_value, 5));
   let pieces = info.total;   // frames per piece; 0 total = unknown length, run whole
   if (mode !== 'off' && info.total > 0) { const want = mode === 'seconds' ? Math.round(value * info.fps) : Math.ceil(info.total / value); pieces = Math.max(9, Math.floor((want - 1) / 8) * 8 + 1); }
   let result: { filename: string; subfolder: string };
-  const runOne = async (extra: { skip?: number; cap?: number; anchor?: string }, label: string) => {
+  const runOne = async (extra: { skip?: number; cap?: number; anchor?: string }, label: string, pid?: { attach?: string; onQueued?: (id: string) => void }) => {
     const g = await buildRefineGraph({ file, ...job, ...extra });
-    const res = await runPrompt(g.graph, { onProgress: (pct, l) => c.progress(pct, `${label} ${l ?? ''}`), signal: c.signal });
+    const res = await runPrompt(g.graph, { onProgress: (pct, l) => c.progress(pct, `${label} ${l ?? ''}`), signal: c.signal, ...pid });
     const f = (res.raw[g.save]?.gifs ?? res.raw[g.save]?.images ?? res.raw[g.save]?.videos ?? [])[0];
     if (!f) throw new Error('ComfyUI returned no video');
     return { filename: f.filename as string, subfolder: (f.subfolder ?? '') as string };
   };
   if (mode === 'off' || info.total <= 0 || pieces >= info.total) result = await runOne({}, '');
   else {
-    const outs: { filename: string; subfolder: string }[] = []; let anchor: string | undefined;
-    for (let at = 0, i = 1; at < info.total; at += pieces, i++) {
+    const outs: { filename: string; subfolder: string }[] = resume?.outs ?? []; let anchor: string | undefined = resume?.anchor ? String(resume.anchor) : undefined;
+    const plan = (at: number, promptId?: string) => writePlan(c.node.id, { kind: 'ltxup', prompt, seed, outs, anchor, at, promptId });
+    for (let at = Number(resume?.at ?? 0), i = outs.length + 1; at < info.total; at += pieces, i++) {
       if (c.signal?.aborted) throw new Error('cancelled');
       const n = Math.ceil(info.total / pieces);
-      outs.push(await runOne({ skip: at, cap: Math.min(pieces, info.total - at), anchor }, `piece ${i}/${n}`));
+      // after a reload: follow the piece that was in flight (queued or already finished) instead of making it again
+      let attach: string | undefined;
+      if (resume && at === Number(resume.at) && resume.promptId) { const r = await recoverPrompt(String(resume.promptId)); if (r === 'failed') throw new Error(`piece ${i} failed while the page was closed`); attach = r === null ? undefined : String(resume.promptId); }
+      plan(at);
+      outs.push(await runOne({ skip: at, cap: Math.min(pieces, info.total - at), anchor }, `piece ${i}/${n}`, { attach, onQueued: (id) => plan(at, id) }));
       const lf = await clipLastFrame(outs[outs.length - 1].filename, outs[outs.length - 1].subfolder);
       if (!lf.ok || !lf.filename) throw new Error(`piece ${i}: could not take the last frame (${lf.error ?? 'unknown'})`);
       anchor = lf.filename;

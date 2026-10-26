@@ -4091,22 +4091,27 @@ __export(comfy_exports, {
   assetFromFile: () => assetFromFile,
   cancelPrompt: () => cancelPrompt,
   clearInflight: () => clearInflight,
+  clearPlan: () => clearPlan,
   clientId: () => clientId,
   ensureInput: () => ensureInput,
   fetchBlob: () => fetchBlob,
   forgetInflight: () => forgetInflight,
   freeModels: () => freeModels,
   interrupt: () => interrupt,
+  markResume: () => markResume,
   objectInfo: () => objectInfo,
   onSocket: () => onSocket,
   readInflight: () => readInflight,
+  readPlans: () => readPlans,
   recoverPrompt: () => recoverPrompt,
   runContext: () => runContext,
   runPrompt: () => runPrompt,
   systemStats: () => systemStats,
+  takeResume: () => takeResume,
   uid: () => uid,
   uploadToInput: () => uploadToInput,
-  viewUrl: () => viewUrl
+  viewUrl: () => viewUrl,
+  writePlan: () => writePlan
 });
 async function systemStats() {
   return getJson("/system_stats");
@@ -4230,6 +4235,35 @@ function forgetInflight(promptId) {
   }
   if (changed) writeInflight(v);
 }
+function readPlans() {
+  try {
+    return JSON.parse(localStorage.getItem(PLAN_KEY) ?? "{}");
+  } catch {
+    return {};
+  }
+}
+function writePlan(nodeId, plan) {
+  const v = readPlans();
+  v[nodeId] = plan;
+  try {
+    localStorage.setItem(PLAN_KEY, JSON.stringify(v));
+  } catch {
+  }
+}
+function clearPlan(nodeId) {
+  const v = readPlans();
+  if (nodeId in v) {
+    delete v[nodeId];
+    try {
+      localStorage.setItem(PLAN_KEY, JSON.stringify(v));
+    } catch {
+    }
+  }
+}
+function takeResume(nodeId) {
+  if (!resumeNodes.delete(nodeId)) return void 0;
+  return readPlans()[nodeId];
+}
 function clearInflight() {
   try {
     localStorage.removeItem(INFLIGHT_KEY);
@@ -4263,18 +4297,23 @@ async function recoverPrompt(promptId) {
 async function runPrompt(graph, opts = {}) {
   await waitForLocalLlmIdle();
   await openSocket();
-  const res = await fetch(url("/prompt"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    // VHS_VideoCombine reads these from the workflow extra: without them it leaves a silent video and a first-frame PNG next to the "-audio" file
-    body: JSON.stringify({ prompt: graph, client_id: clientId, extra_data: { extra_pnginfo: { workflow: { extra: { VHS_KeepIntermediate: false, VHS_MetadataImage: false } } } } })
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok || data.error) {
-    const nodeErr = data.node_errors ? Object.values(data.node_errors).map((n2) => (n2.errors ?? []).map((e) => e.message + (e.details ? ` (${e.details})` : "")).join("; ")).filter(Boolean).join(" | ") : "";
-    throw new Error([data.error?.message, nodeErr].filter(Boolean).join(" \u2014 ") || `queue failed: HTTP ${res.status}`);
+  let promptId;
+  if (opts.attach) promptId = opts.attach;
+  else {
+    const res = await fetch(url("/prompt"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      // VHS_VideoCombine reads these from the workflow extra: without them it leaves a silent video and a first-frame PNG next to the "-audio" file
+      body: JSON.stringify({ prompt: graph, client_id: clientId, extra_data: { extra_pnginfo: { workflow: { extra: { VHS_KeepIntermediate: false, VHS_MetadataImage: false } } } } })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.error) {
+      const nodeErr = data.node_errors ? Object.values(data.node_errors).map((n2) => (n2.errors ?? []).map((e) => e.message + (e.details ? ` (${e.details})` : "")).join("; ")).filter(Boolean).join(" | ") : "";
+      throw new Error([data.error?.message, nodeErr].filter(Boolean).join(" \u2014 ") || `queue failed: HTTP ${res.status}`);
+    }
+    promptId = data.prompt_id;
   }
-  const promptId = data.prompt_id;
+  opts.onQueued?.(promptId);
   const runNodeId = opts.signal ? runContext.get(opts.signal)?.node : void 0;
   if (runNodeId) {
     const v = readInflight();
@@ -4363,7 +4402,7 @@ async function freeModels() {
   } catch {
   }
 }
-var clientId, viewUrl, uid, ws, listeners, opening, runContext, INFLIGHT_KEY;
+var clientId, viewUrl, uid, ws, listeners, opening, runContext, INFLIGHT_KEY, PLAN_KEY, resumeNodes, markResume;
 var init_comfy = __esm({
   "src/backend/comfy.ts"() {
     "use strict";
@@ -4377,6 +4416,11 @@ var init_comfy = __esm({
     opening = null;
     runContext = /* @__PURE__ */ new WeakMap();
     INFLIGHT_KEY = "canvers.inflight.v1";
+    PLAN_KEY = "canvers.runplan.v1";
+    resumeNodes = /* @__PURE__ */ new Set();
+    markResume = (nodeId) => {
+      resumeNodes.add(nodeId);
+    };
   }
 });
 
@@ -7538,17 +7582,25 @@ async function runH3Lat(c) {
 }
 var rtx2 = (p) => ({ mode: str(p.p2_mode, "scale"), scale: num2(p.p2_scale, 2), short: num2(p.p2_short, 1080), long: num2(p.p2_long, 1920), w: num2(p.p2_w, 1920), h: num2(p.p2_h, 1080), anchor: str(p.p2_anchor, "center"), quality: str(p.p2_quality, "ULTRA") });
 async function runLtxUpscale(c) {
+  try {
+    return await runLtxUpscaleCore(c);
+  } finally {
+    clearPlan(c.node.id);
+  }
+}
+async function runLtxUpscaleCore(c) {
+  const resume = takeResume(c.node.id);
   const p = c.p;
   const s = useSettings.getState();
   const v = need(c.inputs("video")[0], "Video");
   const metaPrompt = String(v.meta?.prompt ?? "");
-  const prompt = c.text("prompt").trim() || (metaPrompt && !isH3Brief(metaPrompt) ? metaPrompt : "");
+  const prompt = resume ? String(resume.prompt) : c.text("prompt").trim() || (metaPrompt && !isH3Brief(metaPrompt) ? metaPrompt : "");
   if (!prompt) throw new Error("LTX 2.5 Upscale: connect an LTX prompt to the Prompt input (this clip carries none).");
   c.progress(2, "uploading video\u2026");
   const file = await ensureInput(v);
   const info = await sizeAndFps(v.url);
   const sv = num2(p.seed, -1);
-  const seed2 = sv < 0 ? Math.floor(Math.random() * 2 ** 40) : sv;
+  const seed2 = typeof resume?.seed === "number" ? resume.seed : sv < 0 ? Math.floor(Math.random() * 2 ** 40) : sv;
   const job = { prompt, negative: "bad anatomy, inconsistent look, low resolution,", steps: num2(p.ltx_steps, 4), denoise: num2(p.ltx_denoise, 0.15), sampler: str(p.ltx_sampler, "euler_ancestral"), scheduler: str(p.ltx_scheduler, "simple"), seed: seed2, loras: cardLoras(c), models: s.video, saveSubfolder: s.saveSubfolder, stem: "canvers" };
   const mode = str(p.split_mode, "off"), value = Math.max(1, num2(p.split_value, 5));
   let pieces = info.total;
@@ -7557,21 +7609,29 @@ async function runLtxUpscale(c) {
     pieces = Math.max(9, Math.floor((want - 1) / 8) * 8 + 1);
   }
   let result;
-  const runOne = async (extra, label) => {
+  const runOne = async (extra, label, pid) => {
     const g = await buildRefineGraph({ file, ...job, ...extra });
-    const res = await runPrompt(g.graph, { onProgress: (pct, l) => c.progress(pct, `${label} ${l ?? ""}`), signal: c.signal });
+    const res = await runPrompt(g.graph, { onProgress: (pct, l) => c.progress(pct, `${label} ${l ?? ""}`), signal: c.signal, ...pid });
     const f = (res.raw[g.save]?.gifs ?? res.raw[g.save]?.images ?? res.raw[g.save]?.videos ?? [])[0];
     if (!f) throw new Error("ComfyUI returned no video");
     return { filename: f.filename, subfolder: f.subfolder ?? "" };
   };
   if (mode === "off" || info.total <= 0 || pieces >= info.total) result = await runOne({}, "");
   else {
-    const outs = [];
-    let anchor;
-    for (let at = 0, i = 1; at < info.total; at += pieces, i++) {
+    const outs = resume?.outs ?? [];
+    let anchor = resume?.anchor ? String(resume.anchor) : void 0;
+    const plan = (at, promptId) => writePlan(c.node.id, { kind: "ltxup", prompt, seed: seed2, outs, anchor, at, promptId });
+    for (let at = Number(resume?.at ?? 0), i = outs.length + 1; at < info.total; at += pieces, i++) {
       if (c.signal?.aborted) throw new Error("cancelled");
       const n2 = Math.ceil(info.total / pieces);
-      outs.push(await runOne({ skip: at, cap: Math.min(pieces, info.total - at), anchor }, `piece ${i}/${n2}`));
+      let attach;
+      if (resume && at === Number(resume.at) && resume.promptId) {
+        const r = await recoverPrompt(String(resume.promptId));
+        if (r === "failed") throw new Error(`piece ${i} failed while the page was closed`);
+        attach = r === null ? void 0 : String(resume.promptId);
+      }
+      plan(at);
+      outs.push(await runOne({ skip: at, cap: Math.min(pieces, info.total - at), anchor }, `piece ${i}/${n2}`, { attach, onQueued: (id) => plan(at, id) }));
       const lf = await clipLastFrame(outs[outs.length - 1].filename, outs[outs.length - 1].subfolder);
       if (!lf.ok || !lf.filename) throw new Error(`piece ${i}: could not take the last frame (${lf.error ?? "unknown"})`);
       anchor = lf.filename;
@@ -8496,6 +8556,7 @@ async function runH3(c) {
   try {
     return await runH3Core(c, temp);
   } finally {
+    clearPlan(c.node.id);
     for (const id of temp) {
       try {
         await deleteAsset(id);
@@ -8506,12 +8567,13 @@ async function runH3(c) {
 }
 async function runH3Core(c, temp) {
   const p = c.p;
+  const resume = takeResume(c.node.id);
   const assetCard = parseCard(c.inputs("assets")[0]);
   let assetRef = assetCard?.kind === "assetlib" ? { project: assetCard.project, ids: assetCard.ids ?? [] } : void 0;
   const ref = c.engineId === "h3-ref" || !!assetRef;
   const si = c.inputs("seed_in")[0];
   const sv = si ? num2(si.text, -1) : num2(p.seed, -1);
-  const seed0 = sv < 0 ? Math.floor(Math.random() * 2 ** 40) : sv;
+  const seed0 = typeof resume?.seed0 === "number" ? resume.seed0 : sv < 0 ? Math.floor(Math.random() * 2 ** 40) : sv;
   const settings = useSettings.getState();
   let imgs = c.inputs("image");
   const lastA = c.inputs("last")[0];
@@ -8557,8 +8619,8 @@ async function runH3Core(c, temp) {
     assetRef = { project: void 0, ids };
     imgs = [];
   }
-  let promptSrc = c.text("prompt");
-  if (p.auto_prompt) promptSrc = await autoWrite(c, () => autoPromptH3({ prompt: promptSrc, seconds: num2(p.seconds, 8), mode: ref ? "reference" : imgs[0] || lastA ? "firstlast" : "t2v", images: ref ? imgs : [imgs[0], lastA].filter((x) => !!x), assetRef, tempImages, warn: (m) => c.progress(2, m), oneTake: !ref && str(p.continuity, "lastframe") === "onetake", clips: promptSrc.split(/\n\s*-{3,}\s*\n/).filter((x) => x.trim()).length }), promptSrc);
+  let promptSrc = resume ? String(resume.promptSrc) : c.text("prompt");
+  if (p.auto_prompt && !resume) promptSrc = await autoWrite(c, () => autoPromptH3({ prompt: promptSrc, seconds: num2(p.seconds, 8), mode: ref ? "reference" : imgs[0] || lastA ? "firstlast" : "t2v", images: ref ? imgs : [imgs[0], lastA].filter((x) => !!x), assetRef, tempImages, warn: (m) => c.progress(2, m), oneTake: !ref && str(p.continuity, "lastframe") === "onetake", clips: promptSrc.split(/\n\s*-{3,}\s*\n/).filter((x) => x.trim()).length }), promptSrc);
   const prompts = promptSrc.split(/\n\s*-{3,}\s*\n/).map((x) => x.trim()).filter(Boolean);
   if (!prompts.length) throw new Error("Prompt is empty");
   const cards = h3Cards(c);
@@ -8587,15 +8649,27 @@ async function runH3Core(c, temp) {
     if (!lf.ok || !lf.filename) throw new Error(`Continuity: could not take the last frame (${lf.error ?? "unknown"})`);
     first = lf.filename;
   }
-  const startAt = prevCheckpoint ? 1 : 0;
+  const startAt = resume ? Number(resume.startAt ?? 0) : prevCheckpoint ? 1 : 0;
+  if (resume) {
+    if (resume.first) first = String(resume.first);
+    prevCheckpoint = resume.prevCheckpoint ? String(resume.prevCheckpoint) : void 0;
+  }
   const lora = (n2, s2) => ({ name: str(p[n2], "none"), strength: num2(p[s2], 1) });
   const seconds = num2(p.seconds, 8);
-  const runId = uid("ot").slice(0, 10);
+  const runId = resume ? String(resume.runId) : uid("ot").slice(0, 10);
   const opt = await h3Opt(cards, ref);
   const pvCfg = await previewOf(c, "taeh3");
-  const clips = [];
-  for (let i = 0; i < prompts.length; i++) {
+  const clips = resume?.clips ?? [];
+  const plan = (i, promptId) => writePlan(c.node.id, { kind: "h3", promptSrc, seed0, runId, startAt, i, clips, first, prevCheckpoint, promptId });
+  for (let i = Number(resume?.i ?? 0); i < prompts.length; i++) {
     if (c.signal?.aborted) throw new Error("cancelled");
+    let attach;
+    if (resume && i === Number(resume.i) && resume.promptId) {
+      const r = await recoverPrompt(String(resume.promptId));
+      if (r === "failed") throw new Error(`clip ${i + 1} failed while the page was closed`);
+      attach = r === null ? void 0 : String(resume.promptId);
+    }
+    plan(i);
     const checkpoint = continuity === "onetake" ? `canvers_${runId}_${i}` : void 0;
     const mode = ref ? "reference" : first || i === prompts.length - 1 && lastFile ? "firstlast" : "t2v";
     const built = await buildH3Graph({
@@ -8626,7 +8700,7 @@ async function runH3Core(c, temp) {
       preview: pvCfg
     });
     const base2 = i / prompts.length;
-    const res = await runPrompt(built.graph, { onProgress: (pct, label) => c.progress(Math.round((base2 + pct / 100 / prompts.length) * 100), `clip ${i + 1}/${prompts.length} ${label ?? ""}`), signal: c.signal, previewKey: pvCfg?.key, onPreview: c.preview }).catch((e) => {
+    const res = await runPrompt(built.graph, { onProgress: (pct, label) => c.progress(Math.round((base2 + pct / 100 / prompts.length) * 100), `clip ${i + 1}/${prompts.length} ${label ?? ""}`), signal: c.signal, previewKey: pvCfg?.key, onPreview: c.preview, attach, onQueued: (pid) => plan(i, pid) }).catch((e) => {
       const msg = e instanceof Error ? e.message : String(e);
       throw /doesn't match the broadcast shape/.test(msg) && opt.hires ? new Error(`${msg}
 If this happened on the last step of 7+1, H3 Memory Optimization does not work with this model: tick "Bypass H3 Memory Optimization on the last step" on the H3 Turbo card and run again.`) : e;
@@ -8649,6 +8723,7 @@ If this happened on the last step of 7+1, H3 Memory Optimization does not work w
       first = (await copyToInput(pick)).filename;
     }
   }
+  plan(prompts.length);
   const assets = clips.map((f) => assetFromFile({ filename: f.filename, subfolder: f.subfolder, type: "output" }, "video", "video"));
   const tag = (a) => {
     if (a[0]) a[0].meta = { ...a[0].meta, ...prevCheckpoint ? { checkpoint: prevCheckpoint } : {}, ...prompts.length === 1 && !ref ? { prompt: prompts[0] } : {} };
@@ -8663,16 +8738,24 @@ If this happened on the last step of 7+1, H3 Memory Optimization does not work w
   return tag(assets);
 }
 async function runLtx(c) {
+  try {
+    return await runLtxCore(c);
+  } finally {
+    clearPlan(c.node.id);
+  }
+}
+async function runLtxCore(c) {
+  const resume = takeResume(c.node.id);
   const p = c.p;
   const si = c.inputs("seed_in")[0];
   const sv = si ? num2(si.text, -1) : num2(p.seed, -1);
-  const seed0 = sv < 0 ? Math.floor(Math.random() * 2 ** 40) : sv;
+  const seed0 = typeof resume?.seed0 === "number" ? resume.seed0 : sv < 0 ? Math.floor(Math.random() * 2 ** 40) : sv;
   const settings = useSettings.getState();
   const first = c.inputs("image")[0], last = c.inputs("last")[0];
   const seconds = num2(p.seconds, 5);
   const split = (t2) => t2.split(/\n\s*-{3,}\s*\n/).map((x) => x.trim()).filter(Boolean);
-  let promptSrc = c.text("prompt");
-  if (p.auto_prompt) {
+  let promptSrc = resume ? String(resume.promptSrc) : c.text("prompt");
+  if (p.auto_prompt && !resume) {
     promptSrc = await autoWrite(c, async () => {
       const out = [];
       for (const part of split(promptSrc).length ? split(promptSrc) : [promptSrc]) out.push(await autoPromptLtx({ prompt: part, seconds, images: out.length ? [] : [first, last].filter((x) => !!x) }));
@@ -8697,9 +8780,20 @@ async function runLtx(c) {
   }
   const chain2 = p.chain_last !== false;
   const pvCfg = await previewOf(c, "taeltx2_3");
-  const clips = [];
-  for (let i = 0; i < prompts.length; i++) {
+  const clips = resume?.clips ?? [];
+  if (resume?.firstFile) firstFile = String(resume.firstFile);
+  const plan = (i, promptId) => {
+    if (prompts.length > 1) writePlan(c.node.id, { kind: "ltx", promptSrc, seed0, i, clips, firstFile, promptId });
+  };
+  for (let i = Number(resume?.i ?? 0); i < prompts.length; i++) {
     if (c.signal?.aborted) throw new Error("cancelled");
+    let attach;
+    if (resume && i === Number(resume.i) && resume.promptId) {
+      const r = await recoverPrompt(String(resume.promptId));
+      if (r === "failed") throw new Error(`clip ${i + 1} failed while the page was closed`);
+      attach = r === null ? void 0 : String(resume.promptId);
+    }
+    plan(i);
     const graph = await buildLtxGraph({
       prompt: prompts[i],
       seconds,
@@ -8721,7 +8815,7 @@ async function runLtx(c) {
     });
     if (prompts.length === 1) return runGraph(c, graph, pvCfg?.key);
     const base2 = i / prompts.length;
-    const res = await runPrompt(graph, { onProgress: (pct, label) => c.progress(Math.round((base2 + pct / 100 / prompts.length) * 100), `clip ${i + 1}/${prompts.length} ${label ?? ""}`), signal: c.signal, previewKey: pvCfg?.key, onPreview: c.preview });
+    const res = await runPrompt(graph, { onProgress: (pct, label) => c.progress(Math.round((base2 + pct / 100 / prompts.length) * 100), `clip ${i + 1}/${prompts.length} ${label ?? ""}`), signal: c.signal, previewKey: pvCfg?.key, onPreview: c.preview, attach, onQueued: (pid) => plan(i, pid) });
     const vf = [...res.videos, ...res.images].find((f) => VIDEO_EXT.test(f.filename));
     if (!vf) throw new Error(`clip ${i + 1}: ComfyUI returned no video`);
     clips.push({ filename: vf.filename, subfolder: vf.subfolder ?? "" });
@@ -8731,6 +8825,7 @@ async function runLtx(c) {
       firstFile = lf.filename;
     }
   }
+  plan(prompts.length);
   const assets = clips.map((f) => assetFromFile({ filename: f.filename, subfolder: f.subfolder, type: "output" }, "video", "video"));
   if (p.stitch !== false) {
     c.progress(98, "stitching\u2026");
@@ -9087,7 +9182,7 @@ var send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 async function handle(msg) {
   const { id, method, params } = msg;
   try {
-    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.25.0" } } });
+    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.25.1" } } });
     if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS.map(({ run: _r, ...t2 }) => t2) } });
     if (method === "tools/call") {
       const tool = TOOLS.find((t2) => t2.name === params?.name);

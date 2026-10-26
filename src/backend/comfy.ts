@@ -125,6 +125,16 @@ export function forgetInflight(promptId: string) {
   for (const [k, e] of Object.entries(v)) if (e.promptId === promptId) { delete v[k]; changed = true; }
   if (changed) writeInflight(v);
 }
+// ---- run plans: a multi-clip run keeps what is done and what is left, so a reload continues it instead of re-attaching only the clip in flight
+const PLAN_KEY = 'canvers.runplan.v1';
+export type RunPlan = { kind: string; promptId?: string; [k: string]: unknown };
+export function readPlans(): Record<string, RunPlan> { try { return JSON.parse(localStorage.getItem(PLAN_KEY) ?? '{}'); } catch { return {}; } }
+export function writePlan(nodeId: string, plan: RunPlan) { const v = readPlans(); v[nodeId] = plan; try { localStorage.setItem(PLAN_KEY, JSON.stringify(v)); } catch { /* quota */ } }
+export function clearPlan(nodeId: string) { const v = readPlans(); if (nodeId in v) { delete v[nodeId]; try { localStorage.setItem(PLAN_KEY, JSON.stringify(v)); } catch { /* ignore */ } } }
+// a node run again by resumeInflight takes its plan once (each run is picked up one time)
+const resumeNodes = new Set<string>();
+export const markResume = (nodeId: string) => { resumeNodes.add(nodeId); };
+export function takeResume(nodeId: string): RunPlan | undefined { if (!resumeNodes.delete(nodeId)) return undefined; return readPlans()[nodeId]; }
 export function clearInflight() { try { localStorage.removeItem(INFLIGHT_KEY); } catch { /* ignore */ } }
 
 function collectOutput(out: RunResult, nodeId: string, output: any) {
@@ -159,12 +169,19 @@ export interface RunOptions {
   signal?: AbortSignal;
   /** stored with the in-flight record so a result re-attached after a reload gets the same meta */
   meta?: Record<string, unknown>;
+  /** a prompt that is already queued / finished (after a reload): follow it instead of queuing a new one */
+  attach?: string;
+  /** called with the prompt id as soon as it is queued */
+  onQueued?: (promptId: string) => void;
 }
 
 /** Queue an API-format graph and resolve with everything its output nodes produced. */
 export async function runPrompt(graph: Record<string, unknown>, opts: RunOptions = {}): Promise<RunResult> {
   await waitForLocalLlmIdle();   // a generation never starts while a local LLM is running
   await openSocket();
+  let promptId: string;
+  if (opts.attach) promptId = opts.attach;
+  else {
   const res = await fetch(url('/prompt'), {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     // VHS_VideoCombine reads these from the workflow extra: without them it leaves a silent video and a first-frame PNG next to the "-audio" file
@@ -175,7 +192,9 @@ export async function runPrompt(graph: Record<string, unknown>, opts: RunOptions
     const nodeErr = data.node_errors ? Object.values<any>(data.node_errors).map((n) => (n.errors ?? []).map((e: any) => e.message + (e.details ? ` (${e.details})` : '')).join('; ')).filter(Boolean).join(' | ') : '';
     throw new Error([data.error?.message, nodeErr].filter(Boolean).join(' — ') || `queue failed: HTTP ${res.status}`);
   }
-  const promptId: string = data.prompt_id;
+  promptId = data.prompt_id as string;
+  }
+  opts.onQueued?.(promptId);
   const runNodeId = opts.signal ? runContext.get(opts.signal)?.node : undefined;
   if (runNodeId) { const v = readInflight(); v[runNodeId] = { promptId, t: Date.now(), ...(opts.meta ? { meta: opts.meta } : {}) }; writeInflight(v); }
 
