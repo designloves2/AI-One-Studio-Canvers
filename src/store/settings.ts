@@ -28,7 +28,7 @@ export const DEFAULT_LLM: LlmSettings = {
   backend: 'custom',
   gguf_model: '', mmproj_file: 'none', n_ctx: 4096, n_gpu_layers: -1,
   text_encoder_name: '', clip_loader_type: 'Auto',
-  or_model_text: 'google/gemini-2.5-flash', or_model_vision: 'google/gemini-2.5-flash',
+  or_model_text: '', or_model_vision: '',   // OpenRouter has no default model: the user picks one
   custom_base: 'http://localhost:3000/v1', custom_model: '', custom_ctx: 0,
   temperature: 0.7, max_tokens: 1000,
 };

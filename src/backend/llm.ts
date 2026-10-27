@@ -8,6 +8,7 @@ import { acquireLocalLlm, type NoticePlace } from './llmGuard';
 import type { Asset } from '../types';
 import { getJson, postJson } from './http';
 import { fetchBlob } from './comfy';
+import { notify } from '../ui/dialog';
 import { DEFAULT_LLM, llmDirty, useSettings, type LlmBackend, type LlmSettings } from '../store/settings';
 
 export const BACKENDS: { id: LlmBackend; label: string; hint: string }[] = [
@@ -187,6 +188,12 @@ async function runLlmNow(req: LlmRequest, retried: boolean): Promise<string> {
   if (l.backend === 'comfy' && !l.text_encoder_name) {
     const vis = !!images.length && l === useSettings.getState().vision.llm;
     throw new Error(`ComfyUI TextGenerate has no text encoder: pick one in Settings → ${vis ? 'LLM (Vision)' : 'LLM (Brief)'} backend and save.`);
+  }
+
+  // OpenRouter has no default model: nothing is sent until one is picked
+  if (l.backend === 'openrouter' && !(images.length ? l.or_model_vision : l.or_model_text).trim()) {
+    const msg = 'OpenRouter 모델이 선택되지 않았습니다. 설정 > LLM 에서 모델을 선택하세요.';
+    void notify(msg); throw new Error(msg);
   }
 
   if (l.backend === 'custom') {

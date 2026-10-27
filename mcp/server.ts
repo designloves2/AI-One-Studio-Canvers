@@ -108,7 +108,7 @@ const send = (m: unknown) => process.stdout.write(JSON.stringify(m) + '\n');
 async function handle(msg: any) {
   const { id, method, params } = msg;
   try {
-    if (method === 'initialize') return send({ jsonrpc: '2.0', id, result: { protocolVersion: params?.protocolVersion ?? '2024-11-05', capabilities: { tools: {} }, serverInfo: { name: 'ai-one-studio-canvers', version: '2.27.3' } } });
+    if (method === 'initialize') return send({ jsonrpc: '2.0', id, result: { protocolVersion: params?.protocolVersion ?? '2024-11-05', capabilities: { tools: {} }, serverInfo: { name: 'ai-one-studio-canvers', version: '2.27.4' } } });
     if (method === 'tools/list') return send({ jsonrpc: '2.0', id, result: { tools: TOOLS.map(({ run: _r, ...t }) => t) } });
     if (method === 'tools/call') {
       const tool = TOOLS.find((t) => t.name === params?.name);

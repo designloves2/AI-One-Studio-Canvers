@@ -3,6 +3,7 @@
 import { useSyncExternalStore } from 'react';
 import { getJson, postJson } from './http';
 import { runLlm } from './llm';
+import { notify } from '../ui/dialog';
 import { DEFAULT_LLM } from '../store/settings';
 import { useGraph } from '../store/graph';
 import { byId } from '../registry';
@@ -41,6 +42,10 @@ export const translateLlm = () => async (system: string, user: string): Promise<
   if (c.backend === 'native') {
     if (!c.native_clip) throw new Error('No translate CLIP set - pick one in Settings -> Translation LLM.');
     return runLlm({ system, prompt: user, max_tokens: 4096, temperature: 0.2, llm: { ...DEFAULT_LLM, backend: 'comfy', text_encoder_name: c.native_clip, max_tokens: 4096, temperature: 0.2 } });
+  }
+  if (c.backend === 'openrouter' && !c.or_model.trim()) {
+    const msg = 'OpenRouter 모델이 선택되지 않았습니다. 설정 > 번역 LLM 에서 모델을 선택하세요.';
+    void notify(msg); throw new Error(msg);
   }
   const d = await postJson<{ ok: boolean; text?: string; error?: string }>('/tj_shared/translate_llm', { system, user });
   if (!d.ok) throw new Error(d.error || 'Translate failed');
