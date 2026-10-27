@@ -8,7 +8,7 @@ import { acquireLocalLlm, type NoticePlace } from './llmGuard';
 import type { Asset } from '../types';
 import { getJson, postJson } from './http';
 import { fetchBlob } from './comfy';
-import { DEFAULT_LLM, useSettings, type LlmBackend, type LlmSettings } from '../store/settings';
+import { DEFAULT_LLM, llmDirty, useSettings, type LlmBackend, type LlmSettings } from '../store/settings';
 
 export const BACKENDS: { id: LlmBackend; label: string; hint: string }[] = [
   { id: 'local', label: 'Local GGUF (llama.cpp)', hint: 'Runs a .gguf model inside ComfyUI (needs ComfyUI-TJ_NODE + llama-cpp-python).' },
@@ -38,6 +38,7 @@ const PREFIX = 'canvers_llm_';
 const VPREFIX = 'canvers_vision_';
 
 export async function loadServerSettings(): Promise<void> {
+  const was = { main: new Set(llmDirty.main), vision: new Set(llmDirty.vision), same: llmDirty.same };   // what the server sends is not a change of ours
   try {
     const { settings } = await getJson<{ settings: Record<string, any> }>('/tj_shared/llm_settings');
     const patch: Partial<LlmSettings> = {};
@@ -55,16 +56,19 @@ export async function loadServerSettings(): Promise<void> {
     if (Object.keys(vp).length) useSettings.getState().setVisionLlm(vp);
     if (typeof settings?.[VPREFIX + 'same'] === 'boolean') useSettings.getState().setVision({ same: settings[VPREFIX + 'same'] });
   } catch { /* backend without the route: browser copy is used */ }
+  llmDirty.main = was.main; llmDirty.vision = was.vision; llmDirty.same = was.same;
 }
 
 export async function saveServerSettings(): Promise<void> {
   const llm = useSettings.getState().llm;
   const flat: Record<string, string | number | boolean> = {};
-  for (const [k, v] of Object.entries(llm)) flat[PREFIX + k] = v as any;
+  for (const [k, v] of Object.entries(llm)) if (llmDirty.main.has(k)) flat[PREFIX + k] = v as any;
   const { vision } = useSettings.getState();
-  for (const [k, v] of Object.entries(vision.llm)) flat[VPREFIX + k] = v as any;
-  flat[VPREFIX + 'same'] = vision.same;
+  for (const [k, v] of Object.entries(vision.llm)) if (llmDirty.vision.has(k)) flat[VPREFIX + k] = v as any;
+  if (llmDirty.same) flat[VPREFIX + 'same'] = vision.same;
+  if (!Object.keys(flat).length) return;
   await postJson('/tj_shared/llm_settings', { settings: flat });
+  llmDirty.main.clear(); llmDirty.vision.clear(); llmDirty.same = false;
 }
 
 export async function saveOpenRouter(keyOrUndefined?: string): Promise<{ openrouter_key_set: boolean; openrouter_key_hint: string }> {

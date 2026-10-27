@@ -2263,7 +2263,7 @@ function load() {
     return {};
   }
 }
-var DEFAULT_LLM, KEY, useSettings;
+var DEFAULT_LLM, llmDirty, KEY, useSettings;
 var init_settings = __esm({
   "src/store/settings.ts"() {
     "use strict";
@@ -2284,6 +2284,7 @@ var init_settings = __esm({
       temperature: 0.7,
       max_tokens: 1e3
     };
+    llmDirty = { main: /* @__PURE__ */ new Set(), vision: /* @__PURE__ */ new Set(), same: false };
     KEY = "canvers.settings.v1";
     useSettings = create((set2, get) => {
       const saved = load();
@@ -2328,14 +2329,17 @@ var init_settings = __esm({
           persist();
         },
         setLlm: (patch) => {
+          for (const k of Object.keys(patch)) llmDirty.main.add(k);
           set2({ llm: { ...get().llm, ...patch } });
           persist();
         },
         setVision: (patch) => {
+          if ("same" in patch) llmDirty.same = true;
           set2({ vision: { ...get().vision, ...patch } });
           persist();
         },
         setVisionLlm: (patch) => {
+          for (const k of Object.keys(patch)) llmDirty.vision.add(k);
           set2({ vision: { ...get().vision, llm: { ...get().vision.llm, ...patch } } });
           persist();
         },
@@ -3458,6 +3462,12 @@ var init_i18n_cards = __esm({
       "Seconds per piece (0 = whole clip)": "\uC870\uAC01\uB2F9 \uCD08 (0 = \uD074\uB9BD \uC804\uCCB4)",
       "Piece count (1 = whole clip)": "\uC870\uAC01 \uC218 (1 = \uD074\uB9BD \uC804\uCCB4)",
       "Translation LLM": "\uBC88\uC5ED LLM",
+      "Use Korean translation": "\uD55C\uAE00 \uBC88\uC5ED \uC0AC\uC6A9",
+      "Off: no automatic translation (before a run, after Enhance / Refine, the Korean side of the Refine result). The EN / \uD55C button still translates once each time it is pressed.": "\uB044\uBA74 \uC790\uB3D9 \uBC88\uC5ED(\uC2E4\uD589 \uC804, \uD5A5\uC0C1 \xB7 \uC218\uC815 \uB4A4, \uC218\uC815 \uACB0\uACFC\uC758 \uD55C\uAD6D\uC5B4)\uC774 \uAEBC\uC9C0\uACE0 EN / \uD55C \uBC84\uD2BC\uC744 \uB204\uB97C \uB54C\uB9CC \uD55C \uBC88 \uBC88\uC5ED\uD569\uB2C8\uB2E4.",
+      "English (you can edit it before applying)": "\uC601\uC5B4 (\uC801\uC6A9 \uC804\uC5D0 \uACE0\uCE60 \uC218 \uC788\uC74C)",
+      "Korean (translation)": "\uD55C\uAD6D\uC5B4 (\uBC88\uC5ED)",
+      "EN \u2192 KO": "EN \u2192 KO",
+      "Use the existing text (merge the box with the images)": "\uAE30\uC874 \uAE00 \uBC18\uC601 (\uCE78\uC758 \uAE00\uC744 \uC774\uBBF8\uC9C0\uC640 \uD569\uCE68)",
       "Used by the KO / EN button on every prompt field. Changing it here changes it in all nodes at once.": "\uBAA8\uB4E0 \uD504\uB86C\uD504\uD2B8 \uCE78\uC758 KO / EN \uBC84\uD2BC\uC774 \uC501\uB2C8\uB2E4. \uC5EC\uAE30\uC11C \uBC14\uAFB8\uBA74 \uBAA8\uB4E0 \uB178\uB4DC\uC5D0 \uD55C\uAEBC\uBC88\uC5D0 \uC801\uC6A9\uB429\uB2C8\uB2E4.",
       "Backend": "\uBC31\uC5D4\uB4DC",
       "Seconds per piece / number of pieces": "\uC870\uAC01\uB2F9 \uCD08 / \uC870\uAC01 \uC218",
@@ -5498,6 +5508,7 @@ init_settings();
 var PREFIX = "canvers_llm_";
 var VPREFIX = "canvers_vision_";
 async function loadServerSettings() {
+  const was = { main: new Set(llmDirty.main), vision: new Set(llmDirty.vision), same: llmDirty.same };
   try {
     const { settings } = await getJson("/tj_shared/llm_settings");
     const patch = {};
@@ -5515,6 +5526,9 @@ async function loadServerSettings() {
     if (typeof settings?.[VPREFIX + "same"] === "boolean") useSettings.getState().setVision({ same: settings[VPREFIX + "same"] });
   } catch {
   }
+  llmDirty.main = was.main;
+  llmDirty.vision = was.vision;
+  llmDirty.same = was.same;
 }
 var sentKeys = /* @__PURE__ */ new Map();
 var ROLES = { text: "img_enhance", vision: "img_i2p" };
@@ -9267,7 +9281,7 @@ var send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 async function handle(msg) {
   const { id, method, params } = msg;
   try {
-    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.27.2" } } });
+    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.27.3" } } });
     if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS.map(({ run: _r, ...t2 }) => t2) } });
     if (method === "tools/call") {
       const tool = TOOLS.find((t2) => t2.name === params?.name);

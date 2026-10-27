@@ -29,6 +29,12 @@ export async function saveTranslateConfig(patch: Partial<TranslateConfig>): Prom
   return cfg;
 }
 
+// "Use Korean translation" (node ko_setting.js): off = no AUTOMATIC translation (before a run, the Korean view after Enhance / Refine,
+// the Korean side of the Refine result); the EN / 한 button still translates once each time it is pressed.
+const KO_KEY = 'tj_use_ko_canvers';
+export const getUseKo = (): boolean => { try { return localStorage.getItem(KO_KEY) !== '0'; } catch { return true; } };
+export function setUseKo(on: boolean) { try { localStorage.setItem(KO_KEY, on ? '1' : '0'); } catch { /* private window: the choice just is not remembered */ } }
+
 /** `(system, user) => text` for the shared translate backend */
 export const translateLlm = () => async (system: string, user: string): Promise<string> => {
   const c = await loadTranslateConfig();
@@ -49,6 +55,7 @@ export const koParams = (key: string) => ({ ko: koKey(key), newest: newestKey(ke
  * typed into the English box) is translated first; a failed translation stops the run with the error.
  */
 export async function ensureGraphEnglish(report?: (text: string) => void): Promise<void> {
+  if (!getUseKo()) return;
   const todo: { id: string; key: string }[] = [];
   for (const n of useGraph.getState().nodes) {
     const def = byId.get(n.defId); if (!def) continue;
@@ -93,11 +100,12 @@ export async function protectWords(): Promise<string[]> {
 }
 
 /** English was written into a field by a model (Enhance / Refine): the Korean slot is cleared, then filled in the background (node fillKoLater) */
-export function putEnglish(id: string, key: string, text: string) {
+export function putEnglish(id: string, key: string, text: string, ko = '') {
   const g = useGraph.getState();
-  g.setParam(id, key, text); g.setParam(id, koKey(key), ''); g.setParam(id, newestKey(key), '');
+  g.setParam(id, key, text); g.setParam(id, koKey(key), ko); g.setParam(id, newestKey(key), '');
 }
 export async function fillKoLater(id: string, key: string): Promise<void> {
+  if (!getUseKo()) return;
   const g = useGraph.getState();
   const node = g.nodes.find((n) => n.id === id); if (!node) return;
   const obj: Record<string, any> = { ...node.params };

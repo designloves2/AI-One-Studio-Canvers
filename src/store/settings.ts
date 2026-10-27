@@ -33,6 +33,9 @@ export const DEFAULT_LLM: LlmSettings = {
   temperature: 0.7, max_tokens: 1000,
 };
 
+/** the LLM settings keys the user changed since the last save: only those are saved to the server (an old copy must not overwrite what another page saved) */
+export const llmDirty = { main: new Set<string>(), vision: new Set<string>(), same: false };
+
 export interface ModelChoice { model: string; textEncoder: string; vae: string }
 
 export interface Settings {
@@ -102,9 +105,9 @@ export const useSettings = create<Settings>((set, get) => {
     setVideo: (k, v) => { set({ video: { ...get().video, [k]: v } }); persist(); },
     setMusic: (k, v) => { set({ music: { ...get().music, [k]: v } }); persist(); },
     set: (patch) => { set(patch); persist(); },
-    setLlm: (patch) => { set({ llm: { ...get().llm, ...patch } }); persist(); },
-    setVision: (patch) => { set({ vision: { ...get().vision, ...patch } }); persist(); },
-    setVisionLlm: (patch) => { set({ vision: { ...get().vision, llm: { ...get().vision.llm, ...patch } } }); persist(); },
+    setLlm: (patch) => { for (const k of Object.keys(patch)) llmDirty.main.add(k); set({ llm: { ...get().llm, ...patch } }); persist(); },
+    setVision: (patch) => { if ('same' in patch) llmDirty.same = true; set({ vision: { ...get().vision, ...patch } }); persist(); },
+    setVisionLlm: (patch) => { for (const k of Object.keys(patch)) llmDirty.vision.add(k); set({ vision: { ...get().vision, llm: { ...get().vision.llm, ...patch } } }); persist(); },
     setLive: (patch) => { set({ live: { ...get().live, ...patch } }); persist(); },
     setLiveLlm: (patch) => { set({ live: { ...get().live, llm: { ...get().live.llm, ...patch } } }); persist(); },
     setKey: (which, v) => set({ keys: { ...get().keys, [which]: v } }),

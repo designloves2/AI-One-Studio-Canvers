@@ -442,3 +442,4 @@ button.save-state.dirty { cursor: pointer; } button.save-state.dirty:hover { bac
 .bil-err { font-size: 10px; color: #e66; margin-bottom: 3px; }
 
 .mention-wrap .bil-busy { position: absolute; inset: 0; z-index: 8; display: flex; align-items: center; justify-content: center; text-align: center; background: rgba(0,0,0,.6); color: #fff; font-size: 12px; font-weight: 700; border-radius: 6px; pointer-events: all; cursor: progress; }
+.refine-cmp textarea { width: 100%; box-sizing: border-box; margin-top: 4px; font: 12px/1.45 inherit; resize: vertical; }

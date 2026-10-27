@@ -51,7 +51,7 @@ export function SimpleView() {
     if (!prompt.trim()) return; setNote('');
     const style = styleNow(); const cur = prompt;
     const accepted = await runRefine(cur, (instruction) => runLlm({ system: '', prompt: cur, refine: instruction, style }));
-    if (accepted) setPrompt(accepted);
+    if (accepted) setPrompt(accepted.text);
   };
   // H3 speed-up (Turbo LoRA + optional 7+1 hi-res finish) rides along as an option card
   const [turbo, setTurbo] = useState({ on: false, lora: 'none', hires: true });

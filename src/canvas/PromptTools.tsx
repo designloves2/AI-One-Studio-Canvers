@@ -16,6 +16,7 @@ export function PromptTools({ id }: { id: string }) {
   const [prev, setPrev] = useState<string | null>(null);
   const [err, setErr] = useState('');
   const [open, setOpen] = useState(false);
+  const [useExisting, setUseExisting] = useState(() => { try { return localStorage.getItem('canvers.enhance_use_existing') === '1'; } catch { return false; } });
   const [cat, setCat] = useState<StyleCatalog | null>(null);
   useEffect(() => { if (open && !cat) void styleCatalog().then(setCat).catch((e) => setErr((e as Error).message)); }, [open, cat]);
   if (!node) return null;
@@ -31,12 +32,13 @@ export function PromptTools({ id }: { id: string }) {
 
   const enhance = async () => {
     const cur = current();
-    if (!cur.trim()) { setErr(T('Write a prompt first.')); return; }
+    const hasImages = downstreamImages(id).images.length > 0;
+    if (!hasImages && !cur.trim()) { setErr(T('Write a prompt first.')); return; }
     await withBusy('enhancing…', async () => {
       const style = styleOf(id, useGraph.getState().nodes.find((n) => n.id === id)!.params);
       const { images } = downstreamImages(id);
       const out = images.length
-        ? await enhanceWithImages({ idea: cur, images: images.map((x) => x.asset), purpose: style.purpose, modelStyle: style, progress: (pct, label) => useGraph.getState().setRuntime(id, { status: 'running', pct, label }) })
+        ? await enhanceWithImages({ idea: useExisting ? cur : '', images: images.map((x) => x.asset), purpose: style.purpose, modelStyle: style, progress: (pct, label) => useGraph.getState().setRuntime(id, { status: 'running', pct, label }) })
         : await runLlm({ system: '', prompt: cur, style });
       if (out) { setPrev(cur); putEnglish(id, 'text', out); void fillKoLater(id, 'text'); }
     });
@@ -48,7 +50,7 @@ export function PromptTools({ id }: { id: string }) {
     setErr('');
     const style = styleOf(id, useGraph.getState().nodes.find((n) => n.id === id)!.params);
     const accepted = await runRefine(cur, (instruction) => runLlm({ system: '', prompt: cur, refine: instruction, style }));
-    if (accepted) { setPrev(cur); putEnglish(id, 'text', accepted); void fillKoLater(id, 'text'); }
+    if (accepted) { setPrev(cur); putEnglish(id, 'text', accepted.text, accepted.ko); void fillKoLater(id, 'text'); }
   };
 
   return (
@@ -58,6 +60,7 @@ export function PromptTools({ id }: { id: string }) {
         <button className="btn" disabled={busy} onClick={() => void refine()}>✎ {T('Refine')}</button>
         <button className={`btn${open ? ' active' : ''}`} title={T('Prompt options')} onClick={() => setOpen(!open)}>⚙</button>
         {prev !== null && <button className="btn" onClick={() => { putEnglish(id, 'text', prev); void fillKoLater(id, 'text'); setPrev(null); }}>{T('Restore')}</button>}
+        {downstreamImages(id).images.length > 0 && <label className="switch-note" title={T('Use the existing text (merge the box with the images)')}><input type="checkbox" checked={useExisting} onChange={(e) => { setUseExisting(e.target.checked); try { localStorage.setItem('canvers.enhance_use_existing', e.target.checked ? '1' : '0'); } catch { /* not remembered */ } }} /> {T('Use the existing text (merge the box with the images)')}</label>}
         {err && <span className="error-inline">{err}</span>}
       </div>
       {open && (
@@ -108,7 +111,7 @@ export function NoteTools({ id }: { id: string }) {
       system: `${NOTE_SYSTEM} Apply the change request to the note. Change only what it asks for and keep everything else as it is.`,
       prompt: `Current note:\n${cur}\n\nChange request:\n${instruction}`, max_tokens: 1500,
     }));
-    if (accepted) { setPrev(cur); putEnglish(id, 'text', accepted); void fillKoLater(id, 'text'); }
+    if (accepted) { setPrev(cur); putEnglish(id, 'text', accepted.text, accepted.ko); void fillKoLater(id, 'text'); }
   };
   return (
     <div className="note-tools nodrag">

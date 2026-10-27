@@ -7,7 +7,7 @@ import { systemStats } from '../backend/comfy';
 import { FAMILIES, clearStudioCache, getModels, pickModels, type Family, type ModelLists } from '../backend/studio';
 import { resetOptions } from '../backend/options';
 import { useT } from '../i18n';
-import { TRANSLATE_DEFAULTS, loadTranslateConfig, saveTranslateConfig, translateLlm, type TranslateConfig } from '../backend/translate';
+import { TRANSLATE_DEFAULTS, getUseKo, setUseKo, loadTranslateConfig, saveTranslateConfig, translateLlm, type TranslateConfig } from '../backend/translate';
 import { translateText } from '../backend/bilingual';
 
 function Row({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
@@ -210,6 +210,7 @@ function Llm({ target = 'main' }: { target?: 'main' | 'live' | 'vision' }) {
 function TranslationLlm() {
   const T = useT();
   const [c, setC] = useState<TranslateConfig>(TRANSLATE_DEFAULTS);
+  const [useKo, setUseKoState] = useState(getUseKo());
   const [cat, setCat] = useState<LlmCatalog | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   useEffect(() => { void loadTranslateConfig(true).then(setC); void fetchCatalog().then(setCat).catch(() => setCat(null)); }, []);
@@ -222,6 +223,8 @@ function TranslationLlm() {
   return (
     <section>
       <h3>{T('Translation LLM')}</h3>
+      <label className="srow"><span className="field-label">{T('Use Korean translation')}</span><input type="checkbox" checked={useKo} onChange={(e) => { setUseKo(e.target.checked); setUseKoState(e.target.checked); }} /></label>
+      <p className="muted">{T('Off: no automatic translation (before a run, after Enhance / Refine, the Korean side of the Refine result). The EN / 한 button still translates once each time it is pressed.')}</p>
       <p className="muted">{T('Used by the KO / EN button on every prompt field. Changing it here changes it in all nodes at once.')}</p>
       <Row label={T('Backend')}><select value={c.backend} onChange={(e) => set({ backend: e.target.value as TranslateConfig['backend'] })}>{Object.keys(labels).map((k) => <option key={k} value={k}>{labels[k]}</option>)}</select></Row>
       {c.backend === 'native' && <Row label={T('Text encoder')}><Select value={c.native_clip} onChange={(v) => set({ native_clip: v })} options={cat?.text_encoders ?? []} blank="(choose)" /></Row>}
