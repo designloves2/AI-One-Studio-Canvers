@@ -1,13 +1,13 @@
 import { SearchSelect } from './SearchSelect';
 import { fieldFill, fieldStale } from '../backend/bilingual';
-import { koParams, protectWords, translateLlm } from '../backend/translate';
+import { koParams, protectWords, translateLlm, useTranslating, whileTranslating } from '../backend/translate';
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type TextareaHTMLAttributes } from 'react';
 import type { ParamDef, Primitive } from '../types';
 import { useOptions } from '../backend/options';
 import { t } from '../i18n';
 
 /** where a long text field keeps its Korean view (the KO / EN button, node v1.49.0): the card's params and a setter */
-export interface Bil { params: Record<string, Primitive>; set(key: string, v: Primitive): void }
+export interface Bil { id: string; params: Record<string, Primitive>; set(key: string, v: Primitive): void }
 interface Props { def: ParamDef; value: Primitive; onChange(v: Primitive): void; compact?: boolean; bil?: Bil }
 
 /** Korean / Japanese / Chinese input: while a character is being composed, keep the text locally and send it on to the card only when the composition ends (a re-render in the middle breaks the composition). */
@@ -51,6 +51,7 @@ const AUTO_MAX_H = 420;
 export function AutoText({ value: enValue, onChange: enChange, placeholder, rows = 3, bil, field }: { value: string; onChange(v: string): void; placeholder?: string; rows?: number; bil?: Bil; field?: string }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   // KO / EN: the English slot is what a model gets; the Korean slot is a view of it
+  const busyTo = useTranslating(bil?.id ?? '', field ?? '');
   const [tbusy, setTbusy] = useState(false); const [terr, setTerr] = useState('');
   const kk = field ? koParams(field) : null;
   const view = bil && kk && bil.params[kk.view] === 'ko' ? 'ko' : 'en';
@@ -66,7 +67,7 @@ export function AutoText({ value: enValue, onChange: enChange, placeholder, rows
     if (!bil || !kk || !field || !slots || tbusy) return;
     const next = view === 'ko' ? 'en' : 'ko'; setTerr('');
     try {
-      if (fieldStale(slots, field, next)) { setTbusy(true); const o = { ...slots }; await fieldFill(o, field, next, translateLlm(), { protect: await protectWords() }); bil.set(next === 'ko' ? kk.ko : field, String(o[next === 'ko' ? kk.ko : field])); bil.set(kk.newest, ''); }
+      if (fieldStale(slots, field, next)) { setTbusy(true); const o = { ...slots }; await whileTranslating(bil.id, field, next, async () => fieldFill(o, field, next, translateLlm(), { protect: await protectWords() })); bil.set(next === 'ko' ? kk.ko : field, String(o[next === 'ko' ? kk.ko : field])); bil.set(kk.newest, ''); }
       bil.set(kk.view, next);
     } catch (e) { setTerr((e as Error).message); } finally { setTbusy(false); }
   };
@@ -111,6 +112,7 @@ export function AutoText({ value: enValue, onChange: enChange, placeholder, rows
     <div className="mention-wrap">
       {bil && field && <button type="button" ref={btn} className={`bil-btn nodrag ${stale ? 'stale' : ''}`} disabled={tbusy} onClick={() => void toggle()} title={view === 'ko' ? 'Korean view - click for the English text the model gets' : 'English text the model gets - click for the Korean view'}>{tbusy ? '…' : view === 'ko' ? '한' : 'EN'}{stale && !tbusy ? ' ↻' : ''}</button>}
       {terr && <div className="bil-err">{terr}</div>}
+      {bil && busyTo && <div className="bil-busy nodrag">{busyTo === 'ko' ? '⏳ 번역중 (한국어로)…' : '⏳ 번역중 (영어로)…'}</div>}
       <ImeTextarea ref={ref} className="nodrag nowheel" rows={rows} value={value} placeholder={placeholder} spellCheck={false}
         style={native ? ({ fieldSizing: 'content', minHeight: rows * 18, maxHeight: AUTO_MAX_H } as React.CSSProperties) : undefined}
         onChange={onChange} onLive={(v) => { const el = ref.current; if (el) look(v, el.selectionStart); }}

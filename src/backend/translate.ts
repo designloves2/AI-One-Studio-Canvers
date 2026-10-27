@@ -1,5 +1,6 @@
 // The one Korean <-> English model setting every TJ node shares (node v1.49.0, SPEC_RELAY_V1_49_0 section 1), and the
 // helpers the prompt fields use for the KO / EN button and the generate guard (section 2).
+import { useSyncExternalStore } from 'react';
 import { getJson, postJson } from './http';
 import { runLlm } from './llm';
 import { DEFAULT_LLM } from '../store/settings';
@@ -60,9 +61,24 @@ export async function ensureGraphEnglish(report?: (text: string) => void): Promi
     report?.(`Translating Korean prompt ${++i}/${todo.length} to English…`);
     const node = useGraph.getState().nodes.find((x) => x.id === t.id); if (!node) continue;
     const obj: Record<string, any> = { ...node.params, [t.key]: node.params[t.key] ?? '' };
-    if (await ensureEnglish(obj, t.key, llm, { protect })) for (const k of [t.key, koKey(t.key), newestKey(t.key)]) useGraph.getState().setParam(t.id, k, obj[k] ?? '');
+    if (await whileTranslating(t.id, t.key, 'en', () => ensureEnglish(obj, t.key, llm, { protect }))) for (const k of [t.key, koKey(t.key), newestKey(t.key)]) useGraph.getState().setParam(t.id, k, obj[k] ?? '');
   }
 }
+
+// Which field is being translated right now and into which language (node: translatingTo / onTranslating / whileTranslating).
+// A field is told apart by its card id + key (a card's params object is a new object on every render).
+const translating = new Map<string, 'ko' | 'en'>();
+const subs = new Set<() => void>();
+let rev = 0;
+const note = () => { rev++; subs.forEach((f) => f()); };
+export const translatingTo = (id: string, key: string): 'ko' | 'en' | undefined => translating.get(`${id}:${key}`);
+export function onTranslating(fn: () => void) { subs.add(fn); return () => { subs.delete(fn); }; }
+export async function whileTranslating<T>(id: string, key: string, to: 'ko' | 'en', run: () => Promise<T>): Promise<T> {
+  translating.set(`${id}:${key}`, to); note();
+  try { return await run(); } finally { translating.delete(`${id}:${key}`); note(); }
+}
+/** re-renders the caller whenever a translation starts or ends */
+export const useTranslating = (id: string, key: string) => { useSyncExternalStore(onTranslating, () => rev); return translatingTo(id, key); };
 
 const triggerCache = new Map<string, Promise<string[]>>();
 /** Trigger words of the LoRAs on the canvas (the node's h3ProtectWords): a translation must keep them as they are. */
@@ -88,7 +104,7 @@ export async function fillKoLater(id: string, key: string): Promise<void> {
   if (!String(obj[key] ?? '').trim() || String(obj[koKey(key)] ?? '').trim()) return;
   g.setRuntime(id, { status: 'running', pct: 0, label: 'writing the Korean view 1/1…' });
   try {
-    await fieldFill(obj, key, 'ko', translateLlm(), { protect: await protectWords() });
+    await whileTranslating(id, key, 'ko', async () => fieldFill(obj, key, 'ko', translateLlm(), { protect: await protectWords() }));
     useGraph.getState().setParam(id, koKey(key), String(obj[koKey(key)] ?? '')); useGraph.getState().setParam(id, newestKey(key), '');
     useGraph.getState().setRuntime(id, { status: 'idle', pct: 100, label: undefined });
   } catch (e) { useGraph.getState().setRuntime(id, { status: 'idle', pct: 0, label: `⚠ Korean view not written: ${String((e as Error).message).slice(0, 80)}` }); }

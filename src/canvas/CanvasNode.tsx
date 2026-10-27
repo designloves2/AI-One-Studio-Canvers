@@ -405,7 +405,7 @@ const PlainNode = memo(function PlainNode({ id, selected }: NodeProps) {
       {def.id === 'comfy-workflow' && <WorkflowBody id={id} />}
       {shown.length > 0 && (
         <div className="params">
-          {shown.map((p) => <Field key={p.id} def={p} value={node.params[p.id] ?? p.default} onChange={(v) => setParam(id, p.id, v)} bil={{ params: node.params, set: (k, v) => setParam(id, k, v) }} />)}
+          {shown.map((p) => <Field key={p.id} def={p} value={node.params[p.id] ?? p.default} onChange={(v) => setParam(id, p.id, v)} bil={{ id, params: node.params, set: (k, v) => setParam(id, k, v) }} />)}
         </div>
       )}
       {def.id === 'prompt' && <MentionBar id={id} />}
