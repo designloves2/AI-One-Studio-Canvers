@@ -1,6 +1,6 @@
 import { SearchSelect } from './SearchSelect';
 import { fieldFill, fieldStale } from '../backend/bilingual';
-import { koParams, translateLlm } from '../backend/translate';
+import { koParams, protectWords, translateLlm } from '../backend/translate';
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type TextareaHTMLAttributes } from 'react';
 import type { ParamDef, Primitive } from '../types';
 import { useOptions } from '../backend/options';
@@ -66,10 +66,25 @@ export function AutoText({ value: enValue, onChange: enChange, placeholder, rows
     if (!bil || !kk || !field || !slots || tbusy) return;
     const next = view === 'ko' ? 'en' : 'ko'; setTerr('');
     try {
-      if (fieldStale(slots, field, next)) { setTbusy(true); const o = { ...slots }; await fieldFill(o, field, next, translateLlm()); bil.set(next === 'ko' ? kk.ko : field, String(o[next === 'ko' ? kk.ko : field])); bil.set(kk.newest, ''); }
+      if (fieldStale(slots, field, next)) { setTbusy(true); const o = { ...slots }; await fieldFill(o, field, next, translateLlm(), { protect: await protectWords() }); bil.set(next === 'ko' ? kk.ko : field, String(o[next === 'ko' ? kk.ko : field])); bil.set(kk.newest, ''); }
       bil.set(kk.view, next);
     } catch (e) { setTerr((e as Error).message); } finally { setTbusy(false); }
   };
+  // the button sits left of the textarea's scrollbar, which only exists while the text overflows (node bilingual_ui.js place())
+  const btn = useRef<HTMLButtonElement>(null);
+  const place = () => {
+    const ta = ref.current, b = btn.current; if (!ta || !b) return;
+    const cs = getComputedStyle(ta); const border = parseFloat(cs.borderRightWidth) || 0;
+    const scrollbar = Math.max(0, ta.offsetWidth - ta.clientWidth - border - (parseFloat(cs.borderLeftWidth) || 0));
+    b.style.right = `${3 + border + scrollbar}px`;
+  };
+  useEffect(() => {
+    const ta = ref.current; if (!ta || !bil) return;
+    const ro = new ResizeObserver(place); ro.observe(ta);
+    const wrap = ta.parentElement; ta.addEventListener('input', place); wrap?.addEventListener('mouseenter', place);
+    return () => { ro.disconnect(); ta.removeEventListener('input', place); wrap?.removeEventListener('mouseenter', place); };
+  }, [!!bil]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { place(); const r = requestAnimationFrame(place); return () => cancelAnimationFrame(r); });   // every paint (again next frame: the box takes its text one render later)
   const [names, setNames] = useState<string[]>([]);
   const [sug, setSug] = useState<{ list: string[]; at: number; idx: number } | null>(null);
   // The browser sizes the box itself (field-sizing); resetting style.height on every keystroke broke Korean composition.
@@ -94,7 +109,7 @@ export function AutoText({ value: enValue, onChange: enChange, placeholder, rows
   };
   return (
     <div className="mention-wrap">
-      {bil && field && <button type="button" className={`bil-btn nodrag ${stale ? 'stale' : ''}`} disabled={tbusy} onClick={() => void toggle()} title={view === 'ko' ? 'Korean view - click for the English text the model gets' : 'English text the model gets - click for the Korean view'}>{tbusy ? '…' : view === 'ko' ? '한' : 'EN'}{stale && !tbusy ? ' ↻' : ''}</button>}
+      {bil && field && <button type="button" ref={btn} className={`bil-btn nodrag ${stale ? 'stale' : ''}`} disabled={tbusy} onClick={() => void toggle()} title={view === 'ko' ? 'Korean view - click for the English text the model gets' : 'English text the model gets - click for the Korean view'}>{tbusy ? '…' : view === 'ko' ? '한' : 'EN'}{stale && !tbusy ? ' ↻' : ''}</button>}
       {terr && <div className="bil-err">{terr}</div>}
       <ImeTextarea ref={ref} className="nodrag nowheel" rows={rows} value={value} placeholder={placeholder} spellCheck={false}
         style={native ? ({ fieldSizing: 'content', minHeight: rows * 18, maxHeight: AUTO_MAX_H } as React.CSSProperties) : undefined}

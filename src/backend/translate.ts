@@ -5,7 +5,7 @@ import { runLlm } from './llm';
 import { DEFAULT_LLM } from '../store/settings';
 import { useGraph } from '../store/graph';
 import { byId } from '../registry';
-import { ensureEnglish, koKey, newestKey, viewKey, fieldNeedsEnglish, translateText } from './bilingual';
+import { ensureEnglish, fieldFill, koKey, newestKey, viewKey, fieldNeedsEnglish, translateText } from './bilingual';
 
 export interface TranslateConfig {
   backend: 'native' | 'openrouter' | 'llamagguf' | 'custom'; native_clip: string; or_model: string; llama_model: string;
@@ -54,14 +54,44 @@ export async function ensureGraphEnglish(report?: (text: string) => void): Promi
     for (const p of def.params) if (p.control.kind === 'text' && p.control.multiline && fieldNeedsEnglish(n.params, p.id)) todo.push({ id: n.id, key: p.id });
   }
   if (!todo.length) return;
-  const llm = translateLlm();
+  const llm = translateLlm(); const protect = await protectWords();
   let i = 0;
   for (const t of todo) {
     report?.(`Translating Korean prompt ${++i}/${todo.length} to English…`);
     const node = useGraph.getState().nodes.find((x) => x.id === t.id); if (!node) continue;
     const obj: Record<string, any> = { ...node.params, [t.key]: node.params[t.key] ?? '' };
-    if (await ensureEnglish(obj, t.key, llm)) for (const k of [t.key, koKey(t.key), newestKey(t.key)]) useGraph.getState().setParam(t.id, k, obj[k] ?? '');
+    if (await ensureEnglish(obj, t.key, llm, { protect })) for (const k of [t.key, koKey(t.key), newestKey(t.key)]) useGraph.getState().setParam(t.id, k, obj[k] ?? '');
   }
+}
+
+const triggerCache = new Map<string, Promise<string[]>>();
+/** Trigger words of the LoRAs on the canvas (the node's h3ProtectWords): a translation must keep them as they are. */
+export async function protectWords(): Promise<string[]> {
+  const names = [...new Set(useGraph.getState().nodes.filter((n) => n.defId === 'lora').map((n) => String(n.params.lora ?? '')).filter((x) => x && x !== 'none'))];
+  const lists = await Promise.all(names.map((name) => {
+    let r = triggerCache.get(name);
+    if (!r) { r = getJson<{ triggers?: string[] }>(`/flux_klein/lora_triggers?name=${encodeURIComponent(name)}`).then((d) => d.triggers ?? []).catch(() => [] as string[]); triggerCache.set(name, r); }
+    return r;
+  }));
+  return lists.flat().flatMap((w) => String(w).split(/[,\n]/)).map((w) => w.trim()).filter(Boolean);
+}
+
+/** English was written into a field by a model (Enhance / Refine): the Korean slot is cleared, then filled in the background (node fillKoLater) */
+export function putEnglish(id: string, key: string, text: string) {
+  const g = useGraph.getState();
+  g.setParam(id, key, text); g.setParam(id, koKey(key), ''); g.setParam(id, newestKey(key), '');
+}
+export async function fillKoLater(id: string, key: string): Promise<void> {
+  const g = useGraph.getState();
+  const node = g.nodes.find((n) => n.id === id); if (!node) return;
+  const obj: Record<string, any> = { ...node.params };
+  if (!String(obj[key] ?? '').trim() || String(obj[koKey(key)] ?? '').trim()) return;
+  g.setRuntime(id, { status: 'running', pct: 0, label: 'writing the Korean view 1/1…' });
+  try {
+    await fieldFill(obj, key, 'ko', translateLlm(), { protect: await protectWords() });
+    useGraph.getState().setParam(id, koKey(key), String(obj[koKey(key)] ?? '')); useGraph.getState().setParam(id, newestKey(key), '');
+    useGraph.getState().setRuntime(id, { status: 'idle', pct: 100, label: undefined });
+  } catch (e) { useGraph.getState().setRuntime(id, { status: 'idle', pct: 0, label: `⚠ Korean view not written: ${String((e as Error).message).slice(0, 80)}` }); }
 }
 
 export { translateText };

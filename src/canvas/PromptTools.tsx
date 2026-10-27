@@ -6,6 +6,7 @@ import { runLlm } from '../backend/llm';
 import { downstreamImages, enhanceWithImages } from '../backend/refEnhance';
 import { AUTO, NO_AESTHETIC, downstreamTarget, styleCatalog, styleOf, type StyleCatalog } from '../backend/promptStyle';
 import { runRefine } from '../ui/refine';
+import { fillKoLater, putEnglish } from '../backend/translate';
 import { useT } from '../i18n';
 
 export function PromptTools({ id }: { id: string }) {
@@ -37,7 +38,7 @@ export function PromptTools({ id }: { id: string }) {
       const out = images.length
         ? await enhanceWithImages({ idea: cur, images: images.map((x) => x.asset), purpose: style.purpose, modelStyle: style, progress: (pct, label) => useGraph.getState().setRuntime(id, { status: 'running', pct, label }) })
         : await runLlm({ system: '', prompt: cur, style });
-      if (out) { setPrev(cur); set('text', out); }
+      if (out) { setPrev(cur); putEnglish(id, 'text', out); void fillKoLater(id, 'text'); }
     });
   };
 
@@ -47,7 +48,7 @@ export function PromptTools({ id }: { id: string }) {
     setErr('');
     const style = styleOf(id, useGraph.getState().nodes.find((n) => n.id === id)!.params);
     const accepted = await runRefine(cur, (instruction) => runLlm({ system: '', prompt: cur, refine: instruction, style }));
-    if (accepted) { setPrev(cur); set('text', accepted); }
+    if (accepted) { setPrev(cur); putEnglish(id, 'text', accepted); void fillKoLater(id, 'text'); }
   };
 
   return (
@@ -56,7 +57,7 @@ export function PromptTools({ id }: { id: string }) {
         <button className="btn" disabled={busy} onClick={() => void enhance()}>{busy ? '…' : '✨ ' + T('Enhance')}</button>
         <button className="btn" disabled={busy} onClick={() => void refine()}>✎ {T('Refine')}</button>
         <button className={`btn${open ? ' active' : ''}`} title={T('Prompt options')} onClick={() => setOpen(!open)}>⚙</button>
-        {prev !== null && <button className="btn" onClick={() => { set('text', prev); setPrev(null); }}>{T('Restore')}</button>}
+        {prev !== null && <button className="btn" onClick={() => { putEnglish(id, 'text', prev); void fillKoLater(id, 'text'); setPrev(null); }}>{T('Restore')}</button>}
         {err && <span className="error-inline">{err}</span>}
       </div>
       {open && (
@@ -97,7 +98,7 @@ export function NoteTools({ id }: { id: string }) {
     setBusy(true); setErr('');
     try {
       const out = await runLlm({ system: `${NOTE_SYSTEM}${NOTE_POLISH}`, prompt: cur, max_tokens: 1500 });
-      if (out) { setPrev(cur); set(out); }
+      if (out) { setPrev(cur); putEnglish(id, 'text', out); void fillKoLater(id, 'text'); }
     } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
   };
   const refine = async () => {
@@ -107,13 +108,13 @@ export function NoteTools({ id }: { id: string }) {
       system: `${NOTE_SYSTEM} Apply the change request to the note. Change only what it asks for and keep everything else as it is.`,
       prompt: `Current note:\n${cur}\n\nChange request:\n${instruction}`, max_tokens: 1500,
     }));
-    if (accepted) { setPrev(cur); set(accepted); }
+    if (accepted) { setPrev(cur); putEnglish(id, 'text', accepted); void fillKoLater(id, 'text'); }
   };
   return (
     <div className="note-tools nodrag">
       <button className="btn" disabled={busy} onClick={() => void enhance()}>{busy ? '…' : '✨ ' + T('Polish note')}</button>
       <button className="btn" disabled={busy} onClick={() => void refine()}>✎ {T('Refine')}</button>
-      {prev !== null && <button className="btn" onClick={() => { set(prev); setPrev(null); }}>{T('Restore')}</button>}
+      {prev !== null && <button className="btn" onClick={() => { putEnglish(id, 'text', prev); void fillKoLater(id, 'text'); setPrev(null); }}>{T('Restore')}</button>}
       {err && <span className="error-inline">{err}</span>}
     </div>
   );
