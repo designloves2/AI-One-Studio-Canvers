@@ -7,6 +7,8 @@ import { systemStats } from '../backend/comfy';
 import { FAMILIES, clearStudioCache, getModels, pickModels, type Family, type ModelLists } from '../backend/studio';
 import { resetOptions } from '../backend/options';
 import { useT } from '../i18n';
+import { TRANSLATE_DEFAULTS, loadTranslateConfig, saveTranslateConfig, translateLlm, type TranslateConfig } from '../backend/translate';
+import { translateText } from '../backend/bilingual';
 
 function Row({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
   return <label className="srow"><span>{label}</span><div>{children}</div>{hint && <small>{hint}</small>}</label>;
@@ -204,6 +206,37 @@ function Llm({ target = 'main' }: { target?: 'main' | 'live' | 'vision' }) {
   );
 }
 
+// ------------------------------------------------------------------ Translation LLM (shared by every TJ node, node v1.49.0)
+function TranslationLlm() {
+  const T = useT();
+  const [c, setC] = useState<TranslateConfig>(TRANSLATE_DEFAULTS);
+  const [cat, setCat] = useState<LlmCatalog | null>(null);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  useEffect(() => { void loadTranslateConfig(true).then(setC); void fetchCatalog().then(setCat).catch(() => setCat(null)); }, []);
+  const set = (patch: Partial<TranslateConfig>) => { setC((x) => ({ ...x, ...patch })); void saveTranslateConfig(patch).then(setC).catch((e) => setMsg({ ok: false, text: (e as Error).message })); };
+  const test = async () => {
+    setMsg(null); const t0 = performance.now();
+    try { const out = await translateText('A woman walks along the beach at sunset.', 'ko', translateLlm()); setMsg({ ok: true, text: `“${out.slice(0, 80)}” · ${Math.round(performance.now() - t0)} ms` }); } catch (e) { setMsg({ ok: false, text: (e as Error).message }); }
+  };
+  const labels: Record<string, string> = { native: 'Native (ComfyUI CLIP)', openrouter: 'OpenRouter (cloud)', llamagguf: 'Llama GGUF (local llama.cpp)', custom: 'Connect Custom' };
+  return (
+    <section>
+      <h3>{T('Translation LLM')}</h3>
+      <p className="muted">{T('Used by the KO / EN button on every prompt field. Changing it here changes it in all nodes at once.')}</p>
+      <Row label={T('Backend')}><select value={c.backend} onChange={(e) => set({ backend: e.target.value as TranslateConfig['backend'] })}>{Object.keys(labels).map((k) => <option key={k} value={k}>{labels[k]}</option>)}</select></Row>
+      {c.backend === 'native' && <Row label={T('Text encoder')}><Select value={c.native_clip} onChange={(v) => set({ native_clip: v })} options={cat?.text_encoders ?? []} blank="(choose)" /></Row>}
+      {c.backend === 'openrouter' && <Row label={T('Text model')}><input list="or-models" value={c.or_model} onChange={(e) => setC({ ...c, or_model: e.target.value })} onBlur={() => set({ or_model: c.or_model })} /></Row>}
+      {c.backend === 'llamagguf' && <Row label={T('GGUF model')}><Select value={c.llama_model} onChange={(v) => set({ llama_model: v })} options={cat?.gguf ?? []} blank="(choose)" /></Row>}
+      {c.backend === 'custom' && <>
+        <Row label={T('Base URL')}><input value={c.custom_base} onChange={(e) => setC({ ...c, custom_base: e.target.value })} onBlur={() => set({ custom_base: c.custom_base })} /></Row>
+        <Row label={T('Model')}><input value={c.custom_model} onChange={(e) => setC({ ...c, custom_model: e.target.value })} onBlur={() => set({ custom_model: c.custom_model })} /></Row>
+      </>}
+      <div className="srow-actions"><button className="btn" onClick={() => void test()}>{T('Test')}</button></div>
+      {msg && <p className={`status ${msg.ok ? 'ok' : 'bad'}`}>{msg.text}</p>}
+    </section>
+  );
+}
+
 function MusicModels() {
   const T = useT();
   const music = useSettings((s) => s.music);
@@ -249,5 +282,5 @@ function VideoModels() {
 }
 
 export function SettingsPanel() {
-  return <div className="panel-body settings"><Connection /><Llm /><Llm target="vision" /><Llm target="live" /><ImageModels /><VideoModels /><MusicModels /></div>;
+  return <div className="panel-body settings"><Connection /><Llm /><Llm target="vision" /><Llm target="live" /><TranslationLlm /><ImageModels /><VideoModels /><MusicModels /></div>;
 }

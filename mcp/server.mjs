@@ -3457,6 +3457,9 @@ var init_i18n_cards = __esm({
       "cut a long clip into pieces, upscale each on its own queue turn, then join them": "\uAE34 \uD074\uB9BD\uC744 \uC870\uAC01\uC73C\uB85C \uC798\uB77C \uC870\uAC01\uB9C8\uB2E4 \uB530\uB85C \uC5C5\uC2A4\uCF00\uC77C\uD55C \uB4A4 \uC774\uC5B4 \uBD99\uC774\uAE30",
       "Seconds per piece (0 = whole clip)": "\uC870\uAC01\uB2F9 \uCD08 (0 = \uD074\uB9BD \uC804\uCCB4)",
       "Piece count (1 = whole clip)": "\uC870\uAC01 \uC218 (1 = \uD074\uB9BD \uC804\uCCB4)",
+      "Translation LLM": "\uBC88\uC5ED LLM",
+      "Used by the KO / EN button on every prompt field. Changing it here changes it in all nodes at once.": "\uBAA8\uB4E0 \uD504\uB86C\uD504\uD2B8 \uCE78\uC758 KO / EN \uBC84\uD2BC\uC774 \uC501\uB2C8\uB2E4. \uC5EC\uAE30\uC11C \uBC14\uAFB8\uBA74 \uBAA8\uB4E0 \uB178\uB4DC\uC5D0 \uD55C\uAEBC\uBC88\uC5D0 \uC801\uC6A9\uB429\uB2C8\uB2E4.",
+      "Backend": "\uBC31\uC5D4\uB4DC",
       "Seconds per piece / number of pieces": "\uC870\uAC01\uB2F9 \uCD08 / \uC870\uAC01 \uC218",
       "By count": "\uAC1C\uC218 \uB2E8\uC704",
       "By seconds": "\uCD08 \uB2E8\uC704",
@@ -9264,7 +9267,7 @@ var send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 async function handle(msg) {
   const { id, method, params } = msg;
   try {
-    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.26.0" } } });
+    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.27.0" } } });
     if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS.map(({ run: _r, ...t2 }) => t2) } });
     if (method === "tools/call") {
       const tool = TOOLS.find((t2) => t2.name === params?.name);

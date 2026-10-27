@@ -4,6 +4,7 @@ import { t as tr } from '../i18n';
 import { canvasFileName, listCanvases, loadCanvas, saveCanvas } from '../backend/canvases';
 import { useGraph, type ComposerRun } from '../store/graph';
 import { executeGraph, importFile } from './run';
+import { ensureGraphEnglish } from '../backend/translate';
 import { byId, defaultParams, engineFor } from '../registry';
 import { cancelPrompt, interrupt, readInflight, recoverPrompt, runContext, forgetInflight, assetFromFile, uid, viewUrl, readPlans, clearPlan, markResume } from '../backend/comfy';
 
@@ -15,6 +16,9 @@ export async function runNode(id: string): Promise<void> {
   const ac = new AbortController(); controllers.set(id, ac);
   s.setRuntime(id, { status: 'running', pct: 0, error: undefined, label: undefined, preview: undefined });
   try {
+    // a Korean prompt edit is turned into English before the card runs (the KO / EN fields)
+    await ensureGraphEnglish((text) => useGraph.getState().setRuntime(id, { status: 'running', pct: 0, label: text }));
+    const s = useGraph.getState();
     await executeGraph({ nodes: s.nodes, edges: s.edges }, id, {
       start: (nid) => { runContext.set(ac.signal, { node: nid }); useGraph.getState().setRuntime(nid, { status: 'running', pct: 0, error: undefined }); },
       progress: (nid, pct, label) => useGraph.getState().setRuntime(nid, { status: 'running', pct, label }),

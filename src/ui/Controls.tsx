@@ -1,10 +1,14 @@
 import { SearchSelect } from './SearchSelect';
+import { fieldFill, fieldStale } from '../backend/bilingual';
+import { koParams, translateLlm } from '../backend/translate';
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type TextareaHTMLAttributes } from 'react';
 import type { ParamDef, Primitive } from '../types';
 import { useOptions } from '../backend/options';
 import { t } from '../i18n';
 
-interface Props { def: ParamDef; value: Primitive; onChange(v: Primitive): void; compact?: boolean }
+/** where a long text field keeps its Korean view (the KO / EN button, node v1.49.0): the card's params and a setter */
+export interface Bil { params: Record<string, Primitive>; set(key: string, v: Primitive): void }
+interface Props { def: ParamDef; value: Primitive; onChange(v: Primitive): void; compact?: boolean; bil?: Bil }
 
 /** Korean / Japanese / Chinese input: while a character is being composed, keep the text locally and send it on to the card only when the composition ends (a re-render in the middle breaks the composition). */
 export function useComposing(value: string, onChange: (v: string) => void) {
@@ -44,8 +48,28 @@ export const ImeTextarea = forwardRef<HTMLTextAreaElement, Omit<TextareaHTMLAttr
 const AUTO_MAX_H = 420;
 
 /** textarea that grows with its content and stops canvas shortcuts while typing */
-export function AutoText({ value, onChange, placeholder, rows = 3 }: { value: string; onChange(v: string): void; placeholder?: string; rows?: number }) {
+export function AutoText({ value: enValue, onChange: enChange, placeholder, rows = 3, bil, field }: { value: string; onChange(v: string): void; placeholder?: string; rows?: number; bil?: Bil; field?: string }) {
   const ref = useRef<HTMLTextAreaElement>(null);
+  // KO / EN: the English slot is what a model gets; the Korean slot is a view of it
+  const [tbusy, setTbusy] = useState(false); const [terr, setTerr] = useState('');
+  const kk = field ? koParams(field) : null;
+  const view = bil && kk && bil.params[kk.view] === 'ko' ? 'ko' : 'en';
+  const slots = bil && field ? { ...bil.params, [field]: enValue } : null;
+  const value = view === 'ko' && bil && kk ? String(bil.params[kk.ko] ?? '') : enValue;
+  const onChange = (v: string) => {
+    if (!bil || !kk) { enChange(v); return; }
+    if (view === 'ko') bil.set(kk.ko, v); else enChange(v);
+    bil.set(kk.newest, view);
+  };
+  const stale = !!(slots && field && fieldStale(slots, field, view));
+  const toggle = async () => {
+    if (!bil || !kk || !field || !slots || tbusy) return;
+    const next = view === 'ko' ? 'en' : 'ko'; setTerr('');
+    try {
+      if (fieldStale(slots, field, next)) { setTbusy(true); const o = { ...slots }; await fieldFill(o, field, next, translateLlm()); bil.set(next === 'ko' ? kk.ko : field, String(o[next === 'ko' ? kk.ko : field])); bil.set(kk.newest, ''); }
+      bil.set(kk.view, next);
+    } catch (e) { setTerr((e as Error).message); } finally { setTbusy(false); }
+  };
   const [names, setNames] = useState<string[]>([]);
   const [sug, setSug] = useState<{ list: string[]; at: number; idx: number } | null>(null);
   // The browser sizes the box itself (field-sizing); resetting style.height on every keystroke broke Korean composition.
@@ -70,6 +94,8 @@ export function AutoText({ value, onChange, placeholder, rows = 3 }: { value: st
   };
   return (
     <div className="mention-wrap">
+      {bil && field && <button type="button" className={`bil-btn nodrag ${stale ? 'stale' : ''}`} disabled={tbusy} onClick={() => void toggle()} title={view === 'ko' ? 'Korean view - click for the English text the model gets' : 'English text the model gets - click for the Korean view'}>{tbusy ? '…' : view === 'ko' ? '한' : 'EN'}{stale && !tbusy ? ' ↻' : ''}</button>}
+      {terr && <div className="bil-err">{terr}</div>}
       <ImeTextarea ref={ref} className="nodrag nowheel" rows={rows} value={value} placeholder={placeholder} spellCheck={false}
         style={native ? ({ fieldSizing: 'content', minHeight: rows * 18, maxHeight: AUTO_MAX_H } as React.CSSProperties) : undefined}
         onChange={onChange} onLive={(v) => { const el = ref.current; if (el) look(v, el.selectionStart); }}
@@ -100,13 +126,13 @@ function TextInput({ value, onChange }: { value: string; onChange(v: string): vo
   return <input className="nodrag" type="text" value={ime.value} onChange={ime.onChange} onCompositionStart={ime.onCompositionStart} onCompositionEnd={ime.onCompositionEnd} onKeyDown={(e) => e.stopPropagation()} />;
 }
 
-export function ParamControl({ def, value, onChange }: Props) {
+export function ParamControl({ def, value, onChange, bil }: Props) {
   const c = def.control;
   const [draft, setDraft] = useState<string | null>(null);
   switch (c.kind) {
     case 'text':
       return c.multiline
-        ? <AutoText value={String(value)} onChange={onChange} placeholder={c.placeholder} />
+        ? <AutoText value={String(value)} onChange={onChange} placeholder={c.placeholder} bil={bil} field={def.id} />
         : <TextInput value={String(value)} onChange={onChange} />;
     case 'number':
       return <input className="nodrag" type="number" value={draft ?? String(value)} min={c.min} max={c.max} step={c.step ?? 1}
@@ -136,12 +162,12 @@ export function ParamControl({ def, value, onChange }: Props) {
   }
 }
 
-export function Field({ def, value, onChange }: Props) {
+export function Field({ def, value, onChange, bil }: Props) {
   const wide = def.control.kind === 'text' && def.control.multiline;
   return (
     <label className={`field ${wide ? 'wide' : ''}`}>
       <span className="field-label">{t(def.label)}</span>
-      <ParamControl def={def} value={value} onChange={onChange} />
+      <ParamControl def={def} value={value} onChange={onChange} bil={bil} />
     </label>
   );
 }
