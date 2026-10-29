@@ -61,7 +61,32 @@ export function addChat(p: DirectorProject, role: ChatMsg['role'], text: string,
 }
 
 /** the cast entry a clip names (case-insensitive) */
-export const findReference = (p: DirectorProject, name: string) => p.references.find((r) => r.name.trim().toLowerCase() === name.trim().toLowerCase());
+const normName = (n: string) => n.toLowerCase().replace(/\([^)]*\)/g, '').replace(/[\s·.,'"\-_]+/g, '');
+export function findReference(p: DirectorProject, name: string): DirectorReference | undefined {
+  const t = String(name ?? '').trim().toLowerCase(); if (!t) return undefined;
+  const exact = p.references.find((r) => r.name.trim().toLowerCase() === t); if (exact) return exact;
+  // the crew often writes a name a little differently (spaces, a part in brackets, a title): one unambiguous match is taken
+  const live = p.references.filter((r) => r.status !== 'rejected');
+  const n = normName(t); if (!n) return undefined;
+  const same = live.filter((r) => normName(r.name) === n); if (same.length === 1) return same[0];
+  const near = live.filter((r) => { const m = normName(r.name); return m.length >= 2 && n.length >= 2 && (m.includes(n) || n.includes(m)); });
+  return near.length === 1 ? near[0] : undefined;
+}
+
+/** the cast entries whose name is written in a text (a variant only by its full name; a base entry is not taken when the clip already has one of its variants) */
+export function mentionedRefs(p: DirectorProject, text: string, already: string[] = []): DirectorReference[] {
+  const t = text.toLowerCase(); const out: DirectorReference[] = [];
+  for (const r of p.references) {
+    if (r.status === 'rejected') continue;
+    const full = r.name.trim().toLowerCase(); if (full.length < 2) continue;
+    if (t.includes(full)) { out.push(r); continue; }
+    if (r.variant_of) continue;
+    const base = r.name.replace(/\([^)]*\)/g, '').trim().toLowerCase();
+    const hasVariant = p.references.some((v) => v.variant_of === r.name && already.some((a) => a.toLowerCase() === v.name.toLowerCase()));
+    if (!hasVariant && base.length >= 2 && base !== full && t.includes(base)) out.push(r);
+  }
+  return out;
+}
 
 /** The cast entries a clip uses, in the order they are shown to the model (cast first, then the location): approved, with a picked image. */
 export function castOf(p: DirectorProject, s: Pick<DirectorShot, 'cast' | 'location'>): DirectorReference[] {

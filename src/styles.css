@@ -720,4 +720,6 @@ button.save-state.dirty { cursor: pointer; } button.save-state.dirty:hover { bac
 
 .dx-voice { font-size: 10px; color: var(--acc); margin-right: 6px; font-weight: 600; }
 
+.dx-avs .dx-warn { color: #d9534f; font-size: 11px; align-self: center; }
+.dx-passrow { display: flex; gap: 10px; align-items: center; margin-top: 6px; }
 .dx-hideable { display: contents; } .dx-hideable.hid img { filter: blur(14px) brightness(.8); }

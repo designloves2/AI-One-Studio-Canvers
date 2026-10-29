@@ -96,6 +96,8 @@ if (real) {
   const bc = (proj, ex, pv, o = {}) => A.buildCastingCanvas(proj, reg3, ex, pv, 'cast', { now: NOW, ...o });
   const gen = (r, ref) => r.project.nodes.find((n) => n.id === A.refGenNodeId(ref.ref_id));
   const c1 = bc(p2, null, null);
+  ok(A.castPromptText({ kind: 'character', description: '30대 여성, 단발', prompt_en: 'old' }).startsWith('30대 여성, 단발') && /Full-body/.test(A.castPromptText({ kind: 'character', description: 'x' })) && /no people/.test(A.castPromptText({ kind: 'location', description: 'y' })) && A.castPromptText({ kind: 'prop', description: '', prompt_en: 'a cup' }).startsWith('a cup'), 'the cast card text is the ONE description plus what kind of picture it is (the old English prompt only when there is no description)');
+  ok(c1.project.nodes.find((n) => n.id === A.refTextNodeId(a1.ref_id)).params.text === A.castPromptText(a1), 'the prompt card of a cast entry starts from that text');
   ok(gen(c1, a1).engineId === 'krea2' && gen(c1, a1).params.aspect === '3:4' && gen(c1, a2).params.aspect === '16:9', 'default model; a person is tall (3:4), a place takes the series aspect');
   const c2 = bc(p2, null, null, { engineId: 'qwen21' });
   ok(gen(c2, a1).engineId === 'qwen21' && gen(c2, a1).params.cfg === 4 && gen(c2, a1).params.steps === 20, 'a chosen model starts with ITS OWN defaults (not the default model\'s)');

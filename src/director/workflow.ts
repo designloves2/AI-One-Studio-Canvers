@@ -79,10 +79,18 @@ export function episodeBlockers(p: DirectorProject, no: number, stage?: StageId)
     }
   }
   if (st === 'canvas' && !p.canvas_links.find((l) => l.episode_id === ep.episode_id && !l.aspect)) out.push('The canvas for this episode has not been built yet.');
-  if (st === 'execute' || st === 'review') {
-    const missing = shots.filter((s) => !s.results.some((r) => r.picked));
-    if (missing.length) out.push(`${missing.length} of ${shots.length} clips have no generated result yet.`);
+  if (st === 'execute') {   // generate + look at every clip: each clip that stays in the video has a result the producer passed, then the clips are joined
+    const inc = shots.filter((s) => !s.excluded);
+    const missing = inc.filter((s) => !s.results.some((r) => r.picked));
+    if (!inc.length) out.push('Leave at least one clip in the video.');
+    else if (missing.length) out.push(`${missing.length} of ${inc.length} clips have no generated result yet.`);
+    else {
+      const open = inc.filter((s) => s.passed !== s.results.find((r) => r.picked)?.result_id);
+      if (open.length) out.push(`${open.length} of ${inc.length} clips are not passed yet. Look at each clip and pass it, or make it again.`);
+      else if (!ep.final) out.push('Join the passed clips into one video first.');
+    }
   }
+  if (st === 'review' && !ep.final) out.push('The episode has no joined video yet.');
   return out;
 }
 

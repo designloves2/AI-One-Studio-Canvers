@@ -204,9 +204,12 @@ export function buildCanvasFromDirector(p: DirectorProject, reg: RegistryLike, e
     else {
       const sid = stitchNodeId(opt.episodeId);
       if (!byNode.get(sid)) { const sn: GraphNode = { id: sid, defId: 'video-stitch', x: COL_GEN_X + 460, y: Math.max(0, Math.round((y - ROW_H) / 2)), params: { ...stDef.defaults }, results: [], activeResult: 0, title: 'Episode (clips joined)' }; nodes.push(sn); byNode.set(sid, sn); report.created.push(sid); }
-      for (const l of linkShots) {   // in clip order: that is the order of the joined video
-        const eid = `e_st_${l.shot_id}`;
-        if (!edges.some((e) => e.id === eid) && !edges.some((e) => e.source === l.node_ids[1] && e.target === sid)) edges.push({ id: eid, source: l.node_ids[1], sourceHandle: genOut.id, target: sid, targetHandle: stIn.id });
+      // the joined video takes the clips that stay in, in clip order (that is the order of the joined video): the wires are laid again every time, so a clip left out / put back is right
+      for (let i = edges.length - 1; i >= 0; i--) if (edges[i].target === sid && edges[i].id.startsWith('e_st_')) edges.splice(i, 1);
+      const left = new Set(shots.filter((s) => s.excluded).map((s) => s.shot_id));
+      for (const l of linkShots) {
+        if (left.has(l.shot_id)) continue;
+        edges.push({ id: `e_st_${l.shot_id}`, source: l.node_ids[1], sourceHandle: genOut.id, target: sid, targetHandle: stIn.id });
       }
       finalId = sid;
       if (opt.finish.audio) {
@@ -243,6 +246,9 @@ export function buildCanvasFromDirector(p: DirectorProject, reg: RegistryLike, e
 // ------------------------------------------------------------------ casting canvas
 export interface CastingReport { created: string[]; updated: string[]; keptUserText: string[]; recreated: string[]; missing: { ref_id: string; reason: string }[] }
 export const refTextNodeId = (refId: string) => `n_${refId}_text`;
+const KIND_HINT: Record<string, string> = { character: 'Full-body character reference image, standing, neutral plain background.', location: 'Establishing shot of the place, no people.', prop: 'Product shot of the object on a plain background.' };
+/** the text a cast card starts from: ONE description (the project language) + what kind of picture it is; the image card's own prompt writer (Auto enhance, per model) makes the model's prompt from it */
+export const castPromptText = (r: { kind: string; description: string; prompt_en?: string; prompt_ko?: string }) => `${(r.description || r.prompt_en || r.prompt_ko || '').trim()}\n${KIND_HINT[r.kind] ?? ''}`.trim();
 export const refGenNodeId = (refId: string) => `n_${refId}_gen`;
 
 /**
@@ -269,6 +275,7 @@ export function buildCastingCanvas(p: DirectorProject, reg: RegistryLike, existi
     const want = r.kind === 'character' ? '3:4' : r.kind === 'location' ? p.series.aspect : '1:1';   // a person is shown full-body (tall), a place wide, a prop square
     if (pe.params.aspect?.options?.includes(want)) params.aspect = want;
     if (pe.params.seed && r.seed !== undefined && r.seed >= 0) params.seed = r.seed;
+    if (pe.params.auto_enhance) params.auto_enhance = true;   // each model's own prompt writer turns the description into the model's prompt
     return params;
   };
   const wired = promptDef && genDef ? { out: textOut(promptDef), inn: textIn(genDef, reg, 'text') } : null;
@@ -301,7 +308,7 @@ export function buildCastingCanvas(p: DirectorProject, reg: RegistryLike, existi
       y += 420; continue;
     }
     if (!promptDef || !genDef || !wired?.out || !wired.inn) { report.missing.push({ ref_id: r.ref_id, reason: !promptDef ? 'card "prompt" is not in the registry' : !genDef ? 'card "image-generate" is not in the registry' : 'no text port to connect' }); continue; }
-    const text = r.prompt_en.trim() || r.description.trim();
+    const text = castPromptText(r);
     const tid = refTextNodeId(r.ref_id), gid = refGenNodeId(r.ref_id);
     let tn = byNode.get(tid);
     if (!tn) {

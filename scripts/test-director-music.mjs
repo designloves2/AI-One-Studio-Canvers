@@ -123,6 +123,13 @@ ok(f1.project.edges.filter((e) => e.target === st.id).map((e) => e.source).join(
 ok(f1.project.edges.some((e) => e.source === st.id && e.target === va.id) && f1.project.edges.some((e) => e.source === au.id && e.target === va.id && e.targetHandle === 'audio'), 'joined video + song go into Add Audio');
 const f2 = A.buildCanvasFromDirector(fin, reg2, f1.project, f1.link, 'f', { generator: 'video-generate', episodeId: ep.episode_id, now: NOW, finish: { stitch: true, audio: songAsset } });
 ok(f2.project.nodes.length === f1.project.nodes.length && f2.project.edges.length === f1.project.edges.length, 'building again adds no card and no wire');
+// a clip left out is not in the joined video; put back, it returns IN ITS PLACE (clip order)
+shots[1].excluded = true;
+const fx = A.buildCanvasFromDirector(fin, reg2, f1.project, f1.link, 'f', { generator: 'video-generate', episodeId: ep.episode_id, now: NOW, finish: { stitch: true, audio: songAsset } });
+ok(fx.project.edges.filter((e) => e.target === st.id).map((e) => e.source).join() === [shots[0], shots[2]].map((s) => A.genNodeId(s.shot_id)).join(), 'a clip that is left out is taken out of the joined video');
+shots[1].excluded = undefined;
+const fy = A.buildCanvasFromDirector(fin, reg2, fx.project, fx.link, 'f', { generator: 'video-generate', episodeId: ep.episode_id, now: NOW, finish: { stitch: true, audio: songAsset } });
+ok(fy.project.edges.filter((e) => e.target === st.id).map((e) => e.source).join() === shots.map((s) => A.genNodeId(s.shot_id)).join(), 'put back, the clip is joined in its own place again (not at the end)');
 const f3 = A.buildCanvasFromDirector(fin, reg2, null, null, 'f', { generator: 'video-generate', episodeId: ep.episode_id, now: NOW, finish: { stitch: true } });
 ok(f3.project.nodes.some((n) => n.defId === 'video-stitch') && !f3.project.nodes.some((n) => n.defId === 'video-audio') && f3.link.final_node_id === f3.project.nodes.find((n) => n.defId === 'video-stitch').id, 'a drama episode: the clips joined, no song');
 const noStitch = A.buildCanvasFromDirector(fin, { ...reg2, get: (id) => (id === 'video-stitch' ? undefined : reg2.get(id)) }, null, null, 'f', { generator: 'video-generate', episodeId: ep.episode_id, now: NOW, finish: { stitch: true } });

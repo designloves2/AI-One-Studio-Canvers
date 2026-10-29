@@ -107,8 +107,10 @@ export async function finishEpisode(no?: number): Promise<{ made: boolean; cance
   if (!p) throw new Error('no project');
   if (d.readOnly) throw new Error(tr('Read-only (saved by a newer version)'));
   const ep = episodeByNo(p, no ?? p.workflow.episode_no); if (!ep) throw new Error('no episode');
-  const shots = shotsOfEpisode(p, ep.episode_id);
-  if (!shots.length || shots.some((s) => !s.results.some((r) => r.picked))) throw new Error(tr('Every clip needs a result before the clips can be joined.'));
+  const shots = shotsOfEpisode(p, ep.episode_id).filter((s) => !s.excluded);
+  if (!shots.length) throw new Error(tr('Leave at least one clip in the video.'));
+  if (shots.some((s) => !s.results.some((r) => r.picked))) throw new Error(tr('Every clip needs a result before the clips can be joined.'));
+  if (shots.some((s) => s.passed !== s.results.find((r) => r.picked)?.result_id)) throw new Error(tr('Every clip that stays in the video must be passed first.'));
   if (isDemo()) {
     await sleep(400);
     d.edit((x) => { const e = x.episodes.find((q) => q.episode_id === ep.episode_id); if (e) e.final = demoFinalResult(`${ep.no}: ${ep.title || x.series.title}`, x.series.aspect); });

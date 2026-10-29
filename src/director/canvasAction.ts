@@ -71,7 +71,7 @@ export async function makeEpisodeCanvas(no?: number): Promise<{ file: string; re
   for (const s of shotsOfEpisode(p, ep.episode_id)) for (const r of castOf(p, s)) { const pick = r.results.find((x) => x.picked); if (pick && !refAssets[r.ref_id]) refAssets[r.ref_id] = assetOfResult(pick, `ra_${r.ref_id}`); }
   // a music video: the clips are joined and the song is laid on top in the same canvas (the card whose result is the finished episode)
   const song = p.series.format === 'musicvideo' ? pickedAudio(p.music) : undefined;
-  const finish = p.series.format === 'musicvideo' ? { stitch: true, audio: song && !song.data_url ? assetFromFile(song.file, 'audio', 'audio') : undefined } : undefined;
+  const finish = { stitch: true, audio: song && !song.data_url ? assetFromFile(song.file, 'audio', 'audio') : undefined };   // every kind: the passed clips are joined (a music video also gets the song)
   const res = buildCanvasFromDirector(p, appRegistry, existing, prev, file, { generator: 'video-generate', episodeId: ep.episode_id, turbo: turbo.params, refAssets, finish });
   res.report.warnings.push(...turbo.warnings);
   if (!demo) await saveCanvas(file, res.project);

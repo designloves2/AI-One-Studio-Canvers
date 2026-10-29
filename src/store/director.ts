@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { CrewRole, DirectorProject, StageId } from '../director/types';
-import { addChat, episodeByNo, newDirectorProject, safeProjectName, touch } from '../director/model';
+import { addChat, episodeByNo, newDirectorProject, safeProjectName, shotsOfEpisode, touch } from '../director/model';
 import { CREW_LABEL, defaultCrew, directorTurn, kickoffInstruction, type LlmFn } from '../director/ai';
 import { approveEpisode, approveStage, blockers, EPISODE_STAGES, GLOBAL_STAGES, markEpisodeFailed, markEpisodeReview, markEpisodeWorking, markFailed, markReview, markWorking, productionOpen, reopenEpisode, startEpisodes, startFromIntake, type ApproveResult, type Kickoff } from '../director/workflow';
 import { demoCrew } from '../director/demoCrew';
@@ -233,7 +233,14 @@ export const useDirector = create<DirectorState>((set, get) => {
         const work = structuredClone(get().project!);
         work.workflow.episode_no = get().focus;
         const res = await directorTurn(work, t, crew(), { kickoff: 'free', previous: await previousTexts(work) });
-        commit((x) => { takeOver(x, work); addChat(x, 'assistant', res.reply.say, { crew: res.reply.crew ?? defaultCrew(stage), notes: res.notes }); });
+        // a change asked for during the final review sends the episode back to the clips (the changed clips have to be generated again)
+        let back = 0;
+        commit((x) => {
+          takeOver(x, work); addChat(x, 'assistant', res.reply.say, { crew: res.reply.crew ?? defaultCrew(stage), notes: res.notes });
+          const e = episodeByNo(x, get().focus);
+          if (e && (e.stage === 'review' || e.stage === 'done') && shotsOfEpisode(x, e.episode_id).some((s) => s.status === 'draft') && reopenEpisode(x, e.no, 'execute')) back = e.no;
+        });
+        if (back) set({ focus: back, view: 'execute' });
         if (res.reply.intent === 'approve') { set({ busy: false }); await get().approve(); return; }
         // "make the song now": the crew set the song data and asked for the generation (still behind the button's "yes")
         if (res.reply.music?.generate && get().project?.music?.source === 'generate') {

@@ -45,11 +45,13 @@ export const demoCrew: LlmFn = async (system, user) => {
       film: [['character', '주인공', '조용한 인물', 'portrait of a quiet middle-aged person, soft window light'], ['location', '오래된 방', '햇빛 드는 방', 'wide shot of an old room with dusty sunlight']],
     };
     const list = SETS[fmtId] ?? SETS.drama;
-    return JSON.stringify({ crew: 'art', say: ko('필요한 인물·장소·소품을 정했습니다. 이미지는 아직 만들기 전입니다.', 'Cast proposed.'), references: list.map(([kind, name, description, prompt_en], i) => ({ kind, name, description, prompt_en, prompt_ko: description, ...(kind === 'character' && /웨딩|무대/.test(name) ? { variant_of: list[0][1] } : {}) })) });
+    return JSON.stringify({ crew: 'art', say: ko('필요한 인물·장소·소품을 정했습니다. 이미지는 아직 만들기 전입니다.', 'Cast proposed.'), references: list.map(([kind, name, description, prompt_en]) => ({ kind, name, description: ko(`${description}. ${prompt_en}`, prompt_en), ...(kind === 'character' && /웨딩|무대/.test(name) ? { variant_of: list[0][1] } : {}) })) });
   }
   if (/with the approved CAST: "series.synopsis"/.test(said)) {
+    const cast = [...system.matchAll(/^ {2}(character|location|prop): ([^\n(\[]+?)(?: \(look of [^)]*\))? \[/gm)].map((m) => ({ kind: m[1], name: m[2].trim() }));
+    const people = cast.filter((x) => x.kind !== 'location').map((x) => x.name), places = cast.filter((x) => x.kind === 'location').map((x) => x.name);
     return JSON.stringify({ crew: 'writer', say: ko(`${total}편 시나리오를 썼습니다. 승인된 캐스팅으로만 구성했습니다.`, 'Scenario written.'), series: { synopsis: ko('저택에서 시작된 비밀이 가족 전체를 흔든다.', 'A secret shakes the whole family.') },
-      episodes: Array.from({ length: total }, (_, i) => ({ no: i + 1, title: ko(`${i + 1}화: ${['편지', '재회', '거짓말', '폭로', '이별'][i % 5]}`, `Ep ${i + 1}`), logline: ko(`서연이 새로운 진실을 알게 되고, 마지막에 반전이 터진다. (${i + 1}/${total})`, `Twist ${i + 1}`) })), suggest: [ko('3화를 더 자극적으로', 'Make ep 3 sharper')] });
+      episodes: Array.from({ length: total }, (_, i) => ({ no: i + 1, title: ko(`${i + 1}화: ${['편지', '재회', '거짓말', '폭로', '이별'][i % 5]}`, `Ep ${i + 1}`), logline: ko(`서연이 새로운 진실을 알게 되고, 마지막에 반전이 터진다. (${i + 1}/${total})`, `Twist ${i + 1}`), cast: people.slice(0, 2 + (i % 2)), locations: places.length ? [places[i % places.length]] : [] })), suggest: [ko('3화를 더 자극적으로', 'Make ep 3 sharper')] });
   }
   if (/Use "episode_plan"/.test(said)) {
     const n = splitSeconds(epSec, clipSec).length, half = Math.ceil(n / 2);

@@ -40,7 +40,7 @@ const CAST = { crew: 'art', say: '캐스팅했습니다.', references: [
   { kind: 'character', name: 'Minji', description: '28, lead', prompt_en: 'full body woman 28' },
   { kind: 'character', name: 'Minji wedding', description: 'wedding dress look', prompt_en: 'same woman, wedding dress', variant_of: 'Minji' },
   { kind: 'location', name: 'Villa', description: 'rich villa', prompt_en: 'villa exterior' }] };
-const series = () => ({ crew: 'writer', say: '시나리오를 썼습니다.', series: { synopsis: 'syn' }, episodes: Array.from({ length: 30 }, (_, i) => ({ no: i + 1, title: `T${i + 1}`, logline: `L${i + 1}` })) });
+const series = () => ({ crew: 'writer', say: '시나리오를 썼습니다.', series: { synopsis: 'syn' }, episodes: Array.from({ length: 30 }, (_, i) => ({ no: i + 1, title: `T${i + 1}`, logline: `L${i + 1}`, cast: ['Minji'], locations: ['Villa'] })) });
 const clips = (n, cast = ['Minji'], loc = 'Villa') => Array.from({ length: n }, (_, i) => ({ prompt_en: `clip ${i + 1}`, prompt_ko: `클립 ${i + 1}`, camera: 'wide', dialogue: i === 0 ? 'Minji: Why?' : '', sound: 'rain', music: 'strings', cast, location: loc }));
 const ep = (n, o = {}) => ({ crew: 'director', say: '1화를 썼습니다.', episode_plan: { no: 1, scenes: [{ title: 'A', summary: 's', clips: clips(Math.ceil(n / 2)) }, { title: 'B', summary: 's', clips: clips(Math.floor(n / 2)) }] }, ...o });
 
@@ -133,7 +133,19 @@ const link = { canvas_id: 'cv_aaaaaaaaaaaa', canvas_file: 'f', shots: [], create
 ok(W.approveEpisode(p, 1).ok && e1.stage === 'execute' && e1.stage_status === 'review_required', 'with a canvas, episode 1 goes on to the generate step');
 ok(/no generated result/.test(W.approveEpisode(p, 1).reason), 'a clip that was never generated cannot be approved as done');
 for (const s of M.shotsOfEpisode(p, e1.episode_id)) s.results.push({ result_id: 'rs_' + s.shot_id, file: { filename: 'c.mp4', subfolder: '', type: 'output' }, kind: 'video', created_at: '', picked: true });
-ok(W.approveEpisode(p, 1).ok && e1.stage === 'review', 'with results, it goes to the review step');
+ok(/not passed yet/.test(W.approveEpisode(p, 1).reason), 'clips with results but not passed cannot go on: each clip is looked at and passed first');
+const e1shots = M.shotsOfEpisode(p, e1.episode_id);
+e1shots.forEach((s) => { s.passed = s.results[0].result_id; });
+ok(/Join the passed clips/.test(W.approveEpisode(p, 1).reason), 'all passed, but the passed clips must be joined into one video before the final review');
+e1shots[0].excluded = true; e1shots[0].passed = undefined; e1.final = undefined;
+ok(/Join the passed clips/.test(W.approveEpisode(p, 1).reason), 'a clip that is left out needs no pass (the others are passed)');
+e1shots[0].excluded = undefined; e1shots[0].passed = e1shots[0].results[0].result_id;
+e1.final = { result_id: 'rs_final', file: { filename: 'final.mp4', subfolder: '', type: 'output' }, kind: 'video', created_at: '', picked: true };
+e1shots[1].results.push({ result_id: 'rs_new', file: { filename: 'n.mp4', subfolder: '', type: 'output' }, kind: 'video', created_at: '', picked: false });
+e1shots[1].results.forEach((x) => { x.picked = x.result_id === 'rs_new'; });
+ok(/not passed yet/.test(W.approveEpisode(p, 1).reason), 'a clip made again (another picked result) is not passed any more');
+e1shots[1].results = e1shots[1].results.filter((x) => x.result_id !== 'rs_new'); e1shots[1].results.forEach((x) => { x.picked = true; });
+ok(W.approveEpisode(p, 1).ok && e1.stage === 'review', 'passed clips + a joined video: it goes to the final review');
 // go back with ONE episode, change, come forward again
 ok(W.reopenEpisode(p, 1, 'episode') && e1.stage === 'episode' && e1.stage_status === 'review_required' && M.episodeByNo(p, 2).stage === 'canvas', 'episode 1 goes back to writing; episode 2 stays where it was');
 ok(M.shotsOfEpisode(p, e1.episode_id).every((s) => s.results.length === 1) && p.canvas_links.length === 1, 'nothing that was made is deleted by going back (results, canvas)');
@@ -141,6 +153,7 @@ ok(W.reopenEpisode(p, 1, 'review') === false && W.reopenEpisode(p, 4, 'episode')
 ok(W.approveEpisode(p, 1).ok && e1.stage === 'canvas', 'approving again goes forward from there (canvas is rebuilt idempotently, results stay)');
 // a saved project can be opened at the review step, reopened, changed and generated again
 e1.stage = 'review'; e1.stage_status = 'review_required';
+e1.final = undefined; ok(/no joined video/.test(W.approveEpisode(p, 1).reason), 'the final review needs the joined video'); e1.final = { result_id: 'rs_final', file: { filename: 'final.mp4', subfolder: '', type: 'output' }, kind: 'video', created_at: '', picked: true };
 ok(W.approveEpisode(p, 1).ok && e1.stage === 'done' && e1.stage_status === 'completed' && !W.approveEpisode(p, 1).ok, 'review approved: episode 1 is done');
 ok(W.reopenEpisode(p, 1, 'execute') && e1.stage === 'execute', 'a finished episode can be reopened at the generate step to make clips again');
 ok(W.episodeState(e1) === 'generating' && W.episodeState(M.episodeByNo(p, 4)) === 'idle', 'the episode strip words follow the line');
@@ -156,7 +169,7 @@ const snap = JSON.stringify(p); script.push('nope', 'nope', 'nope'); await rejec
 // ---- 7. the whole series is finished when every episode is done
 const q = M.newDirectorProject('Q'); q.series.total_episodes = 2; q.workflow.stage = 'episode'; q.workflow.status.episode = 'approved';
 const q1 = M.newEpisode(q, 1, 'a'), q2 = M.newEpisode(q, 2, 'b');
-for (const [e, no] of [[q1, 1], [q2, 2]]) { const sc = M.newScene(q, e.episode_id); const sh = M.newShot(q, sc.scene_id); sh.results.push({ result_id: 'rs_' + no, file: { filename: 'a.mp4', subfolder: '', type: 'output' }, kind: 'video', created_at: '', picked: true }); e.stage = 'review'; e.stage_status = 'review_required'; }
+for (const [e, no] of [[q1, 1], [q2, 2]]) { const sc = M.newScene(q, e.episode_id); const sh = M.newShot(q, sc.scene_id); sh.results.push({ result_id: 'rs_' + no, file: { filename: 'a.mp4', subfolder: '', type: 'output' }, kind: 'video', created_at: '', picked: true }); e.stage = 'review'; e.stage_status = 'review_required'; e.final = { result_id: 'rs_f' + no, file: { filename: 'f.mp4', subfolder: '', type: 'output' }, kind: 'video', created_at: '', picked: true }; }
 let f = W.approveEpisode(q, 1); ok(f.ok && f.to === 'done' && !f.finished, 'episode 1 done: the series is not finished yet');
 f = W.approveEpisode(q, 2); ok(f.ok && f.finished, 'episode 2 done: the whole series is finished');
 const notOpen = M.newDirectorProject('N'); M.newEpisode(notOpen, 1); ok(W.startEpisodes(notOpen, [1]).length === 0 && W.approveEpisode(notOpen, 1).ok === false, 'before the scenario is approved nothing can be started');
@@ -187,14 +200,49 @@ ok(m2.schema_version === 5 && m2.series.format === 'drama' && m2.workflow.stage 
 // ---- cast prompts in English and Korean
 {
   const q = M.newDirectorProject('K');
-  const r1 = M.newReference(q, 'character', 'Hana', 'girl', 'a girl', '소녀');
-  ok(r1.prompt_ko === '소녀' && M.newReference(q, 'prop', 'Cup', 'c', 'a cup').prompt_ko === undefined, 'a cast entry keeps its Korean prompt next to the English one');
-  AI.applyReply(q, { say: '', references: [{ kind: 'character', name: 'Hana', prompt_en: 'a tall girl', prompt_ko: '키 큰 소녀' }, { kind: 'prop', name: 'Key', prompt_en: 'a key', prompt_ko: '열쇠' }] });
-  ok(r1.prompt_en === 'a tall girl' && r1.prompt_ko === '키 큰 소녀' && q.references.find((x) => x.name === 'Key').prompt_ko === '열쇠', 'the casting reply updates both languages and adds new entries with both');
-  r1.status = 'approved'; AI.applyReply(q, { say: '', references: [{ name: 'Hana', prompt_en: 'CHANGED', prompt_ko: '바뀜' }] });
-  ok(r1.prompt_en === 'a tall girl', 'an approved cast entry is not rewritten by a repeated casting reply');
-  AI.applyReply(q, { say: '', edits: [{ op: 'set_reference', name: 'Hana', prompt_ko: '한국어만 수정' }] });
-  ok(r1.prompt_ko === '한국어만 수정' && r1.prompt_en === 'a tall girl', 'a change asked for in the chat can touch just the Korean prompt');
+  const r1 = M.newReference(q, 'character', 'Hana', 'girl');
+  AI.applyReply(q, { say: '', references: [{ kind: 'character', name: 'Hana', description: 'a tall girl' }, { kind: 'prop', name: 'Key', description: 'a key' }] });
+  ok(r1.description === 'a tall girl' && q.references.find((x) => x.name === 'Key').description === 'a key', 'a cast entry is ONE description: the casting reply updates it and adds new entries');
+  r1.status = 'approved'; AI.applyReply(q, { say: '', references: [{ name: 'Hana', description: 'CHANGED' }] });
+  ok(r1.description === 'a tall girl', 'an approved cast entry is not rewritten by a repeated automatic casting reply');
+  AI.applyReply(q, { say: '', references: [{ name: 'Hana', description: 'older, short grey hair' }] }, { free: true });
+  ok(r1.description === 'older, short grey hair', 'a change the producer asked for in the chat IS applied, also to an approved entry');
+  AI.applyReply(q, { say: '', edits: [{ op: 'set_reference', name: 'Hana', description: 'in a red coat' }] });
+  ok(r1.description === 'in a red coat', 'set_reference changes the description');
+  // the crew spells a name a little differently: one clear match is taken; a rename follows into the clips and episodes
+  const ep1 = M.newEpisode(q, 1, 'E'); const sc1 = M.newScene(q, ep1.episode_id); const sh1 = M.newShot(q, sc1.scene_id); sh1.cast = ['Hana']; ep1.cast = ['Hana'];
+  ok(M.findReference(q, ' hana ')?.name === 'Hana' && M.findReference(q, 'Hana (red coat)')?.name === 'Hana' && M.findReference(q, 'Nobody') === undefined, 'names are matched without case, spaces and a bracket part; an unknown name stays unknown');
+  AI.applyReply(q, { say: '', edits: [{ op: 'set_reference', name: 'Hana', new_name: 'Hana Kim' }] });
+  ok(r1.name === 'Hana Kim' && sh1.cast[0] === 'Hana Kim' && ep1.cast[0] === 'Hana Kim', 'renaming a cast entry changes it in the clips and episodes too');
+}
+// ---- every clip names the people in it and has a place; the scenario names the cast and places of every episode
+{
+  const q = M.newDirectorProject('R'); q.series.total_episodes = 2; q.series.episode_seconds = 20; q.series.clip_seconds = 10;
+  const mk = (kind, name) => { const r = M.newReference(q, kind, name, name + ' desc'); r.status = 'approved'; r.results.push({ result_id: 'rs_' + name, file: { filename: name + '.png', subfolder: '', type: 'output' }, kind: 'image', created_at: '', picked: true }); return r; };
+  mk('character', '한지우'); mk('character', '김민수'); mk('location', '럭셔리 맨션 - 그랜드 홀'); mk('location', '옥상'); mk('prop', '편지');
+  // scenario: an episode without cast / without a place is sent back; names are checked
+  const base = { say: '', episodes: [{ no: 1, title: 'a', logline: 'b', cast: ['한지우'], locations: ['옥상'] }, { no: 2, title: 'c', logline: 'd', cast: [], locations: [] }] };
+  ok(/cast" is empty/.test(AI.checkReply(q, base, 'series')), 'a scenario with an episode that has no cast is sent back');
+  ok(/locations" is empty/.test(AI.checkReply(q, { say: '', episodes: [{ no: 1, title: 'a', cast: ['한지우'], locations: ['옥상'] }, { no: 2, title: 'c', cast: ['김민수'], locations: [] }] }, 'series')), 'a scenario with an episode that has no place is sent back');
+  ok(/not in CAST/.test(AI.checkReply(q, { say: '', episodes: [{ no: 1, title: 'a', cast: ['Ghost'], locations: ['옥상'] }, { no: 2, title: 'c', cast: ['김민수'], locations: ['옥상'] }] }, 'series')), 'an episode naming somebody who is not in the cast is sent back');
+  AI.applyReply(q, { say: '', episodes: [{ no: 1, title: 'a', logline: 'b', cast: ['한지우 ', '편지'], locations: ['럭셔리 맨션'] }, { no: 2, title: 'c', logline: 'd', cast: ['김민수'], locations: ['옥상'] }] });
+  const e1 = M.episodeByNo(q, 1);
+  ok(e1.cast.join() === '한지우,편지' && e1.locations.join() === '럭셔리 맨션 - 그랜드 홀', "the episode keeps its cast and places (names resolved to the exact cast names, a place goes to 'locations')");
+  // a written episode: a plan that carries another episode number still goes to the episode that was asked for
+  q.workflow.episode_no = 2;
+  AI.applyReply(q, { say: '', episode_plan: { no: 1, scenes: [{ title: 'S', clips: [
+    { prompt_en: 'Minsu looks out', prompt_ko: '김민수가 창밖을 본다', dialogue: '한지우: 가지 마', cast: ['김민수'], location: '' },
+    { prompt_en: 'a close shot of the letter', prompt_ko: '편지 클로즈업', cast: [], location: '' }] }] } }, { episode: 2 });
+  const sh = M.shotsOfEpisode(q, M.episodeByNo(q, 2).episode_id);
+  ok(sh.length === 2 && M.shotsOfEpisode(q, e1.episode_id).length === 0, 'a plan always goes to the episode that was asked for (not to the number the model wrote)');
+  ok(sh[0].cast.join() === '김민수,한지우', 'a person who only speaks (named in the dialogue) is added to the clip cast');
+  ok(sh[1].cast.join() === '편지', 'a prop named in the picture text is added to the clip');
+  ok(sh[0].location === '옥상' && sh[1].location === '옥상', 'a clip without a place gets the place of the episode (and then the one before it)');
+  ok(M.findReference(q, '한지우') && !M.mentionedRefs(q, 'nothing here').length, 'a text that names nobody adds nobody');
+  // a clip changed by the producer has to be passed again, and can be left out
+  const p0 = sh[0]; p0.results.push({ result_id: 'r1', file: { filename: 'a.mp4', subfolder: '', type: 'output' }, kind: 'video', created_at: '', picked: true }); p0.passed = 'r1'; p0.status = 'done';
+  AI.applyReply(q, { say: '', edits: [{ op: 'set_clip', episode: 2, clip: 1, prompt_en: 'darker', include: false }] });
+  ok(p0.passed === undefined && p0.excluded === true && p0.status === 'draft', 'a changed clip is not passed any more; include:false leaves it out of the joined video');
 }
 // ---- demo stand-in pictures
 {

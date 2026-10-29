@@ -12,7 +12,7 @@ import { BACKENDS } from '../backend/llm';
 import { Llm } from '../panels/SettingsPanel';
 import { resultUrl } from './media';
 import { CREW_LABEL } from './ai';
-import { episodeByNo, newAsset, newReference, shotsOfEpisode, syncShotAssets } from './model';
+import { episodeByNo, findReference, newAsset, newReference, shotsOfEpisode, syncShotAssets } from './model';
 import { newSeed } from './execution';
 import { applyMusicPatch, defaultSections, newMusic, pickedAudio, songMap } from './music';
 import { finishEpisode, generateSong, pickSong, registerSong, syncFinalFromCanvas, uploadSong } from './musicAction';
@@ -27,9 +27,9 @@ import type { DirectorProject, DirectorReference, DirectorShot, ResultRef, Stage
 
 const STEPS: { id: StageId; label: string }[] = [
   { id: 'brief', label: 'Brief' }, { id: 'references', label: 'Casting' }, { id: 'music', label: 'Song' }, { id: 'series', label: 'Scenario' },
-  { id: 'episode', label: 'Episode' }, { id: 'canvas', label: 'Canvas' }, { id: 'execute', label: 'Generate' }, { id: 'review', label: 'Review' },
+  { id: 'episode', label: 'Episode' }, { id: 'canvas', label: 'Canvas' }, { id: 'execute', label: 'Generate & check' }, { id: 'review', label: 'Final review' },
 ];
-const NEXT_LABEL: Partial<Record<StageId, string>> = { brief: 'Casting', references: 'Scenario', music: 'Scenario', series: 'Episode', episode: 'Canvas', canvas: 'Generate', execute: 'Review', review: 'Next episode' };
+const NEXT_LABEL: Partial<Record<StageId, string>> = { brief: 'Casting', references: 'Scenario', music: 'Scenario', series: 'Episode', episode: 'Canvas', canvas: 'Generate & check', execute: 'Final review', review: 'Next episode' };
 const STATUS_TEXT: Record<string, string> = { idle: 'waiting', working: 'the crew is working…', review_required: 'waiting for your approval', approved: 'approved', failed: 'failed', completed: 'finished', blocked: 'blocked' };
 const EXAMPLES = [
   '막장 드라마 하나 만들자. 장편이고 30부작, 편당 1분 30초 구성으로 16:9 비율이며 7+1 Kimchy 모드로 생성하고 싶어.',
@@ -171,7 +171,8 @@ function StagePanel({ p, ro, view }: { p: DirectorProject; ro: boolean; view: St
   if (!ep || ep.stage === 'idle') return <EpisodeIdle p={p} ro={ro} />;
   if (view === 'episode') return <EpisodeCard p={p} />;
   if (view === 'canvas') return <CanvasCard p={p} />;
-  return <GenerateCard p={p} ro={ro} review={view === 'review'} />;
+  if (view === 'review') return <ReviewCard p={p} ro={ro} />;
+  return <GenerateCard p={p} ro={ro} review={false} />;
 }
 
 /** "working" line for the unit being looked at: the global step, or the episode's own step */
@@ -372,11 +373,11 @@ function CastPicker({ refId, onClose }: { refId: string; onClose: () => void }) 
 
 // ---- casting
 const KIND: Record<string, { icon: keyof typeof ICONS; label: string; cls: string }> = { character: { icon: 'user', label: 'Actors', cls: 'k-char' }, location: { icon: 'pin', label: 'Locations', cls: 'k-loc' }, prop: { icon: 'box', label: 'Props', cls: 'k-prop' } };
-function CastCard({ r, onPick, onMake, onRegister, onChoose, onSavePrompt, onVariant, ro, busy }: { r: DirectorReference; onVariant?: () => void; onPick: () => void; onMake: () => void; onRegister: () => void; onChoose: (id: string) => void; onSavePrompt: (lang: 'en' | 'ko', text: string) => void; ro: boolean; busy: boolean }) {
+function CastCard({ r, onPick, onMake, onRegister, onChoose, onSavePrompt, onVariant, ro, busy }: { r: DirectorReference; onVariant?: () => void; onPick: () => void; onMake: () => void; onRegister: () => void; onChoose: (id: string) => void; onSavePrompt: (text: string) => void; ro: boolean; busy: boolean }) {
   const T = useT(); const pick = r.results.find((x) => x.picked); const k = KIND[r.kind];
   const fmtOfProject = useDirector((x) => x.project?.series.format);
-  const [showPrompt, setShowPrompt] = useState(false); const [lang, setLang] = useState<'en' | 'ko'>('ko'); const [draft, setDraft] = useState<string | null>(null);
-  const shown = lang === 'en' ? r.prompt_en : (r.prompt_ko || r.description);
+  const [showPrompt, setShowPrompt] = useState(false); const [draft, setDraft] = useState<string | null>(null);
+  const shown = r.description;
   return (
     <article className={`dx-cast ${k.cls}`}>
       <div className="dx-cast-img">{pick ? <img src={img(pick)} alt={r.name} loading="lazy" /> : <div className="empty"><Ico n="image" /><span>{T('No image yet')}</span></div>}
@@ -389,14 +390,13 @@ function CastCard({ r, onPick, onMake, onRegister, onChoose, onSavePrompt, onVar
           <button className="btn small" disabled={ro} onClick={onPick}>{pick ? T('Change image') : T('Choose from Library / Gallery')}</button>
           {onVariant && <button className="btn small" disabled={ro || busy} title={T('The same one with another costume, hair or look (a new entry)')} onClick={onVariant}>+ {T('New look')}</button>}
           {pick && !r.asset_id && <button className="btn small" disabled={ro || busy} onClick={onRegister}>{T('Register as asset')}</button>}
-          <button className={`btn small${showPrompt ? ' on' : ''}`} onClick={() => setShowPrompt(!showPrompt)}>{T('Prompt')}</button>
+          <button className={`btn small${showPrompt ? ' on' : ''}`} onClick={() => setShowPrompt(!showPrompt)}>{T('Edit description')}</button>
         </div>
         {showPrompt && (
           <div className="dx-promptbox">
-            <div className="dx-seg"><button className={lang === 'ko' ? 'on' : ''} onClick={() => { setLang('ko'); setDraft(null); }}>한국어</button><button className={lang === 'en' ? 'on' : ''} onClick={() => { setLang('en'); setDraft(null); }}>English</button></div>
             <textarea rows={5} disabled={ro} value={draft ?? shown} onChange={(e) => setDraft(e.target.value)} />
-            <small>{lang === 'en' ? T('English is what the image model receives.') : T('Korean is for reading and for asking for changes (the model gets the English prompt).')}</small>
-            {draft !== null && draft !== shown && <div className="dx-btns"><button className="btn small" onClick={() => setDraft(null)}>{T('Undo')}</button><button className="btn small primary" disabled={ro} onClick={() => { onSavePrompt(lang, draft); setDraft(null); }}>{T('Apply')}</button></div>}
+            <small>{T('This text is all there is: when the image is made, the image model\'s own prompt writer turns it into that model\'s prompt.')}</small>
+            {draft !== null && draft !== shown && <div className="dx-btns"><button className="btn small" onClick={() => setDraft(null)}>{T('Undo')}</button><button className="btn small primary" disabled={ro} onClick={() => { onSavePrompt(draft); setDraft(null); }}>{T('Apply')}</button></div>}
           </div>)}
       </div>
     </article>
@@ -421,7 +421,7 @@ function CastGrid({ p, ro }: { p: DirectorProject; ro: boolean }) {
   // a new look (costume, hair, age, season) of a cast entry: a new entry that says it is a variant of the first one; its prompt is the base prompt + the change
   const variant = async (r: DirectorReference) => {
     const what = (await askText(`${T('Describe the new look (costume, hair, age, season …)')}\n${r.name}`))?.trim(); if (!what) return;
-    edit((x) => { const b = x.references.find((q) => q.ref_id === r.ref_id); if (!b) return; const v = newReference(x, b.kind, `${b.name} (${what.slice(0, 14)})`, `${b.description} — ${what}`, `${b.prompt_en}, ${what}`); v.variant_of = b.name; v.seed = undefined; });
+    edit((x) => { const b = x.references.find((q) => q.ref_id === r.ref_id); if (!b) return; const v = newReference(x, b.kind, `${b.name} (${what.slice(0, 14)})`, `${b.description} — ${what}`); v.variant_of = b.name; v.seed = undefined; });
   };
   return (
     <div className="dx-page">
@@ -447,7 +447,7 @@ function CastGrid({ p, ro }: { p: DirectorProject; ro: boolean }) {
       {(['character', 'location', 'prop'] as const).map((kind) => {
         const items = live.filter((r) => r.kind === kind); if (!items.length) return null;
         return <section key={kind} className="dx-group"><h4 className={KIND[kind].cls}><Ico n={KIND[kind].icon} />{T(kind === 'character' ? vocabOf(p.series.format).characters : kind === 'location' ? vocabOf(p.series.format).locations : vocabOf(p.series.format).props)} <small>{items.length}</small></h4>
-          <div className="dx-castgrid">{items.map((r) => <CastCard key={r.ref_id} r={r} ro={ro} busy={busy} onVariant={r.kind !== 'prop' && !r.variant_of ? () => void variant(r) : undefined} onPick={() => setPicking(r.ref_id)} onMake={() => void makeOne(r)} onRegister={() => void register([r.ref_id])} onChoose={(id) => choose(r, id)} onSavePrompt={(lang, text) => edit((x) => { const q = x.references.find((z) => z.ref_id === r.ref_id); if (q) { if (lang === 'en') q.prompt_en = text; else q.prompt_ko = text; } })} />)}</div></section>;
+          <div className="dx-castgrid">{items.map((r) => <CastCard key={r.ref_id} r={r} ro={ro} busy={busy} onVariant={r.kind !== 'prop' && !r.variant_of ? () => void variant(r) : undefined} onPick={() => setPicking(r.ref_id)} onMake={() => void makeOne(r)} onRegister={() => void register([r.ref_id])} onChoose={(id) => choose(r, id)} onSavePrompt={(text) => edit((x) => { const q = x.references.find((z) => z.ref_id === r.ref_id); if (q) q.description = text.trim(); })} />)}</div></section>;
       })}
       {picking && <CastPicker refId={picking} onClose={() => setPicking(null)} />}
     </div>
@@ -533,9 +533,22 @@ function ScenarioList({ p }: { p: DirectorProject }) {
       <CastStrip p={p} />
       <section className="dx-group"><h4><Ico n="list" />{T(p.series.total_episodes > 1 ? 'Episodes' : vocabOf(p.series.format).scenario)} <small>{eps.length}</small></h4>
         <div className="dx-epgrid">{eps.map((e) => (
-          <article key={e.episode_id} className={`dx-epcard st-${e.status}`}><span className="no">{e.no}</span><div><b>{e.title.replace(/^\d+화:\s*/, '')}</b><p>{e.logline}</p><div className="dx-avs">{p.references.filter((r) => castInText(p, `${e.title} ${e.logline}`).includes(r.name)).map((r) => <Avatar key={r.ref_id} r={r} size={22} />)}</div></div></article>))}</div>
+          <article key={e.episode_id} className={`dx-epcard st-${e.status}`}><span className="no">{e.no}</span><div><b>{e.title.replace(/^\d+화:\s*/, '')}</b><p>{e.logline}</p><EpisodeRefs p={p} e={e} /></div></article>))}</div>
       </section>
     </div>
+  );
+}
+
+/** the cast, props and places of an episode (what the scenario decided; before that was decided, the names written in its story line) */
+function EpisodeRefs({ p, e }: { p: DirectorProject; e: DirectorProject['episodes'][number] }) {
+  const T = useT();
+  const named = [...(e.cast ?? []), ...(e.locations ?? [])].map((n) => findReference(p, n)).filter((r): r is DirectorReference => !!r && r.status !== 'rejected');
+  const refs = named.length ? named : p.references.filter((r) => castInText(p, `${e.title} ${e.logline}`).includes(r.name));
+  const anyPlace = p.references.some((r) => r.kind === 'location' && r.status !== 'rejected');
+  return (
+    <div className="dx-avs">{[...new Set(refs)].map((r) => <span key={r.ref_id} className="dx-strip-item"><Avatar r={r} size={22} /><em>{r.name}</em></span>)}
+      {!refs.some((r) => r.kind !== 'location') && <small className="dx-warn">{T('No cast yet')}</small>}
+      {anyPlace && !refs.some((r) => r.kind === 'location') && <small className="dx-warn">{T('No place yet')}</small>}</div>
   );
 }
 
@@ -546,9 +559,12 @@ function ClipCard({ s, n, big, gen, sel, onSel, onAgain, ro }: { s: DirectorShot
   const pick = s.results.find((r) => r.picked);
   const live = useGraph((g) => { const l = proj?.canvas_links.find((c) => !c.aspect && c.shots.some((q) => q.shot_id === s.shot_id)); const id = l?.shots.find((q) => q.shot_id === s.shot_id)?.node_ids[1]; return id && g.canvasFile === l?.canvas_file ? g.runtime[id] : undefined; });
   const setSeed = (v: number | undefined) => edit((x) => { const q = x.shots.find((z) => z.shot_id === s.shot_id); if (q) q.seed = v; });
+  const passed = !!pick && s.passed === pick.result_id;
+  const setPass = () => edit((x) => { const q = x.shots.find((z) => z.shot_id === s.shot_id); const pk = q?.results.find((r) => r.picked); if (q && pk) q.passed = passed ? undefined : pk.result_id; });
+  const setIn = (v: boolean) => edit((x) => { const q = x.shots.find((z) => z.shot_id === s.shot_id); if (q) q.excluded = v ? undefined : true; });
   return (
     <article className={`dx-clip st-${s.status}${sel ? ' sel' : ''}`}>
-      <header>{onSel && <input type="checkbox" className="dx-clip-check" checked={!!sel} onChange={onSel} title={T('Select this clip')} />}<span className="num">{n}</span><span className="pill">{s.duration_sec}s</span>{s.camera && <span className="pill cam">{s.camera}</span>}<span className={`stat s-${s.status}`}>{T(STATUS_KO[s.status])}</span></header>
+      <header>{onSel && <input type="checkbox" className="dx-clip-check" checked={!!sel} onChange={onSel} title={T('Select this clip')} />}<span className="num">{n}</span><span className="pill">{s.duration_sec}s</span>{s.camera && <span className="pill cam">{s.camera}</span>}<span className={`stat s-${s.status}`}>{T(STATUS_KO[s.status])}</span>{pick && s.passed === pick.result_id && <span className="stat s-done">✓ {T('Passed')}</span>}{s.excluded && <span className="stat s-failed">{T('Left out')}</span>}</header>
       {s.status === 'generating' && live?.status === 'running' && <div className="dx-clipprog"><div><i style={{ width: `${Math.max(2, Math.min(100, Math.round(live.pct ?? 0)))}%` }} /></div><span>{Math.round(live.pct ?? 0)}%{live.label ? ` · ${live.label}` : ''}</span></div>}
       <p className="pic">{s.prompt_ko || s.prompt_en}</p>
       {s.prompt_ko && <p className="en">{s.prompt_en}</p>}
@@ -564,6 +580,11 @@ function ClipCard({ s, n, big, gen, sel, onSel, onAgain, ro }: { s: DirectorShot
           <label>{T('Seed')}<input type="number" min={0} disabled={ro} placeholder={T('random')} value={s.seed ?? ''} onChange={(e) => setSeed(e.target.value === '' ? undefined : Math.max(0, Math.floor(Number(e.target.value))))} /></label>
           <button className="btn small" disabled={ro} title={T('A new random seed')} onClick={() => setSeed(newSeed())}>🎲</button>
           {onAgain && <button className="btn small" disabled={ro} title={T('Make this clip again with a new seed')} onClick={onAgain}>↻ {T('Make again')}</button>}
+        </div>)}
+      {gen && (
+        <div className="dx-passrow">
+          <button className={`btn small${passed ? ' primary' : ''}`} disabled={ro || !pick} title={T('The clip is good: it can be joined')} onClick={setPass}>{passed ? `✓ ${T('Passed')}` : T('Pass')}</button>
+          <label className="dx-check"><input type="checkbox" disabled={ro} checked={!s.excluded} onChange={(ev) => setIn(ev.target.checked)} />{T('In the joined video')}</label>
         </div>)}
     </article>
   );
@@ -590,10 +611,11 @@ function EpisodeHead({ p, icon }: { p: DirectorProject; icon: keyof typeof ICONS
 }
 function EpisodeCard({ p }: { p: DirectorProject }) {
   const e = episodeByNo(p, p.workflow.episode_no);
-  const scenes = e ? p.scenes.filter((s) => s.episode_id === e.episode_id).sort((a, b) => a.order - b.order) : [];
+  const writing = e?.stage === 'episode' && e.stage_status === 'working';   // while the crew writes, nothing old is shown
+  const scenes = e && !writing ? p.scenes.filter((s) => s.episode_id === e.episode_id).sort((a, b) => a.order - b.order) : [];
   let n = 0;
   return (
-    <div className="dx-page"><Working p={p} /><EpisodeHead p={p} icon="film" />
+    <div className="dx-page"><Working p={p} />{writing ? <header className="dx-hero small"><h2>{e?.title.replace(/^\d+화:\s*/, '')}</h2>{e?.logline && <p>{e.logline}</p>}</header> : <EpisodeHead p={p} icon="film" />}
       {scenes.map((sc) => (
         <section key={sc.scene_id} className="dx-group"><h4><span className="sceneno">{sc.order}</span>{sc.title} <small>{sc.summary}</small></h4>
           <div className="dx-clips">{p.shots.filter((s) => s.scene_id === sc.scene_id).sort((a, b) => a.order - b.order).map((s) => <ClipCard key={s.shot_id} s={s} n={++n} />)}</div>
@@ -644,7 +666,8 @@ function FinalBlock({ p, ro, shots }: { p: DirectorProject; ro: boolean; shots: 
   const T = useT(); const [busy, setBusy] = useState(false);
   const e = episodeByNo(p, p.workflow.episode_no);
   if (!e || !shots.length) return null;
-  const ready = shots.every((s) => s.results.some((r) => r.picked));
+  const inc = shots.filter((s) => !s.excluded);
+  const ready = inc.length > 0 && inc.every((s) => { const pk = s.results.find((r) => r.picked); return !!pk && s.passed === pk.result_id; });
   const mv = p.series.format === 'musicvideo';
   const link = linkOfEpisode(p, e.no);
   const guard = async (f: () => Promise<void>) => { setBusy(true); try { await f(); } catch (er) { await notify((er as Error).message); } finally { setBusy(false); } };
@@ -655,7 +678,8 @@ function FinalBlock({ p, ro, shots }: { p: DirectorProject; ro: boolean; shots: 
         <button className="btn primary" disabled={ro || busy || !ready} onClick={() => void guard(async () => { const r = await finishEpisode(e.no); if (!r.made && !r.cancelled) await notify(T('No finished video came back.')); })}>{e.final ? T('Join the clips again') : T(mv ? 'Join the clips and add the song' : 'Join the clips')}</button>
         <button className="btn" disabled={ro || busy || !link} onClick={() => void guard(async () => { const n = await syncFinalFromCanvas(e.no); await notify(n ? `${T('Results added')}: ${n}` : T('No new results.')); })}>{T('Sync results')}</button>
       </div>
-      {!ready && <p className="dirx-muted">{T('Every clip needs a result before the clips can be joined.')}</p>}
+      {!ready && <p className="dirx-muted">{T('Every clip that stays in the video must be passed first.')}</p>}
+      {inc.length < shots.length && <p className="dirx-muted">{shots.length - inc.length} {T('clips are left out of the joined video.')}</p>}
       {mv && !pickedAudio(p.music) && <p className="dirx-muted">{T('There is no song yet: the clips are joined without it.')}</p>}
     </section>
   );
@@ -713,14 +737,32 @@ function GenerateCard({ p, ro, review }: { p: DirectorProject; ro: boolean; revi
               <button className="btn" disabled={busy} onClick={() => void zip()}>{T('Take it as a file (ZIP)')}</button>
               <button className="btn" disabled={ro || !link} onClick={() => void sync()}>{T('Sync results')}</button>
             </div>)}
-          <div className="dx-btns small"><button className="linkbtn" onClick={() => d.setSelClips(shots.map((s) => s.shot_id))}>{T('Tick all clips')}</button><button className="linkbtn" onClick={() => d.setSelClips(shots.filter((s) => !s.results.some((r) => r.picked)).map((s) => s.shot_id))}>{T('Clips without a result')}</button><button className="linkbtn" onClick={() => d.setSelClips([])}>{T('None')}</button></div>
+          <div className="dx-btns small"><button className="linkbtn" disabled={ro} onClick={() => edit((x) => { for (const q of x.shots) { if (!shots.some((s) => s.shot_id === q.shot_id)) continue; const pk = q.results.find((r) => r.picked); if (pk) q.passed = pk.result_id; } })}>{T('Pass all clips that have a result')}</button><button className="linkbtn" onClick={() => d.setSelClips(shots.map((s) => s.shot_id))}>{T('Tick all clips')}</button><button className="linkbtn" onClick={() => d.setSelClips(shots.filter((s) => !s.results.some((r) => r.picked)).map((s) => s.shot_id))}>{T('Clips without a result')}</button><button className="linkbtn" onClick={() => d.setSelClips([])}>{T('None')}</button></div>
         </section>)}
       {d.batch && (
         <section className="dx-block"><h4><Ico n="list" />{T('Batch')} {d.batch.running ? <span className="dirx-spin" /> : <button className="linkbtn" onClick={() => d.setBatch(null)}>{T('Close')}</button>}</h4>
           <div className="dx-batch">{d.batch.items.map((i) => <div key={i.no} className={`dx-batch-row s-${i.state}`}><b>{i.no}</b><span>{i.clips ? `${i.clips} ${T('clips')}` : ''}</span><em>{T(BATCH_STATE_TEXT[i.state])}</em>{i.note && <small>{i.note}</small>}</div>)}</div></section>)}
-      {(review || have === shots.length) && <FinalBlock p={p} ro={ro} shots={shots} />}
+      <p className="dirx-muted">{T('Make each clip, look at it and pass it (or make it again). Clips you do not want can be left out. Then join the passed clips; the joined video is checked in the next step.')}</p>
+      <FinalBlock p={p} ro={ro} shots={shots} />
       <div className="dx-clips">{shots.map((s, i) => <ClipCard key={s.shot_id} s={s} n={i + 1} big gen ro={ro} sel={d.selClips.includes(s.shot_id)} onSel={() => d.toggleClip(s.shot_id)}
         onAgain={mode === 'auto' && !busy && link ? () => void run({ nos: [no], clipIds: [s.shot_id], newSeeds: true }) : undefined} />)}</div>
+    </div>
+  );
+}
+
+/** the last step of an episode: the joined video is watched and judged as a whole; changes are asked for in the chat */
+function ReviewCard({ p, ro }: { p: DirectorProject; ro: boolean }) {
+  const T = useT(); const d = useDirector();
+  const e = episodeByNo(p, p.workflow.episode_no); const shots = e ? shotsOfEpisode(p, e.episode_id) : [];
+  return (
+    <div className="dx-page"><Working p={p} /><EpisodeHead p={p} icon="check" />
+      <CastStrip p={p} names={[...new Set(shots.flatMap((s) => [...s.cast, ...(s.location ? [s.location] : [])]))]} />
+      <FinalBlock p={p} ro={ro} shots={shots} />
+      <section className="dx-block"><h4><Ico n="chat" />{T('Your verdict on the joined video')}</h4>
+        <p className="dx-prose">{T('Watch the whole video. If something must change, tell the crew in the chat (for example: "make clip 3 darker", "leave out clip 5", "change the ending"): the clips that change go back to be generated again. If it is good, approve to finish this episode.')}</p>
+        <div className="dx-btns">{e && <button className="btn" disabled={ro} onClick={() => d.reopen(e.no, 'execute')}>{T('Back to the clips')}</button>}</div></section>
+      <section className="dx-group"><h4><Ico n="clip" />{T('Clips in this video')} <small>{shots.filter((s) => !s.excluded).length} / {shots.length}</small></h4>
+        <div className="dx-clips">{shots.map((s, i) => <ClipCard key={s.shot_id} s={s} n={i + 1} />)}</div></section>
     </div>
   );
 }

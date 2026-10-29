@@ -53,6 +53,8 @@ export interface DirectorEpisode {
   status: 'planned' | 'drafted' | 'approved';
   /** the finished episode: all clips joined into one video (with the song laid on for a music video) */
   final?: ResultRef;
+  /** the cast (people, props) and the places this episode uses, as cast entry names (set when the scenario is written; the clips then use them) */
+  cast?: string[]; locations?: string[];
   /** this episode's own place in the production line (several episodes can be in progress at the same time) */
   stage: EpisodeStage; stage_status: StageStatus;
 }
@@ -122,6 +124,10 @@ export interface DirectorShot {
   cast: string[]; location: string;
   /** the seed this clip is generated with (undefined = random every time). Change it to get a different take of just this clip. */
   seed?: number;
+  /** the result_id the producer passed as good (a new picked result makes it not passed any more) */
+  passed?: string;
+  /** left out of the joined episode */
+  excluded?: boolean;
   asset_ids: string[]; results: ResultRef[];
 }
 

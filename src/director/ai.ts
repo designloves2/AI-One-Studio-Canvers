@@ -3,7 +3,7 @@
 //
 // Why JSON: the LLM backends here are plain text-in / text-out (same protocol as the Live Canvas). The app checks the reply
 // (clip count, numbers) BEFORE touching the project, asks the model once or twice to fix it, and only then applies it.
-import { addChat, episodeByNo, findReference, newEpisode, newReference, newScene, newShot, shotsOfEpisode, syncShotAssets } from './model';
+import { addChat, episodeByNo, findReference, mentionedRefs, newEpisode, newReference, newScene, newShot, shotsOfEpisode, syncShotAssets } from './model';
 import { PRESETS, RESOLUTIONS, splitSeconds, usableClipSeconds } from './series';
 import { allFormatsGuide, detectFormat, formatOf, isFormat, vocabOf } from './formats';
 import { applyMusicPatch, newMusic, songMap, songText } from './music';
@@ -17,7 +17,11 @@ export interface ClipPlan { prompt_en: string; prompt_ko?: string; camera?: stri
 export interface Edit {
   op: 'set_episode' | 'set_clip' | 'delete_clip' | 'set_scene' | 'set_reference' | 'delete_reference' | 'skip_references';
   episode?: number; no?: number; clip?: number; scene?: number; name?: string;
-  title?: string; logline?: string; summary?: string; kind?: ReferenceKind; description?: string; status?: string; variant_of?: string; cast?: string[]; location?: string;
+  title?: string; logline?: string; summary?: string; kind?: ReferenceKind; description?: string; status?: string; variant_of?: string; cast?: string[]; location?: string; locations?: string[];
+  /** set_reference: the new name of an entry (the clips and episodes that use it follow) */
+  new_name?: string;
+  /** set_clip: false = leave this clip out of the joined video, true = put it back */
+  include?: boolean;
   prompt_en?: string; prompt_ko?: string; camera?: string; dialogue?: string; sound?: string; music?: string; notes?: string;
 }
 export interface AiReply {
@@ -26,7 +30,7 @@ export interface AiReply {
   /** music video: the song (where it comes from, style, lyrics, length, sections). `generate: true` = the producer asked to make the song now. */
   music?: Record<string, unknown> & { generate?: boolean };
   brief?: { text?: string; assumptions?: string[] };
-  episodes?: { no: number; title?: string; logline?: string }[];
+  episodes?: { no: number; title?: string; logline?: string; cast?: string[]; locations?: string[] }[];
   references?: { kind?: ReferenceKind; name: string; description?: string; prompt_en?: string; prompt_ko?: string; variant_of?: string }[];
   episode_plan?: { no?: number; scenes: { title?: string; summary?: string; clips: ClipPlan[] }[] };
   edits?: Edit[];
@@ -52,9 +56,10 @@ function stateText(p: DirectorProject): string {
   if (s.music_direction) L.push(`MUSIC DIRECTION: ${clip(s.music_direction, 200)}`);
   if (s.format === 'musicvideo' && songText(p)) L.push(songText(p));
   if (p.brief.text) L.push(`BRIEF (${p.brief.status}): ${clip(p.brief.text, 800)}`);
-  if (p.episodes.length) L.push('EPISODES:\n' + p.episodes.map((e) => `  ${e.no}. ${clip(e.title, 40)} - ${clip(e.logline, 90)} [${e.status}]`).join('\n'));
-  if (p.references.length) L.push('CAST (casting entries; use these names exactly):\n' + p.references.filter((r) => r.status !== 'rejected').map((r) => `  ${r.kind}: ${r.name}${r.variant_of ? ` (look of ${r.variant_of})` : ''} [${r.status}${r.asset_id ? ', registered asset' : ''}] ${clip(r.description, 100)}`).join('\n'));
+  if (p.episodes.length) L.push('EPISODES:\n' + p.episodes.map((e) => `  ${e.no}. ${clip(e.title, 40)} - ${clip(e.logline, 90)} [${e.status}]${e.cast?.length ? ` | cast: ${e.cast.join(', ')}` : ''}${e.locations?.length ? ` | places: ${e.locations.join(', ')}` : ''}`).join('\n'));
+  if (p.references.length) L.push('CAST (casting entries; use these names exactly):\n' + p.references.filter((r) => r.status !== 'rejected').map((r) => `  ${r.kind}: ${r.name}${r.variant_of ? ` (look of ${r.variant_of})` : ''} [${r.status}${r.asset_id ? ', registered asset' : ''}] ${clip(r.description, 260)}`).join('\n'));
   const ep = episodeByNo(p, w.episode_no);
+  if (ep && (ep.stage === 'review' || ep.stage === 'done')) L.push(`EPISODE ${ep.no} IS IN THE FINAL REVIEW: the producer watches the joined video${ep.final ? '' : ' (not joined yet)'}. Changes the producer asks for are made with "edits" on the clips (set_clip; include:false leaves a clip out of the video); a changed clip goes back to be generated again.`);
   if (ep) {
     const shots = shotsOfEpisode(p, ep.episode_id);
     if (shots.length) {
@@ -80,10 +85,10 @@ Reply with ONE JSON object only (no markdown). All keys are optional except "say
  "series": { "format":"drama|film|ad|musicvideo|vlog|short","title","genre","tone","logline","synopsis","language":"ko|en","total_episodes","episode_seconds","clip_seconds","aspect":"${ASPECTS.join('|')}","resolution":"${RESOLUTIONS.join('|')}","preset":"${PRESETS.join('|')}","sound_direction","music_direction" },
  "music": { "source":"upload|generate", "title","style":"genre, tempo, mood, instruments, voice","lyrics","language":"ko|en","duration_sec","bpm","sections":[{"name":"intro|verse|pre-chorus|chorus|bridge|outro","start_sec","end_sec"}],"generate":true }, // music video only: the producer can bring their own song (source upload) or ask for one (source generate); generate:true = make the song now
  "brief": { "text": "the brief in prose: concept, audience, tone, structure, look, sound, music, how it will be produced", "assumptions": ["..."] },
- "episodes": [ { "no":1, "title":"", "logline":"" } ],
- "references": [ { "kind":"character|location|prop", "name":"", "description":"", "prompt_en":"image prompt (a person: full body, neutral background; a place: establishing shot; a prop: product shot)", "prompt_ko":"the same prompt in Korean", "variant_of":"base entry name, only for a new costume / look" } ],
+ "episodes": [ { "no":1, "title":"", "logline":"", "cast":["CAST names of the people and props in this episode"], "locations":["CAST names of the places of this episode"] } ],
+ "references": [ { "kind":"character|location|prop", "name":"", "description":"the look in ${lang}: what an image maker needs (a person: age, build, face, hair, clothes; a place: architecture, light, mood; a prop: shape, material, colour). ONE text only; the image model's own prompt writer turns it into the model's prompt", "variant_of":"base entry name, only for a new costume / look" } ],
  "episode_plan": { "no": 1, "scenes": [ { "title":"", "summary":"", "clips": [ { "prompt_en":"what the camera sees: subject, action, setting, camera, light", "prompt_ko":"short Korean", "camera":"", "dialogue":"spoken lines with the speaker", "sound":"effects and ambience", "music":"the music under this clip", "cast":["names from CAST in this clip"], "location":"a CAST location name" } ] } ] },
- "edits": [ {"op":"set_clip","episode":1,"clip":2,"prompt_en":"..."}, {"op":"set_episode","no":3,"title":"","logline":""}, {"op":"set_scene","episode":1,"scene":2,"title":"","summary":""}, {"op":"delete_clip","episode":1,"clip":4}, {"op":"set_reference","name":"","kind":"","description":"","prompt_en":"","prompt_ko":"","variant_of":""}, {"op":"delete_reference","name":""}, {"op":"skip_references"} ],
+ "edits": [ {"op":"set_clip","episode":1,"clip":2,"prompt_en":"...","cast":["names"],"location":"name","include":true}, {"op":"set_episode","no":3,"title":"","logline":"","cast":["names"],"locations":["names"]}, {"op":"set_scene","episode":1,"scene":2,"title":"","summary":""}, {"op":"delete_clip","episode":1,"clip":4}, {"op":"set_reference","name":"","new_name":"","kind":"","description":"","variant_of":""}, {"op":"delete_reference","name":""}, {"op":"skip_references"} ],
  "suggest": ["up to 3 short next things the producer might say"]
 }
 THIS WORK IS A ${f.label.toUpperCase()}. ${f.guide}
@@ -91,7 +96,8 @@ RULES
 - Picture and sound prompts are written in English; "say" and prompt_ko are ${lang}. Keep every clip's picture description self-contained (characters described again, no "as before").
 - THE ORDER OF WORK: brief -> casting (actors, places, props are cast and their images are made FIRST) -> scenario (the series plan and every episode are written ONLY with the approved CAST) -> clips.
 - A clip is one continuous shot of the length given by the app. The lead and the other main characters are the same people in every episode: the same CAST entry, the same face. Only costume and place change: for a new costume or a new look of a place, add a variant entry (variant_of) at casting time or with set_reference.
-- Every clip names its cast and location with the exact CAST names; never invent a name that is not in CAST.
+- Every clip names its cast and location with the exact CAST names; never invent a name that is not in CAST. EVERY person who appears or speaks in a clip is in that clip's cast (also one who only speaks off screen), the props that matter are in it, and EVERY clip has a location. Each episode lists its cast and places in "episodes"; no episode may be left without cast or without a place.
+- When the producer asks to change a cast entry, change that entry (set_reference with its exact name, or new_name to rename it) and keep it consistent in the episodes and clips; answer only after it is changed.
 - The writer writes dialogue and story; the sound director writes "sound" (effects, ambience); the music director writes "music" and the series music direction.
 - Change only what the producer asked to change. Use "edits" for small changes (one clip, one episode, one reference). Do not resend the whole plan for a small change.
 - Approved work stays as it is unless the producer asks to change it.
@@ -113,12 +119,14 @@ export function kickoffInstruction(p: DirectorProject, k: Exclude<Kickoff, 'canv
     return `Write the song for this music video: "music" with title, style (genre, tempo, mood, instruments, voice), the full lyrics in ${s.language === 'en' ? 'English' : 'Korean'}, language, duration_sec (the length the producer asked for; if not said use ${s.episode_seconds}), bpm, and sections (contiguous from 0 to duration_sec). Set music.source to "generate". The song matches the look and mood of the brief and the cast.`;
   }
   if (k === 'series' && !f.multi) return `Write the ${vocabOf(s.format).scenario.toLowerCase()} of this ${f.label.toLowerCase()} with the approved CAST: "series.synopsis" and "series.logline", and "episodes" with EXACTLY 1 entry (no 1, a title and one line that says what the piece is about). ${f.guide}`;
-  if (k === 'series') return `Write the scenario of the whole series with the approved CAST: "series.synopsis" and "series.logline" updates, and "episodes" with EXACTLY ${s.total_episodes} entries numbered 1 to ${s.total_episodes} (a title and one story line each; name the main cast and the costume or place changes in the story line). The episodes must build one story arc with hooks and a cliffhanger at the end of each episode. The leads appear throughout; use the supporting cast, places and props where they fit.`;
-  if (k === 'references') return `Do the casting now, before any story is written (${vocabOf(s.format).cast}). From the brief choose the ${vocabOf(s.format).characters.toLowerCase()} (the leads and the important supporting cast, each with a precise look: age, build, face, hair, usual clothes), the main ${vocabOf(s.format).locations.toLowerCase()} and the key ${vocabOf(s.format).props.toLowerCase()}${s.format === 'ad' ? ' (the product is a prop entry with its exact look; no logo, no text on it)' : ''}. Use "references" (4 to 12 entries; kind character / location / prop). If CAST already holds entries (taken over from earlier work), do NOT cast them again: list only NEW cast that the next story needs, and keep the old entries as they are. If the story needs a costume or a look that is clearly different (wedding dress, uniform, night version of a place), add it as its own entry with variant_of set to the base entry. The sound and music directions may be refined in "series".`;
+  if (k === 'series') return `Write the scenario of the whole series with the approved CAST: "series.synopsis" and "series.logline" updates, and "episodes" with EXACTLY ${s.total_episodes} entries numbered 1 to ${s.total_episodes} (a title and one story line each; name the main cast and the costume or place changes in the story line) and for EACH episode "cast" (every CAST person and important prop who appears in it) and "locations" (every CAST place it happens in), with the exact CAST names; no episode without cast and without a place, and every CAST entry is used in at least one episode. The episodes must build one story arc with hooks and a cliffhanger at the end of each episode. The leads appear throughout; use the supporting cast, places and props where they fit.`;
+  if (k === 'references') return `Do the casting now, before any story is written (${vocabOf(s.format).cast}). From the brief choose the ${vocabOf(s.format).characters.toLowerCase()} (the leads and the important supporting cast, each with a precise look: age, build, face, hair, usual clothes), the main ${vocabOf(s.format).locations.toLowerCase()} and the key ${vocabOf(s.format).props.toLowerCase()}${s.format === 'ad' ? ' (the product is a prop entry with its exact look; no logo, no text on it)' : ''}. Use "references" (4 to 12 entries; kind character / location / prop; each with a "description" in ${s.language === 'en' ? 'English' : 'Korean'} and no separate prompt). If CAST already holds entries (taken over from earlier work), do NOT cast them again: list only NEW cast that the next story needs, and keep the old entries as they are. If the story needs a costume or a look that is clearly different (wedding dress, uniform, night version of a place), add it as its own entry with variant_of set to the base entry. The sound and music directions may be refined in "series".`;
   const no = p.workflow.episode_no;
   const parts = splitSeconds(s.episode_seconds, s.clip_seconds);
   const songMapText = f.id === 'musicvideo' && p.music?.sections.length ? ` THE SONG MAP (which part of the song each clip covers): ${songMap(p.music.duration_sec, s.clip_seconds, p.music.sections).map((c) => `clip ${c.no} = ${c.from}-${c.to}s ${c.section ?? ''}`).join('; ')}. Each clip's picture follows its part of the song, "music" says which part it is, "dialogue" holds the lyric line sung in that clip (or is empty).` : '';
-  return `Write ${f.multi ? `episode ${no} ("${episodeByNo(p, no)?.title ?? ''}")` : `the whole ${f.label.toLowerCase()}`}. Use "episode_plan" with scenes and clips. EXACTLY ${parts.length} clips in total across all scenes (the app sets their lengths: ${parts.join(', ')} seconds). Every clip needs prompt_en, prompt_ko, camera, dialogue (may be empty), sound and music.${songMapText}`;
+  const epNow = episodeByNo(p, no);
+  const cl = epNow && (epNow.cast?.length || epNow.locations?.length) ? ` This episode's cast: ${(epNow.cast ?? []).join(', ') || '-'}; its places: ${(epNow.locations ?? []).join(', ') || '-'}. Use them; every person who appears or speaks is in the cast of that clip, and every clip has a location.` : ' Every person who appears or speaks is in the cast of that clip, and every clip has a location.';
+  return `Write ${f.multi ? `episode ${no} ("${epNow?.title ?? ''}")` : `the whole ${f.label.toLowerCase()}`}. Use "episode_plan" with scenes and clips.${cl} EXACTLY ${parts.length} clips in total across all scenes (the app sets their lengths: ${parts.join(', ')} seconds). Every clip needs prompt_en, prompt_ko, camera, dialogue (may be empty), sound and music.${songMapText}`;
 }
 
 // ------------------------------------------------------------------ reading the reply
@@ -148,6 +156,16 @@ export function checkReply(p: DirectorProject, r: AiReply, kickoff: Kickoff | 'f
     const nos = new Set(eps.map((e) => Number(e.no)));
     if (eps.length !== n || [...Array(n)].some((_, i) => !nos.has(i + 1))) return `"episodes" must have exactly ${n} entries numbered 1 to ${n} (got ${eps.length})`;
     if (eps.some((e) => !String(e.title ?? '').trim() && !String(e.logline ?? '').trim())) return 'every episode needs a title or a logline';
+    const live = p.references.filter((x) => x.status !== 'rejected');
+    if (live.length) {
+      const names = (e: { cast?: string[]; locations?: string[] }) => [...(e.cast ?? []), ...(e.locations ?? [])].map(String);
+      const bad = new Set<string>(); for (const e of eps) for (const n of names(e)) if (!findReference(p, n)) bad.add(n);
+      if (bad.size) return `these names are not in CAST: ${[...bad].slice(0, 6).join(', ')}. Use the exact CAST names in each episode's "cast" and "locations"`;
+      const noCast = eps.filter((e) => !names(e).some((n) => findReference(p, n)?.kind !== 'location')).map((e) => e.no);
+      if (noCast.length && live.some((x) => x.kind !== 'location')) return `episode ${noCast.slice(0, 6).join(', ')}: "cast" is empty. Every episode lists the CAST people / props who appear in it`;
+      const noPlace = eps.filter((e) => !names(e).some((n) => findReference(p, n)?.kind === 'location')).map((e) => e.no);
+      if (noPlace.length && live.some((x) => x.kind === 'location')) return `episode ${noPlace.slice(0, 6).join(', ')}: "locations" is empty. Every episode lists the CAST places where it happens`;
+    }
   }
   if (kickoff === 'music') {
     const mu = r.music; if (!mu) return 'the reply needs "music"';
@@ -197,7 +215,17 @@ function applySeries(p: DirectorProject, patch: Partial<DirectorSeries>, notes: 
 
 const refKey = (n: string) => n.trim().toLowerCase();
 
-export function applyReply(p: DirectorProject, r: AiReply): string[] {
+/** a new name for a cast entry: everything that used the old one follows */
+function renameReference(p: DirectorProject, r: DirectorProject['references'][number], to: string) {
+  const old = r.name; r.name = to;
+  const swap = (a?: string[]) => a?.map((n) => (n === old ? to : n));
+  for (const s of p.shots) { s.cast = swap(s.cast)!; if (s.location === old) s.location = to; }
+  for (const e of p.episodes) { if (e.cast) e.cast = swap(e.cast); if (e.locations) e.locations = swap(e.locations); }
+  for (const q of p.references) if (q.variant_of === old) q.variant_of = to;
+}
+
+/** `free` = the producer asked for it by chat (an approved cast entry may then be changed, and an episode plan goes to the episode being looked at); `episode` = the episode a written plan belongs to */
+export function applyReply(p: DirectorProject, r: AiReply, opt: { free?: boolean; episode?: number } = {}): string[] {
   const notes: string[] = [];
   if (r.series) applySeries(p, r.series, notes);
   if (r.music) { const { generate: _g, ...patch } = r.music; void _g; p.music = p.music ?? newMusic(); applyMusicPatch(p.music, patch, notes); }
@@ -211,6 +239,7 @@ export function applyReply(p: DirectorProject, r: AiReply): string[] {
     const ep = episodeByNo(p, no) ?? newEpisode(p, no);
     if (typeof e.title === 'string') ep.title = e.title.trim();
     if (typeof e.logline === 'string') ep.logline = e.logline.trim();
+    setEpisodeRefs(p, ep, e.cast, e.locations);
   }
   p.episodes.sort((a, b) => a.no - b.no);
   // a shorter series drops the plain "planned" extras (never an episode that has scenes)
@@ -218,12 +247,12 @@ export function applyReply(p: DirectorProject, r: AiReply): string[] {
   for (const x of r.references ?? []) {
     if (!x?.name) continue;
     const cur = p.references.find((q) => refKey(q.name) === refKey(x.name));
-    if (cur) { if (cur.status !== 'approved') { if (x.description) cur.description = x.description; if (x.prompt_en) cur.prompt_en = x.prompt_en; if (x.prompt_ko) cur.prompt_ko = x.prompt_ko; } continue; }
-    const nr = newReference(p, (['character', 'location', 'prop'] as const).includes(x.kind as ReferenceKind) ? (x.kind as ReferenceKind) : 'character', x.name.trim(), x.description ?? '', x.prompt_en ?? '', x.prompt_ko ?? '');
+    if (cur) { if (opt.free || cur.status !== 'approved') { if (x.description) { cur.description = x.description; if (cur.results.length) notes.push(`${cur.name}: the old image is kept, generate again to see the change`); } } continue; }
+    const nr = newReference(p, (['character', 'location', 'prop'] as const).includes(x.kind as ReferenceKind) ? (x.kind as ReferenceKind) : 'character', x.name.trim(), x.description || x.prompt_ko || x.prompt_en || '', '');
     if (x.variant_of && findReference(p, x.variant_of)) nr.variant_of = findReference(p, x.variant_of)!.name;
   }
   if (r.episode_plan) {
-    const no = Math.round(num(r.episode_plan.no ?? p.workflow.episode_no));
+    const no = Math.round(num(opt.episode ?? r.episode_plan.no ?? p.workflow.episode_no));   // a written plan always goes to the episode that was asked for, whatever number the model put in it
     const ep = episodeByNo(p, no);
     if (ep) {
       const old = new Set(p.scenes.filter((s) => s.episode_id === ep.episode_id).map((s) => s.scene_id));
@@ -241,11 +270,47 @@ export function applyReply(p: DirectorProject, r: AiReply): string[] {
         }
       }
       ep.status = 'drafted';
+      repairClipRefs(p, ep.episode_id);
     }
   }
   for (const e of r.edits ?? []) applyEdit(p, e, notes);
+  for (const ep of p.episodes) if (p.scenes.some((s) => s.episode_id === ep.episode_id)) repairClipRefs(p, ep.episode_id);
   syncShotAssets(p);
   return notes;
+}
+
+/** an episode's own cast and places (names resolved to CAST entries; a place goes to `locations`, everything else to `cast`) */
+function setEpisodeRefs(p: DirectorProject, ep: DirectorProject['episodes'][number], cast?: string[], locations?: string[]) {
+  if (!Array.isArray(cast) && !Array.isArray(locations)) return;
+  const c: string[] = [], l: string[] = [];
+  for (const n of [...(Array.isArray(cast) ? cast : []), ...(Array.isArray(locations) ? locations : [])]) {
+    const r = findReference(p, String(n)); if (!r || r.status === 'rejected') continue;
+    const to = r.kind === 'location' ? l : c; if (!to.includes(r.name)) to.push(r.name);
+  }
+  ep.cast = c; ep.locations = l;
+}
+
+/**
+ * Make every clip's references complete without asking the model again: a cast entry whose name is written in the clip (picture, Korean text, dialogue) is in the clip's cast,
+ * a clip without a place gets the place of the clip before it (else the episode's first place), and the episode's own list gets what its clips use.
+ */
+export function repairClipRefs(p: DirectorProject, episodeId: string): void {
+  const ep = p.episodes.find((e) => e.episode_id === episodeId); if (!ep) return;
+  let lastPlace = '';
+  const useCast = new Set<string>(), usePlaces = new Set<string>();
+  for (const s of shotsOfEpisode(p, episodeId)) {
+    const text = [s.prompt_en, s.prompt_ko, s.dialogue, s.notes, s.sound].join(' \n ');
+    const have = s.cast.map((n) => findReference(p, n)?.name).filter((n): n is string => !!n);
+    let place = s.location ? (findReference(p, s.location)?.name ?? '') : '';
+    for (const r of mentionedRefs(p, text, [...have, place])) {
+      if (r.kind === 'location') { if (!place) place = r.name; } else if (!have.includes(r.name)) have.push(r.name);
+    }
+    if (!place) place = lastPlace || (ep.locations ?? [])[0] || '';
+    s.cast = [...new Set(have)]; s.location = place;
+    if (place) { lastPlace = place; usePlaces.add(place); }
+    s.cast.forEach((n) => useCast.add(n));
+  }
+  if (useCast.size || usePlaces.size) { ep.cast = [...new Set([...(ep.cast ?? []), ...useCast])]; ep.locations = [...new Set([...(ep.locations ?? []), ...usePlaces])]; }
 }
 
 function applyEdit(p: DirectorProject, e: Edit, notes: string[]) {
@@ -256,7 +321,8 @@ function applyEdit(p: DirectorProject, e: Edit, notes: string[]) {
     case 'set_episode': {
       const t = episodeByNo(p, Math.round(num(e.no ?? e.episode)));
       if (!t) return void notes.push(`episode ${e.no ?? e.episode} does not exist`);
-      if (typeof e.title === 'string') t.title = e.title.trim(); if (typeof e.logline === 'string') t.logline = e.logline.trim(); return;
+      if (typeof e.title === 'string') t.title = e.title.trim(); if (typeof e.logline === 'string') t.logline = e.logline.trim();
+      setEpisodeRefs(p, t, e.cast, e.locations); return;
     }
     case 'set_clip': {
       const s = clips[Math.round(num(e.clip)) - 1];
@@ -265,7 +331,9 @@ function applyEdit(p: DirectorProject, e: Edit, notes: string[]) {
       for (const k of ['prompt_en', 'prompt_ko', 'camera', 'dialogue', 'sound', 'music', 'notes'] as const) if (typeof e[k] === 'string' && e[k] !== s[k]) { s[k] = e[k]!; changed = true; }
       if (Array.isArray(e.cast)) { s.cast = e.cast.map((n) => findReference(p, String(n))?.name).filter((n): n is string => !!n); changed = true; }
       if (typeof e.location === 'string') { s.location = findReference(p, e.location)?.name ?? ''; changed = true; }
+      if (typeof e.include === 'boolean') s.excluded = e.include ? undefined : true;
       // a changed clip needs a new look-over; its old results stay in the history
+      if (changed) s.passed = undefined;   // a changed clip has to be looked at again
       if (changed && ['approved', 'review', 'done', 'ready'].includes(s.status)) { s.status = 'draft'; if (s.results.length) notes.push(`clip ${e.clip}: the old result is kept, generate again to see the change`); }
       return;
     }
@@ -286,10 +354,11 @@ function applyEdit(p: DirectorProject, e: Edit, notes: string[]) {
       if (!e.name) return;
       let r = p.references.find((q) => refKey(q.name) === refKey(e.name!));
       if (!r) r = newReference(p, (['character', 'location', 'prop'] as const).includes(e.kind as ReferenceKind) ? (e.kind as ReferenceKind) : 'character', e.name.trim());
-      if (typeof e.description === 'string') r.description = e.description; if (typeof e.prompt_en === 'string') r.prompt_en = e.prompt_en; if (typeof e.prompt_ko === 'string') r.prompt_ko = e.prompt_ko;
+      if (typeof e.description === 'string' && e.description.trim()) r.description = e.description.trim();
+      if (typeof e.new_name === 'string' && e.new_name.trim() && e.new_name.trim() !== r.name) renameReference(p, r, e.new_name.trim());
       if (e.status === 'rejected' || e.status === 'proposed') r.status = e.status;
       if (e.variant_of && findReference(p, e.variant_of)) r.variant_of = findReference(p, e.variant_of)!.name;
-      if (e.prompt_en && r.results.length) notes.push(`${r.name}: the old image is kept, generate again to see the change`);
+      if ((e.description || e.new_name) && r.results.length) notes.push(`${r.name}: the old image is kept, generate again to see the change`);
       return;
     }
     case 'delete_reference': p.references = p.references.filter((q) => refKey(q.name) !== refKey(e.name ?? '')); return;
@@ -324,7 +393,7 @@ export async function directorTurn(p: DirectorProject, userText: string, llm: Ll
     } catch (e) { err = (e as Error).message; }
   }
   if (!reply) throw new Error(`The crew could not produce a usable answer (${err}). Try again, or pick a stronger LLM in Settings.`);
-  const notes = reply.intent === 'approve' ? [] : applyReply(p, reply);
+  const notes = reply.intent === 'approve' ? [] : applyReply(p, reply, { free: kickoff === 'free', episode: kickoff === 'episode' ? p.workflow.episode_no : undefined });
   return { reply, notes, attempts };
 }
 

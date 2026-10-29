@@ -95,6 +95,11 @@
 - **한꺼번에 하는 검증 목록은 `docs/DIRECTOR_VERIFY_CHECKLIST.md`**. 좁은 창 CSS 는 이미 있음(눈으로 확인만).
 - 그 뒤 후보: 좁은 창 편 스트립 확인, 그리고 **한꺼번에 하는 검증**(위 "확인 못 한 것" 목록 + 진행 막대).
 
+### 실사용 피드백 7건 반영 (2026-10-30, 코드 완료 — 화면 검증 전, `npm run test:director` 통과)
+- 사용자가 실제 LLM 으로 써 본 문제: ① 캐스팅 수정 LLM 결과가 카드에 안 반영 ② 캐스팅 프롬프트가 모델별로 강화되지 않음(카드엔 설정 언어 한 가지면 됨) ③ 시나리오의 레퍼런스(특히 장소) 누락·수정 안 보임 ④ 편 작성 시작 화면에 찌꺼기 ⑤ 클립에 출연자 누락 ⑥ 생성/검토를 합치고 클립별 합격 + 선택 합치기 ⑦ 검토 = 합쳐진 최종 영상.
+- 구현: ①②: 캐스팅은 `description` 하나(`prompt_en/ko`는 데이터에 남지만 안 씀; `adapter.castPromptText` = 설명 + 종류 안내, 이미지 카드 `auto_enhance: true`), `applyReply(p, r, { free, episode })`(채팅이면 승인된 항목도 수정), `set_reference.new_name`, `model.findReference` 느슨한 이름 매칭 + `mentionedRefs`. ③: `DirectorEpisode.cast/locations`, 시나리오 검사(`checkReply` series: 편마다 출연자·장소 필수), 화면 `EpisodeRefs`. ④⑤: `applyReply` episode 인자로 편 번호 고정, `ai.repairClipRefs`(클립 글에 나온 이름 → cast, 장소 채움), 쓰는 동안 EpisodeCard 비움. ⑥⑦: `DirectorShot.passed`(합격한 result_id)·`excluded`, `workflow.episodeBlockers`(execute: 포함된 클립 모두 결과+합격+합친 영상 `ep.final`; review: `ep.final`), `adapter` 스티치 선을 매번 순서대로 다시 깔고 제외 클립 뺌, `canvasAction.makeEpisodeCanvas` 모든 종류에 `finish.stitch`, `musicAction.finishEpisode` 합격 검사, `DirectorView` ClipCard(합격·제외)·`FinalBlock`·새 `ReviewCard`, 스토어: 최종 검토 중 채팅 수정이 클립을 바꾸면 `reopenEpisode(…,'execute')`.
+- 시험 스크립트도 새 규칙으로 갱신(flow/music/assets). **화면(브라우저) 확인은 안 함** → `docs/DIRECTOR_VERIFY_CHECKLIST.md` 11~16번.
+
 ### Director Mode 진행 (미릴리즈, 2026-10-29, 커밋됨 — 버전 올림·릴리즈 전)
 - 된 것(코드 + 시험): 채팅 중심 화면, 브리프→캐스팅→시나리오→편별(작성·캔버스·생성·검토) 진행선, **편마다 자기 단계**(여러 편 동시 진행·한 편만 되돌리기), 회차 선택 줄·여러 편 체크, 위쪽 단계 클릭으로 다시 보기(보기는 상태를 바꾸지 않음), 캐스트 이미지 선택(생성/에셋 라이브러리/갤러리)과 끝까지 따라오기(캔버스에 `@imageN` 순서로 Load Image 연결, 엔진 h3-ref), 자동/수동 생성 선택(수동 = 캔버스 열기·ZIP), 클립별 시드·다시 생성·선택 클립 배치·여러 편 배치(한 번 확인), 이어서 만들기, 편 ZIP, 디렉터 전용 LLM 설정.
 - **브라우저로 직접 확인한 것(데모 작업팀)**: 브리프~생성 선택, 라이브러리 이미지로 캐스팅, 캔버스 연결(카드·선·엔진·프롬프트 순서), ZIP 다운로드, 자동 시작 확인창 취소, **편 3개 동시 작성·일괄 승인·캔버스 3개 생성·생성 단계 동시 진행, 회차 줄 이동, 위 단계 눌러 다시 보기(상태 불변), 생성 범위(이 편/체크한 편/이 단계 모든 편 = 27클립 확인창, 취소 시 변화 없음), 클립 체크·시드·선택 클립 확인창, 한 편만 되돌리기(클립·캔버스 유지), 모델 설정 창(4가지 백엔드)**. **아직 못 본 것**: 배치 진행 표시(실제 생성 중 모습)·좁은 창에서 회차 줄.

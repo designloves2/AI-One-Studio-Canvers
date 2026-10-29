@@ -70,6 +70,15 @@ export const KO_DIRECTOR: Record<string, string> = {
   'The episode is set up as a canvas': '이 편을 캔버스로 구성했습니다', 'with the shared 7+1 card': '공용 7+1 카드 포함', 'The canvas is being built…': '캔버스를 구성하는 중…',
   // side menu
   'Director projects': '디렉터 프로젝트', 'Start a new project by writing in the chat. To continue an earlier one, name it: "…1편에 이어서 2편을 만들자".': '새 프로젝트는 채팅창에 쓰면 시작됩니다. 이전 작품에 이어 만들려면 이름을 말하세요: "…1편에 이어서 2편을 만들자".',
+  // casting is one description, the scenario names the cast and places of every episode, per-clip check, final review
+  'Edit description': '설명 고치기', "This text is all there is: when the image is made, the image model's own prompt writer turns it into that model's prompt.": '이 글이 전부입니다. 이미지를 만들 때 이미지 모델 전용 프롬프트 작성기가 이 글로 그 모델에 맞는 프롬프트를 만듭니다.',
+  'No cast yet': '인물·소품 없음', 'No place yet': '장소 없음',
+  'Generate & check': '생성·확인', 'Final review': '최종 검토', 'Passed': '합격', 'Pass': '합격', 'Left out': '제외', 'In the joined video': '합친 영상에 넣기', 'The clip is good: it can be joined': '이 클립이 좋습니다: 합칠 수 있습니다',
+  'Every clip that stays in the video must be passed first.': '영상에 남는 클립은 모두 먼저 합격이어야 합니다.', 'clips are left out of the joined video.': '개 클립은 합친 영상에서 빠집니다.',
+  'Make each clip, look at it and pass it (or make it again). Clips you do not want can be left out. Then join the passed clips; the joined video is checked in the next step.': '클립을 만들고, 하나씩 보고 합격시키거나 다시 만드세요. 필요 없는 클립은 뺄 수 있습니다. 그다음 합격한 클립을 합치면, 합친 영상은 다음 단계에서 검토합니다.',
+  'Pass all clips that have a result': '결과 있는 클립 모두 합격',
+  'Your verdict on the joined video': '합친 영상 판정', 'Watch the whole video. If something must change, tell the crew in the chat (for example: "make clip 3 darker", "leave out clip 5", "change the ending"): the clips that change go back to be generated again. If it is good, approve to finish this episode.': '영상 전체를 보세요. 고칠 곳이 있으면 채팅으로 작업팀에게 말하세요(예: "3번 클립을 더 어둡게", "5번 클립 빼줘", "엔딩 바꿔줘"). 바뀐 클립은 다시 생성하러 돌아갑니다. 좋으면 승인해서 이 편을 끝냅니다.',
+  'Back to the clips': '클립으로 돌아가기', 'Clips in this video': '이 영상의 클립', 'Leave at least one clip in the video.': '영상에 넣을 클립이 하나도 없습니다.',
   // song step / finished video
   'New look': '새 모습', 'The same one with another costume, hair or look (a new entry)': '같은 인물·장소의 다른 의상·머리·분위기 (새 항목)', 'Describe the new look (costume, hair, age, season …)': '새 모습을 설명하세요 (의상, 머리, 나이, 계절 …)',
   'Other screen ratios': '다른 화면비', 'Make the same piece in more ratios (for example an ad as 16:9, 9:16 and 1:1). Each ratio gets its own canvas with the same prompts, cast images and seeds; you generate them in the Canvas.': '같은 작품을 다른 화면비로도 만듭니다(예: 광고를 16:9, 9:16, 1:1로). 화면비마다 같은 프롬프트·캐스트 이미지·시드의 캔버스가 따로 만들어지고, 생성은 캔버스에서 합니다.', 'Make the canvases for the other ratios': '다른 화면비 캔버스 만들기', 'Canvases made': '만든 캔버스',
