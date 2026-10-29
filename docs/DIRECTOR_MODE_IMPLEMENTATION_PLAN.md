@@ -87,4 +87,4 @@ Phase 2~4에서 만든 "양식 편집기" 화면은 요구와 달라 **채팅 �
 - 화면: 위 단계 줄을 누르면 그 단계를 봄(`store.view`), 회차 줄(`store.focus`, 여러 편 체크 `selEpisodes`), 보는 단계가 현재 단계가 아니면 "이 단계로 되돌리기".
 - 시드: 클립 `seed`(없으면 무작위), 어댑터가 생성 카드 시드를 따라가되 캔버스에서 직접 바꾼 시드는 유지(`link.seed_sent`). 선택 클립·편 배치: `execution.planBatch/reseed/requeueClips`, 앱 쪽 `canvasAction.generateBatch`(확인 한 번, 편 순서대로, 실패 시 멈춤/건너뜀, 진행 표시 `store.batch`).
 - 디렉터 전용 LLM: `settings.director` + `Llm target="director"`(설정 화면과 채팅 입력창 ⚙ 버튼의 모델 설정 창).
-- 시험: `npm run test:director` 230여 개 통과(순수 로직). **UI 브라우저 확인은 아직**(위 항목 중 회차 줄·단계 클릭·되돌리기·클립 선택·시드·배치 진행·모델 설정 창).
+- 시험: `npm run test:director` 230여 개 통과(순수 로직). 브라우저(데모 작업팀): 편 3개 동시 작성/승인/캔버스/생성 단계, 단계 클릭, 생성 범위 27클립 확인창(취소), 클립 체크·시드, 한 편 되돌리기, 모델 설정 창 확인 — GPU 유휴·큐 0/0. 못 본 것: 실제 생성 중 배치 진행 표시.
