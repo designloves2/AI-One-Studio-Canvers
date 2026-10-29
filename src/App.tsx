@@ -14,6 +14,7 @@ import { AssetsPanel } from './panels/AssetsPanel';
 import { SettingsPanel } from './panels/SettingsPanel';
 import { StatusPanel } from './panels/StatusPanel';
 import { SimpleView } from './simple/SimpleView';
+import { DirectorView } from './director/DirectorView';
 import { addImports, resumeInflight, runAll, saveCanvasToList, stopAll } from './engine/actions';
 import { clearInflight } from './backend/comfy';
 import { loadTurboFromStudio } from './backend/turboMemory';
@@ -80,6 +81,7 @@ function TopBar() {
         <button title={`${T('Save')} (Ctrl+S)`} onClick={() => void saveCanvasToList()}>⤓</button>
       </div>
       <div className="mode-toggle">
+        <button className={mode === 'director' ? 'active' : ''} onClick={() => setMode('director')}>{T('Director')}</button>
         <button className={mode === 'canvas' ? 'active' : ''} onClick={() => setMode('canvas')}>{T('Canvas')}</button>
         <button className={mode === 'simple' ? 'active' : ''} onClick={() => setMode('simple')}>{T('Simple')}</button>
       </div>
@@ -95,7 +97,7 @@ function Rail() {
   const setPanel = useGraph((s) => s.setPanel);
   const items: [Exclude<PanelId, null>, string, string][] = [['canvases', 'Canvases', ICONS.canvases], ['live', 'Live Canvas', ICONS.live], ['decks', 'Decks', ICONS.nodes], ['nodes', 'Nodes', ICONS.nodes], ['assets', 'Gallery', ICONS.assets], ['library', 'Asset Library', ICONS.library], ['models', 'Models', ICONS.status], ['settings', 'Settings', ICONS.settings]];
   // decks / nodes only make sense on the canvas, so the simple mode hides them
-  const visible = mode === 'simple' ? items.filter(([id]) => id !== 'decks' && id !== 'nodes' && id !== 'live' && id !== 'canvases') : items;
+  const visible = mode === 'simple' ? items.filter(([id]) => id !== 'decks' && id !== 'nodes' && id !== 'live' && id !== 'canvases') : mode === 'director' ? items.filter(([id]) => id !== 'decks' && id !== 'nodes' && id !== 'live') : items;
   return (
     <div className="rail">
       {visible.map(([id, label, d]) => (
@@ -217,7 +219,7 @@ export function App() {
       <TopBar />
       <div className="body">
         <Rail />
-        {panel && (mode === 'canvas' || panel === 'assets' || panel === 'library' || panel === 'settings' || panel === 'models') ? (
+        {panel && (mode === 'canvas' || (mode === 'director' && panel === 'canvases') || panel === 'assets' || panel === 'library' || panel === 'settings' || panel === 'models') ? (
           <aside className="panel" style={{ width: panelW }}>
             <header><b>{T(({ canvases: 'Canvases', decks: 'Decks', nodes: 'Nodes', assets: 'Gallery', settings: 'Settings', models: 'Models', library: 'Asset Library', live: 'Live Canvas' } as const)[panel!])}</b><button onClick={() => useGraph.getState().setPanel(null)}>✕</button></header>
             {panel === 'canvases' && <CanvasesPanel />}
@@ -238,7 +240,7 @@ export function App() {
               <Toolbar tool={tool} setTool={setTool} onAdd={() => setMenu({ x: window.innerWidth / 2 - 130, y: window.innerHeight / 3, flow: screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 }) })} />
               <SelectionBar />
             </>
-          ) : <SimpleView />}
+          ) : mode === 'director' ? <DirectorView /> : <SimpleView />}
           <LlmNotice mode={mode} />
         </main>
       </div>

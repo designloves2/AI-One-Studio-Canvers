@@ -5,7 +5,7 @@ import { uid } from '../backend/comfy';
 import { useSettings } from './settings';
 import { saveTurboPick } from '../backend/turboMemory';
 
-export type AppMode = 'canvas' | 'simple';
+export type AppMode = 'director' | 'canvas' | 'simple';
 export type PanelId = null | 'canvases' | 'nodes' | 'decks' | 'assets' | 'library' | 'live' | 'settings' | 'models';
 
 export interface ComposerRun {
@@ -114,7 +114,7 @@ function measure(n: GraphNode): { w: number; h: number } {
 
 const RUNS_KEY = 'canvers.runs.v1';
 
-const readMode = (): AppMode => { try { return localStorage.getItem(MODE_KEY) === 'simple' ? 'simple' : 'canvas'; } catch { return 'canvas'; } };
+const readMode = (): AppMode => { try { const m = localStorage.getItem(MODE_KEY); return m === 'simple' || m === 'director' ? m : 'canvas'; } catch { return 'canvas'; } };
 const readRuns = (): ComposerRun[] => { try { return JSON.parse(localStorage.getItem(RUNS_KEY) ?? '[]'); } catch { return []; } };
 const writeRuns = (r: ComposerRun[]) => { try { localStorage.setItem(RUNS_KEY, JSON.stringify(r.slice(0, 150).map((x) => (x.status === 'running' ? { ...x, status: 'error', error: 'interrupted' } : x)))); } catch { /* full */ } };
 
@@ -131,7 +131,7 @@ export const useGraph = create<State>((set, get) => ({
   mode: readMode(), panel: null, viewer: null, painter: null, boxEditor: null, melody: null, assetPicker: null, facePicker: null, fitTick: 0, focusId: null, focusTick: 0,
   composerRuns: readRuns(),
 
-  setMode: (mode) => { try { localStorage.setItem(MODE_KEY, mode); } catch { /* ignore */ } set({ mode, ...(mode === 'simple' && (get().panel === 'decks' || get().panel === 'nodes') ? { panel: null } : {}) }); },
+  setMode: (mode) => { try { localStorage.setItem(MODE_KEY, mode); } catch { /* ignore */ } set({ mode, ...(mode !== 'canvas' && (get().panel === 'decks' || get().panel === 'nodes') ? { panel: null } : {}) }); },
   setPanel: (panel) => set({ panel }),
   setName: (projectName) => set({ projectName }),
 

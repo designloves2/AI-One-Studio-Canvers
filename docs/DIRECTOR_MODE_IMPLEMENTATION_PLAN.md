@@ -42,5 +42,6 @@
 
 ## 진행 상태
 - Phase 0: 문서 3개 작성 완료. 코드 변경 없음.
-- Phase 1: 완료(미커밋). `src/director/{types,model}.ts`, `server-lib/director.mjs`(+`serve.mjs`·`vite.config.ts` 연결), `src/backend/director.ts`, `scripts/test-director.mjs`(`npm run test:director`, 30개 통과), `npm run typecheck` 통과. 화면 없음. 실제 앱 서버(8765/8766)에서의 라우트 확인은 아직 안 함(임시 서버로만 시험).
-- Phase 2 이후: 시작 전.
+- Phase 1: 완료(커밋 4ecc8a6). `src/director/{types,model}.ts`, `server-lib/director.mjs`(+`serve.mjs`·`vite.config.ts` 연결), `src/backend/director.ts`, `scripts/test-director.mjs`(`npm run test:director`, 30개 통과), `npm run typecheck` 통과. 화면 없음. 실제 앱 서버(8765/8766)에서의 라우트 확인은 아직 안 함(임시 서버로만 시험).
+- Phase 2: 완료(미커밋). 모드 3개(Director/Canvas/Simple) 토글, `src/director/DirectorView.tsx`(브리프·스토리 초안/승인·씬/샷 보드·에셋 연결), `src/store/director.ts`, 한글 사전, CSS(모바일 폭 규칙 포함). `npm run typecheck`·`npm run build`·`npm run test:director` 통과. 브라우저(포트 8766)에서 확인: 3모드 전환, 새 프로젝트→씬/샷 추가→프롬프트 입력→저장→디스크 파일 확인→새로고침 뒤 모드 유지·다시 열기, Canvas/Simple 정상, 콘솔 오류 없음. 못 한 것: 에셋 라이브러리 실제 목록(서버 8188 연결 안 보고 시험), 넓은 데스크톱 폭 눈으로 확인(시험 창이 좁아 모바일 배치만 봄), 승인 상태 버전 이력("버전 기본 기능")은 아직 없음.
+- Phase 3 이후: 시작 전.

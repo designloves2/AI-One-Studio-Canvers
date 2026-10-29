@@ -5,7 +5,19 @@ export type Lang = 'ko' | 'en';
 
 const KO: Record<string, string> = {
   // chrome
-  Canvas: '캔버스', Simple: '심플', Settings: '설정', Gallery: '갤러리', Nodes: '노드', Assets: '에셋',
+  // Director mode
+  'Director projects': '디렉터 프로젝트', 'No Director projects yet.': '아직 디렉터 프로젝트가 없습니다.', scenes: '씬', shots: '샷',
+  'Plan the film here: brief, story, scenes and shots. Nothing is generated from this screen.': '여기서 영상을 기획합니다: 브리프, 스토리, 씬, 샷. 이 화면에서는 아무것도 생성하지 않습니다.',
+  'New project': '새 프로젝트', 'Project name': '프로젝트 이름', 'That name cannot be used as a file name.': '이 이름은 파일 이름으로 쓸 수 없습니다.',
+  'This project has unsaved changes. Continue?': '저장하지 않은 변경이 있습니다. 계속할까요?', 'Read-only (saved by a newer version)': '읽기 전용 (더 새 버전에서 저장됨)',
+  'Not saved': '저장 안 됨', Brief: '브리프', Story: '스토리', 'Scenes & shots': '씬 / 샷', Title: '제목', Purpose: '목적', Audience: '대상',
+  Tone: '분위기', Notes: '메모', 'Brief approved': '브리프 승인', Logline: '한 줄 요약', Synopsis: '시놉시스', Draft: '초안', Approved: '승인본',
+  'Replace the approved story with this draft?': '승인된 스토리를 이 초안으로 바꿀까요?', 'Approve draft': '초안 승인',
+  'Nothing approved yet. Approving copies the draft here; a new draft never overwrites it.': '아직 승인된 것이 없습니다. 승인하면 초안이 여기로 복사되고, 새 초안이 이것을 덮어쓰지 않습니다.',
+  'Scene title': '씬 제목', 'Scene summary': '씬 요약', Shot: '샷', Scene: '씬', Camera: '카메라', 'In this project': '이 프로젝트의 에셋',
+  'No assets yet. Add some from the Asset Library below.': '아직 에셋이 없습니다. 아래 에셋 라이브러리에서 추가하세요.', 'The Asset Library is not available': '에셋 라이브러리를 쓸 수 없습니다',
+  'The Asset Library is empty.': '에셋 라이브러리가 비어 있습니다.',
+  Director: '디렉터', Canvas: '캔버스', Simple: '심플', Settings: '설정', Gallery: '갤러리', Nodes: '노드', Assets: '에셋',
   Models: '모델', Search: '검색', 'Search nodes…': '노드 검색…', Run: '실행', Stop: '중지', 'Run all': '전체 실행',
   Save: '저장', 'Save as': '다른 이름으로 저장', Open: '열기', New: '새로 만들기', Undo: '실행 취소', Redo: '다시 실행',
   Delete: '삭제', Duplicate: '복제', Group: '그룹', Ungroup: '그룹 해제', Lock: '잠금', Unlock: '잠금 해제',
