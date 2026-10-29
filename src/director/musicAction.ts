@@ -137,3 +137,21 @@ export async function syncFinalFromCanvas(no?: number): Promise<number> {
   let n = 0; d.edit((x) => { n = applyEpisodeFinal(x, link, nodes); });
   return n;
 }
+
+/**
+ * Register the picked song in the Asset Library (category "music") and remember it as a project asset, so it can be used again (this series and others).
+ * In the demo a project asset is made without a library entry. Returns true when something was registered.
+ */
+export async function registerSong(): Promise<boolean> {
+  const d = useDirector.getState(); const m = d.project?.music;
+  const pick = m?.candidates.find((c) => c.picked && c.kind === 'audio');
+  if (!d.project || !m || !pick || m.asset_id || d.readOnly) return false;
+  const { newAsset } = await import('./model');
+  if (isDemo()) { d.edit((x) => { const a = newAsset(x, { name: x.music!.title || 'song', role: 'audio', source: { kind: 'upload', name: x.music!.title || 'song' }, note: 'song (demo)' }); x.music!.asset_id = a.asset_id; }); return true; }
+  const { registerAsset } = await import('../backend/assetlib');
+  const { resultUrl } = await import('./media');
+  const blob = await (await fetch(resultUrl(pick))).blob();
+  const lib = await registerAsset(new File([blob], pick.file.filename, { type: blob.type || 'audio/mpeg' }), 'music', m.title || undefined);
+  d.edit((x) => { const a = newAsset(x, { name: lib.name, role: 'audio', source: { kind: 'library', id: lib.id }, note: `song ${m.title}` }); x.music!.asset_id = a.asset_id; });
+  return true;
+}

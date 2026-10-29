@@ -255,6 +255,10 @@ export const useDirector = create<DirectorState>((set, get) => {
       if (view === 'references' && project.settings.cast_register !== 'manual' && !blockers(project, 'references').length) {
         try { const { registerCast } = await import('../director/canvasAction'); await registerCast(); } catch (e) { commit((x) => { addChat(x, 'assistant', `Asset Library: ${(e as Error).message}`, { crew: 'art', error: true }); }); }
       }
+      // the song becomes an asset the moment it is approved (same rule as the cast: automatic unless the producer chose manual)
+      if (view === 'music' && project.settings.cast_register !== 'manual' && !blockers(project, 'music').length) {
+        try { const { registerSong } = await import('../director/musicAction'); await registerSong(); } catch (e) { commit((x) => { addChat(x, 'assistant', `Asset Library: ${(e as Error).message}`, { crew: 'music', error: true }); }); }
+      }
       let result: ApproveResult | null = null;
       commit((x) => { result = approveStage(x); if (!result.ok) addChat(x, 'assistant', localizeMsg(result.reason ?? ''), { crew: 'producer_desk' }); });
       const r = result as ApproveResult | null;

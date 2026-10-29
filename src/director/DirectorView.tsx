@@ -13,7 +13,7 @@ import { CREW_LABEL } from './ai';
 import { episodeByNo, newAsset, shotsOfEpisode, syncShotAssets } from './model';
 import { newSeed } from './execution';
 import { applyMusicPatch, defaultSections, newMusic, pickedAudio, songMap } from './music';
-import { finishEpisode, generateSong, pickSong, syncFinalFromCanvas, uploadSong } from './musicAction';
+import { finishEpisode, generateSong, pickSong, registerSong, syncFinalFromCanvas, uploadSong } from './musicAction';
 import { byId } from '../registry';
 import { PRESETS, PRESET_LABEL, RESOLUTIONS, splitSeconds } from './series';
 import { ASPECTS, applySeriesPatch } from './ai';
@@ -501,6 +501,7 @@ function MusicCard({ p, ro }: { p: DirectorProject; ro: boolean }) {
             <div className="dx-songbar clips" title={T('Which part of the song each clip covers')}>{clips.map((c) => <span key={c.no} style={{ width: `${(100 * (c.to - c.from)) / total}%` }} title={`${T('Clip')} ${c.no}: ${c.from}–${c.to}s ${c.section ?? ''}`}>{c.no}</span>)}</div>
             <p className="dirx-muted">{clips.length} {T('clips')} · {p.series.clip_seconds}s</p>
             <div className="dx-btns"><button className="linkbtn" disabled={ro} onClick={() => set({ sections: defaultSections(total) })}>{T('Reset the sections to a typical song')}</button></div></>}
+          {picked && <div className="dx-btns"><button className="btn" disabled={ro || busy || !!m.asset_id} onClick={() => void guard(async () => { await registerSong(); })}>{m.asset_id ? T('Registered as an asset') : T('Register the song as an asset')}</button></div>}
         </section>)}
     </div>
   );
