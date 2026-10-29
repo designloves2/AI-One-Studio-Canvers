@@ -243,7 +243,7 @@ export const useDirector = create<DirectorState>((set, get) => {
       if ((EPISODE_STAGES as StageId[]).includes(view)) { await get().approveEpisodes([focus]); return; }
       if (!(GLOBAL_STAGES as StageId[]).includes(view) || project.workflow.stage !== view) return;   // looking at a step that was already approved: nothing to approve
       // the casting images become assets the moment the cast is approved (so later clips can use them)
-      if (view === 'references' && !blockers(project, 'references').length) {
+      if (view === 'references' && project.settings.cast_register !== 'manual' && !blockers(project, 'references').length) {
         try { const { registerCast } = await import('../director/canvasAction'); await registerCast(); } catch (e) { commit((x) => { addChat(x, 'assistant', `Asset Library: ${(e as Error).message}`, { crew: 'art', error: true }); }); }
       }
       let result: ApproveResult | null = null;

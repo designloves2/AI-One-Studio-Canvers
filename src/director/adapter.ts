@@ -17,6 +17,8 @@ export interface RegDef {
   engineId?: string;
   /** every engine id the card offers */
   engines?: string[];
+  /** the parameters and defaults of each engine (they differ per engine: Krea 2, Qwen Image, Z-Image ...) */
+  perEngine?: Record<string, { params: Record<string, { options?: string[]; min?: number; max?: number }>; defaults: Record<string, Primitive> }>;
   /** parameter id -> allowed values (select) or range (slider/number); only parameters that exist */
   params: Record<string, { options?: string[]; min?: number; max?: number }>;
   defaults: Record<string, Primitive>;
@@ -213,7 +215,7 @@ export const refGenNodeId = (refId: string) => `n_${refId}_gen`;
  * The canvas that makes the cast images: one Prompt card + one Image Generate card per cast entry (not the rejected ones).
  * Same rules as the episode canvas: fixed card ids, nothing duplicated, the user's moves / settings / own prompt text are kept.
  */
-export function buildCastingCanvas(p: DirectorProject, reg: RegistryLike, existing: Project | null, prev: CanvasLink | null, canvasFile: string, opt: { now?: () => string } = {}): { project: Project; link: CanvasLink; report: CastingReport } {
+export function buildCastingCanvas(p: DirectorProject, reg: RegistryLike, existing: Project | null, prev: CanvasLink | null, canvasFile: string, opt: { now?: () => string; engineId?: string } = {}): { project: Project; link: CanvasLink; report: CastingReport } {
   const now = (opt.now ?? (() => new Date().toISOString()))();
   const report: CastingReport = { created: [], updated: [], keptUserText: [], recreated: [], missing: [] };
   const promptDef = reg.get('prompt'), genDef = reg.get('image-generate');
@@ -222,6 +224,19 @@ export function buildCastingCanvas(p: DirectorProject, reg: RegistryLike, existi
   const byNode = new Map(nodes.map((n) => [n.id, n]));
   const prevSent = prev?.prompt_sent ?? {}; const sent: Record<string, string> = { ...prevSent };
   const refs: NonNullable<CanvasLink['refs']> = [];
+  // the image model: the one asked for, else the producer's choice for this project, else the card's default; unknown ids fall back to the default
+  const wantEngine = opt.engineId ?? p.settings.cast_engine;
+  const engine = wantEngine && genDef?.engines?.includes(wantEngine) ? wantEngine : genDef?.engineId;
+  const pe = (engine && genDef?.perEngine?.[engine]) || (genDef ? { params: genDef.params, defaults: genDef.defaults } : { params: {}, defaults: {} });
+  const engineSent: Record<string, string> = { ...(prev?.engine_sent ?? {}) };
+  const prevSeed = prev?.seed_sent ?? {}; const seedSent: Record<string, number> = { ...prevSeed };
+  const castParams = (r: DirectorProject['references'][number]): Record<string, Primitive> => {
+    const params: Record<string, Primitive> = { ...pe.defaults };
+    const want = r.kind === 'character' ? '3:4' : r.kind === 'location' ? p.series.aspect : '1:1';   // a person is shown full-body (tall), a place wide, a prop square
+    if (pe.params.aspect?.options?.includes(want)) params.aspect = want;
+    if (pe.params.seed && r.seed !== undefined && r.seed >= 0) params.seed = r.seed;
+    return params;
+  };
   const wired = promptDef && genDef ? { out: textOut(promptDef), inn: textIn(genDef, reg, 'text') } : null;
   let y = 0;
   for (const r of p.references.filter((x) => x.status !== 'rejected')) {
@@ -235,13 +250,23 @@ export function buildCastingCanvas(p: DirectorProject, reg: RegistryLike, existi
     } else if (String(tn.params.text ?? '') === text) sent[r.ref_id] = text;
     else if (prevSent[r.ref_id] !== undefined && String(tn.params.text ?? '') === prevSent[r.ref_id]) { tn.params = { ...tn.params, text }; report.updated.push(tid); sent[r.ref_id] = text; }
     else report.keptUserText.push(tid);
-    if (!byNode.get(gid)) {
-      const params: Record<string, Primitive> = { ...genDef.defaults };
-      const asp = genDef.params.aspect;   // a person is shown full-body (tall), a place wide, a prop square
-      const want = r.kind === 'character' ? '3:4' : r.kind === 'location' ? p.series.aspect : '1:1';
-      if (asp?.options?.includes(want)) params.aspect = want;
-      const gn: GraphNode = { id: gid, defId: 'image-generate', x: COL_GEN_X, y, params, engineId: genDef.engineId, results: [], activeResult: 0, title: r.name };
+    let gn = byNode.get(gid);
+    if (!gn) {
+      gn = { id: gid, defId: 'image-generate', x: COL_GEN_X, y, params: castParams(r), engineId: engine, results: [], activeResult: 0, title: r.name };
       nodes.push(gn); byNode.set(gid, gn); (prev?.refs?.some((x) => x.ref_id === r.ref_id) ? report.recreated : report.created).push(gid);
+      engineSent[r.ref_id] = engine ?? ''; if (pe.params.seed) seedSent[r.ref_id] = Number(gn.params.seed ?? -1);
+    } else {
+      // another model was chosen: the card follows while it still holds the model the adapter gave it (a model picked in the canvas is the producer's)
+      const was = engineSent[r.ref_id] ?? genDef.engineId;
+      if (engine && gn.engineId === was && was !== engine) {
+        const keepSeed = gn.params.seed; gn.engineId = engine; gn.params = { ...castParams(r), ...(keepSeed !== undefined ? { seed: keepSeed } : {}) }; engineSent[r.ref_id] = engine; report.updated.push(gid);
+      } else if (engineSent[r.ref_id] === undefined) engineSent[r.ref_id] = gn.engineId ?? '';
+      // the seed of this cast entry (a new take): same rule as the clips
+      if (pe.params.seed) {
+        const wantSeed = r.seed !== undefined && r.seed >= 0 ? r.seed : -1; const wasSeed = prevSeed[r.ref_id] ?? -1;
+        if (Number(gn.params.seed ?? -1) === wasSeed && wasSeed !== wantSeed) { gn.params = { ...gn.params, seed: wantSeed }; if (!report.updated.includes(gid)) report.updated.push(gid); seedSent[r.ref_id] = wantSeed; }
+        else if (seedSent[r.ref_id] === undefined) seedSent[r.ref_id] = Number(gn.params.seed ?? -1);
+      }
     }
     const eid = `e_${r.ref_id}`;
     if (!edges.some((e) => e.id === eid) && !edges.some((e) => e.source === tid && e.target === gid)) edges.push({ id: eid, source: tid, sourceHandle: wired.out.id, target: gid, targetHandle: wired.inn.id });
@@ -249,6 +274,6 @@ export function buildCastingCanvas(p: DirectorProject, reg: RegistryLike, existi
     y += 420;
   }
   const project: Project = { app: 'ai-one-studio-canvers', version: 1, id: existing?.id ?? p.project_id, name: existing?.name ?? `${p.name} casting`, nodes, edges, updatedAt: now };
-  const link: CanvasLink = { canvas_id: prev?.canvas_id ?? newId('cv'), canvas_file: canvasFile, shots: [], purpose: 'casting', refs, created_at: prev?.created_at ?? now, prompt_sent: sent };
+  const link: CanvasLink = { canvas_id: prev?.canvas_id ?? newId('cv'), canvas_file: canvasFile, shots: [], purpose: 'casting', refs, created_at: prev?.created_at ?? now, prompt_sent: sent, engine_sent: engineSent, seed_sent: seedSent };
   return { project, link, report };
 }

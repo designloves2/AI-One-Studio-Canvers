@@ -185,3 +185,10 @@ export function requeueClips(p: DirectorProject, shotIds: string[]): number {
   for (const s of p.shots) if (shotIds.includes(s.shot_id) && s.status !== 'approved') { s.status = 'approved'; n++; }
   return n;
 }
+
+/** give these cast entries a new random seed (a different take of their image); the entries that are not listed keep theirs */
+export function reseedRefs(p: DirectorProject, refIds: string[], make: () => number = newSeed): number {
+  let n = 0;
+  for (const r of p.references) if (refIds.includes(r.ref_id)) { r.seed = make(); n++; }
+  return n;
+}

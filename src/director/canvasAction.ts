@@ -13,7 +13,8 @@ import { buildEpisodePackage, type PackageResult } from './exportPackage';
 import { buildZip } from './zip';
 import { buildCanvasFromDirector, buildCastingCanvas, refGenNodeId, type AdapterReport } from './adapter';
 import { appRegistry } from './adapterRegistry';
-import { applyCanvasResults, applyReferenceResults, planBatch, requeueClips, reseed, runShots, staleShots, type RunPlan, type RunSummary } from './execution';
+import { applyCanvasResults, applyReferenceResults, planBatch, requeueClips, reseed, reseedRefs, runShots, staleShots, type RunPlan, type RunSummary } from './execution';
+import { byId } from '../registry';
 import { castOf, episodeByNo, findReference, newAsset, shotsOfEpisode, syncShotAssets } from './model';
 import { turboSettings } from './series';
 import type { CanvasLink, DirectorProject } from './types';
@@ -122,31 +123,44 @@ export async function runFromDirector(plan: RunPlan, no?: number, opt: { skipCon
 }
 
 // ------------------------------------------------------------------ casting
-/** Build the casting canvas (a Prompt + Image Generate card per cast entry) and, after a yes, make the images one after another. */
-export async function generateCast(): Promise<{ made: number; failed?: string; cancelled: boolean }> {
-  const d = useDirector.getState(); const p = d.project;
-  if (!p) throw new Error('no project');
+/** the image models the cast can be generated with (the engines of the Image Generate card: Krea 2, Qwen Image, Z-Image, ...) */
+export const castEngines = (): { id: string; label: string }[] => (byId.get('image-generate')?.engines ?? []).map((e) => ({ id: e.id, label: e.label }));
+const engineLabel = (id?: string) => castEngines().find((e) => e.id === id)?.label ?? id ?? '';
+
+/**
+ * Casting: build the casting canvas (a Prompt + Image Generate card per cast entry, with the chosen image model) and, after a yes, make the images one after another.
+ *  - no `refIds`: every cast entry that has no image yet (generate all);
+ *  - `refIds`: exactly these entries, even when they already have an image (make one, or make it again; `newSeed` = a different take).
+ * A new image becomes the picked one; the older ones stay as candidates.
+ */
+export async function generateCast(opt: { refIds?: string[]; engine?: string; newSeed?: boolean } = {}): Promise<{ made: number; failed?: string; cancelled: boolean }> {
+  const d = useDirector.getState();
+  if (!d.project) throw new Error('no project');
   if (d.readOnly) throw new Error(tr('Read-only (saved by a newer version)'));
+  // the model belongs to the project (it is remembered); a new seed belongs to the entries that are made again
+  d.edit((x) => { if (opt.engine) x.settings.cast_engine = opt.engine; if (opt.newSeed && opt.refIds) reseedRefs(x, opt.refIds); });
+  const p = useDirector.getState().project!;
   const prev = linkOfCasting(p);
   const file = prev?.canvas_file ?? `${canvasFileName(p.name)} - casting`;
   const existing = await existingCanvas(file, !!prev);
-  const res = buildCastingCanvas(p, appRegistry, existing, prev, file);
+  const res = buildCastingCanvas(p, appRegistry, existing, prev, file, { engineId: opt.engine });
   if (res.report.missing.length) throw new Error(`${tr('Not built')}: ${res.report.missing[0].reason}`);
   await saveCanvas(file, res.project);
   setLink(res.link);
-  if (useGraph.getState().canvasFile !== file) await openSavedCanvas(file);
+  if (useGraph.getState().canvasFile !== file) await openSavedCanvas(file); else await refreshOpenCanvas(file);
   if (useGraph.getState().canvasFile !== file) throw new Error(tr('The linked canvas is not open.'));
-  // only entries that still have no picked image are made (an existing image is never replaced without being asked)
-  const todo = res.link.refs!.filter((r) => !p.references.find((x) => x.ref_id === r.ref_id)?.results.some((q) => q.picked));
+  const nameOf = (id: string) => p.references.find((x) => x.ref_id === id)?.name ?? id;
+  const todo = opt.refIds ? res.link.refs!.filter((r) => opt.refIds!.includes(r.ref_id)) : res.link.refs!.filter((r) => !p.references.find((x) => x.ref_id === r.ref_id)?.results.some((q) => q.picked));
   if (!todo.length) return { made: 0, cancelled: false };
-  if (!(await askConfirm(`${tr('Make the cast images now? Generating uses the GPU and takes time.')}\n\n${todo.map((r) => p.references.find((x) => x.ref_id === r.ref_id)!.name).join(', ')} (${todo.length})`))) return { made: 0, cancelled: true };
+  const model = engineLabel(p.settings.cast_engine ?? res.project.nodes.find((n) => n.id === refGenNodeId(todo[0].ref_id))?.engineId);
+  if (!(await askConfirm(`${tr('Make the cast images now? Generating uses the GPU and takes time.')}\n\n${tr('Image model')}: ${model}\n${todo.map((r) => nameOf(r.ref_id)).join(', ')} (${todo.length})`))) return { made: 0, cancelled: true };
   let made = 0, failed: string | undefined;
   for (const r of todo) {
     await runNode(refGenNodeId(r.ref_id));
     const g = useGraph.getState();
     const rt = g.runtime[refGenNodeId(r.ref_id)];
     useDirector.getState().edit((x) => { applyReferenceResults(x, res.link, g.nodes); });
-    if (rt?.status === 'error') { failed = p.references.find((x) => x.ref_id === r.ref_id)?.name; break; }
+    if (rt?.status === 'error') { failed = nameOf(r.ref_id); break; }
     made++;
   }
   try { const g = useGraph.getState(); await saveCanvas(file, g.toProject()); g.markSaved(file); } catch { /* shown by the unsaved mark */ }
@@ -169,17 +183,17 @@ const CATEGORY = { character: 'character', location: 'background', prop: 'prop' 
  * Register the picked image of every approved cast entry in the Asset Library (so it can be used again, in this series and others)
  * and remember it as a project asset. Entries already registered are skipped. Needs the Asset Library of the node pack.
  */
-export async function registerCast(): Promise<number> {
+export async function registerCast(opt: { refIds?: string[] } = {}): Promise<number> {
   const d = useDirector.getState(); const p = d.project;
   if (!p || d.readOnly) return 0;
   let n = 0;
-  for (const ref of p.references.filter((r) => r.status !== 'rejected' && !r.asset_id)) {
+  for (const ref of p.references.filter((r) => r.status !== 'rejected' && !r.asset_id && (!opt.refIds || opt.refIds.includes(r.ref_id)))) {
     const pick = ref.results.find((r) => r.picked); if (!pick || pick.lib_id) continue;   // a library pick is already an asset
     const blob = await (await fetch(resultUrl(pick))).blob();
     const lib = await registerAsset(new File([blob], `${pick.file.filename}`, { type: blob.type || 'image/png' }), CATEGORY[ref.kind], ref.name);
     d.edit((x) => {
       const r = x.references.find((q) => q.ref_id === ref.ref_id)!;
-      const a = newAsset(x, { name: lib.name, role: ref.kind === 'character' ? 'character' : ref.kind === 'location' ? 'background' : 'prop', source: { kind: 'library', id: lib.id }, note: ref.description });
+      const a = x.assets.find((q) => q.source.kind === 'library' && q.source.id === lib.id) ?? newAsset(x, { name: lib.name, role: ref.kind === 'character' ? 'character' : ref.kind === 'location' ? 'background' : 'prop', source: { kind: 'library', id: lib.id }, note: ref.description });
       r.asset_id = a.asset_id; syncShotAssets(x);
     });
     n++;

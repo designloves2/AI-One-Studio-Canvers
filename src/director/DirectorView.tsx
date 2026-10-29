@@ -15,7 +15,7 @@ import { newSeed } from './execution';
 import { PRESET_LABEL, splitSeconds } from './series';
 import { blockers, EPISODE_STAGES, epStageIndex, episodeBlockers, episodeState, GLOBAL_STAGES, productionOpen, stageIndex } from './workflow';
 import { localizeMsg } from './localize';
-import { downloadEpisodePackages, generateBatch, generateCast, linkOfCasting, linkOfEpisode, openLinkedCanvas, syncCastFromCanvas, syncResultsFromCanvas } from './canvasAction';
+import { castEngines, downloadEpisodePackages, generateBatch, generateCast, linkOfCasting, linkOfEpisode, openLinkedCanvas, registerCast, syncCastFromCanvas, syncResultsFromCanvas } from './canvasAction';
 import type { DirectorProject, DirectorReference, DirectorShot, ResultRef, StageId } from './types';
 
 const STEPS: { id: StageId; label: string }[] = [
@@ -323,7 +323,7 @@ function CastPicker({ refId, onClose }: { refId: string; onClose: () => void }) 
 
 // ---- casting
 const KIND: Record<string, { icon: keyof typeof ICONS; label: string; cls: string }> = { character: { icon: 'user', label: 'Actors', cls: 'k-char' }, location: { icon: 'pin', label: 'Locations', cls: 'k-loc' }, prop: { icon: 'box', label: 'Props', cls: 'k-prop' } };
-function CastCard({ r, onPick, ro }: { r: DirectorReference; onPick: () => void; ro: boolean }) {
+function CastCard({ r, onPick, onMake, onRegister, onChoose, ro, busy }: { r: DirectorReference; onPick: () => void; onMake: () => void; onRegister: () => void; onChoose: (id: string) => void; ro: boolean; busy: boolean }) {
   const T = useT(); const pick = r.results.find((x) => x.picked); const k = KIND[r.kind];
   return (
     <article className={`dx-cast ${k.cls}`}>
@@ -331,35 +331,56 @@ function CastCard({ r, onPick, ro }: { r: DirectorReference; onPick: () => void;
         <span className="badge"><Ico n={k.icon} />{T(r.kind === 'character' ? 'Actor' : r.kind === 'location' ? 'Location' : 'Prop')}</span>
         {r.asset_id && <span className="asset"><Ico n="check" />{T('Asset')}</span>}</div>
       <div className="dx-cast-body"><b>{r.name}</b>{r.variant_of && <em><Ico n="link" />{T('look of')} {r.variant_of}</em>}<p>{r.description}</p>
-        <button className="btn small" disabled={ro} onClick={onPick}>{pick ? T('Change image') : T('Choose from Library / Gallery')}</button></div>
+        {r.results.length > 1 && <div className="dx-cands" title={T('Other takes: click one to use it')}>{r.results.map((x) => <button key={x.result_id} className={x.picked ? 'on' : ''} disabled={ro} onClick={() => onChoose(x.result_id)}><img src={img(x)} alt="" loading="lazy" /></button>)}</div>}
+        <div className="dx-cast-actions">
+          <button className="btn small" disabled={ro || busy} onClick={onMake}>{pick ? `↻ ${T('Make again')}` : T('Make this one')}</button>
+          <button className="btn small" disabled={ro} onClick={onPick}>{pick ? T('Change image') : T('Choose from Library / Gallery')}</button>
+          {pick && !r.asset_id && <button className="btn small" disabled={ro || busy} onClick={onRegister}>{T('Register as asset')}</button>}
+        </div></div>
     </article>
   );
 }
 function CastGrid({ p, ro }: { p: DirectorProject; ro: boolean }) {
-  const T = useT(); const [busy, setBusy] = useState(false); const [picking, setPicking] = useState<string | null>(null);
+  const T = useT(); const edit = useDirector((x) => x.edit); const [busy, setBusy] = useState(false); const [picking, setPicking] = useState<string | null>(null);
   const live = p.references.filter((r) => r.status !== 'rejected');
   const made = live.filter((r) => r.results.some((x) => x.picked)).length;
   const link = linkOfCasting(p);
-  const make = async () => {
-    setBusy(true);
-    try {
-      const r = await generateCast();
-      if (r.failed) await notify(`${T('Failed')}: ${r.failed}`); else if (!r.cancelled && !r.made) await notify(T('Every cast entry already has an image.'));
-    } catch (e) { await notify((e as Error).message); } finally { setBusy(false); }
-  };
-  const sync = async () => { try { const n = await syncCastFromCanvas(); await notify(n ? `${T('Results added')}: ${n}` : T('No new results.')); } catch (e) { await notify((e as Error).message); } };
+  const engines = castEngines();
+  const engine = p.settings.cast_engine && engines.some((e) => e.id === p.settings.cast_engine) ? p.settings.cast_engine : engines[0]?.id;
+  const toRegister = live.filter((r) => r.results.some((x) => x.picked) && !r.asset_id);
+  const guard = async (f: () => Promise<void>) => { setBusy(true); try { await f(); } catch (e) { await notify((e as Error).message); } finally { setBusy(false); } };
+  const report = async (r: Awaited<ReturnType<typeof generateCast>>) => { if (r.failed) await notify(`${T('Failed')}: ${r.failed}`); else if (!r.cancelled && !r.made) await notify(T('Every cast entry already has an image.')); };
+  const makeAll = () => guard(async () => report(await generateCast({ engine })));
+  const makeOne = (r: DirectorReference) => guard(async () => report(await generateCast({ refIds: [r.ref_id], engine, newSeed: r.results.some((x) => x.picked) })));
+  const sync = () => guard(async () => { const n = await syncCastFromCanvas(); await notify(n ? `${T('Results added')}: ${n}` : T('No new results.')); });
+  const register = (ids?: string[]) => guard(async () => { const n = await registerCast({ refIds: ids }); await notify(n ? `${T('Registered')}: ${n}` : T('Nothing to register.')); });
+  const choose = (r: DirectorReference, resultId: string) => edit((x) => { const q = x.references.find((z) => z.ref_id === r.ref_id)!; q.results.forEach((z) => { z.picked = z.result_id === resultId; }); q.asset_id = undefined; });
+  const regMode = p.settings.cast_register ?? 'auto';
   return (
     <div className="dx-page">
       <Working p={p} />
       <PageHead icon="user" title={T('Casting')} sub={T('Actors, locations and props are cast first; the story is written with them.')}
-        right={<><button className="btn primary" disabled={ro || busy || !live.length || p.workflow.status.references === 'working'} onClick={() => void make()}>{T('Make the cast images')}</button>
+        right={link && <button className="btn" onClick={() => void openLinkedCanvas(link.canvas_file).catch((e) => notify((e as Error).message))}>{T('Open in Canvas')}</button>} />
+      <section className="dx-block"><h4><Ico n="image" />{T('Make the cast images')}</h4>
+        <div className="dx-btns">
+          <label className="dx-field">{T('Image model')}<select disabled={ro || busy} value={engine} onChange={(ev) => edit((x) => { x.settings.cast_engine = ev.target.value; })}>{engines.map((e) => <option key={e.id} value={e.id}>{e.label}</option>)}</select></label>
+          <button className="btn primary" disabled={ro || busy || !live.length || p.workflow.status.references === 'working' || made === live.length} onClick={() => void makeAll()}>{T('Generate all')} ({live.length - made})</button>
           <button className="btn" disabled={ro || !link} onClick={() => void sync()}>{T('Sync results')}</button>
-          {link && <button className="btn" onClick={() => void openLinkedCanvas(link.canvas_file).catch((e) => notify((e as Error).message))}>{T('Open in Canvas')}</button>}</>} />
+        </div>
+        <p className="dirx-muted">{T('Or make one entry at a time on its card, choose an image from the Asset Library or the Gallery, or make one again for a different take.')}</p>
+      </section>
+      <section className="dx-block"><h4><Ico n="box" />{T('Register as assets')}</h4>
+        <div className="dx-btns">
+          <label className="dx-check"><input type="radio" name="reg" checked={regMode === 'auto'} disabled={ro} onChange={() => edit((x) => { x.settings.cast_register = 'auto'; })} />{T('Automatic: all of them when the casting is approved')}</label>
+          <label className="dx-check"><input type="radio" name="reg" checked={regMode === 'manual'} disabled={ro} onChange={() => edit((x) => { x.settings.cast_register = 'manual'; })} />{T('Manual: only the ones I register')}</label>
+          <button className="btn" disabled={ro || busy || !toRegister.length} onClick={() => void register()}>{T('Register all now')} ({toRegister.length})</button>
+        </div>
+      </section>
       {live.length > 0 && <Meter done={made} total={live.length} label={`${made} / ${live.length} ${T('images ready')}`} />}
       {(['character', 'location', 'prop'] as const).map((kind) => {
         const items = live.filter((r) => r.kind === kind); if (!items.length) return null;
         return <section key={kind} className="dx-group"><h4 className={KIND[kind].cls}><Ico n={KIND[kind].icon} />{T(KIND[kind].label)} <small>{items.length}</small></h4>
-          <div className="dx-castgrid">{items.map((r) => <CastCard key={r.ref_id} r={r} ro={ro} onPick={() => setPicking(r.ref_id)} />)}</div></section>;
+          <div className="dx-castgrid">{items.map((r) => <CastCard key={r.ref_id} r={r} ro={ro} busy={busy} onPick={() => setPicking(r.ref_id)} onMake={() => void makeOne(r)} onRegister={() => void register([r.ref_id])} onChoose={(id) => choose(r, id)} />)}</div></section>;
       })}
       {picking && <CastPicker refId={picking} onClose={() => setPicking(null)} />}
     </div>

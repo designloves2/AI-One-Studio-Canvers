@@ -15,6 +15,11 @@ export const KO_DIRECTOR: Record<string, string> = {
   // clip status, casting groups, meters
   draft: '초안', ready: '준비됨', queued: '대기', generating: '생성 중', review: '검토', done: '완료',
   Actors: '배우', Locations: '장소', Props: '소품', 'images ready': '이미지 완료', 'clips generated': '클립 생성됨',
+  // casting: model, generate all / one, register
+  'Image model': '이미지 모델', 'Generate all': '전체 일괄 생성', 'Make this one': '이 항목 생성', 'Register as assets': '에셋 등록', 'Register all now': '지금 전체 등록', 'Nothing to register.': '등록할 이미지가 없습니다.',
+  'Automatic: all of them when the casting is approved': '자동: 캐스팅을 승인할 때 전부 등록', 'Manual: only the ones I register': '수동: 내가 등록한 것만',
+  'Or make one entry at a time on its card, choose an image from the Asset Library or the Gallery, or make one again for a different take.': '또는 카드에서 항목을 하나씩 생성하거나, 에셋 라이브러리/갤러리에서 이미지를 고르거나, 다른 결과가 필요하면 다시 생성하세요.',
+  'Other takes: click one to use it': '다른 결과: 눌러서 사용',
   // register a result as an asset (right-click)
   'Register as asset': '에셋으로 등록', 'Asset name': '에셋 이름', 'Write it in a prompt as': '프롬프트에는 이렇게 씁니다', 'Use letters, numbers, _ and Korean': '글자, 숫자, _ 와 한글을 쓸 수 있습니다',
   'Characters that cannot be used were replaced with _': '쓸 수 없는 문자는 _ 로 바꿨습니다', 'This image was already registered as': '같은 이미지가 이미 등록되어 있습니다:', Category: '카테고리', Register: '등록', Registered: '등록했습니다',

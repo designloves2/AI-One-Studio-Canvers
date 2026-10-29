@@ -64,6 +64,8 @@ export interface DirectorReference {
   variant_of?: string;
   /** the registered asset of the picked image (DirectorAsset.asset_id) */
   asset_id?: string;
+  /** the seed this entry's image is generated with (undefined = random); a new seed = a different take */
+  seed?: number;
 }
 
 export interface DirectorScene { scene_id: string; episode_id: string; order: number; title: string; summary: string; status: ApprovalStatus; shot_ids: string[] }
@@ -103,6 +105,8 @@ export interface CanvasLink {
   prompt_sent?: Record<string, string>;
   /** the seed each shot's generator card was last given by the adapter (same idea: a seed the producer typed in the canvas is kept) */
   seed_sent?: Record<string, number>;
+  /** casting canvas: the image engine each cast card was last given (an engine chosen in the canvas is kept) */
+  engine_sent?: Record<string, string>;
 }
 
 export interface DirectorWorkflow {
@@ -130,5 +134,11 @@ export interface DirectorProject {
   /** earlier projects this one continues (their whole content is read by the crew; the cast is taken over) */
   continues?: { project_id: string; name: string; file: string }[];
   /** generation: how an episode is made. auto = the app connects the assets and generates; manual = the producer opens the canvas or takes a file. Not chosen yet = undefined. */
-  settings: { execution_mode: ExecutionMode; generation?: 'auto' | 'manual' };
+  settings: {
+    execution_mode: ExecutionMode; generation?: 'auto' | 'manual';
+    /** casting: the image model the cast images are generated with (an `image-generate` engine id, e.g. krea2 / qwen21 / zimage / klein); undefined = the card's default */
+    cast_engine?: string;
+    /** casting: auto = every picked cast image becomes an asset when the casting is approved; manual = only the ones the producer registers */
+    cast_register?: 'auto' | 'manual';
+  };
 }

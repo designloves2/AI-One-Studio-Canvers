@@ -83,6 +83,41 @@ if (real) {
   ok(!!e && rr.get('video-generate').inputs.some((i) => i.id === e.targetHandle && i.type === 'image'), 'real registry: the wire goes to a real image input of Video Generate');
 }
 
+// ---- casting canvas: the image model and the seed of each cast entry
+{
+  const reg3 = { compatible: (a, b) => a === b, get: (id) => ({
+    prompt: { id, inputs: [], outputs: [{ id: 'text', type: 'text' }], params: {}, defaults: { text: '' } },
+    'image-generate': { id, inputs: [{ id: 'text', type: 'text' }], outputs: [{ id: 'image', type: 'image' }], engineId: 'krea2', engines: ['krea2', 'qwen21', 'zimage'], params: { aspect: { options: ['1:1', '3:4', '16:9'] }, seed: {} }, defaults: { aspect: '1:1', seed: -1, steps: 8 },
+      perEngine: { krea2: { params: { aspect: { options: ['1:1', '3:4', '16:9'] }, seed: {} }, defaults: { aspect: '1:1', seed: -1, steps: 8 } }, qwen21: { params: { aspect: { options: ['1:1', '3:4'] }, seed: {} }, defaults: { aspect: '1:1', seed: -1, steps: 20, cfg: 4 } }, zimage: { params: { size: {}, seed: {} }, defaults: { size: 1024, seed: -1 } } } },
+  })[id] };
+  const p2 = M.newDirectorProject('C'); p2.series.aspect = '16:9';
+  const a1 = M.newReference(p2, 'character', 'Aya', 'girl', 'a girl'), a2 = M.newReference(p2, 'location', 'Hall', 'hall', 'a hall');
+  const NOW = () => '2026-01-01T00:00:00.000Z';
+  const bc = (proj, ex, pv, o = {}) => A.buildCastingCanvas(proj, reg3, ex, pv, 'cast', { now: NOW, ...o });
+  const gen = (r, ref) => r.project.nodes.find((n) => n.id === A.refGenNodeId(ref.ref_id));
+  const c1 = bc(p2, null, null);
+  ok(gen(c1, a1).engineId === 'krea2' && gen(c1, a1).params.aspect === '3:4' && gen(c1, a2).params.aspect === '16:9', 'default model; a person is tall (3:4), a place takes the series aspect');
+  const c2 = bc(p2, null, null, { engineId: 'qwen21' });
+  ok(gen(c2, a1).engineId === 'qwen21' && gen(c2, a1).params.cfg === 4 && gen(c2, a1).params.steps === 20, 'a chosen model starts with ITS OWN defaults (not the default model\'s)');
+  ok(gen(bc(p2, null, null, { engineId: 'nonexistent' }), a1).engineId === 'krea2', 'an unknown model falls back to the default');
+  p2.settings.cast_engine = 'zimage'; const c3 = bc(p2, null, null);
+  ok(gen(c3, a1).engineId === 'zimage' && gen(c3, a1).params.size === 1024 && !('aspect' in gen(c3, a1).params), 'the project\'s model choice is used; a model without an aspect setting gets none');
+  p2.settings.cast_engine = undefined;
+  // the model is changed later: untouched cards follow, a model picked in the canvas stays
+  const sw = bc(p2, c1.project, c1.link, { engineId: 'qwen21' });
+  ok(gen(sw, a1).engineId === 'qwen21' && gen(sw, a1).params.cfg === 4 && sw.report.updated.includes(A.refGenNodeId(a1.ref_id)) && sw.link.engine_sent[a1.ref_id] === 'qwen21', 'switching the model moves the cards that still hold the model the adapter gave them');
+  const own = JSON.parse(JSON.stringify(c1.project)); own.nodes.find((n) => n.id === A.refGenNodeId(a1.ref_id)).engineId = 'zimage';
+  ok(gen(bc(p2, own, c1.link, { engineId: 'qwen21' }), a1).engineId === 'zimage', 'a model the producer picked in the canvas is kept');
+  const keepSeed = JSON.parse(JSON.stringify(c1.project)); keepSeed.nodes.find((n) => n.id === A.refGenNodeId(a1.ref_id)).params.seed = 55;
+  ok(gen(bc(p2, keepSeed, c1.link, { engineId: 'qwen21' }), a1).params.seed === 55, 'switching the model keeps the seed that is on the card');
+  // seeds: a new take of one cast entry
+  a1.seed = 321; const s1 = bc(p2, c1.project, c1.link);
+  ok(gen(s1, a1).params.seed === 321 && gen(s1, a2).params.seed === -1 && s1.link.seed_sent[a1.ref_id] === 321, 'a cast entry with a seed gets it on its card; the others stay random');
+  const typed = JSON.parse(JSON.stringify(s1.project)); typed.nodes.find((n) => n.id === A.refGenNodeId(a1.ref_id)).params.seed = 9; a1.seed = 500;
+  ok(gen(bc(p2, typed, s1.link), a1).params.seed === 9, 'a seed typed in the canvas is kept');
+  a1.seed = 321; const again = bc(p2, s1.project, s1.link); ok(again.report.updated.length === 0 && again.project.nodes.length === s1.project.nodes.length, 'building again with the same choices changes nothing');
+}
+
 // ---- the package
 const fetcher = async (r) => (r.name === 'Hana' ? { data: new Uint8Array([9, 9, 9]), ext: 'png' } : null);
 const canvas = r1.project;

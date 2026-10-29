@@ -687,3 +687,8 @@ button.save-state.dirty { cursor: pointer; } button.save-state.dirty:hover { bac
 .regdlg .reg-name input { margin: 0; border: 0; background: transparent; padding: 8px 4px; } .regdlg .reg-name:focus-within { border-color: var(--acc); }
 .regdlg select { background: var(--bg); border: 1px solid var(--line2); border-radius: 8px; padding: 7px 8px; color: var(--fg); }
 .reg-hint { margin: 0 0 10px; color: var(--muted); font-size: 12px; } .reg-hint b { color: var(--fg); }
+
+/* casting: model, one-by-one generation, candidates */
+.dx-field { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); } .dx-field select { background: var(--bg); border: 1px solid var(--line2); border-radius: 7px; padding: 5px 8px; color: var(--fg); }
+.dx-cast-actions { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; } .dx-cast-actions .btn.small { margin-top: 0; }
+.dx-cands { display: flex; gap: 4px; flex-wrap: wrap; } .dx-cands button { width: 34px; height: 34px; padding: 0; border: 2px solid var(--line2); border-radius: 6px; overflow: hidden; background: var(--bg); } .dx-cands button.on { border-color: var(--acc); } .dx-cands img { width: 100%; height: 100%; object-fit: cover; display: block; }

@@ -20,6 +20,11 @@ export const appRegistry: RegistryLike = {
       inputs: d.inputs.map((i) => ({ id: i.id, type: i.type, optional: i.optional, multi: i.multi })),
       outputs: d.outputs.map((o) => ({ id: o.id, type: o.type })),
       engineId: eng?.id, engines: d.engines?.map((e) => e.id), params, defaults: defaultParams(d, eng?.id),
+      perEngine: d.engines ? Object.fromEntries(d.engines.map((e) => {
+        const ps: RegDef['params'] = {};
+        for (const q of paramsFor(d, e.id)) { const c = q.control; ps[q.id] = c.kind === 'select' ? { options: c.options } : c.kind === 'slider' || c.kind === 'number' ? { min: c.min, max: c.max } : {}; }
+        return [e.id, { params: ps, defaults: defaultParams(d, e.id) }];
+      })) : undefined,
     };
   },
 };
