@@ -3,6 +3,7 @@
 import type { LlmFn } from './ai';
 import { splitSeconds } from './series';
 import { FORMATS, detectFormat } from './formats';
+import { defaultSections } from './music';
 
 const num = (s: string, re: RegExp, d: number) => { const m = re.exec(s); return m ? Number(m[1]) : d; };
 
@@ -72,6 +73,14 @@ export const demoCrew: LlmFn = async (system, user) => {
     return JSON.stringify({ crew: 'director', say: ko(`${epNo}화를 ${n}개 클립(각 ${clipSec}초)으로 구성했습니다.`, 'Episode written.'), episode_plan: { no: epNo, scenes: [
       { title: ko('도입', 'Opening'), summary: ko('긴장된 분위기로 시작', 'tense start'), clips: Array.from({ length: half }, (_, i) => mk(i)) },
       { title: ko('반전', 'Twist'), summary: ko('마지막 반전', 'final twist'), clips: Array.from({ length: n - half }, (_, i) => mk(half + i)) }] } });
+  }
+  if (/Write the song for this music video|The producer uploaded their own song/.test(said)) {
+    const upload = /uploaded their own song/.test(said);
+    const dur = upload ? num(said, /\((\d+)s\)/, epSec) : epSec;
+    const music = { source: upload ? 'upload' : 'generate', language: lang, duration_sec: dur, sections: defaultSections(dur),
+      ...(upload ? {} : { title: ko('데모 노래', 'Demo song'), style: 'upbeat K-pop, 120 BPM, bright synths, punchy drums, female vocal', bpm: 120,
+        lyrics: ko('[verse]\n밤거리에 불이 켜지면\n나는 너에게 걸어가\n[chorus]\n멈추지 마, 이 순간을\n우리는 빛이 되어 달려가', '[verse]\nCity lights are coming on\nI walk to you\n[chorus]\nDo not stop this moment\nWe run as light') }) };
+    return JSON.stringify({ crew: 'music', say: upload ? ko('노래의 구조(인트로·벌스·코러스…)를 제안했습니다. 구간은 화면에서 고칠 수 있습니다.', 'Structure proposed.') : ko('데모 노래의 스타일과 가사, 구조를 썼습니다. 이제 노래를 만들 수 있습니다.', 'Song written.'), music });
   }
   if (/approve|승인|좋아|OK/i.test(said)) return JSON.stringify({ crew: 'producer_desk', intent: 'approve', say: ko('승인으로 이해했습니다.', 'Understood as approval.') });
   return JSON.stringify({ crew: stage === 'episode' ? 'director' : 'producer_desk', intent: 'revise', say: ko('데모 작업팀은 수정 지시를 실제로 반영하지 않습니다. 실제 LLM을 설정하면 반영됩니다.', 'The demo crew does not apply changes. Set a real LLM in Settings.') });

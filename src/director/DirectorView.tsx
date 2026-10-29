@@ -12,19 +12,22 @@ import { resultUrl } from './media';
 import { CREW_LABEL } from './ai';
 import { episodeByNo, newAsset, shotsOfEpisode, syncShotAssets } from './model';
 import { newSeed } from './execution';
+import { applyMusicPatch, defaultSections, newMusic, pickedAudio, songMap } from './music';
+import { finishEpisode, generateSong, pickSong, syncFinalFromCanvas, uploadSong } from './musicAction';
+import { byId } from '../registry';
 import { PRESETS, PRESET_LABEL, RESOLUTIONS, splitSeconds } from './series';
 import { ASPECTS, applySeriesPatch } from './ai';
 import { FORMAT_IDS, FORMATS, vocabOf } from './formats';
-import { blockers, EPISODE_STAGES, epStageIndex, episodeBlockers, episodeState, GLOBAL_STAGES, productionOpen, stageIndex } from './workflow';
+import { blockers, hasMusicStep, EPISODE_STAGES, epStageIndex, episodeBlockers, episodeState, GLOBAL_STAGES, productionOpen, stageIndex } from './workflow';
 import { localizeMsg } from './localize';
 import { castEngines, downloadEpisodePackages, generateBatch, generateCast, linkOfCasting, linkOfEpisode, openLinkedCanvas, registerCast, syncCastFromCanvas, syncResultsFromCanvas } from './canvasAction';
 import type { DirectorProject, DirectorReference, DirectorShot, ResultRef, StageId } from './types';
 
 const STEPS: { id: StageId; label: string }[] = [
-  { id: 'brief', label: 'Brief' }, { id: 'references', label: 'Casting' }, { id: 'series', label: 'Scenario' },
+  { id: 'brief', label: 'Brief' }, { id: 'references', label: 'Casting' }, { id: 'music', label: 'Song' }, { id: 'series', label: 'Scenario' },
   { id: 'episode', label: 'Episode' }, { id: 'canvas', label: 'Canvas' }, { id: 'execute', label: 'Generate' }, { id: 'review', label: 'Review' },
 ];
-const NEXT_LABEL: Partial<Record<StageId, string>> = { brief: 'Casting', references: 'Scenario', series: 'Episode', episode: 'Canvas', canvas: 'Generate', execute: 'Review', review: 'Next episode' };
+const NEXT_LABEL: Partial<Record<StageId, string>> = { brief: 'Casting', references: 'Scenario', music: 'Scenario', series: 'Episode', episode: 'Canvas', canvas: 'Generate', execute: 'Review', review: 'Next episode' };
 const STATUS_TEXT: Record<string, string> = { idle: 'waiting', working: 'the crew is working…', review_required: 'waiting for your approval', approved: 'approved', failed: 'failed', completed: 'finished', blocked: 'blocked' };
 const EXAMPLES = [
   '막장 드라마 하나 만들자. 장편이고 30부작, 편당 1분 30초 구성으로 16:9 비율이며 7+1 Kimchy 모드로 생성하고 싶어.',
@@ -73,7 +76,7 @@ function Progress({ p }: { p: DirectorProject }) {
         </span>
       </div>
       <ol className="dirx-steps">
-        {STEPS.map((st, i) => {
+        {STEPS.filter((st) => st.id !== 'music' || hasMusicStep(p)).map((st, i) => {
           const isEp = (EPISODE_STAGES as StageId[]).includes(st.id);
           const locked = isEp && !open;
           let done = false, cur = false, bad = false;
@@ -159,6 +162,7 @@ function StagePanel({ p, ro, view }: { p: DirectorProject; ro: boolean; view: St
   const T = useT();
   if (view === 'brief') return <BriefCard p={p} />;
   if (view === 'references') return <CastGrid p={p} ro={ro} />;
+  if (view === 'music' && hasMusicStep(p)) return <MusicCard p={p} ro={ro} />;
   if (view === 'series') return <ScenarioList p={p} />;
   if (!productionOpen(p)) return <div className="dx-page"><p className="dirx-muted">{T('Opens when the scenario is approved')}</p></div>;
   const ep = episodeByNo(p, p.workflow.episode_no);
@@ -435,6 +439,73 @@ function CastGrid({ p, ro }: { p: DirectorProject; ro: boolean }) {
   );
 }
 
+
+// ---- the song of a music video: the producer's own file OR made by the AI, chosen here or by chat
+const SECTION_COLOR: Record<string, string> = { intro: '#6b7a99', verse: '#4f8f7a', 'pre-chorus': '#a68a3a', chorus: '#b0507a', bridge: '#7b62b5', outro: '#6b7a99' };
+function MusicCard({ p, ro }: { p: DirectorProject; ro: boolean }) {
+  const T = useT(); const d = useDirector(); const edit = d.edit; const [busy, setBusy] = useState(false);
+  const m = p.music;
+  const picked = pickedAudio(m);
+  const engines = (byId.get('music-generate')?.engines ?? []).map((e) => ({ id: e.id, label: e.label }));
+  const engine = m?.engine && engines.some((e) => e.id === m.engine) ? m.engine : engines[0]?.id;
+  const guard = async (f: () => Promise<void>) => { setBusy(true); try { await f(); } catch (e) { await notify((e as Error).message); } finally { setBusy(false); } };
+  const choose = (src: 'upload' | 'generate') => edit((x) => { x.music = x.music ?? newMusic(); applyMusicPatch(x.music, { source: src }); });
+  const set = (patch: Record<string, unknown>) => edit((x) => { x.music = x.music ?? newMusic(); applyMusicPatch(x.music, patch); });
+  const fileRef = useRef<HTMLInputElement>(null);
+  const clips = m && m.sections.length && m.duration_sec > 0 ? songMap(m.duration_sec, p.series.clip_seconds, m.sections) : [];
+  const total = m?.duration_sec || 0;
+  return (
+    <div className="dx-page"><Working p={p} />
+      <PageHead icon="music" title={T('Song')} sub={T('The music video is cut to the song: use your own song, or let the AI make one.')} />
+      <section className="dx-block"><h4><Ico n="music" />{T('Where does the song come from?')}</h4>
+        <div className="dx-choose-grid">
+          <button className={m?.source === 'upload' ? 'on' : ''} disabled={ro} onClick={() => choose('upload')}><Ico n="box" /><b>{T('My own song')}</b><span>{T('Upload a music file. The crew proposes its structure (intro, verse, chorus …).')}</span></button>
+          <button className={m?.source === 'generate' ? 'on' : ''} disabled={ro} onClick={() => choose('generate')}><Ico n="bolt" /><b>{T('Make with the AI')}</b><span>{T('The crew writes the style and lyrics, the music model makes the song.')}</span></button>
+        </div>
+        <p className="dirx-muted">{T('You can also say it in the chat: "use my own song" or "make the song with the AI".')}</p>
+      </section>
+      {m?.source === 'upload' && (
+        <section className="dx-block"><h4><Ico n="box" />{T('Your song file')}</h4>
+          <div className="dx-btns">
+            <input ref={fileRef} type="file" accept="audio/*,.mp3,.wav,.flac,.m4a,.ogg" style={{ display: 'none' }} onChange={(ev) => { const f = ev.target.files?.[0]; ev.target.value = ''; if (f) void guard(() => uploadSong(f)); }} />
+            <button className="btn primary" disabled={ro || busy} onClick={() => fileRef.current?.click()}>{picked ? T('Choose another file') : T('Choose the song file')}</button>
+            <button className="btn" disabled={ro || d.busy || !picked} onClick={() => void d.writeSong()}>{T('Ask the crew to propose the structure')}</button>
+          </div>
+        </section>)}
+      {m?.source === 'generate' && (
+        <section className="dx-block"><h4><Ico n="bolt" />{T('Make the song')}</h4>
+          <div className="dx-btns">
+            <label className="dx-field">{T('Music model')}<select disabled={ro || busy} value={engine} onChange={(ev) => set({ engine: ev.target.value })}>{engines.map((e) => <option key={e.id} value={e.id}>{e.label}</option>)}</select></label>
+            <button className="btn" disabled={ro || d.busy} onClick={() => void d.writeSong()}>{T('Ask the crew to write the song')}</button>
+            <button className="btn primary" disabled={ro || busy || !m.style.trim() || !m.lyrics.trim()} onClick={() => void guard(async () => { const r = await generateSong({ newSeedNow: !!picked }); if (!r.made && !r.cancelled) await notify(T('No song came back.')); })}>▶ {picked ? T('Make another take') : T('Make the song')}</button>
+          </div>
+          <div className="dx-songfields">
+            <label className="dx-field wide">{T('Style')}<textarea rows={2} disabled={ro} defaultValue={m.style} key={`st-${m.style}`} onBlur={(ev) => ev.target.value !== m.style && set({ style: ev.target.value })} /></label>
+            <label className="dx-field wide">{T('Lyrics')}<textarea rows={6} disabled={ro} defaultValue={m.lyrics} key={`ly-${m.lyrics}`} onBlur={(ev) => ev.target.value !== m.lyrics && set({ lyrics: ev.target.value })} /></label>
+          </div>
+        </section>)}
+      {m && (m.source || m.title) && (
+        <section className="dx-block"><h4><Ico n="list" />{T('The song')}</h4>
+          <div className="dx-songmeta">
+            <label className="dx-field">{T('Title')}<input disabled={ro} defaultValue={m.title} key={`ti-${m.title}`} onBlur={(ev) => ev.target.value !== m.title && set({ title: ev.target.value })} /></label>
+            <label className="dx-field">{T('Length (s)')}<input type="number" min={10} max={600} disabled={ro} defaultValue={m.duration_sec || ''} key={`du-${m.duration_sec}`} onBlur={(ev) => Number(ev.target.value) !== m.duration_sec && set({ duration_sec: Number(ev.target.value) })} /></label>
+            <label className="dx-field">BPM<input type="number" min={0} max={240} disabled={ro} defaultValue={m.bpm || ''} key={`bp-${m.bpm}`} onBlur={(ev) => Number(ev.target.value) !== m.bpm && set({ bpm: Number(ev.target.value) })} /></label>
+            <label className="dx-field">{T('Language')}<select disabled={ro} value={m.language} onChange={(ev) => set({ language: ev.target.value })}><option value="ko">한국어</option><option value="en">English</option></select></label>
+          </div>
+          {m.candidates.length > 0 && <div className="dx-takes">{m.candidates.map((c, i) => (
+            <div key={c.result_id} className={`dx-take${c.picked ? ' on' : ''}`}><span>{c.source === 'upload' ? T('Uploaded') : `${T('Take')} ${i + 1}`}{c.source === 'demo' ? ' · DEMO' : ''}</span>
+              <audio controls preload="none" src={resultUrl(c)} />
+              {c.picked ? <i>✓ {T('The song')}</i> : <button className="linkbtn" disabled={ro} onClick={() => pickSong(c.result_id)}>{T('Use this take')}</button>}</div>))}</div>}
+          {total > 0 && m.sections.length > 0 && <>
+            <div className="dx-songbar" title={T('Sections of the song')}>{m.sections.map((s, i) => <span key={i} style={{ width: `${(100 * (s.end_sec - s.start_sec)) / total}%`, background: SECTION_COLOR[s.name] }} title={`${s.name} ${s.start_sec}–${s.end_sec}s`}>{s.name}</span>)}</div>
+            <div className="dx-songbar clips" title={T('Which part of the song each clip covers')}>{clips.map((c) => <span key={c.no} style={{ width: `${(100 * (c.to - c.from)) / total}%` }} title={`${T('Clip')} ${c.no}: ${c.from}–${c.to}s ${c.section ?? ''}`}>{c.no}</span>)}</div>
+            <p className="dirx-muted">{clips.length} {T('clips')} · {p.series.clip_seconds}s</p>
+            <div className="dx-btns"><button className="linkbtn" disabled={ro} onClick={() => set({ sections: defaultSections(total) })}>{T('Reset the sections to a typical song')}</button></div></>}
+        </section>)}
+    </div>
+  );
+}
+
 // ---- scenario
 function ScenarioList({ p }: { p: DirectorProject }) {
   const T = useT(); const eps = [...p.episodes].sort((a, b) => a.no - b.no);
@@ -531,6 +602,29 @@ function CanvasCard({ p }: { p: DirectorProject }) {
 
 // ---- generate / review: first decide automatic or manual; then a scope (this episode / ticked episodes / every episode at this step); clips can be ticked
 const BATCH_STATE_TEXT: Record<string, string> = { waiting: 'waiting', running: 'generating', done: 'done', failed: 'failed', cancelled: 'cancelled', skipped: 'skipped' };
+
+/** the finished episode: the clips joined in order, and for a music video the song laid on top */
+function FinalBlock({ p, ro, shots }: { p: DirectorProject; ro: boolean; shots: DirectorShot[] }) {
+  const T = useT(); const [busy, setBusy] = useState(false);
+  const e = episodeByNo(p, p.workflow.episode_no);
+  if (!e || !shots.length) return null;
+  const ready = shots.every((s) => s.results.some((r) => r.picked));
+  const mv = p.series.format === 'musicvideo';
+  const link = linkOfEpisode(p, e.no);
+  const guard = async (f: () => Promise<void>) => { setBusy(true); try { await f(); } catch (er) { await notify((er as Error).message); } finally { setBusy(false); } };
+  return (
+    <section className="dx-block"><h4><Ico n="film" />{T(mv ? 'Finished video (clips joined + the song)' : 'Finished video (clips joined)')}</h4>
+      {e.final && <div className="dx-preview">{e.final.kind === 'video' ? <video src={resultUrl(e.final)} controls preload="metadata" /> : <img src={resultUrl(e.final)} alt="" />}</div>}
+      <div className="dx-btns">
+        <button className="btn primary" disabled={ro || busy || !ready} onClick={() => void guard(async () => { const r = await finishEpisode(e.no); if (!r.made && !r.cancelled) await notify(T('No finished video came back.')); })}>{e.final ? T('Join the clips again') : T(mv ? 'Join the clips and add the song' : 'Join the clips')}</button>
+        <button className="btn" disabled={ro || busy || !link} onClick={() => void guard(async () => { const n = await syncFinalFromCanvas(e.no); await notify(n ? `${T('Results added')}: ${n}` : T('No new results.')); })}>{T('Sync results')}</button>
+      </div>
+      {!ready && <p className="dirx-muted">{T('Every clip needs a result before the clips can be joined.')}</p>}
+      {mv && !pickedAudio(p.music) && <p className="dirx-muted">{T('There is no song yet: the clips are joined without it.')}</p>}
+    </section>
+  );
+}
+
 function GenerateCard({ p, ro, review }: { p: DirectorProject; ro: boolean; review: boolean }) {
   const T = useT(); const d = useDirector(); const edit = d.edit;
   const [busy, setBusy] = useState(false);
@@ -588,6 +682,7 @@ function GenerateCard({ p, ro, review }: { p: DirectorProject; ro: boolean; revi
       {d.batch && (
         <section className="dx-block"><h4><Ico n="list" />{T('Batch')} {d.batch.running ? <span className="dirx-spin" /> : <button className="linkbtn" onClick={() => d.setBatch(null)}>{T('Close')}</button>}</h4>
           <div className="dx-batch">{d.batch.items.map((i) => <div key={i.no} className={`dx-batch-row s-${i.state}`}><b>{i.no}</b><span>{i.clips ? `${i.clips} ${T('clips')}` : ''}</span><em>{T(BATCH_STATE_TEXT[i.state])}</em>{i.note && <small>{i.note}</small>}</div>)}</div></section>)}
+      {(review || have === shots.length) && <FinalBlock p={p} ro={ro} shots={shots} />}
       <div className="dx-clips">{shots.map((s, i) => <ClipCard key={s.shot_id} s={s} n={i + 1} big gen ro={ro} sel={d.selClips.includes(s.shot_id)} onSel={() => d.toggleClip(s.shot_id)}
         onAgain={mode === 'auto' && !busy && link ? () => void run({ nos: [no], clipIds: [s.shot_id], newSeeds: true }) : undefined} />)}</div>
     </div>
@@ -650,7 +745,7 @@ function ChatDock({ p, T }: { p: DirectorProject | null; T: (k: string) => strin
       </div>
       {p && p.workflow.stage !== 'intake' && (
         <div className="dirx-approve">
-          <button className="btn primary big" disabled={!canApprove} onClick={() => void d.approve()}>✓ {T('Approve')}{NEXT_LABEL[view] ? ` → ${T(view === 'brief' ? vocabOf(p?.series.format).cast : view === 'references' ? vocabOf(p?.series.format).scenario : view === 'series' ? vocabOf(p?.series.format).episode : NEXT_LABEL[view]!)}` : ''}</button>
+          <button className="btn primary big" disabled={!canApprove} onClick={() => void d.approve()}>✓ {T('Approve')}{NEXT_LABEL[view] ? ` → ${T(view === 'brief' ? vocabOf(p?.series.format).cast : view === 'references' ? (p && hasMusicStep(p) ? 'Song' : vocabOf(p?.series.format).scenario) : view === 'music' ? vocabOf(p?.series.format).scenario : view === 'series' ? vocabOf(p?.series.format).episode : NEXT_LABEL[view]!)}` : ''}</button>
           {status === 'failed' && <button className="btn" disabled={d.busy} onClick={() => void d.retry()}>{T('Try again')}</button>}
           {behind && <button className="btn" disabled={d.busy || d.readOnly} onClick={() => d.reopen(d.focus, view)}>{T('Go back to this step')}</button>}
           <span className="dirx-hint">{looking ? T('You are looking at a step that is not the current one. Tell the crew below what to change, or go back to it.') : status === 'review_required' ? (blocked[0] ? `${T('Not yet')}: ${localizeMsg(blocked[0])}` : T('To change something, tell the crew below.')) : T(STATUS_TEXT[status] ?? status)}</span>

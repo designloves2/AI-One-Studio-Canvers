@@ -12,6 +12,8 @@ import { assetOfResult, resultUrl } from './media';
 import { buildEpisodePackage, type PackageResult } from './exportPackage';
 import { buildZip } from './zip';
 import { buildCanvasFromDirector, buildCastingCanvas, refGenNodeId, type AdapterReport } from './adapter';
+import { pickedAudio } from './music';
+import { assetFromFile } from '../backend/comfy';
 import { appRegistry } from './adapterRegistry';
 import { applyCanvasResults, applyReferenceResults, planBatch, requeueClips, reseed, reseedRefs, runShots, staleShots, type RunPlan, type RunSummary } from './execution';
 import { byId } from '../registry';
@@ -24,14 +26,14 @@ import type { Asset, Project } from '../types';
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 /** DEMO: nothing is generated, no canvas file is written, no asset is registered: stand-in pictures take the place of results */
-const isDemo = () => useDirector.getState().demo;
-const DEMO_FILE = '(demo) ';
+export const isDemo = () => useDirector.getState().demo;
+export const DEMO_FILE = '(demo) ';
 const isDemoLink = (l: CanvasLink) => l.canvas_file.startsWith(DEMO_FILE);
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+export const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 export const linkOfEpisode = (p: DirectorProject, no = p.workflow.episode_no): CanvasLink | null => { const e = episodeByNo(p, no); return (e && p.canvas_links.find((l) => l.episode_id === e.episode_id)) || null; };
 export const linkOfCasting = (p: DirectorProject): CanvasLink | null => p.canvas_links.find((l) => l.purpose === 'casting') ?? null;
 
-const setLink = (link: CanvasLink) => useDirector.getState().edit((x) => { x.canvas_links = [link, ...x.canvas_links.filter((l) => l.canvas_id !== link.canvas_id)]; });
+export const setLink = (link: CanvasLink) => useDirector.getState().edit((x) => { x.canvas_links = [link, ...x.canvas_links.filter((l) => l.canvas_id !== link.canvas_id)]; });
 
 /** a one-line-per-fact summary of what the adapter did, in the UI language */
 export function describeReport(r: AdapterReport): string {
@@ -44,7 +46,7 @@ export function describeReport(r: AdapterReport): string {
   ].filter(Boolean).join('\n') || tr('Nothing to change.');
 }
 
-async function existingCanvas(file: string, known: boolean): Promise<Project | null> {
+export async function existingCanvas(file: string, known: boolean): Promise<Project | null> {
   const saved = await listCanvases();
   if (!saved.some((c) => c.name === file)) return null;
   if (known) { try { return await loadCanvas(file); } catch { return null; } }
@@ -67,7 +69,10 @@ export async function makeEpisodeCanvas(no?: number): Promise<{ file: string; re
   // the picked image of every cast entry the clips use: connected to each clip as a reference image, in the order of its prompt
   const refAssets: Record<string, Asset> = {};
   for (const s of shotsOfEpisode(p, ep.episode_id)) for (const r of castOf(p, s)) { const pick = r.results.find((x) => x.picked); if (pick && !refAssets[r.ref_id]) refAssets[r.ref_id] = assetOfResult(pick, `ra_${r.ref_id}`); }
-  const res = buildCanvasFromDirector(p, appRegistry, existing, prev, file, { generator: 'video-generate', episodeId: ep.episode_id, turbo: turbo.params, refAssets });
+  // a music video: the clips are joined and the song is laid on top in the same canvas (the card whose result is the finished episode)
+  const song = p.series.format === 'musicvideo' ? pickedAudio(p.music) : undefined;
+  const finish = p.series.format === 'musicvideo' ? { stitch: true, audio: song && !song.data_url ? assetFromFile(song.file, 'audio', 'audio') : undefined } : undefined;
+  const res = buildCanvasFromDirector(p, appRegistry, existing, prev, file, { generator: 'video-generate', episodeId: ep.episode_id, turbo: turbo.params, refAssets, finish });
   res.report.warnings.push(...turbo.warnings);
   if (!demo) await saveCanvas(file, res.project);
   setLink(res.link);
@@ -230,7 +235,7 @@ export async function registerCast(opt: { refIds?: string[] } = {}): Promise<num
 
 // ------------------------------------------------------------------ generating: automatic batches
 /** the canvas that is open in the app, when it is this file and nothing in it is unsaved, is read again (so it holds the latest prompts, seeds and images) */
-async function refreshOpenCanvas(file: string) {
+export async function refreshOpenCanvas(file: string) {
   const g = useGraph.getState();
   if (g.canvasFile === file && !g.dirty) { try { g.loadProject(await loadCanvas(file), file, false); } catch { /* the run will say what is wrong */ } }
 }

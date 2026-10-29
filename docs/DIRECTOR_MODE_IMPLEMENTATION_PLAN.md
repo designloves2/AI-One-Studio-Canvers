@@ -92,3 +92,6 @@ Phase 2~4에서 만든 "양식 편집기" 화면은 요구와 달라 **채팅 �
 - 캐스팅 모델·일괄/개별 생성·등록: `settings.cast_engine`/`cast_register`, `ref.seed`, `buildCastingCanvas`의 `engineId`·`engine_sent`·`seed_sent`, `canvasAction.generateCast({refIds, engine, newSeed})`·`registerCast({refIds})`. 시험 240개(어댑터 모델/시드 규칙 포함).
 - 결과 우클릭 에셋 등록(Director 밖 공통 기능): `src/ui/RegisterAsset.tsx` + `AssetView` 연결. 중앙 팝업·@태그·카테고리, 같은 이미지가 이미 있으면 그 이름을 알림.
 - 시험: `npm run test:director` 230여 개 통과(순수 로직). 브라우저(데모 작업팀): 편 3개 동시 작성/승인/캔버스/생성 단계, 단계 클릭, 생성 범위 27클립 확인창(취소), 클립 체크·시드, 한 편 되돌리기, 모델 설정 창 확인 — GPU 유휴·큐 0/0. 못 본 것: 실제 생성 중 배치 진행 표시.
+
+## 뮤직비디오 노래 단계 (완료: 코드 / 미확인: 데모 전체·실기)
+- 순수 로직 `music.ts`, 앱 연결 `musicAction.ts`, 화면 `MusicCard`·`FinalBlock`, 데모 `demoCrew` 음악 분기. 상세와 남은 확인은 `CLAUDE.md` §8.

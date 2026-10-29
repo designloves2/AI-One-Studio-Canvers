@@ -40,3 +40,25 @@ export function demoClipResult(label: string, shot: Pick<DirectorShot, 'shot_id'
 
 /** add a picked result to a list: the others stay as candidates but are no longer picked */
 export function pushPicked(list: ResultRef[], r: ResultRef): void { list.forEach((x) => { x.picked = false; }); list.push(r); }
+
+/** a short tone as a WAV data URL: the demo's stand-in for a song (nothing is generated; the real length is in the song data) */
+export function demoWavUrl(seconds = 2, hz = 330): string {
+  const rate = 8000, n = Math.round(rate * seconds); const b = new Uint8Array(44 + n);
+  const w32 = (o: number, v: number) => { b[o] = v & 255; b[o + 1] = (v >> 8) & 255; b[o + 2] = (v >> 16) & 255; b[o + 3] = (v >> 24) & 255; };
+  const tag = (o: number, s: string) => { for (let i = 0; i < 4; i++) b[o + i] = s.charCodeAt(i); };
+  tag(0, 'RIFF'); w32(4, 36 + n); tag(8, 'WAVE'); tag(12, 'fmt '); w32(16, 16); b[20] = 1; b[22] = 1; w32(24, rate); w32(28, rate); b[32] = 1; b[34] = 8; tag(36, 'data'); w32(40, n);
+  for (let i = 0; i < n; i++) b[44 + i] = 128 + Math.round(Math.sin((2 * Math.PI * hz * i) / rate) * 40 * Math.min(1, (n - i) / 800));
+  let s = ''; for (let i = 0; i < b.length; i++) s += String.fromCharCode(b[i]);
+  return `data:audio/wav;base64,${btoa(s)}`;
+}
+
+/** a demo "song" take: the title on a card is not possible for audio, so it is a short tone marked source = 'demo' */
+export function demoSongResult(label: string, seed: number, now = new Date().toISOString()): ResultRef {
+  return { result_id: `rs_demo_${hash(`song:${label}:${seed}:${now}`).toString(36)}`, file: { filename: `demo-song-${seed}.wav`, subfolder: '', type: 'output' }, kind: 'audio', source: 'demo', data_url: demoWavUrl(2, 220 + (hash(`${label}:${seed}`) % 220)), created_at: now, picked: true };
+}
+
+/** the finished episode in the demo: a labelled card (the clips are cards too) */
+export function demoFinalResult(label: string, aspect = '16:9', now = new Date().toISOString()): ResultRef {
+  const [w, h] = aspect === '9:16' ? [360, 640] : aspect === '1:1' ? [520, 520] : [640, 360];
+  return base(`rs_demo_${hash(`final:${label}:${now}`).toString(36)}`, placeholderSvg({ title: label, subtitle: 'clips joined + song', badge: 'DEMO · final', hue: hash(label) % 360, w, h }), now);
+}

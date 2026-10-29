@@ -72,6 +72,8 @@ interface DirectorState {
   reopen(no: number, stage: StageId): void;
   /** run the automatic job of the step being looked at again (after a failure) */
   retry(): Promise<void>;
+  /** the crew writes the song (style, lyrics, structure) or proposes the structure of the uploaded song */
+  writeSong(): Promise<void>;
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -99,6 +101,7 @@ export const useDirector = create<DirectorState>((set, get) => {
     Object.assign(x, { series: work.series, brief: work.brief, episodes: x.episodes.map((e) => ({ ...(work.episodes.find((w) => w.episode_id === e.episode_id) ?? e), stage: e.stage, stage_status: e.stage_status })), references: work.references, scenes: work.scenes, shots: work.shots });
     for (const w of work.episodes) if (!x.episodes.some((e) => e.episode_id === w.episode_id)) x.episodes.push(w);   // the scenario may add episodes
     x.episodes.sort((a, b) => a.no - b.no);
+    if (work.music) x.music = work.music;   // the song (music video)
   };
 
   /** one automatic job: global (brief / casting / scenario) or of one episode (write its clips / build its canvas). A failure marks THAT unit failed and the next job still runs. */
@@ -232,6 +235,12 @@ export const useDirector = create<DirectorState>((set, get) => {
         const res = await directorTurn(work, t, crew(), { kickoff: 'free', previous: await previousTexts(work) });
         commit((x) => { takeOver(x, work); addChat(x, 'assistant', res.reply.say, { crew: res.reply.crew ?? defaultCrew(stage), notes: res.notes }); });
         if (res.reply.intent === 'approve') { set({ busy: false }); await get().approve(); return; }
+        // "make the song now": the crew set the song data and asked for the generation (still behind the button's "yes")
+        if (res.reply.music?.generate && get().project?.music?.source === 'generate') {
+          set({ busy: false });
+          try { const { generateSong } = await import('../director/musicAction'); await generateSong(); } catch (e) { commit((x) => { addChat(x, 'assistant', (e as Error).message, { crew: 'music', error: true }); }); }
+          return;
+        }
       } catch (e) {
         commit((x) => { addChat(x, 'assistant', (e as Error).message, { crew: 'producer_desk', error: true }); });
       } finally { set({ busy: false }); }
@@ -286,6 +295,13 @@ export const useDirector = create<DirectorState>((set, get) => {
       if (ok) set({ focus: no, view: stage });
     },
 
+    writeSong: async () => {
+      const { project, busy } = get();
+      if (!project || busy || get().readOnly || project.workflow.stage !== 'music') return;
+      commit((x) => { markWorking(x, 'music'); });
+      await runJobs([{ k: 'music' }]);
+    },
+
     retry: async () => {
       const { project: p, busy, view, focus } = get();
       if (!p || busy) return;
@@ -296,7 +312,7 @@ export const useDirector = create<DirectorState>((set, get) => {
         await runJobs([{ k, no: focus }]); return;
       }
       if (!GLOBAL_STAGES.includes(view) || p.workflow.stage !== view) return;
-      const k: Kickoff = view === 'brief' || view === 'references' || view === 'series' ? view : null; if (!k) return;
+      const k: Kickoff = view === 'brief' || view === 'references' || view === 'music' || view === 'series' ? view : null; if (!k) return;
       commit((x) => { markWorking(x, view); });
       await runJobs([{ k }]);
     },

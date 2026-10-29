@@ -706,3 +706,12 @@ button.save-state.dirty { cursor: pointer; } button.save-state.dirty:hover { bac
 
 /* kind of work tile spans the row */
 .dx-tile.edit.wide { grid-column: 1 / -1; }
+
+/* song step of a music video */
+.dx-choose-grid button.on { border-color: var(--acc); box-shadow: 0 0 0 1px var(--acc) inset; }
+.dx-songfields, .dx-songmeta { display: grid; gap: 10px; } .dx-songmeta { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
+.dx-songfields textarea, .dx-songmeta input, .dx-songmeta select { width: 100%; box-sizing: border-box; }
+.dx-takes { display: flex; flex-direction: column; gap: 6px; } .dx-take { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 6px 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--line2); }
+.dx-take.on { border-color: var(--acc); } .dx-take span { font-size: 11px; color: var(--muted); min-width: 84px; } .dx-take audio { height: 30px; flex: 1 1 200px; min-width: 160px; } .dx-take i { font-style: normal; color: var(--acc); font-size: 11px; }
+.dx-songbar { display: flex; height: 26px; border-radius: 6px; overflow: hidden; border: 1px solid var(--line2); } .dx-songbar span { font-size: 10px; color: #fff; display: flex; align-items: center; justify-content: center; overflow: hidden; white-space: nowrap; border-right: 1px solid rgba(0,0,0,.25); box-sizing: border-box; }
+.dx-songbar.clips { height: 20px; margin-top: 4px; } .dx-songbar.clips span { background: var(--bg3); color: var(--muted); }
