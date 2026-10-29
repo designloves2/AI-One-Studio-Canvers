@@ -84,6 +84,10 @@ function genParams(d: RegDef, p: DirectorProject, sh: DirectorShot, kind: Genera
     const lo = sec.min ?? 1, hi = sec.max ?? 60;
     out.seconds = Math.min(hi, Math.max(lo, Math.round(sh.duration_sec)));
   }
+  const mp = d.params.megapixels;
+  if (kind === 'video-generate' && mp && p.series.preset === 'h3_plain' && p.series.final_mp !== undefined) {
+    out.megapixels = Math.min(mp.max ?? 4, Math.max(mp.min ?? 0.25, p.series.final_mp));
+  }
   return out;
 }
 

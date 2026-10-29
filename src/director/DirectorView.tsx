@@ -17,7 +17,7 @@ import { newSeed } from './execution';
 import { applyMusicPatch, defaultSections, newMusic, pickedAudio, songMap } from './music';
 import { finishEpisode, generateSong, pickSong, registerSong, syncFinalFromCanvas, uploadSong } from './musicAction';
 import { byId } from '../registry';
-import { PRESETS, PRESET_LABEL, RESOLUTIONS, splitSeconds } from './series';
+import { defaultMps, mpRanges, PRESETS, PRESET_LABEL, RESOLUTIONS, splitSeconds } from './series';
 import { ASPECTS, applySeriesPatch } from './ai';
 import { FORMAT_IDS, FORMATS, vocabOf } from './formats';
 import { blockers, hasMusicStep, EPISODE_STAGES, epStageIndex, episodeBlockers, episodeState, GLOBAL_STAGES, productionOpen, stageIndex } from './workflow';
@@ -233,12 +233,13 @@ const EditTile = ({ icon, label, tone, wide, children }: { icon: keyof typeof IC
 function BriefTiles({ p }: { p: DirectorProject }) {
   const T = useT(); const edit = useDirector((x) => x.edit); const ro = useDirector((x) => x.readOnly);
   const s = p.series;
-  const cur = { format: s.format, total_episodes: s.total_episodes, episode_seconds: s.episode_seconds, clip_seconds: s.clip_seconds, aspect: s.aspect, resolution: s.resolution, preset: s.preset };
+  const cur = { format: s.format, total_episodes: s.total_episodes, episode_seconds: s.episode_seconds, clip_seconds: s.clip_seconds, aspect: s.aspect, resolution: s.resolution, preset: s.preset, start_mp: s.start_mp, final_mp: s.final_mp };
   const key = JSON.stringify(cur);
   const [d, setD] = useState(cur);
   useEffect(() => { setD(cur); }, [key]);   // eslint-disable-line react-hooks/exhaustive-deps
   const dirty = JSON.stringify(d) !== key;
   const parts = splitSeconds(d.episode_seconds, d.clip_seconds);
+  const mpR = mpRanges(d.preset); const eff = defaultMps(s);
   const past = p.workflow.stage !== 'brief' && p.workflow.stage !== 'intake';
   const opts = (list: number[], v: number) => [...new Set([...list, v])].sort((x, y) => x - y);
   const apply = () => { const notes: string[] = []; edit((x) => { applySeriesPatch(x, d, notes); }); if (notes.length) void notify(notes.join('\n')); };
@@ -252,6 +253,12 @@ function BriefTiles({ p }: { p: DirectorProject }) {
         <EditTile icon="clip" label={`${T('Clips per episode')}: ${parts.length}`} tone="b"><select disabled={ro} value={d.clip_seconds} onChange={(e) => setD({ ...d, clip_seconds: Number(e.target.value) })}>{opts(CLIP_SECS, d.clip_seconds).map((v) => <option key={v} value={v}>{v}s × {splitSeconds(d.episode_seconds, v).length}</option>)}</select></EditTile>
         <EditTile icon="screen" label={T('Aspect · resolution')}><div className="dx-two-sel"><select disabled={ro} value={d.aspect} onChange={(e) => setD({ ...d, aspect: e.target.value })}>{ASPECTS.map((v) => <option key={v}>{v}</option>)}</select><select disabled={ro} value={d.resolution} onChange={(e) => setD({ ...d, resolution: e.target.value as typeof d.resolution })}>{RESOLUTIONS.map((v) => <option key={v}>{v}</option>)}</select></div></EditTile>
         <EditTile icon="bolt" label={T('Rendering')} tone="a"><select disabled={ro} value={d.preset} onChange={(e) => setD({ ...d, preset: e.target.value as typeof d.preset })}>{PRESETS.map((v) => <option key={v} value={v}>{PRESET_LABEL[v]}</option>)}</select></EditTile>
+        <EditTile icon="image" label={T('Picture size (MP)')} tone="a">
+          <div className="dx-two-sel">
+            {mpR.start && <label className="dx-mp"><span>{T('Start size (MP)')}</span><input type="number" disabled={ro} min={mpR.start[0]} max={mpR.start[1]} step={mpR.start[2]} placeholder={String(eff.start)} value={d.start_mp ?? ''} onChange={(e) => setD({ ...d, start_mp: e.target.value === '' ? undefined : Number(e.target.value) })} /></label>}
+            <label className="dx-mp"><span>{T('Final size (MP)')}</span><input type="number" disabled={ro} min={mpR.final[0]} max={mpR.final[1]} step={mpR.final[2]} placeholder={String(eff.final)} value={d.final_mp ?? ''} onChange={(e) => setD({ ...d, final_mp: e.target.value === '' ? undefined : Number(e.target.value) })} /></label>
+          </div>
+        </EditTile>
       </section>
       {dirty && (
         <div className="dx-apply"><span>{T('You changed the settings.')}{past ? ` ${T('Scenario and clips that are already written are not changed: ask the crew in the chat to rewrite them if needed.')}` : ''}</span>
@@ -797,12 +804,18 @@ function ReviewCard({ p, ro }: { p: DirectorProject; ro: boolean }) {
   return (
     <div className="dx-page"><Working p={p} /><EpisodeHead p={p} icon="check" />
       <CastStrip p={p} names={[...new Set(shots.flatMap((s) => [...s.cast, ...(s.location ? [s.location] : [])]))]} />
-      <FinalBlock p={p} ro={ro} shots={shots} />
+      <section className="dx-screen">
+        {e?.final ? (e.final.kind === 'video' ? <video src={resultUrl(e.final)} controls preload="metadata" /> : <img src={resultUrl(e.final)} alt="" />) : <p className="dirx-muted">{T('The episode has no joined video yet.')}</p>}
+      </section>
       <section className="dx-block"><h4><Ico n="chat" />{T('Your verdict on the joined video')}</h4>
         <p className="dx-prose">{T('Watch the whole video. If something must change, tell the crew in the chat (for example: "make clip 3 darker", "leave out clip 5", "change the ending"): the clips that change go back to be generated again. If it is good, approve to finish this episode.')}</p>
         <div className="dx-btns">{e && <button className="btn" disabled={ro} onClick={() => d.reopen(e.no, 'execute')}>{T('Back to the clips')}</button>}</div></section>
       <section className="dx-group"><h4><Ico n="clip" />{T('Clips in this video')} <small>{shots.filter((s) => !s.excluded).length} / {shots.length}</small></h4>
-        <div className="dx-clips">{shots.map((s, i) => <ClipCard key={s.shot_id} s={s} n={i + 1} />)}</div></section>
+        <div className="dx-minis">{shots.map((s, i) => { const pk = s.results.find((r) => r.picked); return (
+          <figure key={s.shot_id} className={s.excluded ? 'out' : ''}>
+            {pk ? (pk.kind === 'video' ? <video src={img(pk)} muted controls preload="metadata" /> : <img src={img(pk)} alt="" loading="lazy" />) : <div className="empty" />}
+            <figcaption><b>{i + 1}</b> {s.excluded ? `(${T('Left out')}) ` : ''}{(s.prompt_ko || s.prompt_en).slice(0, 60)}</figcaption>
+          </figure>); })}</div></section>
     </div>
   );
 }

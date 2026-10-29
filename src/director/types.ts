@@ -41,6 +41,8 @@ export interface DirectorSeries {
   /** the length one clip is made at (the sweet spot is 10 s); an episode is cut into clips of this length */
   clip_seconds: number;
   aspect: string; resolution: Resolution; preset: GenPreset;
+  /** picture size overrides in megapixels. plain H3: only `final_mp` (the size each clip is rendered at). 7+1 / Kimchy: `start_mp` (the small first pass) + `final_mp` (the finished size). Unset = the preset + resolution default. */
+  start_mp?: number; final_mp?: number;
   /** the sound director's overall direction (ambience, dialogue style, mixing) and the music director's theme / style for the whole series */
   sound_direction: string; music_direction: string;
 }

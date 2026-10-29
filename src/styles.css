@@ -698,6 +698,7 @@ button.save-state.dirty { cursor: pointer; } button.save-state.dirty:hover { bac
 .dx-tile.edit select, .dx-tile.edit input { background: var(--bg); border: 1px solid var(--line2); border-radius: 8px; padding: 6px 8px; color: var(--fg); font-size: 14px; font-weight: 600; width: calc(100% - 22px); }
 .dx-tile.edit.a select, .dx-tile.edit.a input { color: color-mix(in srgb, var(--acc) 70%, #fff); } .dx-tile.edit.b select { color: var(--acc2); }
 .dx-two-sel { display: flex; gap: 6px; width: calc(100% - 22px); } .dx-two-sel select { width: 50%; padding: 6px 4px; }
+.dx-two-sel .dx-mp { display: flex; flex-direction: column; gap: 2px; flex: 1; } .dx-two-sel .dx-mp span { font-size: 10px; color: var(--muted); line-height: 1; } .dx-two-sel .dx-mp input { width: 100%; padding: 5px 4px; font-size: 13px; font-weight: 600; }
 .dx-apply { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; border-radius: 12px; background: color-mix(in srgb, var(--acc) 12%, var(--bg2)); border: 1px solid color-mix(in srgb, var(--acc) 45%, transparent); } .dx-apply span { flex: 1; min-width: 200px; font-size: 12.5px; }
 .dx-promptbox { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; padding-top: 8px; border-top: 1px dashed var(--line2); } .dx-promptbox textarea { width: 100%; background: var(--bg); border: 1px solid var(--line2); border-radius: 8px; padding: 6px 8px; color: var(--fg); font: inherit; font-size: 12px; resize: vertical; } .dx-promptbox small { color: var(--muted); }
 .dx-cast-actions .btn.small.on { border-color: var(--acc); color: var(--acc); }
@@ -721,5 +722,10 @@ button.save-state.dirty { cursor: pointer; } button.save-state.dirty:hover { bac
 .dx-voice { font-size: 10px; color: var(--acc); margin-right: 6px; font-weight: 600; }
 
 .dx-avs .dx-warn { color: #d9534f; font-size: 11px; align-self: center; }
+.dx-screen video, .dx-screen img { width: 100%; max-height: 62vh; background: #000; border-radius: 8px; display: block; }
+.dx-minis { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.dx-minis figure { margin: 0; } .dx-minis figure.out { opacity: .45; }
+.dx-minis video, .dx-minis img, .dx-minis .empty { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; background: #111; border-radius: 6px; display: block; }
+.dx-minis figcaption { font-size: 11px; line-height: 1.3; margin-top: 3px; }
 .dx-passrow { display: flex; gap: 10px; align-items: center; margin-top: 6px; }
 .dx-hideable { display: contents; } .dx-hideable.hid img { filter: blur(14px) brightness(.8); }

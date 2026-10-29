@@ -32,6 +32,9 @@ ok(kim.params.hires_upscaler === 'kimchy' && kim.params.hires === true && Math.a
 const k720 = S.turboSettings({ preset: 'h3_7plus1_kimchy', resolution: '720p', aspect: '16:9' });
 ok(k720.params.hires_kim_final_mp === 1 && k720.warnings.length === 1, '720p is below the Kimchy minimum: 1.0 MP is used and the producer is told');
 ok(S.turboSettings({ preset: 'h3_plain', resolution: '1080p', aspect: '16:9' }).params.hires === false, 'plain H3 has no 7+1');
+ok(S.turboSettings({ preset: 'h3_7plus1', resolution: '1080p', aspect: '16:9', start_mp: 0.6, final_mp: 2.5 }).params.hires_start_mp === 0.6 && S.turboSettings({ preset: 'h3_7plus1', resolution: '1080p', aspect: '16:9', start_mp: 0.6, final_mp: 2.5 }).params.hires_final_mp === 2.5, "7+1: the producer's start / final MP reach the card");
+ok(S.turboSettings({ preset: 'h3_7plus1_kimchy', resolution: '1080p', aspect: '16:9', start_mp: 0.3, final_mp: 4 }).params.hires_kim_start_mp === 0.3 && S.turboSettings({ preset: 'h3_7plus1_kimchy', resolution: '1080p', aspect: '16:9', start_mp: 0.3, final_mp: 4 }).params.hires_kim_final_mp === 4, "Kimchy: the producer's start / final MP reach the card");
+ok(JSON.stringify(S.mpRanges('h3_plain')) === JSON.stringify({ start: null, final: [0.25, 4, 0.25] }) && S.mpRanges('h3_7plus1').start !== null && S.defaultMps({ preset: 'h3_plain', resolution: '1080p', aspect: '16:9' }).start === undefined, 'mpRanges / defaultMps: plain = final only, 7+1 = start + final');
 ok(S.usableClipSeconds(10).value === 10 && S.usableClipSeconds(20).value === 15 && S.usableClipSeconds(2).note, 'clip length is kept inside what the H3 card renders');
 
 // ---- a fake crew that answers like the LLM would

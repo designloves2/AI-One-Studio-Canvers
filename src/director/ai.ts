@@ -49,7 +49,7 @@ function stateText(p: DirectorProject): string {
   const L: string[] = [];
   L.push(`STAGE: ${w.stage} (${w.status[w.stage]}), current episode ${w.episode_no} of ${s.total_episodes}`);
   L.push(`KIND OF WORK: ${s.format} (${formatOf(s.format).label})`);
-  L.push(`SERIES: title="${s.title}" genre="${s.genre}" tone="${s.tone}" language=${s.language} episodes=${s.total_episodes} episode_seconds=${s.episode_seconds} clip_seconds=${s.clip_seconds} aspect=${s.aspect} resolution=${s.resolution} preset=${s.preset}`);
+  L.push(`SERIES: title="${s.title}" genre="${s.genre}" tone="${s.tone}" language=${s.language} episodes=${s.total_episodes} episode_seconds=${s.episode_seconds} clip_seconds=${s.clip_seconds} aspect=${s.aspect} resolution=${s.resolution} preset=${s.preset}${s.start_mp !== undefined ? ` start_mp=${s.start_mp}` : ''}${s.final_mp !== undefined ? ` final_mp=${s.final_mp}` : ''}`);
   if (s.logline) L.push(`LOGLINE: ${clip(s.logline, 200)}`);
   if (s.synopsis) L.push(`SYNOPSIS: ${clip(s.synopsis, 600)}`);
   if (s.sound_direction) L.push(`SOUND DIRECTION: ${clip(s.sound_direction, 200)}`);
@@ -82,7 +82,7 @@ Reply with ONE JSON object only (no markdown). All keys are optional except "say
  "crew": "writer|director|cinematographer|art|sound|music|producer_desk"   // who is speaking; the one the job belongs to
  "say": "1-3 short sentences to the producer in ${lang}: what you did / decided / what you need",
  "intent": "work|revise|approve|ask",   // approve ONLY when the producer clearly accepts the current step (예: 승인, 좋아 진행해, OK)
- "series": { "format":"drama|film|ad|musicvideo|vlog|short","title","genre","tone","logline","synopsis","language":"ko|en","total_episodes","episode_seconds","clip_seconds","aspect":"${ASPECTS.join('|')}","resolution":"${RESOLUTIONS.join('|')}","preset":"${PRESETS.join('|')}","sound_direction","music_direction" },
+ "series": { "format":"drama|film|ad|musicvideo|vlog|short","title","genre","tone","logline","synopsis","language":"ko|en","total_episodes","episode_seconds","clip_seconds","aspect":"${ASPECTS.join('|')}","resolution":"${RESOLUTIONS.join('|')}","preset":"${PRESETS.join('|')}","start_mp","final_mp","sound_direction","music_direction" },
  "music": { "source":"upload|generate", "title","style":"genre, tempo, mood, instruments, voice","lyrics","language":"ko|en","duration_sec","bpm","sections":[{"name":"intro|verse|pre-chorus|chorus|bridge|outro","start_sec","end_sec"}],"generate":true }, // music video only: the producer can bring their own song (source upload) or ask for one (source generate); generate:true = make the song now
  "brief": { "text": "the brief in prose: concept, audience, tone, structure, look, sound, music, how it will be produced", "assumptions": ["..."] },
  "episodes": [ { "no":1, "title":"", "logline":"", "cast":["CAST names of the people and props in this episode"], "locations":["CAST names of the places of this episode"] } ],
@@ -227,6 +227,8 @@ function applySeries(p: DirectorProject, patch: Partial<DirectorSeries>, notes: 
   if (patch.aspect && ASPECTS.includes(patch.aspect)) s.aspect = patch.aspect;
   if (patch.resolution && (RESOLUTIONS as string[]).includes(patch.resolution)) s.resolution = patch.resolution;
   if (patch.preset && (PRESETS as string[]).includes(patch.preset)) s.preset = patch.preset;
+  if (patch.start_mp !== undefined && num(patch.start_mp) > 0) s.start_mp = Math.round(num(patch.start_mp) * 100) / 100;
+  if (patch.final_mp !== undefined && num(patch.final_mp) > 0) s.final_mp = Math.round(num(patch.final_mp) * 100) / 100;
 }
 
 const refKey = (n: string) => n.trim().toLowerCase();

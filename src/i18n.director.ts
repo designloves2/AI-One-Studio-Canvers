@@ -57,7 +57,7 @@ export const KO_DIRECTOR: Record<string, string> = {
   'Before it starts you will be asked once. Generating uses the GPU and takes time; it stops at the first failure.': '시작하기 전에 한 번 물어봅니다. 생성은 GPU를 쓰고 시간이 걸리며, 처음 실패하면 멈춥니다.',
   'Open the episode in the Canvas to run it there, or take it as a file. When you have results, press "Sync results".': '캔버스에서 열어 거기서 실행하거나 파일로 받으세요. 결과가 생기면 "결과 가져오기"를 누르세요.',
   // brief
-  'Per episode': '편당 길이', 'Total length': '전체 분량', 'Clips per episode': '편당 클립', 'Aspect · resolution': '화면 비율 · 해상도', Rendering: '생성 방식', Concept: '컨셉',
+  'Per episode': '편당 길이', 'Total length': '전체 분량', 'Clips per episode': '편당 클립', 'Aspect · resolution': '화면 비율 · 해상도', Rendering: '생성 방식', 'Picture size (MP)': '그림 크기 (MP)', Concept: '컨셉',
   'How one episode is cut': '한 편은 이렇게 나눕니다', 'Every episode is written as clips of this length, so each clip renders at the length the model handles best.': '모든 편은 이 길이의 클립으로 씁니다. 클립마다 모델이 가장 안정적으로 만드는 길이가 됩니다.',
   'I decided these for you': '제가 이렇게 정했습니다', 'Tell me in the chat if any of them is wrong.': '틀린 것이 있으면 채팅으로 말씀해 주세요.',
   Title: '제목', Genre: '장르', Tone: '분위기', Picture: '화면', Sound: '음향', Music: '음악', Dialogue: '대사',
