@@ -71,6 +71,7 @@ export const KO_DIRECTOR: Record<string, string> = {
   // side menu
   'Director projects': '디렉터 프로젝트', 'Start a new project by writing in the chat. To continue an earlier one, name it: "…1편에 이어서 2편을 만들자".': '새 프로젝트는 채팅창에 쓰면 시작됩니다. 이전 작품에 이어 만들려면 이름을 말하세요: "…1편에 이어서 2편을 만들자".',
   // song step / finished video
+  'Narration': '내레이션',
   'Registered as an asset': '에셋으로 등록됨', 'Register the song as an asset': '노래를 에셋으로 등록',
   'Song': '노래',
   'Where does the song come from?': '노래는 어디서 가져올까요?',

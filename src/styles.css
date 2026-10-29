@@ -715,3 +715,7 @@ button.save-state.dirty { cursor: pointer; } button.save-state.dirty:hover { bac
 .dx-take.on { border-color: var(--acc); } .dx-take span { font-size: 11px; color: var(--muted); min-width: 84px; } .dx-take audio { height: 30px; flex: 1 1 200px; min-width: 160px; } .dx-take i { font-style: normal; color: var(--acc); font-size: 11px; }
 .dx-songbar { display: flex; height: 26px; border-radius: 6px; overflow: hidden; border: 1px solid var(--line2); } .dx-songbar span { font-size: 10px; color: #fff; display: flex; align-items: center; justify-content: center; overflow: hidden; white-space: nowrap; border-right: 1px solid rgba(0,0,0,.25); box-sizing: border-box; }
 .dx-songbar.clips { height: 20px; margin-top: 4px; } .dx-songbar.clips span { background: var(--bg3); color: var(--muted); }
+
+.dx-clipprog { display: flex; flex-direction: column; gap: 3px; } .dx-clipprog > div { height: 5px; border-radius: 3px; background: var(--bg3); overflow: hidden; } .dx-clipprog i { display: block; height: 100%; background: var(--acc); transition: width .3s; } .dx-clipprog span { font-size: 10px; color: var(--muted); }
+
+.dx-voice { font-size: 10px; color: var(--acc); margin-right: 6px; font-weight: 600; }

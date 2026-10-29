@@ -6,6 +6,7 @@ import { viewUrl } from '../backend/comfy';
 import { getGallery, type GalleryItem } from '../backend/studio';
 import { listAssets, libThumb, type LibAsset } from '../backend/assetlib';
 import { useSettings, type LlmSettings } from '../store/settings';
+import { useGraph } from '../store/graph';
 import { BACKENDS } from '../backend/llm';
 import { Llm } from '../panels/SettingsPanel';
 import { resultUrl } from './media';
@@ -529,14 +530,16 @@ const STATUS_KO: Record<string, string> = { draft: 'draft', ready: 'ready', appr
 function ClipCard({ s, n, big, gen, sel, onSel, onAgain, ro }: { s: DirectorShot; n: number; big?: boolean; gen?: boolean; sel?: boolean; onSel?: () => void; onAgain?: () => void; ro?: boolean }) {
   const T = useT(); const proj = useDirector((x) => x.project); const edit = useDirector((x) => x.edit);
   const pick = s.results.find((r) => r.picked);
+  const live = useGraph((g) => { const l = proj?.canvas_links.find((c) => c.shots.some((q) => q.shot_id === s.shot_id)); const id = l?.shots.find((q) => q.shot_id === s.shot_id)?.node_ids[1]; return id && g.canvasFile === l?.canvas_file ? g.runtime[id] : undefined; });
   const setSeed = (v: number | undefined) => edit((x) => { const q = x.shots.find((z) => z.shot_id === s.shot_id); if (q) q.seed = v; });
   return (
     <article className={`dx-clip st-${s.status}${sel ? ' sel' : ''}`}>
       <header>{onSel && <input type="checkbox" className="dx-clip-check" checked={!!sel} onChange={onSel} title={T('Select this clip')} />}<span className="num">{n}</span><span className="pill">{s.duration_sec}s</span>{s.camera && <span className="pill cam">{s.camera}</span>}<span className={`stat s-${s.status}`}>{T(STATUS_KO[s.status])}</span></header>
+      {s.status === 'generating' && live?.status === 'running' && <div className="dx-clipprog"><div><i style={{ width: `${Math.max(2, Math.min(100, Math.round(live.pct ?? 0)))}%` }} /></div><span>{Math.round(live.pct ?? 0)}%{live.label ? ` · ${live.label}` : ''}</span></div>}
       <p className="pic">{s.prompt_ko || s.prompt_en}</p>
       {s.prompt_ko && <p className="en">{s.prompt_en}</p>}
       {(s.dialogue || s.sound || s.music) && <ul className="voices">
-        {s.dialogue && <li className="dlg"><Ico n="chat" /><span>{s.dialogue}</span></li>}
+        {s.dialogue && <li className="dlg" title={T(proj?.series.format === 'vlog' ? 'Narration' : 'Dialogue')}><Ico n="chat" />{proj?.series.format === 'vlog' && <b className="dx-voice">{T('Narration')}</b>}<span>{s.dialogue}</span></li>}
         {s.sound && <li className="snd"><Ico n="sound" /><span>{s.sound}</span></li>}
         {s.music && <li className="mus"><Ico n="music" /><span>{s.music}</span></li>}</ul>}
       {(s.cast.length > 0 || s.location) && <footer>{s.cast.map((c) => { const r = proj?.references.find((x) => x.name.toLowerCase() === c.toLowerCase()); return <i key={c}>{r ? <Avatar r={r} size={18} /> : <Ico n="user" />}{c}</i>; })}{s.location && <i className="loc">{(() => { const r = proj?.references.find((x) => x.name.toLowerCase() === s.location.toLowerCase()); return r ? <Avatar r={r} size={18} /> : <Ico n="pin" />; })()}{s.location}</i>}</footer>}
