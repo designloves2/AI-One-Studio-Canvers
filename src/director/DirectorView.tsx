@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useDirector } from '../store/director';
 import { useT } from '../i18n';
-import { notify } from '../ui/dialog';
+import { askText, notify } from '../ui/dialog';
 import { viewUrl } from '../backend/comfy';
 import { getGallery, type GalleryItem } from '../backend/studio';
 import { listAssets, libThumb, type LibAsset } from '../backend/assetlib';
@@ -11,7 +11,7 @@ import { BACKENDS } from '../backend/llm';
 import { Llm } from '../panels/SettingsPanel';
 import { resultUrl } from './media';
 import { CREW_LABEL } from './ai';
-import { episodeByNo, newAsset, shotsOfEpisode, syncShotAssets } from './model';
+import { episodeByNo, newAsset, newReference, shotsOfEpisode, syncShotAssets } from './model';
 import { newSeed } from './execution';
 import { applyMusicPatch, defaultSections, newMusic, pickedAudio, songMap } from './music';
 import { finishEpisode, generateSong, pickSong, registerSong, syncFinalFromCanvas, uploadSong } from './musicAction';
@@ -364,7 +364,7 @@ function CastPicker({ refId, onClose }: { refId: string; onClose: () => void }) 
 
 // ---- casting
 const KIND: Record<string, { icon: keyof typeof ICONS; label: string; cls: string }> = { character: { icon: 'user', label: 'Actors', cls: 'k-char' }, location: { icon: 'pin', label: 'Locations', cls: 'k-loc' }, prop: { icon: 'box', label: 'Props', cls: 'k-prop' } };
-function CastCard({ r, onPick, onMake, onRegister, onChoose, onSavePrompt, ro, busy }: { r: DirectorReference; onPick: () => void; onMake: () => void; onRegister: () => void; onChoose: (id: string) => void; onSavePrompt: (lang: 'en' | 'ko', text: string) => void; ro: boolean; busy: boolean }) {
+function CastCard({ r, onPick, onMake, onRegister, onChoose, onSavePrompt, onVariant, ro, busy }: { r: DirectorReference; onVariant?: () => void; onPick: () => void; onMake: () => void; onRegister: () => void; onChoose: (id: string) => void; onSavePrompt: (lang: 'en' | 'ko', text: string) => void; ro: boolean; busy: boolean }) {
   const T = useT(); const pick = r.results.find((x) => x.picked); const k = KIND[r.kind];
   const fmtOfProject = useDirector((x) => x.project?.series.format);
   const [showPrompt, setShowPrompt] = useState(false); const [lang, setLang] = useState<'en' | 'ko'>('ko'); const [draft, setDraft] = useState<string | null>(null);
@@ -379,6 +379,7 @@ function CastCard({ r, onPick, onMake, onRegister, onChoose, onSavePrompt, ro, b
         <div className="dx-cast-actions">
           <button className="btn small" disabled={ro || busy} onClick={onMake}>{pick ? `↻ ${T('Make again')}` : T('Make this one')}</button>
           <button className="btn small" disabled={ro} onClick={onPick}>{pick ? T('Change image') : T('Choose from Library / Gallery')}</button>
+          {onVariant && <button className="btn small" disabled={ro || busy} title={T('The same one with another costume, hair or look (a new entry)')} onClick={onVariant}>+ {T('New look')}</button>}
           {pick && !r.asset_id && <button className="btn small" disabled={ro || busy} onClick={onRegister}>{T('Register as asset')}</button>}
           <button className={`btn small${showPrompt ? ' on' : ''}`} onClick={() => setShowPrompt(!showPrompt)}>{T('Prompt')}</button>
         </div>
@@ -409,6 +410,11 @@ function CastGrid({ p, ro }: { p: DirectorProject; ro: boolean }) {
   const register = (ids?: string[]) => guard(async () => { const n = await registerCast({ refIds: ids }); await notify(n ? `${T('Registered')}: ${n}` : T('Nothing to register.')); });
   const choose = (r: DirectorReference, resultId: string) => edit((x) => { const q = x.references.find((z) => z.ref_id === r.ref_id)!; q.results.forEach((z) => { z.picked = z.result_id === resultId; }); q.asset_id = undefined; });
   const regMode = p.settings.cast_register ?? 'auto';
+  // a new look (costume, hair, age, season) of a cast entry: a new entry that says it is a variant of the first one; its prompt is the base prompt + the change
+  const variant = async (r: DirectorReference) => {
+    const what = (await askText(`${T('Describe the new look (costume, hair, age, season …)')}\n${r.name}`))?.trim(); if (!what) return;
+    edit((x) => { const b = x.references.find((q) => q.ref_id === r.ref_id); if (!b) return; const v = newReference(x, b.kind, `${b.name} (${what.slice(0, 14)})`, `${b.description} — ${what}`, `${b.prompt_en}, ${what}`); v.variant_of = b.name; v.seed = undefined; });
+  };
   return (
     <div className="dx-page">
       <Working p={p} />
@@ -433,7 +439,7 @@ function CastGrid({ p, ro }: { p: DirectorProject; ro: boolean }) {
       {(['character', 'location', 'prop'] as const).map((kind) => {
         const items = live.filter((r) => r.kind === kind); if (!items.length) return null;
         return <section key={kind} className="dx-group"><h4 className={KIND[kind].cls}><Ico n={KIND[kind].icon} />{T(kind === 'character' ? vocabOf(p.series.format).characters : kind === 'location' ? vocabOf(p.series.format).locations : vocabOf(p.series.format).props)} <small>{items.length}</small></h4>
-          <div className="dx-castgrid">{items.map((r) => <CastCard key={r.ref_id} r={r} ro={ro} busy={busy} onPick={() => setPicking(r.ref_id)} onMake={() => void makeOne(r)} onRegister={() => void register([r.ref_id])} onChoose={(id) => choose(r, id)} onSavePrompt={(lang, text) => edit((x) => { const q = x.references.find((z) => z.ref_id === r.ref_id); if (q) { if (lang === 'en') q.prompt_en = text; else q.prompt_ko = text; } })} />)}</div></section>;
+          <div className="dx-castgrid">{items.map((r) => <CastCard key={r.ref_id} r={r} ro={ro} busy={busy} onVariant={r.kind !== 'prop' && !r.variant_of ? () => void variant(r) : undefined} onPick={() => setPicking(r.ref_id)} onMake={() => void makeOne(r)} onRegister={() => void register([r.ref_id])} onChoose={(id) => choose(r, id)} onSavePrompt={(lang, text) => edit((x) => { const q = x.references.find((z) => z.ref_id === r.ref_id); if (q) { if (lang === 'en') q.prompt_en = text; else q.prompt_ko = text; } })} />)}</div></section>;
       })}
       {picking && <CastPicker refId={picking} onClose={() => setPicking(null)} />}
     </div>
