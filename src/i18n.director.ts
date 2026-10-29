@@ -128,4 +128,9 @@ export const KO_DIRECTOR: Record<string, string> = {
   'Join the clips': '클립 합치기',
   'No finished video came back.': '완성 영상이 돌아오지 않았습니다.',
   'There is no song yet: the clips are joined without it.': '아직 노래가 없어 노래 없이 합쳐집니다.',
+  // cast image viewer
+  'Click to enlarge': '클릭하면 크게 보기',
+  'Previous cast': '이전 캐스팅',
+  'Next cast': '다음 캐스팅',
+  'Close viewer': '닫기',
 };

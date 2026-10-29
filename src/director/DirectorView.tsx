@@ -22,6 +22,7 @@ import { ASPECTS, applySeriesPatch } from './ai';
 import { FORMAT_IDS, FORMATS, vocabOf } from './formats';
 import { blockers, hasMusicStep, EPISODE_STAGES, epStageIndex, episodeBlockers, episodeState, GLOBAL_STAGES, productionOpen, stageIndex } from './workflow';
 import { localizeMsg } from './localize';
+import { attachPanZoom } from '../ui/panZoom';
 import { castEngines, extraAspects, makeVersionCanvases, versionLinks, downloadEpisodePackages, generateBatch, generateCast, linkOfCasting, linkOfEpisode, openLinkedCanvas, registerCast, syncCastFromCanvas, syncResultsFromCanvas } from './canvasAction';
 import type { DirectorProject, DirectorReference, DirectorShot, ResultRef, StageId } from './types';
 
@@ -372,15 +373,50 @@ function CastPicker({ refId, onClose }: { refId: string; onClose: () => void }) 
 }
 
 // ---- casting
+/** Full-size look at a cast image (opened by clicking a generated image on a casting card):
+ *  wheel = zoom · left-drag = pan · double-click = fit · ←/→ = previous / next cast card · Esc = close. */
+function CastViewer({ items, index, onIndex, onClose }: { items: { name: string; url: string }[]; index: number; onIndex: (i: number) => void; onClose: () => void }) {
+  const T = useT();
+  const host = useRef<HTMLDivElement>(null);
+  const cur = items[index];
+  useEffect(() => {
+    if (!host.current) return;
+    attachPanZoom(host.current, () => host.current!.querySelectorAll<HTMLElement>('img'));
+  }, []);
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+      else if (e.key === 'ArrowLeft') onIndex((index - 1 + items.length) % items.length);
+      else if (e.key === 'ArrowRight') onIndex((index + 1) % items.length);
+    };
+    window.addEventListener('keydown', k);
+    return () => window.removeEventListener('keydown', k);
+  }, [index, items.length, onIndex, onClose]);
+  if (!cur) return null;
+  return (
+    <div className="lightbox" onClick={onClose}>
+      <div ref={host} className="lightbox-host" onClick={(e) => e.stopPropagation()}>
+        <img key={cur.url} src={cur.url} alt={cur.name} />
+      </div>
+      <div className="lightbox-bar" onClick={(e) => e.stopPropagation()}>
+        <span className="muted">{cur.name} · {index + 1}/{items.length}</span>
+        <button className="btn" title={T('Previous cast')} disabled={items.length < 2} onClick={() => onIndex((index - 1 + items.length) % items.length)}>◀</button>
+        <button className="btn" title={T('Next cast')} disabled={items.length < 2} onClick={() => onIndex((index + 1) % items.length)}>▶</button>
+        <button className="btn" title={T('Close viewer')} onClick={onClose}>✕</button>
+      </div>
+    </div>
+  );
+}
+
 const KIND: Record<string, { icon: keyof typeof ICONS; label: string; cls: string }> = { character: { icon: 'user', label: 'Actors', cls: 'k-char' }, location: { icon: 'pin', label: 'Locations', cls: 'k-loc' }, prop: { icon: 'box', label: 'Props', cls: 'k-prop' } };
-function CastCard({ r, onPick, onMake, onRegister, onChoose, onSavePrompt, onVariant, ro, busy }: { r: DirectorReference; onVariant?: () => void; onPick: () => void; onMake: () => void; onRegister: () => void; onChoose: (id: string) => void; onSavePrompt: (text: string) => void; ro: boolean; busy: boolean }) {
+function CastCard({ r, onPick, onMake, onRegister, onChoose, onSavePrompt, onVariant, onOpenImage, ro, busy }: { r: DirectorReference; onVariant?: () => void; onPick: () => void; onMake: () => void; onRegister: () => void; onChoose: (id: string) => void; onSavePrompt: (text: string) => void; onOpenImage?: () => void; ro: boolean; busy: boolean }) {
   const T = useT(); const pick = r.results.find((x) => x.picked); const k = KIND[r.kind];
   const fmtOfProject = useDirector((x) => x.project?.series.format);
   const [showPrompt, setShowPrompt] = useState(false); const [draft, setDraft] = useState<string | null>(null);
   const shown = r.description;
   return (
     <article className={`dx-cast ${k.cls}`}>
-      <div className="dx-cast-img">{pick ? <img src={img(pick)} alt={r.name} loading="lazy" /> : <div className="empty"><Ico n="image" /><span>{T('No image yet')}</span></div>}
+      <div className="dx-cast-img">{pick ? <img src={img(pick)} alt={r.name} loading="lazy" title={onOpenImage ? T('Click to enlarge') : undefined} onClick={onOpenImage} /> : <div className="empty"><Ico n="image" /><span>{T('No image yet')}</span></div>}
         <span className="badge"><Ico n={k.icon} />{T(r.kind === 'character' ? vocabOf(fmtOfProject).character : r.kind === 'location' ? vocabOf(fmtOfProject).location : vocabOf(fmtOfProject).prop)}</span>
         {r.asset_id && <span className="asset"><Ico n="check" />{T('Asset')}</span>}</div>
       <div className="dx-cast-body"><b>{r.name}</b>{r.variant_of && <em><Ico n="link" />{T('look of')} {r.variant_of}</em>}<p>{r.description}</p>
@@ -403,13 +439,16 @@ function CastCard({ r, onPick, onMake, onRegister, onChoose, onSavePrompt, onVar
   );
 }
 function CastGrid({ p, ro }: { p: DirectorProject; ro: boolean }) {
-  const T = useT(); const edit = useDirector((x) => x.edit); const [busy, setBusy] = useState(false); const [picking, setPicking] = useState<string | null>(null);
+  const T = useT(); const edit = useDirector((x) => x.edit); const [busy, setBusy] = useState(false); const [picking, setPicking] = useState<string | null>(null); const [viewing, setViewing] = useState<string | null>(null);
   const live = p.references.filter((r) => r.status !== 'rejected');
   const made = live.filter((r) => r.results.some((x) => x.picked)).length;
   const link = linkOfCasting(p);
   const engines = castEngines();
   const engine = p.settings.cast_engine && engines.some((e) => e.id === p.settings.cast_engine) ? p.settings.cast_engine : engines[0]?.id;
   const toRegister = live.filter((r) => r.results.some((x) => x.picked) && !r.asset_id);
+  const madeRefs = live.filter((r) => r.results.some((x) => x.picked));
+  const viewItems = madeRefs.map((r) => ({ name: r.name, url: img(r.results.find((x) => x.picked)) }));
+  const viewIndex = viewing ? madeRefs.findIndex((r) => r.ref_id === viewing) : -1;
   const guard = async (f: () => Promise<void>) => { setBusy(true); try { await f(); } catch (e) { await notify((e as Error).message); } finally { setBusy(false); } };
   const report = async (r: Awaited<ReturnType<typeof generateCast>>) => { if (r.failed) await notify(`${T('Failed')}: ${r.failed}`); else if (!r.cancelled && !r.made) await notify(T('Every cast entry already has an image.')); };
   const makeAll = () => guard(async () => report(await generateCast({ engine })));
@@ -447,9 +486,10 @@ function CastGrid({ p, ro }: { p: DirectorProject; ro: boolean }) {
       {(['character', 'location', 'prop'] as const).map((kind) => {
         const items = live.filter((r) => r.kind === kind); if (!items.length) return null;
         return <section key={kind} className="dx-group"><h4 className={KIND[kind].cls}><Ico n={KIND[kind].icon} />{T(kind === 'character' ? vocabOf(p.series.format).characters : kind === 'location' ? vocabOf(p.series.format).locations : vocabOf(p.series.format).props)} <small>{items.length}</small></h4>
-          <div className="dx-castgrid">{items.map((r) => <CastCard key={r.ref_id} r={r} ro={ro} busy={busy} onVariant={r.kind !== 'prop' && !r.variant_of ? () => void variant(r) : undefined} onPick={() => setPicking(r.ref_id)} onMake={() => void makeOne(r)} onRegister={() => void register([r.ref_id])} onChoose={(id) => choose(r, id)} onSavePrompt={(text) => edit((x) => { const q = x.references.find((z) => z.ref_id === r.ref_id); if (q) q.description = text.trim(); })} />)}</div></section>;
+          <div className="dx-castgrid">{items.map((r) => <CastCard key={r.ref_id} r={r} ro={ro} busy={busy} onVariant={r.kind !== 'prop' && !r.variant_of ? () => void variant(r) : undefined} onPick={() => setPicking(r.ref_id)} onMake={() => void makeOne(r)} onRegister={() => void register([r.ref_id])} onChoose={(id) => choose(r, id)} onSavePrompt={(text) => edit((x) => { const q = x.references.find((z) => z.ref_id === r.ref_id); if (q) q.description = text.trim(); })} onOpenImage={r.results.some((x) => x.picked) ? () => setViewing(r.ref_id) : undefined} />)}</div></section>;
       })}
       {picking && <CastPicker refId={picking} onClose={() => setPicking(null)} />}
+      {viewIndex >= 0 && <CastViewer items={viewItems} index={viewIndex} onIndex={(i) => setViewing(madeRefs[i]?.ref_id ?? null)} onClose={() => setViewing(null)} />}
     </div>
   );
 }
