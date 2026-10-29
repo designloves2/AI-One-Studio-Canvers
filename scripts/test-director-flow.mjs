@@ -15,6 +15,7 @@ const W = await bundle('src/director/workflow.ts', 'workflow.mjs');
 const AI = await bundle('src/director/ai.ts', 'ai.mjs');
 const C = await bundle('src/director/compose.ts', 'compose.mjs');
 const D = await bundle('src/director/demoMedia.ts', 'demomedia.mjs');
+const FM = await bundle('src/director/formats.ts', 'formats.mjs');
 
 let fails = 0;
 const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m); } else console.log('ok  ', m); };
@@ -166,12 +167,12 @@ const v1 = { app: 'ai-one-studio-canvers', kind: 'director-project', schema_vers
   scenes: [{ scene_id: 'sc_aaaaaaaaaaaa', order: 1, title: 's', summary: '', status: 'draft', shot_ids: ['sh_aaaaaaaaaaaa'] }], shots: [{ shot_id: 'sh_aaaaaaaaaaaa', scene_id: 'sc_aaaaaaaaaaaa', order: 1, status: 'approved', duration_sec: 4, prompt_en: 'x', prompt_ko: '', camera: '', notes: '', asset_ids: [], results: [] }],
   assets: [], canvas_links: [], settings: { execution_mode: 'manual' } };
 const mig = M.loadDirectorProject(v1);
-ok(mig.migratedFrom === 1 && mig.project.schema_version === 3 && mig.project.series.episode_seconds === 45 && mig.project.series.aspect === '9:16' && mig.project.episodes.length === 1 && mig.project.scenes[0].episode_id === mig.project.episodes[0].episode_id, 'a first-version project becomes episode 1 of a series, settings kept');
+ok(mig.migratedFrom === 1 && mig.project.schema_version === 4 && mig.project.series.format === 'drama' && mig.project.series.episode_seconds === 45 && mig.project.series.aspect === '9:16' && mig.project.episodes.length === 1 && mig.project.scenes[0].episode_id === mig.project.episodes[0].episode_id, 'a first-version project becomes episode 1 of a series, settings kept');
 ok(mig.project.shots[0].cast.length === 0 && mig.project.workflow.stage === 'episode' && !('story' in mig.project) && mig.project.episodes[0].stage === 'episode' && mig.project.episodes[0].stage_status === 'review_required', 'its clips get the new fields and episode 1 opens at the episode step, waiting for review');
 // schema 2 (one place for the whole series) -> 3 (one place per episode)
 const v2 = M.newDirectorProject('V2'); v2.schema_version = 2; for (let i = 1; i <= 3; i++) M.newEpisode(v2, i); const old2 = JSON.parse(JSON.stringify(v2)); old2.workflow.stage = 'execute'; old2.workflow.status.execute = 'review_required'; old2.workflow.episode_no = 2; old2.episodes.forEach((e) => { delete e.stage; delete e.stage_status; });
 const m2 = M.loadDirectorProject(old2).project;
-ok(m2.schema_version === 3 && m2.workflow.stage === 'episode' && m2.episodes.map((e) => e.stage).join() === 'done,execute,idle' && m2.episodes[1].stage_status === 'review_required', 'a schema-2 project: episodes before the current one are done, the current one keeps its step, later ones are not started');
+ok(m2.schema_version === 4 && m2.series.format === 'drama' && m2.workflow.stage === 'episode' && m2.episodes.map((e) => e.stage).join() === 'done,execute,idle' && m2.episodes[1].stage_status === 'review_required', 'a schema-2 project: episodes before the current one are done, the current one keeps its step, later ones are not started');
 
 
 // ---- the brief settings that can be changed on the result screen use the crew's checks
@@ -207,6 +208,33 @@ ok(m2.schema_version === 3 && m2.workflow.stage === 'episode' && m2.episodes.map
   ok(a.data_url !== b.data_url && a.result_id !== b.result_id && a.source === 'demo' && a.picked && svg(a.data_url).includes('Krea 2') && svg(b.data_url).includes('seed 2'), 'a new seed is a different picture; the model and seed are written on it; results are marked demo');
   const list = [a]; D.pushPicked(list, b); ok(list.length === 2 && list.filter((x) => x.picked).length === 1 && list[1].picked, 'a new result becomes the picked one and the old one stays as a candidate');
   const clip = D.demoClipResult('2-3', { shot_id: 'sh_aaaaaaaaaaaa', duration_sec: 10, prompt_en: 'x' }, 7, '9:16', 't'); ok(dim(clip) === '360x640' && svg(clip.data_url).includes('Clip 2-3') && clip.kind === 'image', 'a clip result is a labelled card in the series aspect');
+}
+
+
+// ---- the kind of work: drama / film / ad / music video / vlog / short-form
+{
+  const d = (t) => FM.detectFormat(t);
+  ok(d('막장 드라마 하나 만들자 30부작') === 'drama' && d('프리미엄 아웃도어 브랜드의 30초 광고를 만들어 줘') === 'ad' && d('이 노래로 뮤직비디오 만들어줘') === 'musicvideo' && d('제주 여행 브이로그') === 'vlog' && d('릴스용 15초 영상') === 'short' && d('단편영화 하나') === 'film', 'the producer\'s words point to the kind of work (Korean and English words)');
+  ok(d('새로운 걸 만들자') === null && d('뮤직비디오 같은 광고') === 'musicvideo', 'no hint = no kind (the crew decides); the most specific word wins');
+  ok(FM.FORMAT_IDS.every((f) => FM.FORMATS[f].guide.length > 40 && FM.vocabOf(f).cast && FM.vocabOf(f).prop) && FM.vocabOf(undefined).cast === 'Casting', 'every kind has words and a guide; an unknown kind falls back to the drama words');
+  ok(!FM.FORMATS.ad.multi && !FM.FORMATS.musicvideo.multi && FM.FORMATS.drama.multi && FM.FORMATS.ad.defaults.episode_seconds === 30 && FM.FORMATS.short.defaults.aspect === '9:16', 'an ad / music video has one episode; a short is vertical');
+  const q = M.newDirectorProject('Ad'); ok(q.series.format === 'drama', 'a new project starts as a drama (the crew changes it in the brief)');
+  q.series.format = 'ad'; q.series.total_episodes = 1;
+  const sys = AI.buildSystem(q);
+  ok(sys.includes('THIS WORK IS A AD / COMMERCIAL') && sys.includes('end card') && sys.includes('KIND OF WORK: ad'), 'the crew is told what kind of work this is and what matters for it');
+  q.chat.push({ id: 'ms_aaaaaaaaaaaa', role: 'user', text: '프리미엄 아웃도어 브랜드의 30초 광고를 만들어 줘', at: '', stage: 'intake' });
+  const bi = AI.kickoffInstruction(q, 'brief'); ok(bi.includes('musicvideo') && bi.includes('vlog') && bi.includes('series.format'), 'for the brief the crew sees every kind and chooses one');
+  const si = AI.kickoffInstruction(q, 'series'); ok(/EXACTLY 1 entry/.test(si) && !/cliffhanger/.test(si), 'a one-episode kind asks for the outline of the one piece (no series arc, no cliffhangers)');
+  const ri = AI.kickoffInstruction(q, 'references'); ok(/Models & product/.test(ri) && /the product is a prop entry/.test(ri), 'the casting instruction for an ad is about models and the product');
+  q.series.format = 'drama'; q.series.total_episodes = 5; ok(/cliffhanger/.test(AI.kickoffInstruction(q, 'series')), 'a drama still gets the series-arc instruction');
+  // the crew forgot the kind: it is read from the producer's own words
+  const p3 = M.newDirectorProject('X'); M.addChat(p3, 'user', '30초 광고 만들자'); p3.workflow.stage = 'brief';
+  const llmNoFormat = async () => JSON.stringify({ say: 'ok', series: { title: 'T', total_episodes: 1, episode_seconds: 30, clip_seconds: 6, aspect: '16:9' }, brief: { text: 'b' } });
+  await AI.directorTurn(p3, AI.kickoffInstruction(p3, 'brief'), llmNoFormat, { kickoff: 'brief' });
+  ok(p3.series.format === 'ad' && p3.series.episode_seconds === 30 && p3.series.clip_seconds === 6, 'a brief reply without a kind gets it from the producer\'s words');
+  const p4 = M.newDirectorProject('Y'); AI.applyReply(p4, { say: '', series: { format: 'musicvideo' } }); AI.applyReply(p4, { say: '', series: { format: 'nonsense' } });
+  ok(p4.series.format === 'musicvideo', 'only a known kind is accepted');
+  ok(M.validateDirectorProject(JSON.parse(JSON.stringify(p4))).errors.length === 0, 'the project with a kind is valid');
 }
 
 fs.rmSync(tmp, { recursive: true, force: true });

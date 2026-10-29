@@ -73,7 +73,7 @@ export function summarizePrevious(q: DirectorProject, maxChars = 14000): string 
  */
 export function inheritFrom(p: DirectorProject, q: DirectorProject, file: string): { cast: number; assets: number } {
   const s = q.series;
-  p.series = { ...p.series, language: s.language, genre: s.genre, tone: s.tone, clip_seconds: s.clip_seconds, episode_seconds: s.episode_seconds, aspect: s.aspect, resolution: s.resolution, preset: s.preset, sound_direction: s.sound_direction, music_direction: s.music_direction };
+  p.series = { ...p.series, format: s.format, language: s.language, genre: s.genre, tone: s.tone, clip_seconds: s.clip_seconds, episode_seconds: s.episode_seconds, aspect: s.aspect, resolution: s.resolution, preset: s.preset, sound_direction: s.sound_direction, music_direction: s.music_direction };
   const assetMap = new Map<string, string>();
   for (const a of q.assets) {
     const id = newId('as'); assetMap.set(a.asset_id, id);

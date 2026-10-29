@@ -87,6 +87,7 @@ Phase 2~4에서 만든 "양식 편집기" 화면은 요구와 달라 **채팅 �
 - 화면: 위 단계 줄을 누르면 그 단계를 봄(`store.view`), 회차 줄(`store.focus`, 여러 편 체크 `selEpisodes`), 보는 단계가 현재 단계가 아니면 "이 단계로 되돌리기".
 - 시드: 클립 `seed`(없으면 무작위), 어댑터가 생성 카드 시드를 따라가되 캔버스에서 직접 바꾼 시드는 유지(`link.seed_sent`). 선택 클립·편 배치: `execution.planBatch/reseed/requeueClips`, 앱 쪽 `canvasAction.generateBatch`(확인 한 번, 편 순서대로, 실패 시 멈춤/건너뜀, 진행 표시 `store.batch`).
 - 디렉터 전용 LLM: `settings.director` + `Llm target="director"`(설정 화면과 채팅 입력창 ⚙ 버튼의 모델 설정 창).
+- 작품 종류(스키마 4, `formats.ts`, 작업팀 지침·용어·1편짜리 자동 시작). 시험 266개. 남은 종류별 기능: 광고 비율별 버전, 뮤직비디오 음악 단계(업로드+AI 생성 병행), 브이로그 내레이션.
 - 브리프 설정 드롭다운(`BriefTiles`, `applySeriesPatch`), 캐스팅 프롬프트 한/영(`ref.prompt_ko`), 전 단계 데모(`demoMedia.ts`, `canvasAction`의 demo 분기, `(demo) ` 링크). 시험 252개.
 - 캐스팅 모델·일괄/개별 생성·등록: `settings.cast_engine`/`cast_register`, `ref.seed`, `buildCastingCanvas`의 `engineId`·`engine_sent`·`seed_sent`, `canvasAction.generateCast({refIds, engine, newSeed})`·`registerCast({refIds})`. 시험 240개(어댑터 모델/시드 규칙 포함).
 - 결과 우클릭 에셋 등록(Director 밖 공통 기능): `src/ui/RegisterAsset.tsx` + `AssetView` 연결. 중앙 팝업·@태그·카테고리, 같은 이미지가 이미 있으면 그 이름을 알림.

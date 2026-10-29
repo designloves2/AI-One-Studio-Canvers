@@ -15,6 +15,10 @@ export const KO_DIRECTOR: Record<string, string> = {
   // clip status, casting groups, meters
   draft: '초안', ready: '준비됨', queued: '대기', generating: '생성 중', review: '검토', done: '완료',
   Actors: '배우', Locations: '장소', Props: '소품', 'images ready': '이미지 완료', 'clips generated': '클립 생성됨',
+  // kinds of work
+  'Kind of work': '작품 종류', 'Drama series': '드라마 시리즈', 'Short film': '단편 영화', 'Ad / commercial': '광고', 'Music video': '뮤직비디오', Vlog: '브이로그', 'Short-form video': '숏폼 영상',
+  'Models & product': '모델 · 제품', Storyboard: '스토리보드', Ad: '광고', Model: '모델', Product: '제품', Models: '모델', 'Products & props': '제품 · 소품', 'Artists & looks': '아티스트 · 의상', Artist: '아티스트', Artists: '아티스트',
+  'Prop / outfit': '소품 · 의상', 'Props & outfits': '소품 · 의상', 'Host & places': '진행자 · 장소', Outline: '구성안', Host: '진행자', Hosts: '진행자', Place: '장소', Places: '장소', Person: '인물', People: '인물', Short: '숏폼', Film: '영화',
   // brief settings you can change, prompt view, demo
   'You changed the settings.': '설정을 바꿨습니다.', Apply: '적용', Undo: '되돌리기', Prompt: '프롬프트',
   'Scenario and clips that are already written are not changed: ask the crew in the chat to rewrite them if needed.': '이미 쓴 시나리오와 클립은 바뀌지 않습니다. 필요하면 채팅으로 다시 쓰도록 지시하세요.',

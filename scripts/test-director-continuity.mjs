@@ -52,6 +52,7 @@ ok(r.cast === 2 && r.assets === 1 && p.references.length === 2 && p.references.e
 ok(p.references[0].results.length === 1 && p.references[0].results[0].picked && p.references[0].ref_id !== hana.ref_id, 'their images come over, so nothing is generated again; ids are new');
 ok(p.references[0].asset_id && p.references[0].asset_id !== asset.asset_id && p.assets.find((a) => a.asset_id === p.references[0].asset_id)?.source.id === 21, 'the registered Asset Library entry is shared (same library id, new project asset id)');
 ok(p.references[1].variant_of === 'Hana', 'the costume variant keeps pointing at its base');
+q.series.format = 'musicvideo'; const pk = M.newDirectorProject('K'); K.inheritFrom(pk, q, 'f'); ok(pk.series.format === 'musicvideo', 'the kind of work is taken over from the earlier project');
 ok(p.series.aspect === '9:16' && p.series.resolution === '720p' && p.series.preset === 'h3_plain' && p.series.music_direction === '북소리' && p.series.title === '' && p.series.total_episodes === 1, 'look and sound settings come over; the title and the number of episodes are the new work\'s own');
 ok(p.episodes.length === 0 && p.scenes.length === 0 && p.shots.length === 0 && p.continues[0].name === '용의 눈동자 1편', 'episodes and clips are not copied; the link to the earlier project is kept');
 ok(M.validateDirectorProject(p).errors.length === 0, 'the new project is valid');

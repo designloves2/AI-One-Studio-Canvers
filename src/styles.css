@@ -703,3 +703,6 @@ button.save-state.dirty { cursor: pointer; } button.save-state.dirty:hover { bac
 .dx-cast-actions .btn.small.on { border-color: var(--acc); color: var(--acc); }
 .dirx-chips i.demo { color: #fff; background: #d9822b; border-color: #d9822b; font-weight: 700; }
 .demo-switch { padding: 8px 12px; border-radius: 10px; background: color-mix(in srgb, #d9822b 12%, var(--bg3)); border: 1px solid color-mix(in srgb, #d9822b 50%, transparent); margin-bottom: 8px; }
+
+/* kind of work tile spans the row */
+.dx-tile.edit.wide { grid-column: 1 / -1; }

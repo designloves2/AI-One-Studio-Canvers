@@ -5,6 +5,7 @@
 // (clip count, numbers) BEFORE touching the project, asks the model once or twice to fix it, and only then applies it.
 import { addChat, episodeByNo, findReference, newEpisode, newReference, newScene, newShot, shotsOfEpisode, syncShotAssets } from './model';
 import { PRESETS, RESOLUTIONS, splitSeconds, usableClipSeconds } from './series';
+import { allFormatsGuide, detectFormat, formatOf, isFormat, vocabOf } from './formats';
 import type { CrewRole, DirectorProject, DirectorSeries, ReferenceKind, StageId } from './types';
 import type { Kickoff } from './workflow';
 
@@ -40,6 +41,7 @@ function stateText(p: DirectorProject): string {
   const s = p.series, w = p.workflow;
   const L: string[] = [];
   L.push(`STAGE: ${w.stage} (${w.status[w.stage]}), current episode ${w.episode_no} of ${s.total_episodes}`);
+  L.push(`KIND OF WORK: ${s.format} (${formatOf(s.format).label})`);
   L.push(`SERIES: title="${s.title}" genre="${s.genre}" tone="${s.tone}" language=${s.language} episodes=${s.total_episodes} episode_seconds=${s.episode_seconds} clip_seconds=${s.clip_seconds} aspect=${s.aspect} resolution=${s.resolution} preset=${s.preset}`);
   if (s.logline) L.push(`LOGLINE: ${clip(s.logline, 200)}`);
   if (s.synopsis) L.push(`SYNOPSIS: ${clip(s.synopsis, 600)}`);
@@ -61,6 +63,7 @@ function stateText(p: DirectorProject): string {
 
 export function buildSystem(p: DirectorProject, previous: string[] = []): string {
   const lang = p.series.language === 'en' ? 'English' : 'Korean';
+  const f = formatOf(p.series.format);
   return `You are the whole production crew of an AI film studio: the writer, the director, the cinematographer, the art department (reference images), the sound director and the music director.
 The USER IS THE PRODUCER. The producer only talks: gives the idea, asks for changes, approves. You do all the work and make every creative and technical decision yourself.
 Never ask the producer to fill in details. If something is missing, choose a sensible default and list it under brief.assumptions (or say it in one short sentence). Ask a question only if you truly cannot go on.
@@ -70,7 +73,7 @@ Reply with ONE JSON object only (no markdown). All keys are optional except "say
  "crew": "writer|director|cinematographer|art|sound|music|producer_desk"   // who is speaking; the one the job belongs to
  "say": "1-3 short sentences to the producer in ${lang}: what you did / decided / what you need",
  "intent": "work|revise|approve|ask",   // approve ONLY when the producer clearly accepts the current step (예: 승인, 좋아 진행해, OK)
- "series": { "title","genre","tone","logline","synopsis","language":"ko|en","total_episodes","episode_seconds","clip_seconds","aspect":"${ASPECTS.join('|')}","resolution":"${RESOLUTIONS.join('|')}","preset":"${PRESETS.join('|')}","sound_direction","music_direction" },
+ "series": { "format":"drama|film|ad|musicvideo|vlog|short","title","genre","tone","logline","synopsis","language":"ko|en","total_episodes","episode_seconds","clip_seconds","aspect":"${ASPECTS.join('|')}","resolution":"${RESOLUTIONS.join('|')}","preset":"${PRESETS.join('|')}","sound_direction","music_direction" },
  "brief": { "text": "the brief in prose: concept, audience, tone, structure, look, sound, music, how it will be produced", "assumptions": ["..."] },
  "episodes": [ { "no":1, "title":"", "logline":"" } ],
  "references": [ { "kind":"character|location|prop", "name":"", "description":"", "prompt_en":"image prompt (a person: full body, neutral background; a place: establishing shot; a prop: product shot)", "prompt_ko":"the same prompt in Korean", "variant_of":"base entry name, only for a new costume / look" } ],
@@ -78,6 +81,7 @@ Reply with ONE JSON object only (no markdown). All keys are optional except "say
  "edits": [ {"op":"set_clip","episode":1,"clip":2,"prompt_en":"..."}, {"op":"set_episode","no":3,"title":"","logline":""}, {"op":"set_scene","episode":1,"scene":2,"title":"","summary":""}, {"op":"delete_clip","episode":1,"clip":4}, {"op":"set_reference","name":"","kind":"","description":"","prompt_en":"","prompt_ko":"","variant_of":""}, {"op":"delete_reference","name":""}, {"op":"skip_references"} ],
  "suggest": ["up to 3 short next things the producer might say"]
 }
+THIS WORK IS A ${f.label.toUpperCase()}. ${f.guide}
 RULES
 - Picture and sound prompts are written in English; "say" and prompt_ko are ${lang}. Keep every clip's picture description self-contained (characters described again, no "as before").
 - THE ORDER OF WORK: brief -> casting (actors, places, props are cast and their images are made FIRST) -> scenario (the series plan and every episode are written ONLY with the approved CAST) -> clips.
@@ -96,12 +100,14 @@ ${stateText(p)}`;
 /** The instruction for an automatic step (the producer did not type it). */
 export function kickoffInstruction(p: DirectorProject, k: Exclude<Kickoff, 'canvas' | null>): string {
   const s = p.series;
-  if (k === 'brief') return 'Write the brief from the producer\'s request above. Fill "series" completely (title, genre, tone, logline, language, total_episodes, episode_seconds, clip_seconds, aspect, resolution, preset, sound_direction, music_direction) and "brief". Defaults when not said: clip_seconds 10, aspect 16:9, resolution 1080p, preset h3_7plus1_kimchy, language ko (when earlier work is given, its settings are the defaults). Series length and episode length must follow what the producer said exactly.';
+  if (k === 'brief') return `Write the brief from the producer's request above. FIRST decide the kind of work (series.format) from what the producer asked for; the kinds are:\n${allFormatsGuide()}\nWhen the producer does not give numbers, use that kind's usual numbers. Fill "series" completely (format, title, genre, tone, logline, language, total_episodes, episode_seconds, clip_seconds, aspect, resolution, preset, sound_direction, music_direction) and "brief". Defaults when not said: clip_seconds 10, aspect 16:9, resolution 1080p, preset h3_7plus1_kimchy, language ko (when earlier work is given, its settings are the defaults). Series length and episode length must follow what the producer said exactly.`;
+  const f = formatOf(s.format);
+  if (k === 'series' && !f.multi) return `Write the ${vocabOf(s.format).scenario.toLowerCase()} of this ${f.label.toLowerCase()} with the approved CAST: "series.synopsis" and "series.logline", and "episodes" with EXACTLY 1 entry (no 1, a title and one line that says what the piece is about). ${f.guide}`;
   if (k === 'series') return `Write the scenario of the whole series with the approved CAST: "series.synopsis" and "series.logline" updates, and "episodes" with EXACTLY ${s.total_episodes} entries numbered 1 to ${s.total_episodes} (a title and one story line each; name the main cast and the costume or place changes in the story line). The episodes must build one story arc with hooks and a cliffhanger at the end of each episode. The leads appear throughout; use the supporting cast, places and props where they fit.`;
-  if (k === 'references') return 'Do the casting now, before any story is written. From the brief choose the actors (the leads and the important supporting cast, each with a precise look: age, build, face, hair, usual clothes), the main locations and the key props. Use "references" (4 to 12 entries; kind character / location / prop). If CAST already holds entries (taken over from earlier work), do NOT cast them again: list only NEW cast that the next story needs, and keep the old entries as they are. If the story needs a costume or a look that is clearly different (wedding dress, uniform, night version of a place), add it as its own entry with variant_of set to the base entry. The sound and music directions may be refined in "series".';
+  if (k === 'references') return `Do the casting now, before any story is written (${vocabOf(s.format).cast}). From the brief choose the ${vocabOf(s.format).characters.toLowerCase()} (the leads and the important supporting cast, each with a precise look: age, build, face, hair, usual clothes), the main ${vocabOf(s.format).locations.toLowerCase()} and the key ${vocabOf(s.format).props.toLowerCase()}${s.format === 'ad' ? ' (the product is a prop entry with its exact look; no logo, no text on it)' : ''}. Use "references" (4 to 12 entries; kind character / location / prop). If CAST already holds entries (taken over from earlier work), do NOT cast them again: list only NEW cast that the next story needs, and keep the old entries as they are. If the story needs a costume or a look that is clearly different (wedding dress, uniform, night version of a place), add it as its own entry with variant_of set to the base entry. The sound and music directions may be refined in "series".`;
   const no = p.workflow.episode_no;
   const parts = splitSeconds(s.episode_seconds, s.clip_seconds);
-  return `Write episode ${no} ("${episodeByNo(p, no)?.title ?? ''}"). Use "episode_plan" with scenes and clips. EXACTLY ${parts.length} clips in total across all scenes (the app sets their lengths: ${parts.join(', ')} seconds). Every clip needs prompt_en, prompt_ko, camera, dialogue (may be empty), sound and music.`;
+  return `Write ${f.multi ? `episode ${no} ("${episodeByNo(p, no)?.title ?? ''}")` : `the whole ${f.label.toLowerCase()}`}. Use "episode_plan" with scenes and clips. EXACTLY ${parts.length} clips in total across all scenes (the app sets their lengths: ${parts.join(', ')} seconds). Every clip needs prompt_en, prompt_ko, camera, dialogue (may be empty), sound and music.`;
 }
 
 // ------------------------------------------------------------------ reading the reply
@@ -161,6 +167,7 @@ export function applySeriesPatch(p: DirectorProject, patch: Partial<DirectorSeri
 function applySeries(p: DirectorProject, patch: Partial<DirectorSeries>, notes: string[]) {
   const s = p.series;
   for (const k of ['title', 'genre', 'tone', 'logline', 'synopsis', 'sound_direction', 'music_direction'] as const) if (typeof patch[k] === 'string') s[k] = patch[k]!;
+  if (isFormat(patch.format)) s.format = patch.format;
   if (patch.language === 'ko' || patch.language === 'en') s.language = patch.language;
   const n = Math.round(num(patch.total_episodes)); if (patch.total_episodes !== undefined && n >= 1 && n <= 200) s.total_episodes = n;
   const es = num(patch.episode_seconds); if (patch.episode_seconds !== undefined && es >= 5 && es <= 3600) s.episode_seconds = es;
@@ -291,6 +298,7 @@ export async function directorTurn(p: DirectorProject, userText: string, llm: Ll
     try { raw = await llm(system, base); } catch (e) { throw e; }
     try {
       const r = parseReply(raw);
+      if (kickoff === 'brief' && r.series && !isFormat(r.series.format)) { const f = detectFormat(p.chat.filter((m) => m.role === 'user').map((m) => m.text).join(' ')); if (f) r.series.format = f; }
       const bad = r.intent === 'approve' ? null : checkReply(p, r, kickoff);
       if (bad) { err = bad; continue; }
       reply = r;

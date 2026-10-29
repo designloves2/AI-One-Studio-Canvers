@@ -249,7 +249,11 @@ export const useDirector = create<DirectorState>((set, get) => {
       let result: ApproveResult | null = null;
       commit((x) => { result = approveStage(x); if (!result.ok) addChat(x, 'assistant', localizeMsg(result.reason ?? ''), { crew: 'producer_desk' }); });
       const r = result as ApproveResult | null;
-      if (r?.ok) { follow(r); if (r.kickoff) await runJobs([{ k: r.kickoff }]); }
+      if (r?.ok) {
+        follow(r);
+        if (r.kickoff) await runJobs([{ k: r.kickoff }]);
+        else if (r.to === 'episode' && get().project?.series.total_episodes === 1) await get().startEpisodes([1]);   // one piece: there is no episode to choose, the crew starts writing it
+      }
     },
 
     approveEpisodes: async (nos) => {

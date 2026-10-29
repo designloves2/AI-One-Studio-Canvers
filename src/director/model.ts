@@ -24,7 +24,7 @@ export function newDirectorProject(name: string): DirectorProject {
   return {
     app: 'ai-one-studio-canvers', kind: 'director-project', schema_version: DIRECTOR_SCHEMA_VERSION,
     project_id: newId('dp'), name: name.trim() || 'untitled', created_at: t, updated_at: t,
-    series: { title: '', genre: '', tone: '', logline: '', synopsis: '', language: 'ko', total_episodes: 1, episode_seconds: 90, clip_seconds: 10, aspect: '16:9', resolution: '1080p', preset: 'h3_7plus1_kimchy', sound_direction: '', music_direction: '' },
+    series: { format: 'drama', title: '', genre: '', tone: '', logline: '', synopsis: '', language: 'ko', total_episodes: 1, episode_seconds: 90, clip_seconds: 10, aspect: '16:9', resolution: '1080p', preset: 'h3_7plus1_kimchy', sound_direction: '', music_direction: '' },
     brief: { text: '', assumptions: [], status: 'draft' },
     episodes: [], references: [], scenes: [], shots: [], assets: [], canvas_links: [],
     workflow: { stage: 'intake', status: { ...freshStatus(), intake: 'review_required' }, episode_no: 1 },
@@ -162,6 +162,9 @@ export const MIGRATIONS: Record<number, Migration> = {
 };
 
 // 2 -> 3: every episode gets its own place in the line (it used to be one place for the whole series, workflow.episode_no)
+// 3 -> 4: the kind of work (everything made so far is a drama series)
+MIGRATIONS[3] = (p) => ({ ...p, series: { format: 'drama', ...(p as { series: Record<string, unknown> }).series } });
+
 MIGRATIONS[2] = (p) => {
   const o = p as unknown as { workflow: { stage: string; status: Record<string, string>; episode_no: number }; episodes: Record<string, unknown>[] };
   const w = o.workflow, inEp = ['episode', 'canvas', 'execute', 'review'].includes(w.stage);

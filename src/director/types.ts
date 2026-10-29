@@ -1,8 +1,9 @@
 // Director Mode data model, schema 2 (docs/DIRECTOR_MODE_DATA_CONTRACT.md). Plain JSON, no functions, so it can be saved, zipped and migrated.
 // The user talks to the Director in a chat; the AI fills these records; the user approves or asks for changes. Nothing here is meant to be typed by hand.
 import type { FileRef } from '../types';
+import type { SeriesFormat } from './formats';
 
-export const DIRECTOR_SCHEMA_VERSION = 3;
+export const DIRECTOR_SCHEMA_VERSION = 4;
 
 export type ShotStatus = 'draft' | 'ready' | 'approved' | 'queued' | 'generating' | 'review' | 'done' | 'failed';
 export type ApprovalStatus = 'draft' | 'approved';
@@ -29,6 +30,8 @@ export type AssetSource =
 
 /** Production settings every episode follows. The AI reads them from the user's first message; the user can change them by chat. */
 export interface DirectorSeries {
+  /** the kind of work: drama / film / ad / musicvideo / vlog / short (words on the screen, what the crew cares about) */
+  format: SeriesFormat;
   title: string; genre: string; tone: string; logline: string; synopsis: string; language: string;
   total_episodes: number;
   /** length of one episode in seconds (1:30 = 90) */

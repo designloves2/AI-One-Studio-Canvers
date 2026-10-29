@@ -14,6 +14,7 @@ import { episodeByNo, newAsset, shotsOfEpisode, syncShotAssets } from './model';
 import { newSeed } from './execution';
 import { PRESETS, PRESET_LABEL, RESOLUTIONS, splitSeconds } from './series';
 import { ASPECTS, applySeriesPatch } from './ai';
+import { FORMAT_IDS, FORMATS, vocabOf } from './formats';
 import { blockers, EPISODE_STAGES, epStageIndex, episodeBlockers, episodeState, GLOBAL_STAGES, productionOpen, stageIndex } from './workflow';
 import { localizeMsg } from './localize';
 import { castEngines, downloadEpisodePackages, generateBatch, generateCast, linkOfCasting, linkOfEpisode, openLinkedCanvas, registerCast, syncCastFromCanvas, syncResultsFromCanvas } from './canvasAction';
@@ -27,7 +28,10 @@ const NEXT_LABEL: Partial<Record<StageId, string>> = { brief: 'Casting', referen
 const STATUS_TEXT: Record<string, string> = { idle: 'waiting', working: 'the crew is working…', review_required: 'waiting for your approval', approved: 'approved', failed: 'failed', completed: 'finished', blocked: 'blocked' };
 const EXAMPLES = [
   '막장 드라마 하나 만들자. 장편이고 30부작, 편당 1분 30초 구성으로 16:9 비율이며 7+1 Kimchy 모드로 생성하고 싶어.',
-  '프리미엄 아웃도어 브랜드의 30초 광고를 만들어 줘. 제품을 고급스럽게 보여주고 5개 장면으로 구성해.',
+  '프리미엄 아웃도어 브랜드의 30초 광고를 만들어 줘. 제품을 고급스럽게 보여주고 16:9, 9:16 두 버전으로 필요해.',
+  '이 노래로 뮤직비디오를 만들자. 3분 길이, 아티스트가 도시 야경에서 노래하는 분위기로.',
+  '제주도 2박 3일 여행 브이로그를 2분 길이로 만들어 줘. 내레이션은 편안한 말투로.',
+  '릴스용 15초 숏폼. 첫 장면은 훅으로, 9:16 세로.',
   '용의 눈동자 1편 내용에 이어지는 2편의 내용을 만들자.',
 ];
 
@@ -59,6 +63,8 @@ function Progress({ p }: { p: DirectorProject }) {
   const w = p.workflow, s = p.series, open = productionOpen(p);
   const ep = episodeByNo(p, d.focus);
   const eps = s.total_episodes > 1;
+  const V = vocabOf(s.format);
+  const stepName = (id: StageId, label: string) => (id === 'references' ? V.cast : id === 'series' ? V.scenario : id === 'episode' ? V.episode : label);
   return (
     <div className="dirx-progress">
       <div className="dirx-title"><b>{s.title || p.name}</b>
@@ -76,13 +82,13 @@ function Progress({ p }: { p: DirectorProject }) {
           return (
             <li key={st.id} className={`${done ? 'done' : ''}${cur ? ' cur' : ''}${bad ? ' bad' : ''}${d.view === st.id ? ' view' : ''}${locked ? ' locked' : ''}`}>
               <button disabled={locked} title={locked ? T('Opens when the scenario is approved') : T('Look at this step')} onClick={() => d.setView(st.id)}>
-                <span>{done ? '✓' : i + 1}</span>{T(st.label)}{st.id === 'episode' && eps ? ` ${d.focus}/${s.total_episodes}` : ''}
+                <span>{done ? '✓' : i + 1}</span>{T(stepName(st.id, st.label))}{st.id === 'episode' && eps ? ` ${d.focus}/${s.total_episodes}` : ''}
               </button>
             </li>
           );
         })}
       </ol>
-      {open && <EpisodeStrip p={p} />}
+      {open && eps && <EpisodeStrip p={p} />}
     </div>
   );
 }
@@ -212,14 +218,14 @@ const fmtTotal = (sec: number) => { const m = Math.round(sec / 60); return m >= 
 
 const EP_SECS = [30, 45, 60, 90, 120, 180, 300];
 const CLIP_SECS = [6, 8, 10, 12, 15];
-const EditTile = ({ icon, label, tone, children }: { icon: keyof typeof ICONS; label: string; tone?: string; children: React.ReactNode }) => (
-  <div className={`dx-tile edit ${tone ?? ''}`}><Ico n={icon} /><span className="lab">{label}</span>{children}</div>
+const EditTile = ({ icon, label, tone, wide, children }: { icon: keyof typeof ICONS; label: string; tone?: string; wide?: boolean; children: React.ReactNode }) => (
+  <div className={`dx-tile edit ${tone ?? ''}${wide ? ' wide' : ''}`}><Ico n={icon} /><span className="lab">{label}</span>{children}</div>
 );
 /** the settings of the brief: the crew fills them from the producer's words; here they can be changed with dropdowns and kept with "Apply" */
 function BriefTiles({ p }: { p: DirectorProject }) {
   const T = useT(); const edit = useDirector((x) => x.edit); const ro = useDirector((x) => x.readOnly);
   const s = p.series;
-  const cur = { total_episodes: s.total_episodes, episode_seconds: s.episode_seconds, clip_seconds: s.clip_seconds, aspect: s.aspect, resolution: s.resolution, preset: s.preset };
+  const cur = { format: s.format, total_episodes: s.total_episodes, episode_seconds: s.episode_seconds, clip_seconds: s.clip_seconds, aspect: s.aspect, resolution: s.resolution, preset: s.preset };
   const key = JSON.stringify(cur);
   const [d, setD] = useState(cur);
   useEffect(() => { setD(cur); }, [key]);   // eslint-disable-line react-hooks/exhaustive-deps
@@ -231,6 +237,7 @@ function BriefTiles({ p }: { p: DirectorProject }) {
   return (
     <>
       <section className="dx-tiles">
+        <EditTile icon="idea" label={T('Kind of work')} tone="a" wide><select disabled={ro} value={d.format} onChange={(e) => setD({ ...d, format: e.target.value as typeof d.format })}>{FORMAT_IDS.map((f) => <option key={f} value={f}>{T(FORMATS[f].label)}</option>)}</select></EditTile>
         <EditTile icon="film" label={T('Episodes')} tone="a"><input type="number" min={1} max={200} disabled={ro} value={d.total_episodes} onChange={(e) => setD({ ...d, total_episodes: Math.max(1, Math.min(200, Math.floor(Number(e.target.value) || 1))) })} /></EditTile>
         <EditTile icon="clock" label={T('Per episode')}><select disabled={ro} value={d.episode_seconds} onChange={(e) => setD({ ...d, episode_seconds: Number(e.target.value) })}>{opts(EP_SECS, d.episode_seconds).map((v) => <option key={v} value={v}>{fmtSec(v)}</option>)}</select></EditTile>
         <Tile icon="total" value={fmtTotal(d.total_episodes * d.episode_seconds)} label={T('Total length')} />
@@ -354,12 +361,13 @@ function CastPicker({ refId, onClose }: { refId: string; onClose: () => void }) 
 const KIND: Record<string, { icon: keyof typeof ICONS; label: string; cls: string }> = { character: { icon: 'user', label: 'Actors', cls: 'k-char' }, location: { icon: 'pin', label: 'Locations', cls: 'k-loc' }, prop: { icon: 'box', label: 'Props', cls: 'k-prop' } };
 function CastCard({ r, onPick, onMake, onRegister, onChoose, onSavePrompt, ro, busy }: { r: DirectorReference; onPick: () => void; onMake: () => void; onRegister: () => void; onChoose: (id: string) => void; onSavePrompt: (lang: 'en' | 'ko', text: string) => void; ro: boolean; busy: boolean }) {
   const T = useT(); const pick = r.results.find((x) => x.picked); const k = KIND[r.kind];
+  const fmtOfProject = useDirector((x) => x.project?.series.format);
   const [showPrompt, setShowPrompt] = useState(false); const [lang, setLang] = useState<'en' | 'ko'>('ko'); const [draft, setDraft] = useState<string | null>(null);
   const shown = lang === 'en' ? r.prompt_en : (r.prompt_ko || r.description);
   return (
     <article className={`dx-cast ${k.cls}`}>
       <div className="dx-cast-img">{pick ? <img src={img(pick)} alt={r.name} loading="lazy" /> : <div className="empty"><Ico n="image" /><span>{T('No image yet')}</span></div>}
-        <span className="badge"><Ico n={k.icon} />{T(r.kind === 'character' ? 'Actor' : r.kind === 'location' ? 'Location' : 'Prop')}</span>
+        <span className="badge"><Ico n={k.icon} />{T(r.kind === 'character' ? vocabOf(fmtOfProject).character : r.kind === 'location' ? vocabOf(fmtOfProject).location : vocabOf(fmtOfProject).prop)}</span>
         {r.asset_id && <span className="asset"><Ico n="check" />{T('Asset')}</span>}</div>
       <div className="dx-cast-body"><b>{r.name}</b>{r.variant_of && <em><Ico n="link" />{T('look of')} {r.variant_of}</em>}<p>{r.description}</p>
         {r.results.length > 1 && <div className="dx-cands" title={T('Other takes: click one to use it')}>{r.results.map((x) => <button key={x.result_id} className={x.picked ? 'on' : ''} disabled={ro} onClick={() => onChoose(x.result_id)}><img src={img(x)} alt="" loading="lazy" /></button>)}</div>}
@@ -399,7 +407,7 @@ function CastGrid({ p, ro }: { p: DirectorProject; ro: boolean }) {
   return (
     <div className="dx-page">
       <Working p={p} />
-      <PageHead icon="user" title={T('Casting')} sub={T('Actors, locations and props are cast first; the story is written with them.')}
+      <PageHead icon="user" title={T(vocabOf(p.series.format).cast)} sub={T('Actors, locations and props are cast first; the story is written with them.')}
         right={link && <button className="btn" onClick={() => void openLinkedCanvas(link.canvas_file).catch((e) => notify((e as Error).message))}>{T('Open in Canvas')}</button>} />
       <section className="dx-block"><h4><Ico n="image" />{T('Make the cast images')}</h4>
         <div className="dx-btns">
@@ -419,7 +427,7 @@ function CastGrid({ p, ro }: { p: DirectorProject; ro: boolean }) {
       {live.length > 0 && <Meter done={made} total={live.length} label={`${made} / ${live.length} ${T('images ready')}`} />}
       {(['character', 'location', 'prop'] as const).map((kind) => {
         const items = live.filter((r) => r.kind === kind); if (!items.length) return null;
-        return <section key={kind} className="dx-group"><h4 className={KIND[kind].cls}><Ico n={KIND[kind].icon} />{T(KIND[kind].label)} <small>{items.length}</small></h4>
+        return <section key={kind} className="dx-group"><h4 className={KIND[kind].cls}><Ico n={KIND[kind].icon} />{T(kind === 'character' ? vocabOf(p.series.format).characters : kind === 'location' ? vocabOf(p.series.format).locations : vocabOf(p.series.format).props)} <small>{items.length}</small></h4>
           <div className="dx-castgrid">{items.map((r) => <CastCard key={r.ref_id} r={r} ro={ro} busy={busy} onPick={() => setPicking(r.ref_id)} onMake={() => void makeOne(r)} onRegister={() => void register([r.ref_id])} onChoose={(id) => choose(r, id)} onSavePrompt={(lang, text) => edit((x) => { const q = x.references.find((z) => z.ref_id === r.ref_id); if (q) { if (lang === 'en') q.prompt_en = text; else q.prompt_ko = text; } })} />)}</div></section>;
       })}
       {picking && <CastPicker refId={picking} onClose={() => setPicking(null)} />}
@@ -436,7 +444,7 @@ function ScenarioList({ p }: { p: DirectorProject }) {
       <header className="dx-hero small"><div className="dx-tags"><span>{p.series.genre}</span><span>{eps.length} {T('episodes')}</span></div>
         <h2>{p.series.logline || p.series.title}</h2>{p.series.synopsis && <p>{p.series.synopsis}</p>}</header>
       <CastStrip p={p} />
-      <section className="dx-group"><h4><Ico n="list" />{T('Episodes')} <small>{eps.length}</small></h4>
+      <section className="dx-group"><h4><Ico n="list" />{T(p.series.total_episodes > 1 ? 'Episodes' : vocabOf(p.series.format).scenario)} <small>{eps.length}</small></h4>
         <div className="dx-epgrid">{eps.map((e) => (
           <article key={e.episode_id} className={`dx-epcard st-${e.status}`}><span className="no">{e.no}</span><div><b>{e.title.replace(/^\d+화:\s*/, '')}</b><p>{e.logline}</p><div className="dx-avs">{p.references.filter((r) => castInText(p, `${e.title} ${e.logline}`).includes(r.name)).map((r) => <Avatar key={r.ref_id} r={r} size={22} />)}</div></div></article>))}</div>
       </section>
@@ -485,7 +493,7 @@ function EpisodeHead({ p, icon }: { p: DirectorProject; icon: keyof typeof ICONS
   const total = Math.round(shots.reduce((a, s) => a + s.duration_sec, 0) * 10) / 10;
   return (
     <>
-      <header className="dx-hero small"><div className="dx-tags"><span>{T('Episode')} {p.workflow.episode_no} / {p.series.total_episodes}</span><span>{shots.length} {T('clips')}</span><span>{total}s / {p.series.episode_seconds}s</span>{e && <span>{T(EPISODE_STATE_TEXT[episodeState(e)])}</span>}</div>
+      <header className="dx-hero small"><div className="dx-tags"><span>{p.series.total_episodes > 1 ? `${T('Episode')} ${p.workflow.episode_no} / ${p.series.total_episodes}` : T(vocabOf(p.series.format).episode)}</span><span>{shots.length} {T('clips')}</span><span>{total}s / {p.series.episode_seconds}s</span>{e && <span>{T(EPISODE_STATE_TEXT[episodeState(e)])}</span>}</div>
         <h2><Ico n={icon} />{e?.title.replace(/^\d+화:\s*/, '') || `${T('Episode')} ${p.workflow.episode_no}`}</h2>{e?.logline && <p>{e.logline}</p>}</header>
       {shots.length > 0 && <div className="dx-bar line">{shots.map((s, i) => <i key={s.shot_id} className={`s-${s.status}`} style={{ flex: s.duration_sec }} title={`#${i + 1} ${s.duration_sec}s`}><em>{i + 1}</em></i>)}</div>}
     </>
@@ -642,7 +650,7 @@ function ChatDock({ p, T }: { p: DirectorProject | null; T: (k: string) => strin
       </div>
       {p && p.workflow.stage !== 'intake' && (
         <div className="dirx-approve">
-          <button className="btn primary big" disabled={!canApprove} onClick={() => void d.approve()}>✓ {T('Approve')}{NEXT_LABEL[view] ? ` → ${T(NEXT_LABEL[view]!)}` : ''}</button>
+          <button className="btn primary big" disabled={!canApprove} onClick={() => void d.approve()}>✓ {T('Approve')}{NEXT_LABEL[view] ? ` → ${T(view === 'brief' ? vocabOf(p?.series.format).cast : view === 'references' ? vocabOf(p?.series.format).scenario : view === 'series' ? vocabOf(p?.series.format).episode : NEXT_LABEL[view]!)}` : ''}</button>
           {status === 'failed' && <button className="btn" disabled={d.busy} onClick={() => void d.retry()}>{T('Try again')}</button>}
           {behind && <button className="btn" disabled={d.busy || d.readOnly} onClick={() => d.reopen(d.focus, view)}>{T('Go back to this step')}</button>}
           <span className="dirx-hint">{looking ? T('You are looking at a step that is not the current one. Tell the crew below what to change, or go back to it.') : status === 'review_required' ? (blocked[0] ? `${T('Not yet')}: ${localizeMsg(blocked[0])}` : T('To change something, tell the crew below.')) : T(STATUS_TEXT[status] ?? status)}</span>
