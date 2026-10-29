@@ -3,7 +3,7 @@
 import type { FileRef } from '../types';
 import type { SeriesFormat } from './formats';
 
-export const DIRECTOR_SCHEMA_VERSION = 4;
+export const DIRECTOR_SCHEMA_VERSION = 5;
 
 export type ShotStatus = 'draft' | 'ready' | 'approved' | 'queued' | 'generating' | 'review' | 'done' | 'failed';
 export type ApprovalStatus = 'draft' | 'approved';
@@ -11,7 +11,7 @@ export type ExecutionMode = 'manual' | 'approval_required' | 'step_by_step' | 'h
 export type AssetRole = 'character' | 'background' | 'prop' | 'reference' | 'audio' | 'other';
 
 /** The production line: brief -> casting (references) -> scenario (series plan) -> then every episode. `episode`, `canvas`, `execute`, `review` repeat for every episode (workflow.episode_no). */
-export type StageId = 'intake' | 'brief' | 'references' | 'series' | 'episode' | 'canvas' | 'execute' | 'review';
+export type StageId = 'intake' | 'brief' | 'references' | 'music' | 'series' | 'episode' | 'canvas' | 'execute' | 'review';
 export type StageStatus = 'idle' | 'working' | 'review_required' | 'approved' | 'blocked' | 'failed' | 'completed';
 /** where ONE episode is in its own line: not started, writing the clips, building the canvas, generating, reviewing, done */
 export type EpisodeStage = 'idle' | 'episode' | 'canvas' | 'execute' | 'review' | 'done';
@@ -49,6 +49,8 @@ export interface DirectorEpisode {
   episode_id: string; no: number; title: string; logline: string;
   /** planned = one line only; drafted = scenes and clips written; approved = the user accepted the clips */
   status: 'planned' | 'drafted' | 'approved';
+  /** the finished episode: all clips joined into one video (with the song laid on for a music video) */
+  final?: ResultRef;
   /** this episode's own place in the production line (several episodes can be in progress at the same time) */
   stage: EpisodeStage; stage_status: StageStatus;
 }
@@ -73,12 +75,34 @@ export interface DirectorReference {
   seed?: number;
 }
 
+export type SectionName = 'intro' | 'verse' | 'pre-chorus' | 'chorus' | 'bridge' | 'outro';
+export interface SongSection { name: SectionName; start_sec: number; end_sec: number; lyric?: string }
+/**
+ * The song of a music video. It comes from the producer's own file (source = upload) or is made by the AI (source = generate); both are possible
+ * and the producer chooses (screen or chat). The sections tell which part of the song every clip covers.
+ */
+export interface DirectorMusic {
+  source: 'upload' | 'generate' | null;
+  title: string; style: string; lyrics: string; language: 'ko' | 'en';
+  duration_sec: number; bpm: number;
+  /** the music engine of the Music Generate card (acestep / yue2 / minimax) */
+  engine?: string;
+  sections: SongSection[];
+  /** the uploaded file or the generated takes; the picked one is the song */
+  candidates: ResultRef[];
+  /** the registered asset of the picked song */
+  asset_id?: string;
+  /** a new seed = a different take of the generated song */
+  seed?: number;
+  status: ApprovalStatus;
+}
+
 export interface DirectorScene { scene_id: string; episode_id: string; order: number; title: string; summary: string; status: ApprovalStatus; shot_ids: string[] }
 
 export interface ResultRef {
   result_id: string; file: FileRef; kind: 'image' | 'video' | 'audio'; node_id?: string; generation_job_id?: string; created_at: string; picked: boolean;
   /** where the image came from: made in the casting canvas, chosen from the Gallery, or chosen from the Asset Library */
-  source?: 'generated' | 'gallery' | 'library' | 'demo';
+  source?: 'generated' | 'gallery' | 'library' | 'demo' | 'upload';
   /** a demo stand-in picture (SVG data URL): nothing was generated */
   data_url?: string;
   /** Asset Library id when source = library (the image is then read from the library, `file` is only a label) */
@@ -106,7 +130,11 @@ export interface CanvasLink {
   /** which episode this canvas holds (one canvas per episode) */
   episode_id?: string;
   /** 'casting' = the canvas that makes the cast images (refs below instead of shots) */
-  purpose?: 'casting' | 'episode';
+  purpose?: 'casting' | 'episode' | 'music';
+  /** episode canvas: the card whose result is the finished episode (clips joined, with the song on top for a music video) */
+  final_node_id?: string;
+  /** music canvas: the cards (style, lyrics, generator) */
+  music_nodes?: string[];
   refs?: { ref_id: string; node_ids: string[] }[];
   /** the prompt each shot's card was last given by the adapter (tells a user's own edit in the canvas from an untouched card) */
   prompt_sent?: Record<string, string>;
@@ -140,6 +168,8 @@ export interface DirectorProject {
   workflow: DirectorWorkflow; chat: ChatMsg[];
   /** earlier projects this one continues (their whole content is read by the crew; the cast is taken over) */
   continues?: { project_id: string; name: string; file: string }[];
+  /** music video: the song */
+  music?: DirectorMusic;
   /** generation: how an episode is made. auto = the app connects the assets and generates; manual = the producer opens the canvas or takes a file. Not chosen yet = undefined. */
   settings: {
     execution_mode: ExecutionMode; generation?: 'auto' | 'manual';

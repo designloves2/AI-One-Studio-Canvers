@@ -11,7 +11,7 @@
     "start": "node serve.mjs",
     "mock": "node mock/mock-comfy.mjs",
     "build:mcp": "node mcp/build.mjs",
-    "test:director": "node scripts/test-director.mjs && node scripts/test-director-adapter.mjs && node scripts/test-director-execution.mjs && node scripts/test-director-flow.mjs && node scripts/test-director-continuity.mjs && node scripts/test-director-assets.mjs"
+    "test:director": "node scripts/test-director.mjs && node scripts/test-director-adapter.mjs && node scripts/test-director-execution.mjs && node scripts/test-director-flow.mjs && node scripts/test-director-continuity.mjs && node scripts/test-director-assets.mjs && node scripts/test-director-music.mjs"
   },
   "dependencies": {
     "@xyflow/react": "12.8.2",

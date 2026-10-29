@@ -192,3 +192,28 @@ export function reseedRefs(p: DirectorProject, refIds: string[], make: () => num
   for (const r of p.references) if (refIds.includes(r.ref_id)) { r.seed = make(); n++; }
   return n;
 }
+
+/** Pull the generated song(s) of the music canvas into the song's candidates (adds only; the newest becomes the picked one). Returns how many were added. */
+export function applyMusicResult(p: DirectorProject, link: CanvasLink, nodes: Pick<GraphNode, 'id' | 'results'>[], now: () => string = () => new Date().toISOString()): number {
+  const m = p.music; const node = nodes.find((n) => n.id === (link.music_nodes ?? []).at(-1));
+  if (!m || !node) return 0;
+  const have = new Set(m.candidates.map((c) => c.result_id)); let added = 0;
+  for (const a of node.results) {
+    if (a.type !== 'audio' || !a.file) continue;
+    const id = `rs_${a.id}`; if (have.has(id)) continue;
+    m.candidates.forEach((c) => { c.picked = false; });
+    m.candidates.push({ result_id: id, file: a.file, kind: 'audio', node_id: node.id, created_at: now(), picked: true, source: 'generated' }); have.add(id); added++;
+  }
+  return added;
+}
+
+/** Pull the finished episode (clips joined, with the song on top for a music video) of the episode canvas into the episode. Returns how many were added (0 or 1). */
+export function applyEpisodeFinal(p: DirectorProject, link: CanvasLink, nodes: Pick<GraphNode, 'id' | 'results'>[], now: () => string = () => new Date().toISOString()): number {
+  const ep = p.episodes.find((e) => e.episode_id === link.episode_id); const node = nodes.find((n) => n.id === link.final_node_id);
+  if (!ep || !node) return 0;
+  const a = [...node.results].reverse().find((r) => r.type === 'video' && r.file);
+  if (!a || !a.file) return 0;
+  const id = `rs_${a.id}`; if (ep.final?.result_id === id) return 0;
+  ep.final = { result_id: id, file: a.file, kind: 'video', node_id: node.id, created_at: now(), picked: true, source: 'generated' };
+  return 1;
+}

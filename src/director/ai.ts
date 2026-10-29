@@ -6,6 +6,7 @@
 import { addChat, episodeByNo, findReference, newEpisode, newReference, newScene, newShot, shotsOfEpisode, syncShotAssets } from './model';
 import { PRESETS, RESOLUTIONS, splitSeconds, usableClipSeconds } from './series';
 import { allFormatsGuide, detectFormat, formatOf, isFormat, vocabOf } from './formats';
+import { applyMusicPatch, newMusic, songMap, songText } from './music';
 import type { CrewRole, DirectorProject, DirectorSeries, ReferenceKind, StageId } from './types';
 import type { Kickoff } from './workflow';
 
@@ -22,6 +23,8 @@ export interface Edit {
 export interface AiReply {
   crew?: CrewRole; say: string; intent?: Intent;
   series?: Partial<DirectorSeries>;
+  /** music video: the song (where it comes from, style, lyrics, length, sections). `generate: true` = the producer asked to make the song now. */
+  music?: Record<string, unknown> & { generate?: boolean };
   brief?: { text?: string; assumptions?: string[] };
   episodes?: { no: number; title?: string; logline?: string }[];
   references?: { kind?: ReferenceKind; name: string; description?: string; prompt_en?: string; prompt_ko?: string; variant_of?: string }[];
@@ -47,6 +50,7 @@ function stateText(p: DirectorProject): string {
   if (s.synopsis) L.push(`SYNOPSIS: ${clip(s.synopsis, 600)}`);
   if (s.sound_direction) L.push(`SOUND DIRECTION: ${clip(s.sound_direction, 200)}`);
   if (s.music_direction) L.push(`MUSIC DIRECTION: ${clip(s.music_direction, 200)}`);
+  if (s.format === 'musicvideo' && songText(p)) L.push(songText(p));
   if (p.brief.text) L.push(`BRIEF (${p.brief.status}): ${clip(p.brief.text, 800)}`);
   if (p.episodes.length) L.push('EPISODES:\n' + p.episodes.map((e) => `  ${e.no}. ${clip(e.title, 40)} - ${clip(e.logline, 90)} [${e.status}]`).join('\n'));
   if (p.references.length) L.push('CAST (casting entries; use these names exactly):\n' + p.references.filter((r) => r.status !== 'rejected').map((r) => `  ${r.kind}: ${r.name}${r.variant_of ? ` (look of ${r.variant_of})` : ''} [${r.status}${r.asset_id ? ', registered asset' : ''}] ${clip(r.description, 100)}`).join('\n'));
@@ -74,6 +78,7 @@ Reply with ONE JSON object only (no markdown). All keys are optional except "say
  "say": "1-3 short sentences to the producer in ${lang}: what you did / decided / what you need",
  "intent": "work|revise|approve|ask",   // approve ONLY when the producer clearly accepts the current step (예: 승인, 좋아 진행해, OK)
  "series": { "format":"drama|film|ad|musicvideo|vlog|short","title","genre","tone","logline","synopsis","language":"ko|en","total_episodes","episode_seconds","clip_seconds","aspect":"${ASPECTS.join('|')}","resolution":"${RESOLUTIONS.join('|')}","preset":"${PRESETS.join('|')}","sound_direction","music_direction" },
+ "music": { "source":"upload|generate", "title","style":"genre, tempo, mood, instruments, voice","lyrics","language":"ko|en","duration_sec","bpm","sections":[{"name":"intro|verse|pre-chorus|chorus|bridge|outro","start_sec","end_sec"}],"generate":true }, // music video only: the producer can bring their own song (source upload) or ask for one (source generate); generate:true = make the song now
  "brief": { "text": "the brief in prose: concept, audience, tone, structure, look, sound, music, how it will be produced", "assumptions": ["..."] },
  "episodes": [ { "no":1, "title":"", "logline":"" } ],
  "references": [ { "kind":"character|location|prop", "name":"", "description":"", "prompt_en":"image prompt (a person: full body, neutral background; a place: establishing shot; a prop: product shot)", "prompt_ko":"the same prompt in Korean", "variant_of":"base entry name, only for a new costume / look" } ],
@@ -102,12 +107,18 @@ export function kickoffInstruction(p: DirectorProject, k: Exclude<Kickoff, 'canv
   const s = p.series;
   if (k === 'brief') return `Write the brief from the producer's request above. FIRST decide the kind of work (series.format) from what the producer asked for; the kinds are:\n${allFormatsGuide()}\nWhen the producer does not give numbers, use that kind's usual numbers. Fill "series" completely (format, title, genre, tone, logline, language, total_episodes, episode_seconds, clip_seconds, aspect, resolution, preset, sound_direction, music_direction) and "brief". Defaults when not said: clip_seconds 10, aspect 16:9, resolution 1080p, preset h3_7plus1_kimchy, language ko (when earlier work is given, its settings are the defaults). Series length and episode length must follow what the producer said exactly.`;
   const f = formatOf(s.format);
+  if (k === 'music') {
+    const m = p.music;
+    if (m?.source === 'upload') return `The producer uploaded their own song${m.title ? ` "${m.title}"` : ''} (${m.duration_sec}s). You cannot hear it: propose its structure with "music.sections" (name, start_sec, end_sec; contiguous from 0 to ${m.duration_sec}s) the way a song of this length is usually built, a title if there is none, and the style / lyrics only if the producer wrote them. Keep everything that is already filled in.`;
+    return `Write the song for this music video: "music" with title, style (genre, tempo, mood, instruments, voice), the full lyrics in ${s.language === 'en' ? 'English' : 'Korean'}, language, duration_sec (the length the producer asked for; if not said use ${s.episode_seconds}), bpm, and sections (contiguous from 0 to duration_sec). Set music.source to "generate". The song matches the look and mood of the brief and the cast.`;
+  }
   if (k === 'series' && !f.multi) return `Write the ${vocabOf(s.format).scenario.toLowerCase()} of this ${f.label.toLowerCase()} with the approved CAST: "series.synopsis" and "series.logline", and "episodes" with EXACTLY 1 entry (no 1, a title and one line that says what the piece is about). ${f.guide}`;
   if (k === 'series') return `Write the scenario of the whole series with the approved CAST: "series.synopsis" and "series.logline" updates, and "episodes" with EXACTLY ${s.total_episodes} entries numbered 1 to ${s.total_episodes} (a title and one story line each; name the main cast and the costume or place changes in the story line). The episodes must build one story arc with hooks and a cliffhanger at the end of each episode. The leads appear throughout; use the supporting cast, places and props where they fit.`;
   if (k === 'references') return `Do the casting now, before any story is written (${vocabOf(s.format).cast}). From the brief choose the ${vocabOf(s.format).characters.toLowerCase()} (the leads and the important supporting cast, each with a precise look: age, build, face, hair, usual clothes), the main ${vocabOf(s.format).locations.toLowerCase()} and the key ${vocabOf(s.format).props.toLowerCase()}${s.format === 'ad' ? ' (the product is a prop entry with its exact look; no logo, no text on it)' : ''}. Use "references" (4 to 12 entries; kind character / location / prop). If CAST already holds entries (taken over from earlier work), do NOT cast them again: list only NEW cast that the next story needs, and keep the old entries as they are. If the story needs a costume or a look that is clearly different (wedding dress, uniform, night version of a place), add it as its own entry with variant_of set to the base entry. The sound and music directions may be refined in "series".`;
   const no = p.workflow.episode_no;
   const parts = splitSeconds(s.episode_seconds, s.clip_seconds);
-  return `Write ${f.multi ? `episode ${no} ("${episodeByNo(p, no)?.title ?? ''}")` : `the whole ${f.label.toLowerCase()}`}. Use "episode_plan" with scenes and clips. EXACTLY ${parts.length} clips in total across all scenes (the app sets their lengths: ${parts.join(', ')} seconds). Every clip needs prompt_en, prompt_ko, camera, dialogue (may be empty), sound and music.`;
+  const songMapText = f.id === 'musicvideo' && p.music?.sections.length ? ` THE SONG MAP (which part of the song each clip covers): ${songMap(p.music.duration_sec, s.clip_seconds, p.music.sections).map((c) => `clip ${c.no} = ${c.from}-${c.to}s ${c.section ?? ''}`).join('; ')}. Each clip's picture follows its part of the song, "music" says which part it is, "dialogue" holds the lyric line sung in that clip (or is empty).` : '';
+  return `Write ${f.multi ? `episode ${no} ("${episodeByNo(p, no)?.title ?? ''}")` : `the whole ${f.label.toLowerCase()}`}. Use "episode_plan" with scenes and clips. EXACTLY ${parts.length} clips in total across all scenes (the app sets their lengths: ${parts.join(', ')} seconds). Every clip needs prompt_en, prompt_ko, camera, dialogue (may be empty), sound and music.${songMapText}`;
 }
 
 // ------------------------------------------------------------------ reading the reply
@@ -137,6 +148,13 @@ export function checkReply(p: DirectorProject, r: AiReply, kickoff: Kickoff | 'f
     const nos = new Set(eps.map((e) => Number(e.no)));
     if (eps.length !== n || [...Array(n)].some((_, i) => !nos.has(i + 1))) return `"episodes" must have exactly ${n} entries numbered 1 to ${n} (got ${eps.length})`;
     if (eps.some((e) => !String(e.title ?? '').trim() && !String(e.logline ?? '').trim())) return 'every episode needs a title or a logline';
+  }
+  if (kickoff === 'music') {
+    const mu = r.music; if (!mu) return 'the reply needs "music"';
+    const src = p.music?.source ?? mu.source;
+    if (!Array.isArray(mu.sections) || !mu.sections.length) return '"music.sections" is needed (name, start_sec, end_sec)';
+    if (!(Number(mu.duration_sec ?? p.music?.duration_sec) >= 10)) return '"music.duration_sec" is needed (10 - 600)';
+    if (src === 'generate' && (!String(mu.lyrics ?? p.music?.lyrics ?? '').trim() || !String(mu.style ?? p.music?.style ?? '').trim())) return 'a generated song needs "style" and "lyrics"';
   }
   if (kickoff === 'references' && !(r.references ?? []).some((x) => x?.name)) return 'the reply needs "references" with at least one named entry';
   if (kickoff === 'episode') {
@@ -182,6 +200,7 @@ const refKey = (n: string) => n.trim().toLowerCase();
 export function applyReply(p: DirectorProject, r: AiReply): string[] {
   const notes: string[] = [];
   if (r.series) applySeries(p, r.series, notes);
+  if (r.music) { const { generate: _g, ...patch } = r.music; void _g; p.music = p.music ?? newMusic(); applyMusicPatch(p.music, patch, notes); }
   if (r.brief) {
     if (typeof r.brief.text === 'string') { p.brief.text = r.brief.text.trim(); p.brief.status = 'draft'; }
     if (Array.isArray(r.brief.assumptions)) p.brief.assumptions = r.brief.assumptions.map(String).filter(Boolean).slice(0, 12);

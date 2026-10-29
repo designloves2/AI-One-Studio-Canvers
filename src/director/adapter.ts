@@ -32,6 +32,8 @@ export interface AdapterOptions {
   episodeId?: string;
   /** values for the shared `h3-turbo` card (7+1 / Kimchy / resolution); only used with video-generate */
   turbo?: Record<string, Primitive>;
+  /** the finished episode: join the clips in order (`stitch`) and lay the song on top (`audio`, a music video) */
+  finish?: { stitch?: boolean; audio?: Asset };
   /** the picked image of each cast entry (key = ref_id). Clips that use cast get these connected as reference images, in the order of their prompt. */
   refAssets?: Record<string, Asset>;
 }
@@ -62,6 +64,9 @@ export const textNodeId = (shotId: string) => `n_${shotId}_text`;
 export const genNodeId = (shotId: string) => `n_${shotId}_gen`;
 export const edgeId = (shotId: string) => `e_${shotId}`;
 export const turboNodeId = (episodeId: string) => `n_turbo_${episodeId}`;
+export const stitchNodeId = (episodeId: string) => `n_stitch_${episodeId}`;
+export const songNodeId = (episodeId: string) => `n_song_${episodeId}`;
+export const finalNodeId = (episodeId: string) => `n_final_${episodeId}`;
 
 const COL_GEN_X = 420, ROW_H = 480, SCENE_GAP = 80;
 
@@ -191,6 +196,35 @@ export function buildCanvasFromDirector(p: DirectorProject, reg: RegistryLike, e
     y += ROW_H;
   }
 
+  // --- the finished episode: the clips joined in order, and the song laid on top (a music video)
+  let finalId: string | undefined;
+  if (opt.finish?.stitch && linkShots.length && opt.episodeId) {
+    const stDef = reg.get('video-stitch'); const stIn = stDef?.inputs.find((i) => i.multi && i.type === 'video'); const stOut = stDef?.outputs.find((o) => o.type === 'video'); const genOut = genDef?.outputs.find((o) => o.type === 'video');
+    if (!stDef || !stIn || !stOut || !genOut) report.warnings.push('the clips cannot be joined into one video here (no Video Stitch card): only the single clips are made');
+    else {
+      const sid = stitchNodeId(opt.episodeId);
+      if (!byNode.get(sid)) { const sn: GraphNode = { id: sid, defId: 'video-stitch', x: COL_GEN_X + 460, y: Math.max(0, Math.round((y - ROW_H) / 2)), params: { ...stDef.defaults }, results: [], activeResult: 0, title: 'Episode (clips joined)' }; nodes.push(sn); byNode.set(sid, sn); report.created.push(sid); }
+      for (const l of linkShots) {   // in clip order: that is the order of the joined video
+        const eid = `e_st_${l.shot_id}`;
+        if (!edges.some((e) => e.id === eid) && !edges.some((e) => e.source === l.node_ids[1] && e.target === sid)) edges.push({ id: eid, source: l.node_ids[1], sourceHandle: genOut.id, target: sid, targetHandle: stIn.id });
+      }
+      finalId = sid;
+      if (opt.finish.audio) {
+        const vaDef = reg.get('video-audio'), auDef = reg.get('import-audio');
+        const vaV = vaDef?.inputs.find((i) => i.type === 'video'), vaA = vaDef?.inputs.find((i) => i.type === 'audio'), vaOut = vaDef?.outputs.find((o) => o.type === 'video'), auOut = auDef?.outputs.find((o) => o.type === 'audio');
+        if (!vaDef || !auDef || !vaV || !vaA || !vaOut || !auOut) report.warnings.push('the song cannot be laid on the video here (no Add Audio card): the joined clips have no song');
+        else {
+          const aid = songNodeId(opt.episodeId), vid = finalNodeId(opt.episodeId);
+          if (!byNode.get(aid)) { const an: GraphNode = { id: aid, defId: 'import-audio', x: COL_GEN_X + 460, y: Math.max(0, Math.round((y - ROW_H) / 2)) + 360, params: {}, results: [opt.finish.audio], activeResult: 0, title: 'Song' }; nodes.push(an); byNode.set(aid, an); report.created.push(aid); }
+          else if (!byNode.get(aid)!.results.length) byNode.get(aid)!.results = [opt.finish.audio];
+          if (!byNode.get(vid)) { const vn: GraphNode = { id: vid, defId: 'video-audio', x: COL_GEN_X + 920, y: Math.max(0, Math.round((y - ROW_H) / 2)), params: { ...vaDef.defaults }, results: [], activeResult: 0, title: 'Episode + song' }; nodes.push(vn); byNode.set(vid, vn); report.created.push(vid); }
+          if (!edges.some((e) => e.source === sid && e.target === vid)) edges.push({ id: `e_va_${vid}`, source: sid, sourceHandle: stOut.id, target: vid, targetHandle: vaV.id });
+          if (!edges.some((e) => e.source === aid && e.target === vid)) edges.push({ id: `e_au_${vid}`, source: aid, sourceHandle: auOut.id, target: vid, targetHandle: vaA.id });
+          finalId = vid;
+        }
+      }
+    }
+  }
   const inDirector = new Set(p.shots.map((s) => s.shot_id));
   for (const l of prev?.shots ?? []) if (!inDirector.has(l.shot_id) && l.node_ids.some((id) => byNode.has(id))) report.orphaned.push(l.shot_id);
   // a shot that could not be built keeps its older link entry so it is not forgotten
@@ -201,7 +235,7 @@ export function buildCanvasFromDirector(p: DirectorProject, reg: RegistryLike, e
     app: 'ai-one-studio-canvers', version: 1, id: existing?.id ?? p.project_id, name: existing?.name ?? p.name,
     nodes, edges, updatedAt: now,
   };
-  const link: CanvasLink = { canvas_id: prev?.canvas_id ?? opt.canvasId ?? newId('cv'), canvas_file: canvasFile, purpose: 'episode', shots: linkShots, created_at: prev?.created_at ?? now, prompt_sent: sent, seed_sent: seedSent, ...(opt.episodeId ? { episode_id: opt.episodeId } : {}) };
+  const link: CanvasLink = { canvas_id: prev?.canvas_id ?? opt.canvasId ?? newId('cv'), canvas_file: canvasFile, purpose: 'episode', shots: linkShots, created_at: prev?.created_at ?? now, prompt_sent: sent, seed_sent: seedSent, ...(finalId ? { final_node_id: finalId } : {}), ...(opt.episodeId ? { episode_id: opt.episodeId } : {}) };
   return { project, link, report };
 }
 
@@ -275,5 +309,71 @@ export function buildCastingCanvas(p: DirectorProject, reg: RegistryLike, existi
   }
   const project: Project = { app: 'ai-one-studio-canvers', version: 1, id: existing?.id ?? p.project_id, name: existing?.name ?? `${p.name} casting`, nodes, edges, updatedAt: now };
   const link: CanvasLink = { canvas_id: prev?.canvas_id ?? newId('cv'), canvas_file: canvasFile, shots: [], purpose: 'casting', refs, created_at: prev?.created_at ?? now, prompt_sent: sent, engine_sent: engineSent, seed_sent: seedSent };
+  return { project, link, report };
+}
+
+
+// ------------------------------------------------------------------ music canvas (the song of a music video, made by the AI)
+export interface MusicReport { created: string[]; updated: string[]; keptUserText: string[]; missing: string[] }
+export const MUSIC_STYLE_ID = 'n_music_style', MUSIC_LYRICS_ID = 'n_music_lyrics', MUSIC_GEN_ID = 'n_music_gen';
+
+/**
+ * One Prompt card (style) + one Prompt card (lyrics) + the Music Generate card with the chosen engine, the song length, BPM and language.
+ * Same rules as the other canvases: fixed ids, nothing duplicated, a text / engine / number the producer changed in the canvas is kept.
+ */
+export function buildMusicCanvas(p: DirectorProject, reg: RegistryLike, existing: Project | null, prev: CanvasLink | null, canvasFile: string, opt: { now?: () => string; engineId?: string } = {}): { project: Project; link: CanvasLink; report: MusicReport } {
+  const now = (opt.now ?? (() => new Date().toISOString()))();
+  const report: MusicReport = { created: [], updated: [], keptUserText: [], missing: [] };
+  const m = p.music; const promptDef = reg.get('prompt'), genDef = reg.get('music-generate');
+  const nodes: GraphNode[] = existing ? JSON.parse(JSON.stringify(existing.nodes)) : [];
+  const edges: GraphEdge[] = existing ? JSON.parse(JSON.stringify(existing.edges)) : [];
+  const project: Project = { app: 'ai-one-studio-canvers', version: 1, id: existing?.id ?? p.project_id, name: existing?.name ?? `${p.name} song`, nodes, edges, updatedAt: now };
+  const link: CanvasLink = { canvas_id: prev?.canvas_id ?? newId('cv'), canvas_file: canvasFile, shots: [], purpose: 'music', created_at: prev?.created_at ?? now, music_nodes: [MUSIC_STYLE_ID, MUSIC_LYRICS_ID, MUSIC_GEN_ID], prompt_sent: { ...(prev?.prompt_sent ?? {}) }, engine_sent: { ...(prev?.engine_sent ?? {}) }, seed_sent: { ...(prev?.seed_sent ?? {}) } };
+  if (!m) { report.missing.push('there is no song yet'); return { project, link, report }; }
+  if (!promptDef || !genDef) { report.missing.push(!promptDef ? 'card "prompt" is not in the registry' : 'card "music-generate" is not in the registry'); return { project, link, report }; }
+  const styleIn = genDef.inputs.find((i) => i.id === 'prompt' && reg.compatible('text', i.type)), lyricsIn = genDef.inputs.find((i) => i.id === 'lyrics' && reg.compatible('text', i.type)), out = promptDef.outputs.find((o) => o.type === 'text');
+  if (!styleIn || !out) { report.missing.push('no text port to connect the style to the generator'); return { project, link, report }; }
+  const byNode = new Map(nodes.map((n) => [n.id, n]));
+  const want = opt.engineId ?? m.engine;
+  const engine = want && genDef.engines?.includes(want) ? want : genDef.engineId;
+  const pe = (engine && genDef.perEngine?.[engine]) || { params: genDef.params, defaults: genDef.defaults };
+  const sec = pe.params.seconds; const seconds = Math.min(sec?.max ?? 300, Math.max(sec?.min ?? 5, m.duration_sec || 60));
+  const params = (): Record<string, Primitive> => {
+    const x: Record<string, Primitive> = { ...pe.defaults };
+    if (pe.params.seconds) x.seconds = seconds;
+    if (pe.params.bpm && m.bpm >= 40) x.bpm = m.bpm;
+    if (pe.params.language?.options?.includes(m.language)) x.language = m.language;
+    if (pe.params.seed && m.seed !== undefined && m.seed >= 0) x.seed = m.seed;
+    return x;
+  };
+  const text = (id: string, key: string, title: string, value: string, y: number) => {
+    let n = byNode.get(id);
+    if (!n) { n = { id, defId: 'prompt', x: 0, y, params: { ...promptDef.defaults, text: value }, results: [], activeResult: 0, title }; nodes.push(n); byNode.set(id, n); report.created.push(id); link.prompt_sent![key] = value; return n; }
+    const cur = String(n.params.text ?? ''), was = prev?.prompt_sent?.[key];
+    if (cur === value) link.prompt_sent![key] = value;
+    else if (was !== undefined && cur === was) { n.params = { ...n.params, text: value }; report.updated.push(id); link.prompt_sent![key] = value; }
+    else report.keptUserText.push(id);
+    return n;
+  };
+  text(MUSIC_STYLE_ID, 'style', 'Song style', m.style, 0);
+  if (lyricsIn) text(MUSIC_LYRICS_ID, 'lyrics', 'Lyrics', m.lyrics, 420);
+  let gn = byNode.get(MUSIC_GEN_ID);
+  if (!gn) { gn = { id: MUSIC_GEN_ID, defId: 'music-generate', x: COL_GEN_X, y: 0, params: params(), engineId: engine, results: [], activeResult: 0, title: 'Song' }; nodes.push(gn); byNode.set(MUSIC_GEN_ID, gn); report.created.push(MUSIC_GEN_ID); link.engine_sent![MUSIC_GEN_ID] = engine ?? ''; link.seed_sent!.seconds = Number(gn.params.seconds ?? 0); link.seed_sent!.bpm = Number(gn.params.bpm ?? 0); link.seed_sent!.seed = Number(gn.params.seed ?? -1); }
+  else {
+    const was = prev?.engine_sent?.[MUSIC_GEN_ID] ?? genDef.engineId;
+    if (engine && gn.engineId === was && was !== engine) { gn.engineId = engine; gn.params = params(); link.engine_sent![MUSIC_GEN_ID] = engine; report.updated.push(MUSIC_GEN_ID); }
+    else {   // numbers follow the song while the card still holds what the adapter gave it
+      const next = params();
+      for (const k of ['seconds', 'bpm', 'seed'] as const) {
+        if (next[k] === undefined) continue;
+        const sentV = prev?.seed_sent?.[k] ?? (k === 'seed' ? -1 : undefined);
+        if (sentV !== undefined && Number(gn.params[k] ?? (k === 'seed' ? -1 : 0)) === sentV && sentV !== next[k]) { gn.params = { ...gn.params, [k]: next[k] }; link.seed_sent![k] = Number(next[k]); if (!report.updated.includes(MUSIC_GEN_ID)) report.updated.push(MUSIC_GEN_ID); }
+      }
+    }
+    if (link.engine_sent![MUSIC_GEN_ID] === undefined) link.engine_sent![MUSIC_GEN_ID] = gn.engineId ?? '';
+  }
+  const wire = (from: string, to: string, handle: string, id: string) => { if (!edges.some((e) => e.id === id) && !edges.some((e) => e.source === from && e.target === to && e.targetHandle === handle)) edges.push({ id, source: from, sourceHandle: out.id, target: to, targetHandle: handle }); };
+  wire(MUSIC_STYLE_ID, MUSIC_GEN_ID, styleIn.id, 'e_music_style');
+  if (lyricsIn) wire(MUSIC_LYRICS_ID, MUSIC_GEN_ID, lyricsIn.id, 'e_music_lyrics');
   return { project, link, report };
 }

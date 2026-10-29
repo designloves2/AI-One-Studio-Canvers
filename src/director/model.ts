@@ -16,7 +16,7 @@ export const isId = (v: unknown, kind?: IdKind): v is string => typeof v === 'st
 
 const now = () => new Date().toISOString();
 
-export const STAGES: StageId[] = ['intake', 'brief', 'references', 'series', 'episode', 'canvas', 'execute', 'review'];
+export const STAGES: StageId[] = ['intake', 'brief', 'references', 'music', 'series', 'episode', 'canvas', 'execute', 'review'];
 export const freshStatus = (): Record<StageId, StageStatus> => Object.fromEntries(STAGES.map((s) => [s, 'idle'])) as Record<StageId, StageStatus>;
 
 export function newDirectorProject(name: string): DirectorProject {
@@ -162,6 +162,9 @@ export const MIGRATIONS: Record<number, Migration> = {
 };
 
 // 2 -> 3: every episode gets its own place in the line (it used to be one place for the whole series, workflow.episode_no)
+// 4 -> 5: the song step of a music video (every status gets a `music` entry; nothing else changes)
+MIGRATIONS[4] = (p) => { const w = (p as { workflow: { status: Record<string, string> } }).workflow; return { ...p, workflow: { ...w, status: { music: 'idle', ...w.status } } }; };
+
 // 3 -> 4: the kind of work (everything made so far is a drama series)
 MIGRATIONS[3] = (p) => ({ ...p, series: { format: 'drama', ...(p as { series: Record<string, unknown> }).series } });
 

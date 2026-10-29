@@ -167,12 +167,12 @@ const v1 = { app: 'ai-one-studio-canvers', kind: 'director-project', schema_vers
   scenes: [{ scene_id: 'sc_aaaaaaaaaaaa', order: 1, title: 's', summary: '', status: 'draft', shot_ids: ['sh_aaaaaaaaaaaa'] }], shots: [{ shot_id: 'sh_aaaaaaaaaaaa', scene_id: 'sc_aaaaaaaaaaaa', order: 1, status: 'approved', duration_sec: 4, prompt_en: 'x', prompt_ko: '', camera: '', notes: '', asset_ids: [], results: [] }],
   assets: [], canvas_links: [], settings: { execution_mode: 'manual' } };
 const mig = M.loadDirectorProject(v1);
-ok(mig.migratedFrom === 1 && mig.project.schema_version === 4 && mig.project.series.format === 'drama' && mig.project.series.episode_seconds === 45 && mig.project.series.aspect === '9:16' && mig.project.episodes.length === 1 && mig.project.scenes[0].episode_id === mig.project.episodes[0].episode_id, 'a first-version project becomes episode 1 of a series, settings kept');
+ok(mig.migratedFrom === 1 && mig.project.schema_version === 5 && mig.project.series.format === 'drama' && mig.project.series.episode_seconds === 45 && mig.project.series.aspect === '9:16' && mig.project.episodes.length === 1 && mig.project.scenes[0].episode_id === mig.project.episodes[0].episode_id, 'a first-version project becomes episode 1 of a series, settings kept');
 ok(mig.project.shots[0].cast.length === 0 && mig.project.workflow.stage === 'episode' && !('story' in mig.project) && mig.project.episodes[0].stage === 'episode' && mig.project.episodes[0].stage_status === 'review_required', 'its clips get the new fields and episode 1 opens at the episode step, waiting for review');
 // schema 2 (one place for the whole series) -> 3 (one place per episode)
 const v2 = M.newDirectorProject('V2'); v2.schema_version = 2; for (let i = 1; i <= 3; i++) M.newEpisode(v2, i); const old2 = JSON.parse(JSON.stringify(v2)); old2.workflow.stage = 'execute'; old2.workflow.status.execute = 'review_required'; old2.workflow.episode_no = 2; old2.episodes.forEach((e) => { delete e.stage; delete e.stage_status; });
 const m2 = M.loadDirectorProject(old2).project;
-ok(m2.schema_version === 4 && m2.series.format === 'drama' && m2.workflow.stage === 'episode' && m2.episodes.map((e) => e.stage).join() === 'done,execute,idle' && m2.episodes[1].stage_status === 'review_required', 'a schema-2 project: episodes before the current one are done, the current one keeps its step, later ones are not started');
+ok(m2.schema_version === 5 && m2.series.format === 'drama' && m2.workflow.stage === 'episode' && m2.episodes.map((e) => e.stage).join() === 'done,execute,idle' && m2.episodes[1].stage_status === 'review_required', 'a schema-2 project: episodes before the current one are done, the current one keeps its step, later ones are not started');
 
 
 // ---- the brief settings that can be changed on the result screen use the crew's checks

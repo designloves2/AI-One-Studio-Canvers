@@ -10,17 +10,27 @@
 // A step only moves on when it is waiting for review (`review_required`). Approving twice, or approving a step that is still working,
 // does nothing: that is what stops double clicks and retried events from running a step twice.
 import { episodeByNo, shotsOfEpisode, syncShotAssets } from './model';
+import { musicBlockers } from './music';
 import type { DirectorEpisode, DirectorProject, EpisodeStage, StageId, StageStatus } from './types';
 
-export const GLOBAL_STAGES: StageId[] = ['intake', 'brief', 'references', 'series'];
+export const GLOBAL_STAGES: StageId[] = ['intake', 'brief', 'references', 'music', 'series'];
 export const EPISODE_STAGES: StageId[] = ['episode', 'canvas', 'execute', 'review'];
 const EP_ORDER: EpisodeStage[] = ['idle', 'episode', 'canvas', 'execute', 'review', 'done'];
-const GLOBAL_ORDER: StageId[] = ['intake', 'brief', 'references', 'series', 'episode'];   // 'episode' on the global line = production is open
+const GLOBAL_ORDER: StageId[] = ['intake', 'brief', 'references', 'music', 'series', 'episode'];   // 'episode' on the global line = production is open; 'music' only for a music video
 export const epStageIndex = (s: EpisodeStage) => EP_ORDER.indexOf(s);
 export const stageIndex = (s: StageId) => GLOBAL_ORDER.indexOf(s);
 
 /** the automatic job that starts when a step is entered (LLM work or a deterministic build) */
-export type Kickoff = 'brief' | 'references' | 'series' | 'episode' | 'canvas' | null;
+export type Kickoff = 'brief' | 'references' | 'music' | 'series' | 'episode' | 'canvas' | null;
+
+/** does this work have a song step? (a music video: the song is chosen before the scenario is written) */
+export const hasMusicStep = (p: DirectorProject) => p.series.format === 'musicvideo';
+/** the global step after `from` (the song step is skipped unless this is a music video) */
+export function nextGlobal(p: DirectorProject, from: StageId): StageId {
+  let i = stageIndex(from) + 1;
+  if (GLOBAL_ORDER[i] === 'music' && !hasMusicStep(p)) i += 1;
+  return GLOBAL_ORDER[i];
+}
 
 export interface ApproveResult {
   ok: boolean;
@@ -43,6 +53,7 @@ export function blockers(p: DirectorProject, stage: StageId = p.workflow.stage):
     if (p.episodes.length !== p.series.total_episodes) out.push(`The series plan has ${p.episodes.length} episodes, the brief says ${p.series.total_episodes}.`);
     if (p.episodes.some((e) => !e.title.trim() && !e.logline.trim())) out.push('Some episodes have no title or story line yet.');
   }
+  if (stage === 'music') out.push(...musicBlockers(p));
   if (stage === 'references') {
     const live = p.references.filter((r) => r.status !== 'rejected');
     if (!live.length) out.push('There is no cast yet. Ask for casting, or tell the crew to go without.');
@@ -87,9 +98,14 @@ export function approveStage(p: DirectorProject): ApproveResult {
   if (from === 'brief') p.brief.status = 'approved';
   if (from === 'references') { p.references.forEach((r) => { if (r.status === 'proposed') r.status = 'approved'; }); syncShotAssets(p); }
   p.workflow.status[from] = 'approved';
-  const to = GLOBAL_ORDER[stageIndex(from) + 1];
+  if (from === 'music' && p.music) {   // the song fixes the length of the one piece
+    p.music.status = 'approved';
+    if (p.music.duration_sec > 0) { p.series.total_episodes = 1; p.series.episode_seconds = p.music.duration_sec; }
+  }
+  const to = nextGlobal(p, from);
   p.workflow.stage = to;
   if (to === 'episode') { p.workflow.status.episode = 'approved'; return { ok: true, from, to, kickoff: null }; }   // production opens: the producer chooses which episodes to start
+  if (to === 'music') { p.workflow.status.music = 'review_required'; return { ok: true, from, to, kickoff: null }; }   // the producer chooses the song (own file or made by the AI): no automatic job
   const kickoff: Kickoff = to === 'brief' || to === 'references' || to === 'series' ? to : null;
   p.workflow.status[to] = 'working';
   return { ok: true, from, to, kickoff };
