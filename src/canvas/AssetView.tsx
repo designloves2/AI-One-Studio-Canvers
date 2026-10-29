@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Asset } from '../types';
 import { useT } from '../i18n';
+import { openAssetMenu } from '../ui/RegisterAsset';
 
 // Videos start loading once they are near the screen (off-screen ones wait), so a long canvas does not open every clip at once.
 
@@ -40,9 +41,9 @@ export function AssetView({ asset, className, controls = true, onBroken }: { ass
   if (asset.type === 'video') {
     const f = asset.file;
     const poster = f ? `/ltx25_one/thumb?filename=${encodeURIComponent(f.filename)}&subfolder=${encodeURIComponent(f.subfolder)}` : undefined;
-    return <video className={className} src={src} poster={poster} preload="none" controls={controls} loop muted playsInline
+    return <video className={className} src={src} poster={poster} preload="none" controls={controls} loop muted playsInline onContextMenu={(e) => openAssetMenu(e, asset)}
       onPlay={() => setPlaying(true)} onLoadedMetadata={() => setReady(true)} onError={() => void failed()} />;
   }
-  if (asset.type === 'audio') return <audio className={className} src={src} controls onError={() => void failed()} />;
-  return <img className={className} src={src} alt="" draggable={false} loading="lazy" onError={() => void failed()} />;
+  if (asset.type === 'audio') return <audio className={className} src={src} controls onContextMenu={(e) => openAssetMenu(e, asset)} onError={() => void failed()} />;
+  return <img className={className} src={src} alt="" draggable={false} loading="lazy" onContextMenu={(e) => openAssetMenu(e, asset)} onError={() => void failed()} />;
 }

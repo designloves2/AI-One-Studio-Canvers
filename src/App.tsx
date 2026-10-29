@@ -31,6 +31,7 @@ import { queueCounts, restartComfy } from './backend/server';
 import { RefineHost } from './ui/refine';
 import { ColorPopupHost } from './ui/ColorPopup';
 import { LightboxHost } from './ui/Lightbox';
+import { AssetRegisterHost } from './ui/RegisterAsset';
 import { LibraryPanel } from './panels/LibraryPanel';
 import { LivePanel } from './panels/LivePanel';
 import { useSettings } from './store/settings';
@@ -218,6 +219,7 @@ export function App() {
       <RefineHost />
       <ColorPopupHost />
       <LightboxHost />
+      <AssetRegisterHost />
       <TopBar />
       <div className="body">
         <Rail />

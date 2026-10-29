@@ -15,6 +15,9 @@ export const KO_DIRECTOR: Record<string, string> = {
   // clip status, casting groups, meters
   draft: '초안', ready: '준비됨', queued: '대기', generating: '생성 중', review: '검토', done: '완료',
   Actors: '배우', Locations: '장소', Props: '소품', 'images ready': '이미지 완료', 'clips generated': '클립 생성됨',
+  // register a result as an asset (right-click)
+  'Register as asset': '에셋으로 등록', 'Asset name': '에셋 이름', 'Write it in a prompt as': '프롬프트에는 이렇게 씁니다', 'Use letters, numbers, _ and Korean': '글자, 숫자, _ 와 한글을 쓸 수 있습니다',
+  'Characters that cannot be used were replaced with _': '쓸 수 없는 문자는 _ 로 바꿨습니다', 'This image was already registered as': '같은 이미지가 이미 등록되어 있습니다:', Category: '카테고리', Register: '등록', Registered: '등록했습니다',
   // model settings of the Director
   'Model settings': '모델 설정', 'Used by the Director crew only': '디렉터 작업팀 전용', 'Director LLM': '디렉터 LLM', 'Main LLM': '메인 LLM', 'no model chosen': '모델 미선택',
   'The Director crew follows the main LLM. Untick to give it its own backend / model (a stronger model writes better scenarios).': '디렉터 작업팀이 메인 LLM을 따릅니다. 체크를 풀면 디렉터 전용 백엔드/모델을 쓸 수 있습니다 (더 강한 모델이 시나리오를 더 잘 씁니다).',

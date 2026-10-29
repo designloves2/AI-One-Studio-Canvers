@@ -677,3 +677,13 @@ button.save-state.dirty { cursor: pointer; } button.save-state.dirty:hover { bac
 .dirx-input-bar { gap: 10px; } .dirx-input-bar .dirx-hint { margin-left: auto; white-space: nowrap; }
 .dx-modal-box.wide { width: min(640px, 100%); } .dx-modal-scroll { overflow-y: auto; min-height: 0; padding-right: 4px; }
 @media (max-width: 700px) { .dirx-input-bar .dirx-hint { display: none; } .dirx-model { max-width: 70%; } }
+
+/* right-click "Register as asset" */
+.reg-menu { z-index: 2500; min-width: 190px; }
+.regdlg { min-width: 340px; max-width: 460px; } .regdlg h3 { margin: 0 0 12px; }
+.reg-preview { display: grid; place-items: center; background: var(--bg); border-radius: 10px; padding: 6px; margin-bottom: 12px; } .reg-preview img, .reg-preview video { max-width: 100%; max-height: 220px; border-radius: 8px; } .reg-preview audio { width: 100%; }
+.reg-row { display: flex; flex-direction: column; gap: 5px; margin-bottom: 8px; } .reg-row > span { color: var(--muted); font-size: 12px; }
+.reg-name { display: flex; align-items: center; gap: 4px; background: var(--bg); border: 1px solid var(--line2); border-radius: 8px; padding: 0 8px; } .reg-name em { font-style: normal; color: var(--acc); font-weight: 700; }
+.regdlg .reg-name input { margin: 0; border: 0; background: transparent; padding: 8px 4px; } .regdlg .reg-name:focus-within { border-color: var(--acc); }
+.regdlg select { background: var(--bg); border: 1px solid var(--line2); border-radius: 8px; padding: 7px 8px; color: var(--fg); }
+.reg-hint { margin: 0 0 10px; color: var(--muted); font-size: 12px; } .reg-hint b { color: var(--fg); }
