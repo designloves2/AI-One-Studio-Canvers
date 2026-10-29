@@ -4,6 +4,7 @@ import react from '@vitejs/plugin-react';
 import { handleDownloads } from './server-lib/downloads.mjs';
 // @ts-ignore plain JS helper shared with serve.mjs
 import { handleCanvases } from './server-lib/canvases.mjs';
+import { handleDirector } from './server-lib/director.mjs';
 
 // Dev: the browser talks to this server only; ComfyUI (+ the STUDIO_ONE routes) is proxied,
 // so there are no CORS problems. Override the target with COMFY_URL.
@@ -21,7 +22,7 @@ const common = {
 };
 
 export default defineConfig({
-  plugins: [react(), { name: 'canvers-downloads', configureServer(server) { server.middlewares.use((req, res, next) => { void handleDownloads(req as any, res as any).then((h: boolean) => { if (!h) next(); }); }); } }, { name: 'canvers-canvases', configureServer(server) { server.middlewares.use((req, res, next) => { void handleCanvases(req as any, res as any).then((h: boolean) => { if (!h) next(); }); }); } }],
+  plugins: [react(), { name: 'canvers-downloads', configureServer(server) { server.middlewares.use((req, res, next) => { void handleDownloads(req as any, res as any).then((h: boolean) => { if (!h) next(); }); }); } }, { name: 'canvers-canvases', configureServer(server) { server.middlewares.use((req, res, next) => { void handleCanvases(req as any, res as any).then((h: boolean) => { if (!h) next(); }); }); } }, { name: 'canvers-director', configureServer(server) { server.middlewares.use((req, res, next) => { void handleDirector(req as any, res as any).then((h: boolean) => { if (!h) next(); }); }); } }],
   server: {
     // 127.0.0.1 (not only "localhost", which on Windows can mean IPv6 only) so a cloudflared tunnel can reach it;
     // tunnel host names are allowed (add more with CANVERS_ALLOWED_HOSTS=a.example.com,b.example.com)

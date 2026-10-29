@@ -42,4 +42,5 @@
 
 ## 진행 상태
 - Phase 0: 문서 3개 작성 완료. 코드 변경 없음.
-- Phase 1 이후: 시작 전.
+- Phase 1: 완료(미커밋). `src/director/{types,model}.ts`, `server-lib/director.mjs`(+`serve.mjs`·`vite.config.ts` 연결), `src/backend/director.ts`, `scripts/test-director.mjs`(`npm run test:director`, 30개 통과), `npm run typecheck` 통과. 화면 없음. 실제 앱 서버(8765/8766)에서의 라우트 확인은 아직 안 함(임시 서버로만 시험).
+- Phase 2 이후: 시작 전.

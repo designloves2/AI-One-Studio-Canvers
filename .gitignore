@@ -4,4 +4,5 @@ dist
 .DS_Store
 release
 canvases
+/director/
 graphify-out

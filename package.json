@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "start": "node serve.mjs",
     "mock": "node mock/mock-comfy.mjs",
-    "build:mcp": "node mcp/build.mjs"
+    "build:mcp": "node mcp/build.mjs",
+    "test:director": "node scripts/test-director.mjs"
   },
   "dependencies": {
     "@xyflow/react": "12.8.2",
