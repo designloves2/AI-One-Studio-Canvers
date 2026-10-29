@@ -91,6 +91,7 @@
 - 코드만 끝낸 것(검증 대기): **광고 등 다른 화면비 버전** — `series.versions`(추가 화면비 목록, 스키마 변경 없음), `CanvasLink.aspect`(추가 화면비 캔버스, 주 캔버스는 없음), `canvasAction.makeVersionCanvases/extraAspects/versionLinks`, 캔버스 단계의 `VersionsBlock`(체크 + "다른 화면비 캔버스 만들기" + 열기). 같은 프롬프트·캐스트·시드, 화면비만 다름. 생성은 캔버스에서 손으로(결과는 그 캔버스에 남음, 샷 결과로 안 들어옴). `linkOfEpisode`·`planBatch`·`episodeBlockers`는 `!l.aspect` 로 주 캔버스만 본다.
 - 코드만 끝낸 것(검증 대기): **새 모습(의상 변형)** — 캐스팅 카드의 "+ 새 모습"(인물·장소, 이미 변형인 것 제외) → 설명 입력 → `variant_of` 가 붙은 새 항목(프롬프트 = 기본 프롬프트 + 설명). 기본 이미지가 이미 있으면 `buildCastingCanvas`(`opt.baseAssets`)가 변형을 `image-edit` 카드(기본 엔진 klein-edit) + 기본 이미지 Load Image 카드(`n_<ref>_base`)로 만들어 같은 얼굴을 유지한다("Keep exactly the same person… Change only: …"). 기본 이미지가 아직 없으면 글 프롬프트만으로 새로 생성(이후 다시 만들면 편집으로 바뀜). 데모 이미지는 편집 입력에서 제외.
 - 코드만 끝낸 것(검증 대기): 캐스트 이미지 선택창(에셋 라이브러리·갤러리)에서 "눈가리기" 목록에 든 그림은 여기서도 흐리게(`Hideable`, `backend/sensitive.ts` 공용 목록).
+- **실 테스트 명세서(다른 에이전트용, 코드 수정 금지·문제 전부 보고)**: `docs/DIRECTOR_REAL_TEST_SPEC.md`. 결과 보고서는 `docs/DIRECTOR_REAL_TEST_REPORT.md` 로 올 예정.
 - **한꺼번에 하는 검증 목록은 `docs/DIRECTOR_VERIFY_CHECKLIST.md`**. 좁은 창 CSS 는 이미 있음(눈으로 확인만).
 - 그 뒤 후보: 좁은 창 편 스트립 확인, 그리고 **한꺼번에 하는 검증**(위 "확인 못 한 것" 목록 + 진행 막대).
 
