@@ -15,6 +15,12 @@ export const KO_DIRECTOR: Record<string, string> = {
   // clip status, casting groups, meters
   draft: '초안', ready: '준비됨', queued: '대기', generating: '생성 중', review: '검토', done: '완료',
   Actors: '배우', Locations: '장소', Props: '소품', 'images ready': '이미지 완료', 'clips generated': '클립 생성됨',
+  // brief settings you can change, prompt view, demo
+  'You changed the settings.': '설정을 바꿨습니다.', Apply: '적용', Undo: '되돌리기', Prompt: '프롬프트',
+  'Scenario and clips that are already written are not changed: ask the crew in the chat to rewrite them if needed.': '이미 쓴 시나리오와 클립은 바뀌지 않습니다. 필요하면 채팅으로 다시 쓰도록 지시하세요.',
+  'English is what the image model receives.': '영어가 이미지 모델에 들어가는 값입니다.', 'Korean is for reading and for asking for changes (the model gets the English prompt).': '한국어는 보기와 수정 요청용입니다 (모델에는 영어 프롬프트가 들어갑니다).',
+  'Demo: nothing is generated, stand-in pictures are used': '데모: 아무것도 생성하지 않고 대체 이미지를 씁니다', 'Demo: go through every step without an LLM or a GPU (stand-in pictures)': '데모: LLM도 GPU도 없이 모든 단계를 진행 (대체 이미지)',
+  'The demo does not make canvas files. Turn the demo off to build the real canvas.': '데모에서는 캔버스 파일을 만들지 않습니다. 실제 캔버스는 데모를 끄고 만드세요.',
   // casting: model, generate all / one, register
   'Image model': '이미지 모델', 'Generate all': '전체 일괄 생성', 'Make this one': '이 항목 생성', 'Register as assets': '에셋 등록', 'Register all now': '지금 전체 등록', 'Nothing to register.': '등록할 이미지가 없습니다.',
   'Automatic: all of them when the casting is approved': '자동: 캐스팅을 승인할 때 전부 등록', 'Manual: only the ones I register': '수동: 내가 등록한 것만',

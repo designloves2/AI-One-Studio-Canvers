@@ -14,6 +14,7 @@ const S = await bundle('src/director/series.ts', 'series.mjs');
 const W = await bundle('src/director/workflow.ts', 'workflow.mjs');
 const AI = await bundle('src/director/ai.ts', 'ai.mjs');
 const C = await bundle('src/director/compose.ts', 'compose.mjs');
+const D = await bundle('src/director/demoMedia.ts', 'demomedia.mjs');
 
 let fails = 0;
 const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m); } else console.log('ok  ', m); };
@@ -171,6 +172,42 @@ ok(mig.project.shots[0].cast.length === 0 && mig.project.workflow.stage === 'epi
 const v2 = M.newDirectorProject('V2'); v2.schema_version = 2; for (let i = 1; i <= 3; i++) M.newEpisode(v2, i); const old2 = JSON.parse(JSON.stringify(v2)); old2.workflow.stage = 'execute'; old2.workflow.status.execute = 'review_required'; old2.workflow.episode_no = 2; old2.episodes.forEach((e) => { delete e.stage; delete e.stage_status; });
 const m2 = M.loadDirectorProject(old2).project;
 ok(m2.schema_version === 3 && m2.workflow.stage === 'episode' && m2.episodes.map((e) => e.stage).join() === 'done,execute,idle' && m2.episodes[1].stage_status === 'review_required', 'a schema-2 project: episodes before the current one are done, the current one keeps its step, later ones are not started');
+
+
+// ---- the brief settings that can be changed on the result screen use the crew's checks
+{
+  const q = M.newDirectorProject('S'); const notes = [];
+  AI.applySeriesPatch(q, { total_episodes: 500, episode_seconds: 60, aspect: 'bad', resolution: '720p', preset: 'nope' }, notes);
+  ok(q.series.total_episodes === 1 && q.series.episode_seconds === 60 && q.series.aspect === '16:9' && q.series.resolution === '720p' && q.series.preset === 'h3_7plus1_kimchy', 'a number out of range and unknown values are ignored; valid ones are taken');
+  AI.applySeriesPatch(q, { total_episodes: 12, clip_seconds: 20, aspect: '9:16', preset: 'h3_plain' }, notes);
+  ok(q.series.total_episodes === 12 && q.series.clip_seconds === 15 && notes.some((n) => /15/.test(n)) && q.series.aspect === '9:16' && q.series.preset === 'h3_plain', 'a clip length the card cannot render is moved into range and the producer is told');
+  AI.applySeriesPatch(q, { clip_seconds: 8, episode_seconds: 90 }, notes); ok(S.splitSeconds(q.series.episode_seconds, q.series.clip_seconds).length === 12, '1:30 at 8 s clips = 12 clips (the screen shows the count before Apply)');
+}
+// ---- cast prompts in English and Korean
+{
+  const q = M.newDirectorProject('K');
+  const r1 = M.newReference(q, 'character', 'Hana', 'girl', 'a girl', '소녀');
+  ok(r1.prompt_ko === '소녀' && M.newReference(q, 'prop', 'Cup', 'c', 'a cup').prompt_ko === undefined, 'a cast entry keeps its Korean prompt next to the English one');
+  AI.applyReply(q, { say: '', references: [{ kind: 'character', name: 'Hana', prompt_en: 'a tall girl', prompt_ko: '키 큰 소녀' }, { kind: 'prop', name: 'Key', prompt_en: 'a key', prompt_ko: '열쇠' }] });
+  ok(r1.prompt_en === 'a tall girl' && r1.prompt_ko === '키 큰 소녀' && q.references.find((x) => x.name === 'Key').prompt_ko === '열쇠', 'the casting reply updates both languages and adds new entries with both');
+  r1.status = 'approved'; AI.applyReply(q, { say: '', references: [{ name: 'Hana', prompt_en: 'CHANGED', prompt_ko: '바뀜' }] });
+  ok(r1.prompt_en === 'a tall girl', 'an approved cast entry is not rewritten by a repeated casting reply');
+  AI.applyReply(q, { say: '', edits: [{ op: 'set_reference', name: 'Hana', prompt_ko: '한국어만 수정' }] });
+  ok(r1.prompt_ko === '한국어만 수정' && r1.prompt_en === 'a tall girl', 'a change asked for in the chat can touch just the Korean prompt');
+}
+// ---- demo stand-in pictures
+{
+  const svg = (u) => decodeURIComponent(u.slice(u.indexOf(',') + 1));
+  const bad = D.placeholderSvg({ title: '<script>alert(1)</script>&"', subtitle: '"><img src=x>', hue: 10, w: 100, h: 100 });
+  ok(bad.startsWith('data:image/svg+xml') && !svg(bad).includes('<script') && !svg(bad).includes('<img') && svg(bad).includes('&lt;script&gt;'), 'text from the project can never break out of the picture markup');
+  const ref = { ref_id: 'rf_aaaaaaaaaaaa', name: 'Hana', kind: 'character' }, loc = { ref_id: 'rf_bbbbbbbbbbbb', name: 'Hall', kind: 'location' }, prop = { ref_id: 'rf_cccccccccccc', name: 'Cup', kind: 'prop' };
+  const dim = (r) => { const m = /width="(\d+)" height="(\d+)"/.exec(svg(r.data_url)); return `${m[1]}x${m[2]}`; };
+  ok(dim(D.demoRefResult(ref, 'Krea 2', 1)) === '480x640' && dim(D.demoRefResult(loc, 'Krea 2', 1)) === '640x360' && dim(D.demoRefResult(loc, 'Krea 2', 1, '9:16')) === '360x640' && dim(D.demoRefResult(prop, 'Krea 2', 1)) === '520x520', 'cast pictures: tall person, wide place (tall in 9:16), square prop');
+  const a = D.demoRefResult(ref, 'Krea 2', 1, '16:9', 't1'), b = D.demoRefResult(ref, 'Krea 2', 2, '16:9', 't2');
+  ok(a.data_url !== b.data_url && a.result_id !== b.result_id && a.source === 'demo' && a.picked && svg(a.data_url).includes('Krea 2') && svg(b.data_url).includes('seed 2'), 'a new seed is a different picture; the model and seed are written on it; results are marked demo');
+  const list = [a]; D.pushPicked(list, b); ok(list.length === 2 && list.filter((x) => x.picked).length === 1 && list[1].picked, 'a new result becomes the picked one and the old one stays as a candidate');
+  const clip = D.demoClipResult('2-3', { shot_id: 'sh_aaaaaaaaaaaa', duration_sec: 10, prompt_en: 'x' }, 7, '9:16', 't'); ok(dim(clip) === '360x640' && svg(clip.data_url).includes('Clip 2-3') && clip.kind === 'image', 'a clip result is a labelled card in the series aspect');
+}
 
 fs.rmSync(tmp, { recursive: true, force: true });
 console.log(fails ? `\n${fails} FAILED` : '\nall passed'); process.exit(fails ? 1 : 0);

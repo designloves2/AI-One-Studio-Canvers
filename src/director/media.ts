@@ -5,7 +5,7 @@ import { libFile } from '../backend/assetlib';
 import type { Asset } from '../types';
 import type { ResultRef } from './types';
 
-export const resultUrl = (r?: ResultRef): string => (!r ? '' : r.lib_id ? libFile(r.lib_id) : viewUrl(r.file));
+export const resultUrl = (r?: ResultRef): string => (!r ? '' : r.data_url ? r.data_url : r.lib_id ? libFile(r.lib_id) : viewUrl(r.file));
 
 /** the canvas Asset for a picked image (what a Load Image card holds) */
 export function assetOfResult(r: ResultRef, id: string): Asset {

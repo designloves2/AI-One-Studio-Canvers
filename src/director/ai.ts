@@ -23,7 +23,7 @@ export interface AiReply {
   series?: Partial<DirectorSeries>;
   brief?: { text?: string; assumptions?: string[] };
   episodes?: { no: number; title?: string; logline?: string }[];
-  references?: { kind?: ReferenceKind; name: string; description?: string; prompt_en?: string; variant_of?: string }[];
+  references?: { kind?: ReferenceKind; name: string; description?: string; prompt_en?: string; prompt_ko?: string; variant_of?: string }[];
   episode_plan?: { no?: number; scenes: { title?: string; summary?: string; clips: ClipPlan[] }[] };
   edits?: Edit[];
   suggest?: string[];
@@ -73,9 +73,9 @@ Reply with ONE JSON object only (no markdown). All keys are optional except "say
  "series": { "title","genre","tone","logline","synopsis","language":"ko|en","total_episodes","episode_seconds","clip_seconds","aspect":"${ASPECTS.join('|')}","resolution":"${RESOLUTIONS.join('|')}","preset":"${PRESETS.join('|')}","sound_direction","music_direction" },
  "brief": { "text": "the brief in prose: concept, audience, tone, structure, look, sound, music, how it will be produced", "assumptions": ["..."] },
  "episodes": [ { "no":1, "title":"", "logline":"" } ],
- "references": [ { "kind":"character|location|prop", "name":"", "description":"", "prompt_en":"image prompt (a person: full body, neutral background; a place: establishing shot; a prop: product shot)", "variant_of":"base entry name, only for a new costume / look" } ],
+ "references": [ { "kind":"character|location|prop", "name":"", "description":"", "prompt_en":"image prompt (a person: full body, neutral background; a place: establishing shot; a prop: product shot)", "prompt_ko":"the same prompt in Korean", "variant_of":"base entry name, only for a new costume / look" } ],
  "episode_plan": { "no": 1, "scenes": [ { "title":"", "summary":"", "clips": [ { "prompt_en":"what the camera sees: subject, action, setting, camera, light", "prompt_ko":"short Korean", "camera":"", "dialogue":"spoken lines with the speaker", "sound":"effects and ambience", "music":"the music under this clip", "cast":["names from CAST in this clip"], "location":"a CAST location name" } ] } ] },
- "edits": [ {"op":"set_clip","episode":1,"clip":2,"prompt_en":"..."}, {"op":"set_episode","no":3,"title":"","logline":""}, {"op":"set_scene","episode":1,"scene":2,"title":"","summary":""}, {"op":"delete_clip","episode":1,"clip":4}, {"op":"set_reference","name":"","kind":"","description":"","prompt_en":"","variant_of":""}, {"op":"delete_reference","name":""}, {"op":"skip_references"} ],
+ "edits": [ {"op":"set_clip","episode":1,"clip":2,"prompt_en":"..."}, {"op":"set_episode","no":3,"title":"","logline":""}, {"op":"set_scene","episode":1,"scene":2,"title":"","summary":""}, {"op":"delete_clip","episode":1,"clip":4}, {"op":"set_reference","name":"","kind":"","description":"","prompt_en":"","prompt_ko":"","variant_of":""}, {"op":"delete_reference","name":""}, {"op":"skip_references"} ],
  "suggest": ["up to 3 short next things the producer might say"]
 }
 RULES
@@ -155,6 +155,9 @@ export function checkReply(p: DirectorProject, r: AiReply, kickoff: Kickoff | 'f
 // ------------------------------------------------------------------ applying the reply
 const num = (v: unknown) => (typeof v === 'number' ? v : Number(v));
 
+/** change the series settings (the crew's JSON and the dropdowns of the brief screen use the same checks: numbers are limited, unknown values are ignored, a clip length is moved into what the card renders) */
+export function applySeriesPatch(p: DirectorProject, patch: Partial<DirectorSeries>, notes: string[]): void { applySeries(p, patch, notes); }
+
 function applySeries(p: DirectorProject, patch: Partial<DirectorSeries>, notes: string[]) {
   const s = p.series;
   for (const k of ['title', 'genre', 'tone', 'logline', 'synopsis', 'sound_direction', 'music_direction'] as const) if (typeof patch[k] === 'string') s[k] = patch[k]!;
@@ -189,8 +192,8 @@ export function applyReply(p: DirectorProject, r: AiReply): string[] {
   for (const x of r.references ?? []) {
     if (!x?.name) continue;
     const cur = p.references.find((q) => refKey(q.name) === refKey(x.name));
-    if (cur) { if (cur.status !== 'approved') { if (x.description) cur.description = x.description; if (x.prompt_en) cur.prompt_en = x.prompt_en; } continue; }
-    const nr = newReference(p, (['character', 'location', 'prop'] as const).includes(x.kind as ReferenceKind) ? (x.kind as ReferenceKind) : 'character', x.name.trim(), x.description ?? '', x.prompt_en ?? '');
+    if (cur) { if (cur.status !== 'approved') { if (x.description) cur.description = x.description; if (x.prompt_en) cur.prompt_en = x.prompt_en; if (x.prompt_ko) cur.prompt_ko = x.prompt_ko; } continue; }
+    const nr = newReference(p, (['character', 'location', 'prop'] as const).includes(x.kind as ReferenceKind) ? (x.kind as ReferenceKind) : 'character', x.name.trim(), x.description ?? '', x.prompt_en ?? '', x.prompt_ko ?? '');
     if (x.variant_of && findReference(p, x.variant_of)) nr.variant_of = findReference(p, x.variant_of)!.name;
   }
   if (r.episode_plan) {
@@ -257,7 +260,7 @@ function applyEdit(p: DirectorProject, e: Edit, notes: string[]) {
       if (!e.name) return;
       let r = p.references.find((q) => refKey(q.name) === refKey(e.name!));
       if (!r) r = newReference(p, (['character', 'location', 'prop'] as const).includes(e.kind as ReferenceKind) ? (e.kind as ReferenceKind) : 'character', e.name.trim());
-      if (typeof e.description === 'string') r.description = e.description; if (typeof e.prompt_en === 'string') r.prompt_en = e.prompt_en;
+      if (typeof e.description === 'string') r.description = e.description; if (typeof e.prompt_en === 'string') r.prompt_en = e.prompt_en; if (typeof e.prompt_ko === 'string') r.prompt_ko = e.prompt_ko;
       if (e.status === 'rejected' || e.status === 'proposed') r.status = e.status;
       if (e.variant_of && findReference(p, e.variant_of)) r.variant_of = findReference(p, e.variant_of)!.name;
       if (e.prompt_en && r.results.length) notes.push(`${r.name}: the old image is kept, generate again to see the change`);

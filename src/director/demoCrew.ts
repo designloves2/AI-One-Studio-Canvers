@@ -27,11 +27,11 @@ export const demoCrew: LlmFn = async (system, user) => {
   }
   if (/casting now/.test(said)) {
     return JSON.stringify({ crew: 'art', say: ko('주연과 장소, 소품을 캐스팅했습니다. 이미지는 아직 만들기 전입니다.', 'Cast proposed.'), references: [
-      { kind: 'character', name: ko('서연', 'Seoyeon'), description: ko('30대 초반 여주인공, 단정한 단발', 'lead, early 30s, neat bob'), prompt_en: 'full body portrait of a Korean woman in her early 30s, neat bob haircut, beige coat, neutral grey background' },
-      { kind: 'character', name: ko('서연 웨딩드레스', 'Seoyeon wedding'), description: ko('같은 인물, 웨딩드레스', 'same person in a wedding dress'), prompt_en: 'same woman in a white wedding dress, full body, neutral grey background', variant_of: ko('서연', 'Seoyeon') },
-      { kind: 'character', name: ko('도현', 'Dohyun'), description: ko('30대 후반 남주인공', 'male lead, late 30s'), prompt_en: 'full body portrait of a Korean man in his late 30s, dark suit, neutral grey background' },
-      { kind: 'location', name: ko('재벌가 저택', 'Mansion'), description: ko('대리석 로비의 큰 저택', 'large mansion with a marble lobby'), prompt_en: 'wide establishing shot of a luxurious mansion lobby with marble floor and a grand staircase' },
-      { kind: 'prop', name: ko('낡은 편지', 'Old letter'), description: ko('비밀이 담긴 편지', 'a letter holding a secret'), prompt_en: 'close product shot of an old yellowed letter with a red wax seal on a wooden table' }] });
+      { kind: 'character', name: ko('서연', 'Seoyeon'), description: ko('30대 초반 여주인공, 단정한 단발', 'lead, early 30s, neat bob'), prompt_en: 'full body portrait of a Korean woman in her early 30s, neat bob haircut, beige coat, neutral grey background', prompt_ko: '30대 초반 한국 여성의 전신 사진, 단정한 단발머리, 베이지 코트, 중립 회색 배경' },
+      { kind: 'character', name: ko('서연 웨딩드레스', 'Seoyeon wedding'), description: ko('같은 인물, 웨딩드레스', 'same person in a wedding dress'), prompt_en: 'same woman in a white wedding dress, full body, neutral grey background', prompt_ko: '같은 여성, 흰 웨딩드레스, 전신, 중립 회색 배경', variant_of: ko('서연', 'Seoyeon') },
+      { kind: 'character', name: ko('도현', 'Dohyun'), description: ko('30대 후반 남주인공', 'male lead, late 30s'), prompt_en: 'full body portrait of a Korean man in his late 30s, dark suit, neutral grey background', prompt_ko: '30대 후반 한국 남성의 전신 사진, 어두운 정장, 중립 회색 배경' },
+      { kind: 'location', name: ko('재벌가 저택', 'Mansion'), description: ko('대리석 로비의 큰 저택', 'large mansion with a marble lobby'), prompt_en: 'wide establishing shot of a luxurious mansion lobby with marble floor and a grand staircase', prompt_ko: '대리석 바닥과 큰 계단이 있는 화려한 저택 로비의 와이드 전경' },
+      { kind: 'prop', name: ko('낡은 편지', 'Old letter'), description: ko('비밀이 담긴 편지', 'a letter holding a secret'), prompt_en: 'close product shot of an old yellowed letter with a red wax seal on a wooden table', prompt_ko: '나무 탁자 위, 붉은 밀랍 봉인이 있는 누렇게 바랜 낡은 편지의 클로즈업' }] });
   }
   if (/scenario of the whole series/.test(said)) {
     return JSON.stringify({ crew: 'writer', say: ko(`${total}편 시나리오를 썼습니다. 승인된 캐스팅으로만 구성했습니다.`, 'Scenario written.'), series: { synopsis: ko('저택에서 시작된 비밀이 가족 전체를 흔든다.', 'A secret shakes the whole family.') },

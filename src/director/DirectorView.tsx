@@ -12,7 +12,8 @@ import { resultUrl } from './media';
 import { CREW_LABEL } from './ai';
 import { episodeByNo, newAsset, shotsOfEpisode, syncShotAssets } from './model';
 import { newSeed } from './execution';
-import { PRESET_LABEL, splitSeconds } from './series';
+import { PRESETS, PRESET_LABEL, RESOLUTIONS, splitSeconds } from './series';
+import { ASPECTS, applySeriesPatch } from './ai';
 import { blockers, EPISODE_STAGES, epStageIndex, episodeBlockers, episodeState, GLOBAL_STAGES, productionOpen, stageIndex } from './workflow';
 import { localizeMsg } from './localize';
 import { castEngines, downloadEpisodePackages, generateBatch, generateCast, linkOfCasting, linkOfEpisode, openLinkedCanvas, registerCast, syncCastFromCanvas, syncResultsFromCanvas } from './canvasAction';
@@ -62,7 +63,7 @@ function Progress({ p }: { p: DirectorProject }) {
     <div className="dirx-progress">
       <div className="dirx-title"><b>{s.title || p.name}</b>
         <span className="dirx-chips">
-          {eps && <i>{s.total_episodes} {T('episodes')}</i>}<i>{fmtSec(s.episode_seconds)}</i><i>{s.clip_seconds}s {T('clips')}</i><i>{s.aspect}</i><i>{s.resolution}</i><i>{PRESET_LABEL[s.preset]}</i>
+          {d.demo && <i className="demo" title={T('Demo: nothing is generated, stand-in pictures are used')}>DEMO</i>}{eps && <i>{s.total_episodes} {T('episodes')}</i>}<i>{fmtSec(s.episode_seconds)}</i><i>{s.clip_seconds}s {T('clips')}</i><i>{s.aspect}</i><i>{s.resolution}</i><i>{PRESET_LABEL[s.preset]}</i>
         </span>
       </div>
       <ol className="dirx-steps">
@@ -209,6 +210,41 @@ const Tile = ({ icon, value, label, sub, tone }: { icon: keyof typeof ICONS; val
 );
 const fmtTotal = (sec: number) => { const m = Math.round(sec / 60); return m >= 120 ? `${Math.floor(m / 60)}h ${m % 60 ? `${m % 60}m` : ''}`.trim() : `${m}m`; };
 
+const EP_SECS = [30, 45, 60, 90, 120, 180, 300];
+const CLIP_SECS = [6, 8, 10, 12, 15];
+const EditTile = ({ icon, label, tone, children }: { icon: keyof typeof ICONS; label: string; tone?: string; children: React.ReactNode }) => (
+  <div className={`dx-tile edit ${tone ?? ''}`}><Ico n={icon} /><span className="lab">{label}</span>{children}</div>
+);
+/** the settings of the brief: the crew fills them from the producer's words; here they can be changed with dropdowns and kept with "Apply" */
+function BriefTiles({ p }: { p: DirectorProject }) {
+  const T = useT(); const edit = useDirector((x) => x.edit); const ro = useDirector((x) => x.readOnly);
+  const s = p.series;
+  const cur = { total_episodes: s.total_episodes, episode_seconds: s.episode_seconds, clip_seconds: s.clip_seconds, aspect: s.aspect, resolution: s.resolution, preset: s.preset };
+  const key = JSON.stringify(cur);
+  const [d, setD] = useState(cur);
+  useEffect(() => { setD(cur); }, [key]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const dirty = JSON.stringify(d) !== key;
+  const parts = splitSeconds(d.episode_seconds, d.clip_seconds);
+  const past = p.workflow.stage !== 'brief' && p.workflow.stage !== 'intake';
+  const opts = (list: number[], v: number) => [...new Set([...list, v])].sort((x, y) => x - y);
+  const apply = () => { const notes: string[] = []; edit((x) => { applySeriesPatch(x, d, notes); }); if (notes.length) void notify(notes.join('\n')); };
+  return (
+    <>
+      <section className="dx-tiles">
+        <EditTile icon="film" label={T('Episodes')} tone="a"><input type="number" min={1} max={200} disabled={ro} value={d.total_episodes} onChange={(e) => setD({ ...d, total_episodes: Math.max(1, Math.min(200, Math.floor(Number(e.target.value) || 1))) })} /></EditTile>
+        <EditTile icon="clock" label={T('Per episode')}><select disabled={ro} value={d.episode_seconds} onChange={(e) => setD({ ...d, episode_seconds: Number(e.target.value) })}>{opts(EP_SECS, d.episode_seconds).map((v) => <option key={v} value={v}>{fmtSec(v)}</option>)}</select></EditTile>
+        <Tile icon="total" value={fmtTotal(d.total_episodes * d.episode_seconds)} label={T('Total length')} />
+        <EditTile icon="clip" label={`${T('Clips per episode')}: ${parts.length}`} tone="b"><select disabled={ro} value={d.clip_seconds} onChange={(e) => setD({ ...d, clip_seconds: Number(e.target.value) })}>{opts(CLIP_SECS, d.clip_seconds).map((v) => <option key={v} value={v}>{v}s × {splitSeconds(d.episode_seconds, v).length}</option>)}</select></EditTile>
+        <EditTile icon="screen" label={T('Aspect · resolution')}><div className="dx-two-sel"><select disabled={ro} value={d.aspect} onChange={(e) => setD({ ...d, aspect: e.target.value })}>{ASPECTS.map((v) => <option key={v}>{v}</option>)}</select><select disabled={ro} value={d.resolution} onChange={(e) => setD({ ...d, resolution: e.target.value as typeof d.resolution })}>{RESOLUTIONS.map((v) => <option key={v}>{v}</option>)}</select></div></EditTile>
+        <EditTile icon="bolt" label={T('Rendering')} tone="a"><select disabled={ro} value={d.preset} onChange={(e) => setD({ ...d, preset: e.target.value as typeof d.preset })}>{PRESETS.map((v) => <option key={v} value={v}>{PRESET_LABEL[v]}</option>)}</select></EditTile>
+      </section>
+      {dirty && (
+        <div className="dx-apply"><span>{T('You changed the settings.')}{past ? ` ${T('Scenario and clips that are already written are not changed: ask the crew in the chat to rewrite them if needed.')}` : ''}</span>
+          <button className="btn" onClick={() => setD(cur)}>{T('Undo')}</button><button className="btn primary" disabled={ro} onClick={apply}>{T('Apply')}</button></div>)}
+    </>
+  );
+}
+
 function BriefCard({ p }: { p: DirectorProject }) {
   const T = useT(); const s = p.series;
   const parts = splitSeconds(s.episode_seconds, s.clip_seconds);
@@ -223,14 +259,7 @@ function BriefCard({ p }: { p: DirectorProject }) {
         {log && <p>{log}</p>}
       </header>
 
-      <section className="dx-tiles">
-        <Tile icon="film" value={String(s.total_episodes)} label={T('Episodes')} tone="a" />
-        <Tile icon="clock" value={fmtSec(s.episode_seconds)} label={T('Per episode')} />
-        <Tile icon="total" value={fmtTotal(s.total_episodes * s.episode_seconds)} label={T('Total length')} />
-        <Tile icon="clip" value={`${s.clip_seconds}s × ${parts.length}`} label={T('Clips per episode')} tone="b" />
-        <Tile icon="screen" value={s.aspect} label={s.resolution} sub={T('Aspect · resolution')} />
-        <Tile icon="bolt" value={PRESET_LABEL[s.preset]} label={T('Rendering')} tone="a" />
-      </section>
+      <BriefTiles p={p} />
 
       <section className="dx-block">
         <h4>{T('How one episode is cut')}</h4>
@@ -323,8 +352,10 @@ function CastPicker({ refId, onClose }: { refId: string; onClose: () => void }) 
 
 // ---- casting
 const KIND: Record<string, { icon: keyof typeof ICONS; label: string; cls: string }> = { character: { icon: 'user', label: 'Actors', cls: 'k-char' }, location: { icon: 'pin', label: 'Locations', cls: 'k-loc' }, prop: { icon: 'box', label: 'Props', cls: 'k-prop' } };
-function CastCard({ r, onPick, onMake, onRegister, onChoose, ro, busy }: { r: DirectorReference; onPick: () => void; onMake: () => void; onRegister: () => void; onChoose: (id: string) => void; ro: boolean; busy: boolean }) {
+function CastCard({ r, onPick, onMake, onRegister, onChoose, onSavePrompt, ro, busy }: { r: DirectorReference; onPick: () => void; onMake: () => void; onRegister: () => void; onChoose: (id: string) => void; onSavePrompt: (lang: 'en' | 'ko', text: string) => void; ro: boolean; busy: boolean }) {
   const T = useT(); const pick = r.results.find((x) => x.picked); const k = KIND[r.kind];
+  const [showPrompt, setShowPrompt] = useState(false); const [lang, setLang] = useState<'en' | 'ko'>('ko'); const [draft, setDraft] = useState<string | null>(null);
+  const shown = lang === 'en' ? r.prompt_en : (r.prompt_ko || r.description);
   return (
     <article className={`dx-cast ${k.cls}`}>
       <div className="dx-cast-img">{pick ? <img src={img(pick)} alt={r.name} loading="lazy" /> : <div className="empty"><Ico n="image" /><span>{T('No image yet')}</span></div>}
@@ -336,7 +367,16 @@ function CastCard({ r, onPick, onMake, onRegister, onChoose, ro, busy }: { r: Di
           <button className="btn small" disabled={ro || busy} onClick={onMake}>{pick ? `↻ ${T('Make again')}` : T('Make this one')}</button>
           <button className="btn small" disabled={ro} onClick={onPick}>{pick ? T('Change image') : T('Choose from Library / Gallery')}</button>
           {pick && !r.asset_id && <button className="btn small" disabled={ro || busy} onClick={onRegister}>{T('Register as asset')}</button>}
-        </div></div>
+          <button className={`btn small${showPrompt ? ' on' : ''}`} onClick={() => setShowPrompt(!showPrompt)}>{T('Prompt')}</button>
+        </div>
+        {showPrompt && (
+          <div className="dx-promptbox">
+            <div className="dx-seg"><button className={lang === 'ko' ? 'on' : ''} onClick={() => { setLang('ko'); setDraft(null); }}>한국어</button><button className={lang === 'en' ? 'on' : ''} onClick={() => { setLang('en'); setDraft(null); }}>English</button></div>
+            <textarea rows={5} disabled={ro} value={draft ?? shown} onChange={(e) => setDraft(e.target.value)} />
+            <small>{lang === 'en' ? T('English is what the image model receives.') : T('Korean is for reading and for asking for changes (the model gets the English prompt).')}</small>
+            {draft !== null && draft !== shown && <div className="dx-btns"><button className="btn small" onClick={() => setDraft(null)}>{T('Undo')}</button><button className="btn small primary" disabled={ro} onClick={() => { onSavePrompt(lang, draft); setDraft(null); }}>{T('Apply')}</button></div>}
+          </div>)}
+      </div>
     </article>
   );
 }
@@ -380,7 +420,7 @@ function CastGrid({ p, ro }: { p: DirectorProject; ro: boolean }) {
       {(['character', 'location', 'prop'] as const).map((kind) => {
         const items = live.filter((r) => r.kind === kind); if (!items.length) return null;
         return <section key={kind} className="dx-group"><h4 className={KIND[kind].cls}><Ico n={KIND[kind].icon} />{T(KIND[kind].label)} <small>{items.length}</small></h4>
-          <div className="dx-castgrid">{items.map((r) => <CastCard key={r.ref_id} r={r} ro={ro} busy={busy} onPick={() => setPicking(r.ref_id)} onMake={() => void makeOne(r)} onRegister={() => void register([r.ref_id])} onChoose={(id) => choose(r, id)} />)}</div></section>;
+          <div className="dx-castgrid">{items.map((r) => <CastCard key={r.ref_id} r={r} ro={ro} busy={busy} onPick={() => setPicking(r.ref_id)} onMake={() => void makeOne(r)} onRegister={() => void register([r.ref_id])} onChoose={(id) => choose(r, id)} onSavePrompt={(lang, text) => edit((x) => { const q = x.references.find((z) => z.ref_id === r.ref_id); if (q) { if (lang === 'en') q.prompt_en = text; else q.prompt_ko = text; } })} />)}</div></section>;
       })}
       {picking && <CastPicker refId={picking} onClose={() => setPicking(null)} />}
     </div>
@@ -559,10 +599,12 @@ function llmLabel(same: boolean, main: LlmSettings, own: LlmSettings, T: (k: str
 /** the Director's own model settings (the same four backends as everywhere else), opened right from the chat box */
 function ModelDialog({ onClose }: { onClose: () => void }) {
   const T = useT();
+  const [demoOn, setDemoOn] = useState(useDirector.getState().demo);
   return (
     <div className="dx-modal" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="dx-modal-box wide">
         <header><b>{T('Model settings')}</b><span className="dirx-muted">{T('Used by the Director crew only')}</span><button className="dir-x" onClick={onClose}>✕</button></header>
+        <label className="dx-check demo-switch"><input type="checkbox" checked={demoOn} onChange={(e) => { useDirector.getState().setDemo(e.target.checked); setDemoOn(e.target.checked); }} />{T('Demo: go through every step without an LLM or a GPU (stand-in pictures)')}</label>
         <div className="dx-modal-scroll settings"><Llm target="director" /></div>
       </div>
     </div>

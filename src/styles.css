@@ -692,3 +692,14 @@ button.save-state.dirty { cursor: pointer; } button.save-state.dirty:hover { bac
 .dx-field { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); } .dx-field select { background: var(--bg); border: 1px solid var(--line2); border-radius: 7px; padding: 5px 8px; color: var(--fg); }
 .dx-cast-actions { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; } .dx-cast-actions .btn.small { margin-top: 0; }
 .dx-cands { display: flex; gap: 4px; flex-wrap: wrap; } .dx-cands button { width: 34px; height: 34px; padding: 0; border: 2px solid var(--line2); border-radius: 6px; overflow: hidden; background: var(--bg); } .dx-cands button.on { border-color: var(--acc); } .dx-cands img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* editable brief settings, prompt box, demo badge */
+.dx-tile.edit { gap: 6px; } .dx-tile.edit .lab { color: var(--muted); font-size: 12px; order: 2; }
+.dx-tile.edit select, .dx-tile.edit input { background: var(--bg); border: 1px solid var(--line2); border-radius: 8px; padding: 6px 8px; color: var(--fg); font-size: 14px; font-weight: 600; width: calc(100% - 22px); }
+.dx-tile.edit.a select, .dx-tile.edit.a input { color: color-mix(in srgb, var(--acc) 70%, #fff); } .dx-tile.edit.b select { color: var(--acc2); }
+.dx-two-sel { display: flex; gap: 6px; width: calc(100% - 22px); } .dx-two-sel select { width: 50%; padding: 6px 4px; }
+.dx-apply { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; border-radius: 12px; background: color-mix(in srgb, var(--acc) 12%, var(--bg2)); border: 1px solid color-mix(in srgb, var(--acc) 45%, transparent); } .dx-apply span { flex: 1; min-width: 200px; font-size: 12.5px; }
+.dx-promptbox { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; padding-top: 8px; border-top: 1px dashed var(--line2); } .dx-promptbox textarea { width: 100%; background: var(--bg); border: 1px solid var(--line2); border-radius: 8px; padding: 6px 8px; color: var(--fg); font: inherit; font-size: 12px; resize: vertical; } .dx-promptbox small { color: var(--muted); }
+.dx-cast-actions .btn.small.on { border-color: var(--acc); color: var(--acc); }
+.dirx-chips i.demo { color: #fff; background: #d9822b; border-color: #d9822b; font-weight: 700; }
+.demo-switch { padding: 8px 12px; border-radius: 10px; background: color-mix(in srgb, #d9822b 12%, var(--bg3)); border: 1px solid color-mix(in srgb, #d9822b 50%, transparent); margin-bottom: 8px; }

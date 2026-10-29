@@ -3,7 +3,7 @@
 import { useDirector } from '../store/director';
 import { useGraph } from '../store/graph';
 import type { BatchItemState } from '../store/director';
-import { askConfirm } from '../ui/dialog';
+import { askConfirm, notify } from '../ui/dialog';
 import { t as tr } from '../i18n';
 import { canvasFileName, listCanvases, loadCanvas, saveCanvas } from '../backend/canvases';
 import { download, openSavedCanvas, runNode } from '../engine/actions';
@@ -15,12 +15,19 @@ import { buildCanvasFromDirector, buildCastingCanvas, refGenNodeId, type Adapter
 import { appRegistry } from './adapterRegistry';
 import { applyCanvasResults, applyReferenceResults, planBatch, requeueClips, reseed, reseedRefs, runShots, staleShots, type RunPlan, type RunSummary } from './execution';
 import { byId } from '../registry';
+import { demoClipResult, demoRefResult, pushPicked } from './demoMedia';
+import { newSeed } from './execution';
 import { castOf, episodeByNo, findReference, newAsset, shotsOfEpisode, syncShotAssets } from './model';
 import { turboSettings } from './series';
 import type { CanvasLink, DirectorProject } from './types';
 import type { Asset, Project } from '../types';
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
+/** DEMO: nothing is generated, no canvas file is written, no asset is registered: stand-in pictures take the place of results */
+const isDemo = () => useDirector.getState().demo;
+const DEMO_FILE = '(demo) ';
+const isDemoLink = (l: CanvasLink) => l.canvas_file.startsWith(DEMO_FILE);
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 export const linkOfEpisode = (p: DirectorProject, no = p.workflow.episode_no): CanvasLink | null => { const e = episodeByNo(p, no); return (e && p.canvas_links.find((l) => l.episode_id === e.episode_id)) || null; };
 export const linkOfCasting = (p: DirectorProject): CanvasLink | null => p.canvas_links.find((l) => l.purpose === 'casting') ?? null;
 
@@ -51,16 +58,18 @@ export async function makeEpisodeCanvas(no?: number): Promise<{ file: string; re
   if (!p) throw new Error('no project');
   const ep = episodeByNo(p, no ?? p.workflow.episode_no);
   if (!ep || !shotsOfEpisode(p, ep.episode_id).length) throw new Error(tr('Add at least one shot first.'));
-  const prev = linkOfEpisode(p, ep.no);
-  const file = prev?.canvas_file ?? `${canvasFileName(p.name)} - ep${pad2(ep.no)}`;
-  const existing = await existingCanvas(file, !!prev);
+  let prev = linkOfEpisode(p, ep.no);
+  if (prev && isDemoLink(prev) !== isDemo()) prev = null;   // a demo canvas and a real one are never mixed
+  const demo = isDemo();
+  const file = prev?.canvas_file ?? `${demo ? DEMO_FILE : ''}${canvasFileName(p.name)} - ep${pad2(ep.no)}`;
+  const existing = demo ? null : await existingCanvas(file, !!prev);
   const turbo = turboSettings(p.series);
   // the picked image of every cast entry the clips use: connected to each clip as a reference image, in the order of its prompt
   const refAssets: Record<string, Asset> = {};
   for (const s of shotsOfEpisode(p, ep.episode_id)) for (const r of castOf(p, s)) { const pick = r.results.find((x) => x.picked); if (pick && !refAssets[r.ref_id]) refAssets[r.ref_id] = assetOfResult(pick, `ra_${r.ref_id}`); }
   const res = buildCanvasFromDirector(p, appRegistry, existing, prev, file, { generator: 'video-generate', episodeId: ep.episode_id, turbo: turbo.params, refAssets });
   res.report.warnings.push(...turbo.warnings);
-  await saveCanvas(file, res.project);
+  if (!demo) await saveCanvas(file, res.project);
   setLink(res.link);
   return { file, report: res.report };
 }
@@ -74,7 +83,7 @@ async function canvasNodes(file: string) {
 /** Pull results (and running / failed state) of the episode canvas into its clips. Returns how many results were added. */
 export async function syncResultsFromCanvas(no?: number): Promise<number> {
   const d = useDirector.getState(); const p = d.project; const link = p && linkOfEpisode(p, no);
-  if (!p || !link || d.readOnly) return 0;
+  if (!p || !link || d.readOnly || isDemoLink(link)) return 0;
   const { nodes, runtime } = await canvasNodes(link.canvas_file);
   const dry = applyCanvasResults(JSON.parse(JSON.stringify(p)) as DirectorProject, link, nodes, runtime);
   if (!dry.added.length && !dry.statusChanged.length) return 0;
@@ -140,7 +149,18 @@ export async function generateCast(opt: { refIds?: string[]; engine?: string; ne
   // the model belongs to the project (it is remembered); a new seed belongs to the entries that are made again
   d.edit((x) => { if (opt.engine) x.settings.cast_engine = opt.engine; if (opt.newSeed && opt.refIds) reseedRefs(x, opt.refIds); });
   const p = useDirector.getState().project!;
-  const prev = linkOfCasting(p);
+  if (isDemo()) {   // stand-in pictures: tall for a person, wide for a place, square for a prop; the model name and the seed are on the picture
+    const ids = opt.refIds ?? p.references.filter((r) => r.status !== 'rejected' && !r.results.some((x) => x.picked)).map((r) => r.ref_id);
+    let made = 0;
+    for (const id of ids) {
+      await sleep(220);
+      useDirector.getState().edit((x) => { const r = x.references.find((q) => q.ref_id === id); if (!r) return; pushPicked(r.results, demoRefResult(r, engineLabel(x.settings.cast_engine) || 'demo', r.seed ?? newSeed(), x.series.aspect)); r.asset_id = undefined; });
+      made++;
+    }
+    return { made, cancelled: false };
+  }
+  let prev = linkOfCasting(p);
+  if (prev && isDemoLink(prev)) prev = null;
   const file = prev?.canvas_file ?? `${canvasFileName(p.name)} - casting`;
   const existing = await existingCanvas(file, !!prev);
   const res = buildCastingCanvas(p, appRegistry, existing, prev, file, { engineId: opt.engine });
@@ -170,7 +190,7 @@ export async function generateCast(opt: { refIds?: string[]; engine?: string; ne
 /** Pull the cast images of the casting canvas into the cast entries. */
 export async function syncCastFromCanvas(): Promise<number> {
   const d = useDirector.getState(); const p = d.project; const link = p && linkOfCasting(p);
-  if (!p || !link || d.readOnly) return 0;
+  if (!p || !link || d.readOnly || isDemoLink(link)) return 0;
   const { nodes } = await canvasNodes(link.canvas_file);
   const dry = applyReferenceResults(JSON.parse(JSON.stringify(p)) as DirectorProject, link, nodes);
   if (!dry.added.length) return 0;
@@ -187,6 +207,13 @@ export async function registerCast(opt: { refIds?: string[] } = {}): Promise<num
   const d = useDirector.getState(); const p = d.project;
   if (!p || d.readOnly) return 0;
   let n = 0;
+  if (isDemo()) {   // the demo makes a project asset (no Asset Library entry): the screens show "Asset" and the clips follow the cast
+    for (const ref of p.references.filter((r) => r.status !== 'rejected' && !r.asset_id && r.results.some((x) => x.picked) && (!opt.refIds || opt.refIds.includes(r.ref_id)))) {
+      d.edit((x) => { const r = x.references.find((q) => q.ref_id === ref.ref_id)!; const a = newAsset(x, { name: r.name, role: r.kind === 'character' ? 'character' : r.kind === 'location' ? 'background' : 'prop', source: { kind: 'upload', name: r.name }, note: r.description }); r.asset_id = a.asset_id; syncShotAssets(x); });
+      n++;
+    }
+    return n;
+  }
   for (const ref of p.references.filter((r) => r.status !== 'rejected' && !r.asset_id && (!opt.refIds || opt.refIds.includes(r.ref_id)))) {
     const pick = ref.results.find((r) => r.picked); if (!pick || pick.lib_id) continue;   // a library pick is already an asset
     const blob = await (await fetch(resultUrl(pick))).blob();
@@ -226,8 +253,9 @@ export async function generateBatch(opt: { nos: number[]; clipIds?: string[]; ne
   if (!first.batches.length) throw new Error(first.skipped.length ? first.skipped.map((s) => `${s.no}: ${tr(s.reason === 'no-canvas' ? 'Make the Canvers canvas first.' : s.reason === 'not-in-generate-step' ? 'This episode is not at the generate step.' : 'No approved shot is waiting to run.')}`).join('\n') : tr('No approved shot is waiting to run.'));
   const ids = first.batches.flatMap((b) => b.shots.map((s) => s.shot_id));
   // the question comes first: nothing is changed or started before the producer said yes
-  const lines = first.batches.map((b) => `${b.no}${tr(' ep')}: ${b.shots.length} ${tr('clips')}${opt.clipIds ? '' : ''}`);
-  if (!(await askConfirm(`${tr('Generate these now? Generating uses the GPU and takes time.')}\n\n${lines.join('\n')}\n(${first.clips} ${tr('clips')}${opt.newSeeds ? `, ${tr('with new seeds')}` : ''})`))) return { items: [], cancelled: true };
+  const lines = first.batches.map((b) => `${b.no}${tr(' ep')}: ${b.shots.length} ${tr('clips')}`);
+  const demo = isDemo();
+  if (!demo && !(await askConfirm(`${tr('Generate these now? Generating uses the GPU and takes time.')}\n\n${lines.join('\n')}\n(${first.clips} ${tr('clips')}${opt.newSeeds ? `, ${tr('with new seeds')}` : ''})`))) return { items: [], cancelled: true };
   d.edit((x) => { for (const b of first.batches) requeueClips(x, b.requeue); if (opt.newSeeds && opt.clipIds) reseed(x, ids); });
   const items: BatchResult['items'] = [...first.batches.map((b) => ({ no: b.no, clips: b.shots.length, state: 'waiting' as BatchItemState })), ...first.skipped.map((s) => ({ no: s.no, clips: 0, state: 'skipped' as BatchItemState, note: s.reason }))];
   const show = (running: boolean) => useDirector.getState().setBatch({ running, items: items.map((i) => ({ ...i })), finishedAt: running ? undefined : new Date().toISOString() });
@@ -236,6 +264,22 @@ export async function generateBatch(opt: { nos: number[]; clipIds?: string[]; ne
   for (const b of first.batches) {
     const it = items.find((i) => i.no === b.no)!;
     it.state = 'running'; show(true);
+    if (demo) {   // stand-in results, one clip after another, so the progress and the review screens can be tried
+      try {
+        await makeEpisodeCanvas(b.no);
+        for (const sh of b.shots) {
+          useDirector.getState().edit((x) => { const q = x.shots.find((z) => z.shot_id === sh.shot_id); if (q) q.status = 'generating'; });
+          await sleep(200);
+          useDirector.getState().edit((x) => {
+            const q = x.shots.find((z) => z.shot_id === sh.shot_id); if (!q) return;
+            const ep = x.episodes.find((e) => e.no === b.no); const idx = ep ? shotsOfEpisode(x, ep.episode_id).findIndex((z) => z.shot_id === q.shot_id) + 1 : 0;
+            pushPicked(q.results, demoClipResult(`${b.no}-${idx}`, q, q.seed ?? newSeed(), x.series.aspect)); q.status = 'review';
+          });
+        }
+        it.state = 'done';
+      } catch (e) { it.state = 'failed'; it.note = (e as Error).message; if (opt.onFail !== 'skip') { for (const r of items) if (r.state === 'waiting') { r.state = 'skipped'; r.note = 'not started'; } show(false); break; } }
+      show(true); continue;
+    }
     try {
       await makeEpisodeCanvas(b.no);                                           // connect the cast images / prompts / seeds
       const link = linkOfEpisode(useDirector.getState().project!, b.no);
@@ -282,6 +326,7 @@ export async function downloadEpisodePackages(nos: number[]): Promise<PackageRes
 }
 
 export async function openLinkedCanvas(file: string): Promise<void> {
+  if (file.startsWith(DEMO_FILE)) { await notify(tr('The demo does not make canvas files. Turn the demo off to build the real canvas.')); return; }
   await openSavedCanvas(file);
   useGraph.getState().setMode('canvas');
 }

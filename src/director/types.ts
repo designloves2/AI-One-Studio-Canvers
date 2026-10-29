@@ -58,6 +58,8 @@ export type ReferenceKind = 'character' | 'location' | 'prop';
  */
 export interface DirectorReference {
   ref_id: string; kind: ReferenceKind; name: string; description: string; prompt_en: string;
+  /** the same prompt in Korean, for reading and for asking for changes (English is what the model gets) */
+  prompt_ko?: string;
   status: 'proposed' | 'approved' | 'rejected';
   results: ResultRef[];
   /** name of the base entry when this is a costume / look variant of it */
@@ -73,7 +75,9 @@ export interface DirectorScene { scene_id: string; episode_id: string; order: nu
 export interface ResultRef {
   result_id: string; file: FileRef; kind: 'image' | 'video' | 'audio'; node_id?: string; generation_job_id?: string; created_at: string; picked: boolean;
   /** where the image came from: made in the casting canvas, chosen from the Gallery, or chosen from the Asset Library */
-  source?: 'generated' | 'gallery' | 'library';
+  source?: 'generated' | 'gallery' | 'library' | 'demo';
+  /** a demo stand-in picture (SVG data URL): nothing was generated */
+  data_url?: string;
   /** Asset Library id when source = library (the image is then read from the library, `file` is only a label) */
   lib_id?: number;
 }

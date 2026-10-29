@@ -51,8 +51,8 @@ export function newAsset(p: DirectorProject, a: Omit<DirectorAsset, 'asset_id'>)
   const x: DirectorAsset = { ...a, asset_id: newId('as') };
   p.assets.push(x); return x;
 }
-export function newReference(p: DirectorProject, kind: ReferenceKind, name: string, description = '', prompt_en = ''): DirectorReference {
-  const r: DirectorReference = { ref_id: newId('rf'), kind, name, description, prompt_en, status: 'proposed', results: [] };
+export function newReference(p: DirectorProject, kind: ReferenceKind, name: string, description = '', prompt_en = '', prompt_ko = ''): DirectorReference {
+  const r: DirectorReference = { ref_id: newId('rf'), kind, name, description, prompt_en, ...(prompt_ko ? { prompt_ko } : {}), status: 'proposed', results: [] };
   p.references.push(r); return r;
 }
 export function addChat(p: DirectorProject, role: ChatMsg['role'], text: string, extra: Partial<ChatMsg> = {}): ChatMsg {
