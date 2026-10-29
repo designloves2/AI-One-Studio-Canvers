@@ -719,3 +719,5 @@ button.save-state.dirty { cursor: pointer; } button.save-state.dirty:hover { bac
 .dx-clipprog { display: flex; flex-direction: column; gap: 3px; } .dx-clipprog > div { height: 5px; border-radius: 3px; background: var(--bg3); overflow: hidden; } .dx-clipprog i { display: block; height: 100%; background: var(--acc); transition: width .3s; } .dx-clipprog span { font-size: 10px; color: var(--muted); }
 
 .dx-voice { font-size: 10px; color: var(--acc); margin-right: 6px; font-weight: 600; }
+
+.dx-hideable { display: contents; } .dx-hideable.hid img { filter: blur(14px) brightness(.8); }

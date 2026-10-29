@@ -7,6 +7,7 @@ import { getGallery, type GalleryItem } from '../backend/studio';
 import { listAssets, libThumb, type LibAsset } from '../backend/assetlib';
 import { useSettings, type LlmSettings } from '../store/settings';
 import { useGraph } from '../store/graph';
+import { assetKey, mediaKey, useIsBlurred, useSensitive } from '../backend/sensitive';
 import { BACKENDS } from '../backend/llm';
 import { Llm } from '../panels/SettingsPanel';
 import { resultUrl } from './media';
@@ -323,9 +324,16 @@ function CastStrip({ p, names }: { p: DirectorProject; names?: string[] }) {
 const castInText = (p: DirectorProject, text: string) => p.references.filter((r) => r.status !== 'rejected' && r.name.length > 1 && text.toLowerCase().includes(r.name.toLowerCase())).map((r) => r.name);
 
 /** choose the image of a cast entry from the Asset Library or from the Gallery (instead of generating it) */
+/** a picture that the producer hid with the eye in the Gallery / Asset Library stays blurred here too (same hidden list) */
+function Hideable({ k, children }: { k: string; children: React.ReactNode }) {
+  const hid = useIsBlurred(k);
+  return <span className={`dx-hideable${hid ? ' hid' : ''}`}>{children}</span>;
+}
+
 function CastPicker({ refId, onClose }: { refId: string; onClose: () => void }) {
   const T = useT(); const edit = useDirector((x) => x.edit); const sub = useSettings((x) => x.saveSubfolder);
   const [tab, setTab] = useState<'library' | 'gallery'>('library');
+  useEffect(() => { void useSensitive.getState().load(); }, []);
   const [lib, setLib] = useState<LibAsset[] | null>(null); const [gal, setGal] = useState<GalleryItem[] | null>(null); const [err, setErr] = useState('');
   useEffect(() => {
     listAssets({ kind: 'image' }).then(setLib, (e) => { setLib([]); setErr(`${T('The Asset Library is not available')}: ${(e as Error).message}`); });
@@ -352,8 +360,8 @@ function CastPicker({ refId, onClose }: { refId: string; onClose: () => void }) 
           <button className="dir-x" onClick={onClose}>✕</button></header>
         {err && tab === 'library' && <p className="dirx-muted">{err}</p>}
         <div className="dx-picker">
-          {tab === 'library' && (lib ?? []).map((a) => <button key={a.id} onClick={() => chooseLib(a)} title={a.name}><img src={libThumb(a.id)} alt="" loading="lazy" /><small>{a.name}</small></button>)}
-          {tab === 'gallery' && (gal ?? []).map((g) => <button key={`${g.subfolder}/${g.filename}`} onClick={() => chooseGal(g)} title={g.filename}><img src={viewUrl({ filename: g.filename, subfolder: g.subfolder, type: 'output' })} alt="" loading="lazy" /></button>)}
+          {tab === 'library' && (lib ?? []).map((a) => <button key={a.id} onClick={() => chooseLib(a)} title={a.name}><Hideable k={assetKey(a.id)}><img src={libThumb(a.id)} alt="" loading="lazy" /></Hideable><small>{a.name}</small></button>)}
+          {tab === 'gallery' && (gal ?? []).map((g) => <button key={`${g.subfolder}/${g.filename}`} onClick={() => chooseGal(g)} title={g.filename}><Hideable k={mediaKey(g.filename, g.subfolder)}><img src={viewUrl({ filename: g.filename, subfolder: g.subfolder, type: 'output' })} alt="" loading="lazy" /></Hideable></button>)}
           {tab === 'library' && lib && !lib.length && !err && <p className="dirx-muted">{T('The Asset Library is empty.')}</p>}
           {tab === 'gallery' && gal && !gal.length && <p className="dirx-muted">{T('The Gallery is empty.')}</p>}
         </div>
