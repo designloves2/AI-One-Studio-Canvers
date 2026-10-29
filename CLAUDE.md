@@ -95,6 +95,10 @@
 - **한꺼번에 하는 검증 목록은 `docs/DIRECTOR_VERIFY_CHECKLIST.md`**. 좁은 창 CSS 는 이미 있음(눈으로 확인만).
 - 그 뒤 후보: 좁은 창 편 스트립 확인, 그리고 **한꺼번에 하는 검증**(위 "확인 못 한 것" 목록 + 진행 막대).
 
+### 최종 검토 시사회 · MP 설정 (2026-10-30, 커밋 e6d7b39, 화면 검증 전)
+- `ReviewCard`(DirectorView): 합쳐진 영상 큰 화면 + `dx-minis`(클립 작은 영상 + 한 줄 설명). 합치기(`FinalBlock`)는 '생성·확인' 단계에만 있음. 수정 = 채팅 → `store.send`가 편을 execute 로 되돌림.
+- MP: `DirectorSeries.start_mp/final_mp`, `series.mpRanges/defaultMps/turboSettings`, `adapter.genParams`(h3_plain 의 megapixels), `ai.applySeries`, 브리프 `BriefTiles`의 '그림 크기(MP)' 칸. opencode(OpenRouter 세션) 작업분이 같은 커밋에 섞여 있음.
+
 ### 실사용 피드백 7건 반영 (2026-10-30, 코드 완료 — 화면 검증 전, `npm run test:director` 통과)
 - 사용자가 실제 LLM 으로 써 본 문제: ① 캐스팅 수정 LLM 결과가 카드에 안 반영 ② 캐스팅 프롬프트가 모델별로 강화되지 않음(카드엔 설정 언어 한 가지면 됨) ③ 시나리오의 레퍼런스(특히 장소) 누락·수정 안 보임 ④ 편 작성 시작 화면에 찌꺼기 ⑤ 클립에 출연자 누락 ⑥ 생성/검토를 합치고 클립별 합격 + 선택 합치기 ⑦ 검토 = 합쳐진 최종 영상.
 - 구현: ①②: 캐스팅은 `description` 하나(`prompt_en/ko`는 데이터에 남지만 안 씀; `adapter.castPromptText` = 설명 + 종류 안내, 이미지 카드 `auto_enhance: true`), `applyReply(p, r, { free, episode })`(채팅이면 승인된 항목도 수정), `set_reference.new_name`, `model.findReference` 느슨한 이름 매칭 + `mentionedRefs`. ③: `DirectorEpisode.cast/locations`, 시나리오 검사(`checkReply` series: 편마다 출연자·장소 필수), 화면 `EpisodeRefs`. ④⑤: `applyReply` episode 인자로 편 번호 고정, `ai.repairClipRefs`(클립 글에 나온 이름 → cast, 장소 채움), 쓰는 동안 EpisodeCard 비움. ⑥⑦: `DirectorShot.passed`(합격한 result_id)·`excluded`, `workflow.episodeBlockers`(execute: 포함된 클립 모두 결과+합격+합친 영상 `ep.final`; review: `ep.final`), `adapter` 스티치 선을 매번 순서대로 다시 깔고 제외 클립 뺌, `canvasAction.makeEpisodeCanvas` 모든 종류에 `finish.stitch`, `musicAction.finishEpisode` 합격 검사, `DirectorView` ClipCard(합격·제외)·`FinalBlock`·새 `ReviewCard`, 스토어: 최종 검토 중 채팅 수정이 클립을 바꾸면 `reopenEpisode(…,'execute')`.
