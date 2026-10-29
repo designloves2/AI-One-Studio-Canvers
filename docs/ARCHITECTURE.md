@@ -87,3 +87,10 @@ ComfyUI :8188  ── 표준 API: /prompt /ws /upload/image /view /history /obje
 ## 테스트 / 개발
 - 로컬 실제 ComfyUI(8188)에 바로 붙여 테스트한다: `npx vite` (포트 8765) (mock 서버는 쓰지 않음).
 - 릴리스 전 매번 `npm run build:mcp`.
+
+## Director Mode (src/director/, 모드: Director / Canvas / Simple)
+사용자는 제작자(채팅으로 지시), AI 작업팀(LLM JSON 프로토콜)이 결과를 만들고 사용자가 승인한다. 상세·진행·검증 목록은 `CLAUDE.md` §8, `docs/DIRECTOR_MODE_*.md`, `docs/DIRECTOR_VERIFY_CHECKLIST.md`.
+- 흐름: 브리프 → 캐스팅 → (뮤직비디오만) 노래 → 시나리오 → 편마다 [작성 → 캔버스 → 생성 → 검토]. 편마다 자기 단계(`workflow.ts`).
+- 순수 로직(DOM·네트워크 없음, `scripts/test-director-*.mjs`): `types/model`(스키마 5, 마이그레이션) · `workflow` · `ai`(작업팀 프로토콜) · `series`/`formats`(작품 종류 6종) · `music`(노래 구조) · `adapter`(Director→캔버스, 멱등) · `execution`(실행 계획·결과 가져오기) · `continuity`(이전 작품 이어서) · `exportPackage`/`zip`.
+- 앱 쪽: `DirectorView.tsx` · `canvasAction.ts`(캔버스 만들기·생성·ZIP·다른 화면비) · `musicAction.ts`(노래 업로드·생성·완성 영상) · `store/director.ts`(상태·작업 큐·자동 저장) · `backend/director.ts` + `server-lib/director.mjs`(저장: `director/` 폴더) · `demoCrew.ts`/`demoMedia.ts`(LLM·GPU 없이 전 단계 체험).
+- 캔버스 연결: 편마다 캔버스 1개(+ 다른 화면비 캔버스, 캐스팅 캔버스, 노래 캔버스), 고정 카드 id 로 멱등, 사용자가 캔버스에서 바꾼 텍스트·모델·시드는 유지.
