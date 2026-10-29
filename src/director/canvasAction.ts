@@ -168,7 +168,10 @@ export async function generateCast(opt: { refIds?: string[]; engine?: string; ne
   if (prev && isDemoLink(prev)) prev = null;
   const file = prev?.canvas_file ?? `${canvasFileName(p.name)} - casting`;
   const existing = await existingCanvas(file, !!prev);
-  const res = buildCastingCanvas(p, appRegistry, existing, prev, file, { engineId: opt.engine });
+  // a new look is edited from the picked image of the entry it is a look of (the same face)
+  const baseAssets: Record<string, Asset> = {};
+  for (const r of p.references) { const pick = r.results.find((x) => x.picked); if (pick && !pick.data_url) baseAssets[r.ref_id] = assetOfResult(pick, `ba_${r.ref_id}`); }
+  const res = buildCastingCanvas(p, appRegistry, existing, prev, file, { engineId: opt.engine, baseAssets });
   if (res.report.missing.length) throw new Error(`${tr('Not built')}: ${res.report.missing[0].reason}`);
   await saveCanvas(file, res.project);
   setLink(res.link);

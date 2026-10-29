@@ -249,7 +249,7 @@ export const refGenNodeId = (refId: string) => `n_${refId}_gen`;
  * The canvas that makes the cast images: one Prompt card + one Image Generate card per cast entry (not the rejected ones).
  * Same rules as the episode canvas: fixed card ids, nothing duplicated, the user's moves / settings / own prompt text are kept.
  */
-export function buildCastingCanvas(p: DirectorProject, reg: RegistryLike, existing: Project | null, prev: CanvasLink | null, canvasFile: string, opt: { now?: () => string; engineId?: string } = {}): { project: Project; link: CanvasLink; report: CastingReport } {
+export function buildCastingCanvas(p: DirectorProject, reg: RegistryLike, existing: Project | null, prev: CanvasLink | null, canvasFile: string, opt: { now?: () => string; engineId?: string; baseAssets?: Record<string, Asset> } = {}): { project: Project; link: CanvasLink; report: CastingReport } {
   const now = (opt.now ?? (() => new Date().toISOString()))();
   const report: CastingReport = { created: [], updated: [], keptUserText: [], recreated: [], missing: [] };
   const promptDef = reg.get('prompt'), genDef = reg.get('image-generate');
@@ -272,8 +272,34 @@ export function buildCastingCanvas(p: DirectorProject, reg: RegistryLike, existi
     return params;
   };
   const wired = promptDef && genDef ? { out: textOut(promptDef), inn: textIn(genDef, reg, 'text') } : null;
+  const editDef = reg.get('image-edit'), importDef = reg.get('import');
+  const editIn = editDef?.inputs.find((i) => i.id === 'image' && reg.compatible('image', i.type)), editText = editDef ? textIn(editDef, reg, 'text') : undefined, impOut = importDef?.outputs.find((o) => o.type === 'image');
   let y = 0;
   for (const r of p.references.filter((x) => x.status !== 'rejected')) {
+    // a new look of a cast entry whose base image exists is made by EDITING that image (the same face), not by a new text-only generation
+    const base = r.variant_of ? p.references.find((x) => x.name === r.variant_of) : undefined;
+    const baseAsset = base ? opt.baseAssets?.[base.ref_id] : undefined;
+    if (baseAsset && editDef && editIn && editText && impOut && promptDef) {
+      const what = r.description.includes(' — ') ? r.description.slice(r.description.lastIndexOf(' — ') + 3) : r.description;
+      const text = `Keep exactly the same person (face, body, identity). Change only: ${what}`;
+      const tid = refTextNodeId(r.ref_id), gid = refGenNodeId(r.ref_id), bid = `n_${r.ref_id}_base`;
+      const old = byNode.get(gid);
+      if (old && old.defId !== 'image-edit') { nodes.splice(nodes.indexOf(old), 1); byNode.delete(gid); for (let i = edges.length - 1; i >= 0; i--) if (edges[i].target === gid) edges.splice(i, 1); report.recreated.push(gid); }
+      let tn = byNode.get(tid);
+      if (!tn) { tn = { id: tid, defId: 'prompt', x: 0, y, params: { ...promptDef.defaults, text }, results: [], activeResult: 0, title: `${r.name} prompt` }; nodes.push(tn); byNode.set(tid, tn); report.created.push(tid); sent[r.ref_id] = text; }
+      else if (String(tn.params.text ?? '') === text) sent[r.ref_id] = text;
+      else if (prevSent[r.ref_id] !== undefined && String(tn.params.text ?? '') === prevSent[r.ref_id]) { tn.params = { ...tn.params, text }; report.updated.push(tid); sent[r.ref_id] = text; }
+      else report.keptUserText.push(tid);
+      let bn = byNode.get(bid);
+      if (!bn) { bn = { id: bid, defId: 'import', x: 0, y: y + 200, params: {}, results: [baseAsset], activeResult: 0, title: `${base!.name} (base image)` }; nodes.push(bn); byNode.set(bid, bn); report.created.push(bid); } else bn.results = [baseAsset];
+      let gn = byNode.get(gid);
+      if (!gn) { gn = { id: gid, defId: 'image-edit', x: COL_GEN_X, y, params: { ...editDef.defaults }, engineId: editDef.engineId, results: [], activeResult: 0, title: r.name }; nodes.push(gn); byNode.set(gid, gn); report.created.push(gid); }
+      const et = `e_${r.ref_id}`, ei = `e_${r.ref_id}_img`;
+      if (!edges.some((e) => e.id === et) && !edges.some((e) => e.source === tid && e.target === gid)) edges.push({ id: et, source: tid, sourceHandle: textOut(promptDef)!.id, target: gid, targetHandle: editText.id });
+      if (!edges.some((e) => e.id === ei) && !edges.some((e) => e.source === bid && e.target === gid)) edges.push({ id: ei, source: bid, sourceHandle: impOut.id, target: gid, targetHandle: editIn.id });
+      refs.push({ ref_id: r.ref_id, node_ids: [tid, gid] });
+      y += 420; continue;
+    }
     if (!promptDef || !genDef || !wired?.out || !wired.inn) { report.missing.push({ ref_id: r.ref_id, reason: !promptDef ? 'card "prompt" is not in the registry' : !genDef ? 'card "image-generate" is not in the registry' : 'no text port to connect' }); continue; }
     const text = r.prompt_en.trim() || r.description.trim();
     const tid = refTextNodeId(r.ref_id), gid = refGenNodeId(r.ref_id);
