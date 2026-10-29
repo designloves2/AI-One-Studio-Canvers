@@ -6,6 +6,11 @@ export type Lang = 'ko' | 'en';
 const KO: Record<string, string> = {
   // chrome
   // Director mode
+  'Card made for each shot': '샷마다 만들 카드', 'Make Canvers canvas': 'Canvers 캔버스 만들기', 'Update Canvers canvas': 'Canvers 캔버스 갱신', 'Open in Canvas': '캔버스에서 열기',
+  'Save the project to keep the link to this canvas.': '이 캔버스와의 연결을 남기려면 프로젝트를 저장하세요.', 'Add at least one shot first.': '먼저 샷을 하나 이상 추가하세요.',
+  'Cards made': '만든 카드', 'Cards updated': '갱신한 카드', 'Cards made again (deleted in the canvas)': '다시 만든 카드 (캔버스에서 지워져 있었음)',
+  'Prompts you changed in the canvas were kept (shots)': '캔버스에서 직접 고친 프롬프트는 그대로 둠 (샷)', 'Shots that are no longer in the project (their cards were left alone)': '프로젝트에서 빠진 샷 (카드는 그대로 둠)',
+  'Shots with an empty prompt': '프롬프트가 빈 샷', 'Shots with assets (assets are not connected to cards yet)': '에셋이 있는 샷 (에셋은 아직 카드에 연결되지 않음)', 'Not built': '만들지 못함', 'Nothing to change.': '바꿀 것이 없습니다.',
   'Director projects': '디렉터 프로젝트', 'No Director projects yet.': '아직 디렉터 프로젝트가 없습니다.', scenes: '씬', shots: '샷',
   'Plan the film here: brief, story, scenes and shots. Nothing is generated from this screen.': '여기서 영상을 기획합니다: 브리프, 스토리, 씬, 샷. 이 화면에서는 아무것도 생성하지 않습니다.',
   'New project': '새 프로젝트', 'Project name': '프로젝트 이름', 'That name cannot be used as a file name.': '이 이름은 파일 이름으로 쓸 수 없습니다.',

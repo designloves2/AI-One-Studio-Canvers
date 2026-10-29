@@ -37,7 +37,11 @@ export interface DirectorShot {
 
 export interface DirectorAsset { asset_id: string; name: string; role: AssetRole; source: AssetSource; note: string }
 
-export interface CanvasLink { canvas_id: string; canvas_file: string; shots: { shot_id: string; node_ids: string[] }[]; created_at: string }
+export interface CanvasLink {
+  canvas_id: string; canvas_file: string; shots: { shot_id: string; node_ids: string[] }[]; created_at: string;
+  /** the prompt each shot's card was last given by the adapter (tells a user's own edit in the canvas from an untouched card) */
+  prompt_sent?: Record<string, string>;
+}
 
 export interface DirectorProject {
   app: 'ai-one-studio-canvers';

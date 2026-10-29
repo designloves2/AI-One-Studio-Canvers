@@ -5,6 +5,8 @@ import { askConfirm, askText, notify } from '../ui/dialog';
 import { newAsset, newScene, newShot, safeProjectName } from './model';
 import type { AssetRole, DirectorProject, ShotStatus } from './types';
 import { libThumb, listAssets, type LibAsset } from '../backend/assetlib';
+import { describeReport, linkOf, makeCanvasFromDirector, openLinkedCanvas } from './canvasAction';
+import type { Generator } from './adapter';
 
 const STATUSES: ShotStatus[] = ['draft', 'ready', 'approved', 'queued', 'generating', 'review', 'done', 'failed'];
 const ROLES: AssetRole[] = ['character', 'background', 'prop', 'reference', 'audio', 'other'];
@@ -106,6 +108,34 @@ function Story({ p, ro }: { p: DirectorProject; ro: boolean }) {
   );
 }
 
+function CanvasBar({ p, ro }: { p: DirectorProject; ro: boolean }) {
+  const T = useT();
+  const [gen, setGen] = useState<Generator>('image-generate');
+  const [busy, setBusy] = useState(false);
+  const link = linkOf(p.canvas_links);
+  const make = async () => {
+    setBusy(true);
+    try {
+      const r = await makeCanvasFromDirector(gen);
+      if (r) await notify(`${r.file}
+
+${describeReport(r.report)}${ro ? '' : `
+
+${T('Save the project to keep the link to this canvas.')}`}`);
+    } catch (e) { await notify((e as Error).message); } finally { setBusy(false); }
+  };
+  return (
+    <div className="dir-canvasbar">
+      <select value={gen} onChange={(e) => setGen(e.target.value as Generator)} title={T('Card made for each shot')}>
+        <option value="image-generate">{T('Image Generate')}</option><option value="video-generate">{T('Video Generate')}</option>
+      </select>
+      <button className="btn" disabled={busy || p.shots.length === 0} onClick={() => void make()}>{link ? T('Update Canvers canvas') : T('Make Canvers canvas')}</button>
+      {link && <button className="btn" onClick={() => void openLinkedCanvas(link.canvas_file).catch((e) => notify((e as Error).message))}>{T('Open in Canvas')}</button>}
+      {link && <span className="dir-muted">{link.canvas_file}</span>}
+    </div>
+  );
+}
+
 function Board({ p, ro }: { p: DirectorProject; ro: boolean }) {
   const T = useT(); const edit = useDirector((s) => s.edit);
   const shotsOf = (sc: string) => p.shots.filter((s) => s.scene_id === sc).sort((a, b) => a.order - b.order);
@@ -116,6 +146,7 @@ function Board({ p, ro }: { p: DirectorProject; ro: boolean }) {
   };
   return (
     <div className="dir-board">
+      <CanvasBar p={p} ro={ro} />
       {[...p.scenes].sort((a, b) => a.order - b.order).map((sc) => (
         <div key={sc.scene_id} className="dir-scene">
           <div className="dir-scene-head">

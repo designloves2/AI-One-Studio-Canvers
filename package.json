@@ -11,7 +11,7 @@
     "start": "node serve.mjs",
     "mock": "node mock/mock-comfy.mjs",
     "build:mcp": "node mcp/build.mjs",
-    "test:director": "node scripts/test-director.mjs"
+    "test:director": "node scripts/test-director.mjs && node scripts/test-director-adapter.mjs"
   },
   "dependencies": {
     "@xyflow/react": "12.8.2",
