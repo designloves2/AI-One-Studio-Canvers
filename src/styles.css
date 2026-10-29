@@ -653,7 +653,7 @@ button.save-state.dirty { cursor: pointer; } button.save-state.dirty:hover { bac
 .dirx-steps li.done button span { background: var(--acc2); color: #04140c; } .dirx-steps li.cur button span { background: #fff; color: var(--acc); }
 .dx-epstrip { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .dx-eps-row { display: flex; gap: 4px; overflow-x: auto; padding: 2px 0 4px; }
-.dx-ep { position: relative; flex: none; min-width: 34px; height: 34px; padding: 0 6px; border-radius: 8px; border: 1px solid var(--line2); background: var(--bg3); color: var(--fg); display: inline-flex; align-items: center; justify-content: center; gap: 4px; cursor: pointer; }
+.dx-ep { position: relative; flex: none; min-width: 68px; height: 34px; padding: 0 6px; border-radius: 8px; border: 1px solid var(--line2); background: var(--bg3); color: var(--fg); display: inline-flex; align-items: center; justify-content: center; gap: 4px; cursor: pointer; }
 .dx-ep b { font-size: 12px; } .dx-ep i { position: absolute; left: 6px; right: 6px; bottom: 3px; height: 3px; border-radius: 2px; background: var(--line2); }
 .dx-ep.cur { outline: 2px solid var(--acc2); } .dx-ep.sel { background: color-mix(in srgb, var(--acc) 30%, var(--bg3)); }
 .dx-ep.s-working i, .dx-ep.s-generating i { background: var(--acc); } .dx-ep.s-working i { animation: dirx-pulse 1s ease-in-out infinite; }
