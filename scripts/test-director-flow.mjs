@@ -244,6 +244,25 @@ ok(m2.schema_version === 5 && m2.series.format === 'drama' && m2.workflow.stage 
   AI.applyReply(q, { say: '', edits: [{ op: 'set_clip', episode: 2, clip: 1, prompt_en: 'darker', include: false }] });
   ok(p0.passed === undefined && p0.excluded === true && p0.status === 'draft', 'a changed clip is not passed any more; include:false leaves it out of the joined video');
 }
+// ---- fixes from the real test: a song only for a music video, the numbers the producer said, the music crew only in a music video
+{
+  const q = M.newDirectorProject('AD'); q.series.format = 'ad';
+  AI.applyReply(q, { say: '', music: { source: 'generate', style: 'x', lyrics: 'y', duration_sec: 60, sections: [{ name: 'verse', start_sec: 0, end_sec: 60 }] } });
+  ok(!q.music, 'an ad never gets a song, even when the model sends one');
+  const mv = M.newDirectorProject('MV'); mv.series.format = 'musicvideo';
+  AI.applyReply(mv, { say: '', music: { source: 'generate', style: 'x', lyrics: 'y', duration_sec: 60, sections: [{ name: 'verse', start_sec: 0, end_sec: 60 }] } });
+  ok(!!mv.music && mv.music.style === 'x', 'a music video takes the song');
+  const n = (t) => AI.saidNumbers(t);
+  ok(n('광고 20초, 아웃도어 재킷, 클립 10초').seconds === 20 && n('편당 1분 30초 30부작').seconds === 90 && n('편당 1분 30초 30부작').episodes === 30, 'the length and the number of episodes are read from the producer\'s words (a clip length is not the episode length)');
+  ok(n('3분 영상, 30초 인트로').seconds === undefined && n('그냥 만들어줘').seconds === undefined, 'an unclear or missing number is not enforced');
+  const b = M.newDirectorProject('B'); M.addChat(b, 'user', '광고 20초 클립 10초로 만들어줘');
+  const reply = (sec) => ({ say: '', series: { format: 'ad', total_episodes: 1, episode_seconds: sec }, brief: { text: 't' } });
+  ok(/20 seconds/.test(AI.checkReply(b, reply(30), 'brief')) && AI.checkReply(b, reply(20), 'brief') === null, 'a brief that changes the length the producer said is sent back');
+  let said = ''; const llmF = async (system) => { said = system; return JSON.stringify({ crew: 'music', say: 'x' }); };
+  const free = M.newDirectorProject('F'); free.series.format = 'ad';
+  const res = await AI.directorTurn(free, 'hi', llmF);
+  ok(res.reply.crew === 'producer_desk', 'the music director does not speak in an ad');
+}
 // ---- demo stand-in pictures
 {
   const svg = (u) => decodeURIComponent(u.slice(u.indexOf(',') + 1));

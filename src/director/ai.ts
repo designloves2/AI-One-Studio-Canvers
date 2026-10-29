@@ -143,12 +143,28 @@ export function parseReply(raw: string): AiReply {
   return r;
 }
 
+/** the length and the number of episodes the producer wrote in plain words (only when it is said once and clearly; a clip length such as "클립 10초" is not the episode length) */
+export function saidNumbers(text: string): { seconds?: number; episodes?: number } {
+  const t = text.replace(/클립\s*당?\s*\d+(?:\.\d+)?\s*초/g, ' ').replace(/\d+(?:\.\d+)?\s*초\s*(?:클립|단위|씩)/g, ' ').replace(/clips?\s*(?:of\s*)?\d+\s*(?:s|sec)/gi, ' ');
+  const out: { seconds?: number; episodes?: number } = {};
+  const d = [...t.matchAll(/(\d+)\s*분(?:\s*(\d+)\s*초)?|(\d+)\s*초/g)];
+  if (d.length === 1) out.seconds = d[0][3] !== undefined ? Number(d[0][3]) : Number(d[0][1]) * 60 + Number(d[0][2] ?? 0);
+  const e = [...t.matchAll(/(\d+)\s*부작/g)];
+  if (e.length === 1) out.episodes = Number(e[0][1]);
+  return out;
+}
+
 /** What is wrong with the reply for the step it was asked for (null = fine). Checked BEFORE anything is applied. */
 export function checkReply(p: DirectorProject, r: AiReply, kickoff: Kickoff | 'free'): string | null {
   const s = { ...p.series, ...(r.series ?? {}) };
   if (kickoff === 'brief') {
     if (!r.series || !r.brief?.text?.trim()) return 'the reply needs "series" and "brief.text"';
     if (!(Number(s.total_episodes) >= 1) || !(Number(s.episode_seconds) > 0)) return '"series.total_episodes" and "series.episode_seconds" must be numbers';
+    const said = saidNumbers(p.chat.filter((m) => m.role === 'user').map((m) => m.text).join(' \n '));
+    if (s.format !== 'musicvideo') {
+      if (said.seconds !== undefined && Math.abs(Number(s.episode_seconds) - said.seconds) > 0.5) return `the producer asked for ${said.seconds} seconds per episode, but "series.episode_seconds" is ${s.episode_seconds}. Use exactly what the producer said`;
+      if (said.episodes !== undefined && Number(s.total_episodes) !== said.episodes) return `the producer asked for ${said.episodes} episodes, but "series.total_episodes" is ${s.total_episodes}. Use exactly what the producer said`;
+    }
   }
   if (kickoff === 'series') {
     const n = Number(s.total_episodes);
@@ -228,7 +244,7 @@ function renameReference(p: DirectorProject, r: DirectorProject['references'][nu
 export function applyReply(p: DirectorProject, r: AiReply, opt: { free?: boolean; episode?: number } = {}): string[] {
   const notes: string[] = [];
   if (r.series) applySeries(p, r.series, notes);
-  if (r.music) { const { generate: _g, ...patch } = r.music; void _g; p.music = p.music ?? newMusic(); applyMusicPatch(p.music, patch, notes); }
+  if (r.music && p.series.format === 'musicvideo') { const { generate: _g, ...patch } = r.music;   void _g; p.music = p.music ?? newMusic(); applyMusicPatch(p.music, patch, notes); }
   if (r.brief) {
     if (typeof r.brief.text === 'string') { p.brief.text = r.brief.text.trim(); p.brief.status = 'draft'; }
     if (Array.isArray(r.brief.assumptions)) p.brief.assumptions = r.brief.assumptions.map(String).filter(Boolean).slice(0, 12);
@@ -387,6 +403,7 @@ export async function directorTurn(p: DirectorProject, userText: string, llm: Ll
     try {
       const r = parseReply(raw);
       if (kickoff === 'brief' && r.series && !isFormat(r.series.format)) { const f = detectFormat(p.chat.filter((m) => m.role === 'user').map((m) => m.text).join(' ')); if (f) r.series.format = f; }
+      if (r.crew === 'music' && formatNow(p, r) !== 'musicvideo') r.crew = 'producer_desk';
       const bad = r.intent === 'approve' ? null : checkReply(p, r, kickoff);
       if (bad) { err = bad; continue; }
       reply = r;
@@ -396,6 +413,8 @@ export async function directorTurn(p: DirectorProject, userText: string, llm: Ll
   const notes = reply.intent === 'approve' ? [] : applyReply(p, reply, { free: kickoff === 'free', episode: kickoff === 'episode' ? p.workflow.episode_no : undefined });
   return { reply, notes, attempts };
 }
+
+const formatNow = (p: DirectorProject, r: AiReply) => (isFormat(r.series?.format) ? r.series!.format : p.series.format);
 
 export const defaultCrew = (stage: StageId): CrewRole => ({ intake: 'producer_desk', brief: 'producer_desk', series: 'writer', references: 'art', episode: 'director', canvas: 'cinematographer', execute: 'cinematographer', review: 'director' } as Record<StageId, CrewRole>)[stage];
 export { addChat };

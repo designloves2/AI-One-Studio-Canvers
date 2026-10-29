@@ -119,7 +119,7 @@ export const KO_DIRECTOR: Record<string, string> = {
   'The song needs a style and lyrics first. Ask the crew to write them, or type them.': '먼저 스타일과 가사가 필요합니다. 작업팀에게 쓰게 하거나 직접 입력하세요.',
   'Make the song now? Generating uses the GPU and takes time.': '지금 노래를 만들까요? 생성은 GPU를 쓰고 시간이 걸립니다.',
   'Every clip needs a result before the clips can be joined.': '클립을 합치려면 모든 클립에 결과가 있어야 합니다.',
-  'The canvas has no card for the finished episode (Video Stitch). Press "Update Canvers canvas".': '캔버스에 완성본 카드(영상 스티치)가 없습니다. "Canvers 캔버스 업데이트"를 누르세요.',
+  'The canvas has no card for the finished episode (Video Stitch). Press "Update Canvers canvas".': '캔버스에 완성본 카드(영상 스티치)가 없습니다. "Canvers 캔버스 갱신"을 누르세요.',
   'Join the clips into one video now?': '지금 클립을 한 영상으로 합칠까요?',
   'Finished video (clips joined + the song)': '완성 영상 (클립 합치기 + 노래)',
   'Finished video (clips joined)': '완성 영상 (클립 합치기)',
