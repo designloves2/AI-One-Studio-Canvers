@@ -21,7 +21,7 @@ import { ASPECTS, applySeriesPatch } from './ai';
 import { FORMAT_IDS, FORMATS, vocabOf } from './formats';
 import { blockers, hasMusicStep, EPISODE_STAGES, epStageIndex, episodeBlockers, episodeState, GLOBAL_STAGES, productionOpen, stageIndex } from './workflow';
 import { localizeMsg } from './localize';
-import { castEngines, downloadEpisodePackages, generateBatch, generateCast, linkOfCasting, linkOfEpisode, openLinkedCanvas, registerCast, syncCastFromCanvas, syncResultsFromCanvas } from './canvasAction';
+import { castEngines, extraAspects, makeVersionCanvases, versionLinks, downloadEpisodePackages, generateBatch, generateCast, linkOfCasting, linkOfEpisode, openLinkedCanvas, registerCast, syncCastFromCanvas, syncResultsFromCanvas } from './canvasAction';
 import type { DirectorProject, DirectorReference, DirectorShot, ResultRef, StageId } from './types';
 
 const STEPS: { id: StageId; label: string }[] = [
@@ -530,7 +530,7 @@ const STATUS_KO: Record<string, string> = { draft: 'draft', ready: 'ready', appr
 function ClipCard({ s, n, big, gen, sel, onSel, onAgain, ro }: { s: DirectorShot; n: number; big?: boolean; gen?: boolean; sel?: boolean; onSel?: () => void; onAgain?: () => void; ro?: boolean }) {
   const T = useT(); const proj = useDirector((x) => x.project); const edit = useDirector((x) => x.edit);
   const pick = s.results.find((r) => r.picked);
-  const live = useGraph((g) => { const l = proj?.canvas_links.find((c) => c.shots.some((q) => q.shot_id === s.shot_id)); const id = l?.shots.find((q) => q.shot_id === s.shot_id)?.node_ids[1]; return id && g.canvasFile === l?.canvas_file ? g.runtime[id] : undefined; });
+  const live = useGraph((g) => { const l = proj?.canvas_links.find((c) => !c.aspect && c.shots.some((q) => q.shot_id === s.shot_id)); const id = l?.shots.find((q) => q.shot_id === s.shot_id)?.node_ids[1]; return id && g.canvasFile === l?.canvas_file ? g.runtime[id] : undefined; });
   const setSeed = (v: number | undefined) => edit((x) => { const q = x.shots.find((z) => z.shot_id === s.shot_id); if (q) q.seed = v; });
   return (
     <article className={`dx-clip st-${s.status}${sel ? ' sel' : ''}`}>
@@ -600,7 +600,25 @@ function CanvasCard({ p }: { p: DirectorProject }) {
           <div className="dx-tiles two"><Tile icon="clip" value={String(shots.length)} label={T('Clips')} tone="b" /><Tile icon="bolt" value={PRESET_LABEL[p.series.preset]} label={`${T('with the shared 7+1 card')} · ${p.series.resolution}`} tone="a" /></div>
           <div className="dx-btns"><button className="btn primary" onClick={() => void openLinkedCanvas(link.canvas_file).catch((er) => notify((er as Error).message))}>{T('Open in Canvas')}</button></div>
         </section>) : <p className="dirx-muted">{T('The canvas is being built…')}</p>}
+      {link && <VersionsBlock p={p} />}
     </div>
+  );
+}
+
+/** the same piece in other screen ratios (an ad in 16:9 + 9:16 + 1:1): one extra canvas per ratio */
+function VersionsBlock({ p }: { p: DirectorProject }) {
+  const T = useT(); const edit = useDirector((x) => x.edit); const [busy, setBusy] = useState(false);
+  const picked = p.series.versions ?? [];
+  const links = versionLinks(p);
+  const toggle = (a: string) => edit((x) => { const v = new Set(x.series.versions ?? []); if (v.has(a)) v.delete(a); else v.add(a); x.series.versions = [...v]; });
+  const make = async () => { setBusy(true); try { const r = await makeVersionCanvases(); await notify(`${T('Canvases made')}: ${r.files.join(', ')}`); } catch (er) { await notify((er as Error).message); } finally { setBusy(false); } };
+  return (
+    <section className="dx-block"><h4><Ico n="image" />{T('Other screen ratios')}</h4>
+      <p className="dirx-muted">{T('Make the same piece in more ratios (for example an ad as 16:9, 9:16 and 1:1). Each ratio gets its own canvas with the same prompts, cast images and seeds; you generate them in the Canvas.')}</p>
+      <div className="dx-btns">{ASPECTS.filter((a) => a !== p.series.aspect).map((a) => <label key={a} className="dx-check"><input type="checkbox" checked={picked.includes(a)} onChange={() => toggle(a)} />{a}</label>)}
+        <button className="btn" disabled={busy || !extraAspects(p).length} onClick={() => void make()}>{T('Make the canvases for the other ratios')}</button></div>
+      {links.length > 0 && <div className="dx-btns">{links.map((l) => <button key={l.canvas_id} className="btn" onClick={() => void openLinkedCanvas(l.canvas_file).catch((er) => notify((er as Error).message))}>{l.aspect} · {T('Open in Canvas')}</button>)}</div>}
+    </section>
   );
 }
 

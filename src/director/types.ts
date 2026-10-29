@@ -30,6 +30,8 @@ export type AssetSource =
 
 /** Production settings every episode follows. The AI reads them from the user's first message; the user can change them by chat. */
 export interface DirectorSeries {
+  /** other screen ratios the same piece is also made in (an ad in 16:9 + 9:16 + 1:1): one extra canvas per ratio, made by hand in the Canvas */
+  versions?: string[];
   /** the kind of work: drama / film / ad / musicvideo / vlog / short (words on the screen, what the crew cares about) */
   format: SeriesFormat;
   title: string; genre: string; tone: string; logline: string; synopsis: string; language: string;
@@ -131,6 +133,8 @@ export interface CanvasLink {
   episode_id?: string;
   /** 'casting' = the canvas that makes the cast images (refs below instead of shots) */
   purpose?: 'casting' | 'episode' | 'music';
+  /** an extra-ratio version of the episode canvas (the main canvas has none) */
+  aspect?: string;
   /** episode canvas: the card whose result is the finished episode (clips joined, with the song on top for a music video) */
   final_node_id?: string;
   /** music canvas: the cards (style, lyrics, generator) */

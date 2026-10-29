@@ -164,7 +164,7 @@ export function planBatch(p: DirectorProject, nos: number[], opt: { clipIds?: st
     const picked = chosen ? shots.filter((s) => chosen.has(s.shot_id)) : shots.filter((s) => s.status === 'approved');
     if (chosen && !picked.length) continue;   // none of the chosen clips is in this episode: not an error
     if (!chosen && ep.stage !== 'execute') { plan.skipped.push({ no, reason: 'not-in-generate-step' }); continue; }
-    if (!p.canvas_links.some((l) => l.episode_id === ep.episode_id)) { plan.skipped.push({ no, reason: 'no-canvas' }); continue; }
+    if (!p.canvas_links.some((l) => l.episode_id === ep.episode_id && !l.aspect)) { plan.skipped.push({ no, reason: 'no-canvas' }); continue; }
     if (!picked.length) { plan.skipped.push({ no, reason: 'nothing-to-run' }); continue; }
     plan.batches.push({ no, shots: picked, requeue: picked.filter((s) => s.status !== 'approved').map((s) => s.shot_id) });
     plan.clips += picked.length;

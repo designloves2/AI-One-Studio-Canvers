@@ -78,7 +78,7 @@ export function episodeBlockers(p: DirectorProject, no: number, stage?: StageId)
       if (shots.some((s) => !s.prompt_en.trim())) out.push('A clip has no picture description yet.');
     }
   }
-  if (st === 'canvas' && !p.canvas_links.find((l) => l.episode_id === ep.episode_id)) out.push('The canvas for this episode has not been built yet.');
+  if (st === 'canvas' && !p.canvas_links.find((l) => l.episode_id === ep.episode_id && !l.aspect)) out.push('The canvas for this episode has not been built yet.');
   if (st === 'execute' || st === 'review') {
     const missing = shots.filter((s) => !s.results.some((r) => r.picked));
     if (missing.length) out.push(`${missing.length} of ${shots.length} clips have no generated result yet.`);

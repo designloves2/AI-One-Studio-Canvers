@@ -30,7 +30,7 @@ export const isDemo = () => useDirector.getState().demo;
 export const DEMO_FILE = '(demo) ';
 const isDemoLink = (l: CanvasLink) => l.canvas_file.startsWith(DEMO_FILE);
 export const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-export const linkOfEpisode = (p: DirectorProject, no = p.workflow.episode_no): CanvasLink | null => { const e = episodeByNo(p, no); return (e && p.canvas_links.find((l) => l.episode_id === e.episode_id)) || null; };
+export const linkOfEpisode = (p: DirectorProject, no = p.workflow.episode_no): CanvasLink | null => { const e = episodeByNo(p, no); return (e && p.canvas_links.find((l) => l.episode_id === e.episode_id && !l.aspect)) || null; };
 export const linkOfCasting = (p: DirectorProject): CanvasLink | null => p.canvas_links.find((l) => l.purpose === 'casting') ?? null;
 
 export const setLink = (link: CanvasLink) => useDirector.getState().edit((x) => { x.canvas_links = [link, ...x.canvas_links.filter((l) => l.canvas_id !== link.canvas_id)]; });
@@ -334,4 +334,35 @@ export async function openLinkedCanvas(file: string): Promise<void> {
   if (file.startsWith(DEMO_FILE)) { await notify(tr('The demo does not make canvas files. Turn the demo off to build the real canvas.')); return; }
   await openSavedCanvas(file);
   useGraph.getState().setMode('canvas');
+}
+
+/** the other screen ratios of the series (not the main one) that this build can make */
+export const extraAspects = (p: DirectorProject): string[] => (p.series.versions ?? []).filter((a) => a !== p.series.aspect);
+export const versionLinks = (p: DirectorProject, no = p.workflow.episode_no): CanvasLink[] => { const e = episodeByNo(p, no); return e ? p.canvas_links.filter((l) => l.episode_id === e.episode_id && l.aspect) : []; };
+
+/**
+ * One extra canvas per other screen ratio (an ad in 9:16 and 1:1 as well): the same prompts, cast images and seeds, only the ratio differs.
+ * The versions are made by hand in the Canvas (open the file and run the cards); their results stay in that canvas.
+ */
+export async function makeVersionCanvases(no?: number): Promise<{ files: string[] }> {
+  const d = useDirector.getState(); const p = d.project;
+  if (!p) throw new Error('no project');
+  if (isDemo()) throw new Error(tr('The demo does not make canvas files. Turn the demo off to build the real canvas.'));
+  const ep = episodeByNo(p, no ?? p.workflow.episode_no);
+  if (!ep || !shotsOfEpisode(p, ep.episode_id).length) throw new Error(tr('Add at least one shot first.'));
+  const files: string[] = [];
+  for (const asp of extraAspects(p)) {
+    const clone = JSON.parse(JSON.stringify(useDirector.getState().project)) as DirectorProject; clone.series.aspect = asp;
+    const prev = clone.canvas_links.find((l) => l.episode_id === ep.episode_id && l.aspect === asp) ?? null;
+    const file = prev?.canvas_file ?? `${canvasFileName(p.name)} - ep${pad2(ep.no)} - ${asp.replace(':', 'x')}`;
+    const existing = await existingCanvas(file, !!prev);
+    const turbo = turboSettings(clone.series);
+    const refAssets: Record<string, Asset> = {};
+    for (const s of shotsOfEpisode(clone, ep.episode_id)) for (const r of castOf(clone, s)) { const pick = r.results.find((x) => x.picked); if (pick && !refAssets[r.ref_id]) refAssets[r.ref_id] = assetOfResult(pick, `ra_${r.ref_id}`); }
+    const res = buildCanvasFromDirector(clone, appRegistry, existing, prev, file, { generator: 'video-generate', episodeId: ep.episode_id, turbo: turbo.params, refAssets });
+    await saveCanvas(file, res.project);
+    setLink({ ...res.link, aspect: asp });
+    files.push(file);
+  }
+  return { files };
 }

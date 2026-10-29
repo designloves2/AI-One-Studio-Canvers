@@ -71,6 +71,7 @@ export const KO_DIRECTOR: Record<string, string> = {
   // side menu
   'Director projects': '디렉터 프로젝트', 'Start a new project by writing in the chat. To continue an earlier one, name it: "…1편에 이어서 2편을 만들자".': '새 프로젝트는 채팅창에 쓰면 시작됩니다. 이전 작품에 이어 만들려면 이름을 말하세요: "…1편에 이어서 2편을 만들자".',
   // song step / finished video
+  'Other screen ratios': '다른 화면비', 'Make the same piece in more ratios (for example an ad as 16:9, 9:16 and 1:1). Each ratio gets its own canvas with the same prompts, cast images and seeds; you generate them in the Canvas.': '같은 작품을 다른 화면비로도 만듭니다(예: 광고를 16:9, 9:16, 1:1로). 화면비마다 같은 프롬프트·캐스트 이미지·시드의 캔버스가 따로 만들어지고, 생성은 캔버스에서 합니다.', 'Make the canvases for the other ratios': '다른 화면비 캔버스 만들기', 'Canvases made': '만든 캔버스',
   'Narration': '내레이션',
   'Registered as an asset': '에셋으로 등록됨', 'Register the song as an asset': '노래를 에셋으로 등록',
   'Song': '노래',

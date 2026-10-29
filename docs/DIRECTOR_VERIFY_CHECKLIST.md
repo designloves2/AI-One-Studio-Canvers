@@ -17,3 +17,4 @@
 4. 노래: 파일 업로드(`importFile`), Music Generate(acestep/yue2/minimax), 에셋 등록(category music).
 5. 완성 영상: Video Stitch → Add Audio(노래 얹기) 실제 실행, `applyEpisodeFinal` 로 편에 들어오는지.
 6. 결과 우클릭 → 에셋 등록: 영상·음악 결과, 새 이미지 신규 등록.
+7. 캔버스 단계 "다른 화면비": 9:16·1:1 체크 → 캔버스 만들기 → 파일이 `… - ep01 - 9x16` 로 생기고 화면비가 바뀌었는지, 주 캔버스·생성 단계에 영향이 없는지(데모는 파일을 안 만듦).
