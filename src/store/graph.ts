@@ -6,7 +6,7 @@ import { useSettings } from './settings';
 import { saveTurboPick } from '../backend/turboMemory';
 
 export type AppMode = 'director' | 'canvas' | 'simple';
-export type PanelId = null | 'canvases' | 'nodes' | 'decks' | 'assets' | 'library' | 'live' | 'settings' | 'models';
+export type PanelId = null | 'director' | 'canvases' | 'nodes' | 'decks' | 'assets' | 'library' | 'live' | 'settings' | 'models';
 
 export interface ComposerRun {
   id: string;

@@ -2,6 +2,16 @@
 
 형식: 버전 · 날짜 / 추가 · 변경 · 수정. 버전은 `package.json`, `mcp/server.ts`와 같습니다.
 
+## 미릴리즈 — Director Mode (개발 중)
+
+### 추가
+- 모드가 3개가 됩니다: **Director / Canvas / Simple**. Director는 사용자가 채팅(왼쪽)으로 말하고 AI 작업팀(작가·감독·촬영·미술·음향·음악)이 결과(오른쪽)를 만들면 승인하거나 수정 지시하는 화면입니다.
+- 진행: 브리프 → 캐스팅(배우·장소·소품 이미지) → 시나리오(승인된 캐스트로 작성) → 편마다 [작성 → 캔버스 → 생성 → 검토]. 편마다 자기 단계라 여러 편을 동시에 진행하고 한 편만 되돌릴 수 있습니다. 단계는 눌러서 언제든 다시 봅니다.
+- 설정: 편수·편당 길이·클립 길이(10초 기준)·비율·해상도·생성 방식(7+1 Kimchy 등). 클립마다 화면·대사·음향·음악·출연·장소·시드.
+- 캐스트 이미지(생성 / 에셋 라이브러리 / 갤러리 선택)가 시나리오·클립·캔버스(`@image1…` 순서로 자동 연결)·생성·검토까지 따라옵니다. 생성은 자동(확인 한 번, 여러 편 배치, 선택 클립 시드 바꿔 다시 생성) 또는 수동(캔버스 열기 / 편 ZIP).
+- 이전 작품 이어서 만들기("…1편에 이어서 2편"), 디렉터 전용 LLM 설정(기존 4가지 백엔드) + 채팅 입력창의 모델 설정 버튼.
+- 저장은 `director/` 폴더(백업 10개). 상세: `docs/DIRECTOR_MODE_IMPLEMENTATION_PLAN.md`.
+
 ## 2.27.4 — 2026-10-27
 
 ### 변경
@@ -310,4 +320,4 @@ OpenRouter(gemini-2.5-flash) 2초 · Connect Custom/Vertex 프록시(:3000, gemi
 - 미검증: Face Refine 다인 체인, Anima inpaint 모드.
 
 ## 2.5.0 이전
-v2.1(카드 덱 방식) ~ v2.5: 카드(노드) 캔버스, 덱, 후처리·Face Refine·Character Sheet·Video Edit·Stitch, 에셋 라이브러리 카드, LTX Director 타임라인, H3 Image, 라이선스 GPL-3.0-only 등. 자세한 내용은 `HANDOFF.md` 와 git 로그를 참고하세요.
+v2.1(카드 덱 방식) ~ v2.5: 카드(노드) 캔버스, 덱, 후처리·Face Refine·Character Sheet·Video Edit·Stitch, 에셋 라이브러리 카드, LTX Director 타임라인, H3 Image, 라이선스 GPL-3.0-only 등. 자세한 내용은 `docs/HANDOFF.md` 와 git 로그를 참고하세요.

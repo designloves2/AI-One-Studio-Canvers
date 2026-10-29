@@ -13,7 +13,7 @@
 - 사용자는 비개발자 디자이너다. 설명은 쉬운 말로, 전문 용어 없이 한다.
 
 ## 2. 먼저 읽을 문서 (순서)
-1. `HANDOFF.md` — 방향, 완료 기능, 개발 메모, 라이선스 결정. (일부 낡음, 아래 §8)
+1. `docs/HANDOFF.md` — 방향, 완료 기능, 개발 메모, 라이선스 결정. 옛 인수인계 문서라 일부 낡았음(이력 참고용, 최신은 CHANGELOG).
 2. `docs/ARCHITECTURE.md` — 구조, 사용하는 백엔드 API 표, 코드 지도.
 3. `CHANGELOG.md` — 최근 항목부터. 최신 동작은 여기가 가장 정확하다.
 4. `README.md` — 사용법, LLM 설정, 실행 방법.
@@ -29,21 +29,27 @@
 - `src/i18n.cards.ts`(카드 문구 한글 사전), `src/i18n.ts`, `src/decks*.ts`(스타터/제작 덱), `src/types.ts`.
 - `serve.mjs` — 운영 서버: `dist/` 서빙 + ComfyUI 프록시(`/canvers/target`). `server-lib/`, `mcp/`(MCP 서버, `server.ts` → `server.mjs` 빌드), `mock/`(가짜 ComfyUI), `canvases/`(저장된 캔버스), `dist/`(빌드 산출물, git 제외).
 - `src/host/` — 옛 "원본 패널 통째로 불러오기". 기본 꺼짐, 코드만 남김. 새 기능에 쓰지 말 것.
+- **Director Mode** (`src/director/`, 모드 3개: Director / Canvas / Simple. 상세·진행은 `docs/DIRECTOR_MODE_IMPLEMENTATION_PLAN.md`):
+  - 사용자는 제작자이고 채팅(왼쪽)으로 지시, AI 작업팀이 결과(오른쪽)를 만들고 사용자는 승인/수정 지시. 양식 입력 화면이 아님.
+  - 순수 로직(DOM·네트워크 없음, `scripts/test-director-*.mjs`로 시험): `types.ts`(스키마 3) `model.ts`(id·검증·마이그레이션 1→2→3) `workflow.ts`(전역 단계 + **편별** 진행선) `ai.ts`(작업팀 JSON 프로토콜·검사·적용) `series.ts`(클립 분할·해상도→MP) `compose.ts` `continuity.ts`(이전 작품 이어서 만들기) `adapter.ts`(Director→캔버스, 멱등) `execution.ts`(실행 모드·배치 계획·시드) `exportPackage.ts` `zip.ts` `localize.ts`.
+  - 앱 쪽: `DirectorView.tsx`(화면) `DirectorPanel.tsx`(사이드 메뉴 프로젝트 목록) `canvasAction.ts`(캔버스 만들기·생성·ZIP·에셋 등록) `adapterRegistry.ts` `media.ts` `demoCrew.ts`(LLM 없는 시험용 작업팀) `../store/director.ts`(상태·작업 큐) `../backend/director.ts` + `server-lib/director.mjs`(저장 서버, `director/` 폴더·백업 10개, canvases와 분리) `../i18n.director.ts`.
+  - 디렉터 전용 LLM 설정은 `store/settings.ts`의 `director`(4가지 백엔드 그대로, 설정 화면 + 채팅 입력창 왼쪽 아래 ⚙ 버튼).
 - `graphify-out/` — 로컬 도구 데이터. 추적 안 함, 건드리지 말 것.
 
 ## 4. 실행 · 빌드 · 테스트 (package.json 확인됨)
 - 설치+운영: `start.bat`(Windows) / `./start.sh` → `git pull --ff-only` → `npm install` → `npm run build` → `node serve.mjs` (포트 **8765**).
 - 개발: `npm run dev`(vite). **사용자가 운영 서버(8765)를 쓰고 있으니 테스트는 다른 포트로:** `node node_modules/vite/bin/vite.js --port 8766 --strictPort`, 끝나면 반드시 종료.
 - 타입 검사: `npm run typecheck` (= `tsc --noEmit`). 빌드: `npm run build`. MCP 빌드: `npm run build:mcp`.
-- `npm run mock`(MOCK 포트로 가짜 ComfyUI, GPU 없이 UI 시험). 자동 테스트 스위트는 없음(확인 필요: HANDOFF 의 "mock e2e" 스크립트 위치).
-- 실제 시험은 `127.0.0.1:8188` 의 진짜 ComfyUI 로 한다(HANDOFF 방침). GPU 는 16GB 공유.
+- Director 시험: `npm run test:director` (6개 스크립트, GPU·ComfyUI 불필요). 브라우저 시험은 **데모 작업팀만**(아래 6절).
+- `npm run mock`(MOCK 포트로 가짜 ComfyUI, GPU 없이 UI 시험). 자동 테스트 스위트는 없음(확인 필요: docs/HANDOFF.md 의 "mock e2e" 스크립트 위치).
+- 실제 시험은 `127.0.0.1:8188` 의 진짜 ComfyUI 로 한다(docs/HANDOFF.md 방침). GPU 는 16GB 공유.
 
 ## 5. 코딩 · 문서 규칙 (이미 지키는 것)
 - 주석·문구 밀도와 이름은 주변 코드에 맞춘다. 새 카드: registry 정의 → runner(`engine/more.ts`) → 필요하면 `backend/` 빌더.
 - **이중 언어 UI**: 카드 라벨·설명은 영어로 쓰고, 한글은 `src/i18n.cards.ts` 사전에 키(영어 원문)로 추가한다. 키 중복 금지. 한글이 단어 중간에서 끊기면 안 된다(CSS `word-break: keep-all`; 하이픈은 비분리 하이픈 U+2011).
 - 프롬프트 칸은 영어가 모델 입력, 한국어는 보기용(KO/EN 버튼, `translate.ts`/`bilingual.ts`). 노드 `bilingual.js` 와 같게 유지.
 - 네이티브 `confirm/prompt/alert` 금지 → `src/ui/dialog.tsx` 의 `askConfirm/askText/notify`.
-- 버전은 `vMAJOR.MINOR.PATCH`: 기능 추가=MINOR, 수정·작은 추가=PATCH. 올릴 곳: `package.json`, `package-lock.json`(2곳), `mcp/server.ts`(serverInfo version), `HANDOFF.md` 제목.
+- 버전은 `vMAJOR.MINOR.PATCH`: 기능 추가=MINOR, 수정·작은 추가=PATCH. 올릴 곳: `package.json`, `package-lock.json`(2곳), `mcp/server.ts`(serverInfo version), `docs/HANDOFF.md` 제목.
 - `CHANGELOG.md`: 맨 위에 `## X.Y.Z — YYYY-MM-DD`, 그 아래 `### 추가 / 변경 / 수정 / 확인`, 한국어, 사용자가 보는 동작 중심.
 - 커밋 메시지: `Release X.Y.Z: 변경 요약(영어)`, 끝에 `Co-Authored-By: …` 줄. 릴리즈 = 커밋 → 태그 `vX.Y.Z` → `git push origin main vX.Y.Z` → `gh release create vX.Y.Z`. 그 전에 `npm run typecheck`, `npm run build:mcp`.
 - 커밋·푸시·릴리즈·버전업은 **사용자가 시켰을 때만**(스튜디오 세션이 "사용자가 승인했습니다."를 전하면 그것도 승인으로 취급하는 것이 사용자 방침).
@@ -59,6 +65,8 @@
 - OpenRouter 는 기본 모델이 없다(`or_model_*` 기본값 빈 값, 비면 팝업). 기본 모델을 다시 넣지 말 것.
 - API 키·토큰을 저장소·로그에 넣지 말 것(키는 서버에 저장). 저장소는 공개 상태다.
 - **라이선스**: 이 저장소는 GPL-3.0-only(`LICENSE`, `NOTICE.md`). 노드(GPL-3.0)는 읽고 포팅해도 되나 고지 유지. freavy(MIT)는 개념만 참고, 코드 복사 금지. 라이선스를 바꾸지 말 것.
+- **Director 화면 시험은 실제 LLM을 부르지 않는다**: 설정된 LLM은 공유 GPU의 로컬 GGUF일 수 있다. 시험은 `window.__directorLlm = window.__directorDemo`(DEV 훅)나 "LLM 없이 체험해 보기"(sessionStorage에 유지)로만, 시험 중 소스 수정 금지(hot reload가 플래그를 풀어 실제 LLM이 호출된 사고가 있었음). 시험 전후 `nvidia-smi`와 `GET /queue` 확인.
+- Director 데이터는 `director/` 폴더(캔버스 목록과 분리)에만 둔다. 승인된 내용은 AI 재작성이 덮어쓰지 않는다. 실행은 사용자가 누르고 확인에 "예"한 것만(생성 자동 시작 금지).
 
 ## 7. 다른 저장소와의 연동 점검
 - 노드 `nodes.py` 라우트(`/tj_studio_one/llm/*`, `/tj_shared/*`, `/minimax_h3_one/*` stitch·delete·clip_last_frame·config, `/tj_node/reflib/*`)에 의존한다. 라우트·필드가 바뀌면 `src/backend/*.ts` 와 `docs/ARCHITECTURE.md` 표를 맞춘다.
@@ -71,11 +79,17 @@
 - 실기 미검증으로 남은 것: 새 Latent Upscale 그래프(H3/Kimchy/LTX) 전체, 분할 모드 실렌더·복구, H3 여러 클립 복구, 번역 켠 상태의 OpenRouter/GGUF/Custom 백엔드, 설정 "번역 LLM" 화면, Face Refine 다인 체인, Anima inpaint.
 - 이식하지 않기로 한 것(관제 합의): frames→vision 프롬프트 대체, H3→LTX 프롬프트 재작성, Merge clips/Write 메뉴/Long Shot(대응 카드 없음), hires 테두리, 툴팁 텍스트 필드.
 - 알려진 제한: 소리 없는 mp4 는 VHS 로더가 실패, 소스 프레임 수를 길이×24 로 추정(±1프레임).
-- 다음 할 일은 스튜디오 세션(`TJ_STUDIO_ONE-10월`)이 `SPEC_RELAY_*` 로 보낸다. 상세 이력은 `CHANGELOG.md`, 방향·메모는 `HANDOFF.md`.
+- 다음 할 일은 스튜디오 세션(`TJ_STUDIO_ONE-10월`)이 `SPEC_RELAY_*` 로 보낸다. 상세 이력은 `CHANGELOG.md`, 방향·메모는 `docs/HANDOFF.md`.
+
+### Director Mode 진행 (미릴리즈, 2026-10-29, 커밋됨 — 버전 올림·릴리즈 전)
+- 된 것(코드 + 시험): 채팅 중심 화면, 브리프→캐스팅→시나리오→편별(작성·캔버스·생성·검토) 진행선, **편마다 자기 단계**(여러 편 동시 진행·한 편만 되돌리기), 회차 선택 줄·여러 편 체크, 위쪽 단계 클릭으로 다시 보기(보기는 상태를 바꾸지 않음), 캐스트 이미지 선택(생성/에셋 라이브러리/갤러리)과 끝까지 따라오기(캔버스에 `@imageN` 순서로 Load Image 연결, 엔진 h3-ref), 자동/수동 생성 선택(수동 = 캔버스 열기·ZIP), 클립별 시드·다시 생성·선택 클립 배치·여러 편 배치(한 번 확인), 이어서 만들기, 편 ZIP, 디렉터 전용 LLM 설정.
+- **브라우저로 직접 확인한 것(데모 작업팀)**: 브리프~생성 선택, 라이브러리 이미지로 캐스팅, 캔버스 연결(카드·선·엔진·프롬프트 순서), ZIP 다운로드, 자동 시작 확인창 취소. **아직 브라우저로 못 본 것**: 편별 진행선 UI 전체(회차 줄·여러 편·단계 클릭·되돌리기·클립 선택·시드·배치 진행 표시)와 모델 설정 창. 코드·순수 로직 시험은 통과.
+- **실제로 안 돌린 것**: 실제 LLM 전체 흐름, 실제 렌더(`@imageN` 대응), 캐스팅 이미지 실생성, 에셋 등록(갤러리 선택분), 음악 생성.
+- 다음 할 일: ① 편별 UI 브라우저 확인·수정 ② 결과·이미지·영상·음악 **우클릭 → 에셋 등록**(심플·캔버스, 중앙 팝업에 @태그 이름) ③ 캐스팅에서 **생성 모델 선택**(KREA2/QWEN21/ZIMAGE…)·전체 일괄/수동 생성·전체 자동/선택 등록 ④ 음악 생성·에셋화 ⑤ 실제 LLM·GPU 시험(사용자가 서버가 비었다고 할 때만).
 
 ## 9. 작업을 끝낼 때
 1. `npm run typecheck`(필요하면 `npm run build`) 통과 확인, 시험용 서버(8766)·임시 파일 정리.
-2. `CHANGELOG.md` 맨 위에 새 항목 추가. 구조·방침이 바뀌면 `HANDOFF.md`(제목 버전 포함)와 `docs/ARCHITECTURE.md` 도 갱신.
+2. `CHANGELOG.md` 맨 위에 새 항목 추가. 구조·방침이 바뀌면 `docs/HANDOFF.md`(제목 버전 포함)와 `docs/ARCHITECTURE.md` 도 갱신.
 3. 릴리즈할 때만: 버전 4곳 갱신 → `npm run build:mcp` → 커밋 → 태그 → 푸시 → `gh release create`.
 4. 보고는 항목별로 "이식함 / 해당 없음(이유) / 검증 못함", 바꾼 파일, 확인할 점을 적는다.
 5. 사용자에게는 새 버전을 쓰려면 서버를 끄고 `start.bat` 으로 다시 시작해야 한다고 알린다.

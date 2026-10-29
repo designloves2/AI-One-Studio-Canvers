@@ -28,10 +28,10 @@ const fake = (over = {}) => {
 };
 
 const mk = () => {
-  const p = M.newDirectorProject('Film'); p.brief.aspect = '16:9';
-  const s1 = M.newScene(p, 'A'); const s2 = M.newScene(p, 'B');
+  const p = M.newDirectorProject('Film'); p.series.aspect = '16:9';
+  const e1 = M.newEpisode(p, 1, 'E1'); const s1 = M.newScene(p, e1.episode_id, 'A'); const s2 = M.newScene(p, e1.episode_id, 'B');
   const a = M.newShot(p, s1.scene_id), b = M.newShot(p, s1.scene_id), c = M.newShot(p, s2.scene_id);
-  a.prompt_en = 'fox runs'; b.prompt_en = 'fox jumps'; c.prompt_en = 'fox sleeps'; b.duration_sec = 30;
+  a.prompt_en = 'fox runs'; b.prompt_en = 'fox jumps'; c.prompt_en = 'fox sleeps'; b.duration_sec = 30; a.duration_sec = 4;
   return { p, a, b, c };
 };
 const NOW = () => '2026-01-01T00:00:00.000Z';
@@ -95,6 +95,28 @@ const withAsset = JSON.parse(JSON.stringify(p)); const asset = M.newAsset(withAs
 const rn = A.buildCanvasFromDirector(withAsset, fake(), null, null, 'f', { now: NOW });
 ok(rn.report.assetsNotWired.length === 1 && rn.report.emptyPrompt.length === 1, 'assets not wired and empty prompts are reported, not hidden');
 const ro = JSON.stringify(p); A.buildCanvasFromDirector(p, fake(), r1.project, r1.link, 'f', { now: NOW }); ok(JSON.stringify(p) === ro, 'the Director project is not changed by building');
+
+// ---- seeds: one clip can be made again with a different take
+{
+  const reg2 = { get: (id) => ({ prompt: { id, inputs: [], outputs: [{ id: 'text', type: 'text' }], params: {}, defaults: { text: '' } },
+    'video-generate': { id, inputs: [{ id: 'prompt', type: 'text' }], outputs: [{ id: 'video', type: 'video' }], engineId: 'h3', params: { seed: {}, seconds: { min: 5.2, max: 15 } }, defaults: { seed: -1, seconds: 8 } } })[id], compatible: (a, b) => a === b };
+  const p2 = M.newDirectorProject('S'); const e = M.newEpisode(p2, 1); const sc = M.newScene(p2, e.episode_id); const x = M.newShot(p2, sc.scene_id); const y = M.newShot(p2, sc.scene_id); x.prompt_en = 'a'; y.prompt_en = 'b'; x.seed = 4242;
+  const build = (proj, ex, pv) => A.buildCanvasFromDirector(proj, reg2, ex, pv, 'f', { generator: 'video-generate', episodeId: e.episode_id, now: NOW });
+  const b1 = build(p2, null, null); const gx = (r) => r.project.nodes.find((n) => n.id === A.genNodeId(x.shot_id)), gy = (r) => r.project.nodes.find((n) => n.id === A.genNodeId(y.shot_id));
+  ok(gx(b1).params.seed === 4242 && gy(b1).params.seed === -1, 'a clip with a seed gets it on its generator card; a clip without one stays random (-1)');
+  ok(b1.link.seed_sent[x.shot_id] === 4242 && b1.link.seed_sent[y.shot_id] === -1, 'the adapter remembers which seed it gave each card');
+  x.seed = 777;
+  const b2 = build(p2, b1.project, b1.link);
+  ok(gx(b2).params.seed === 777 && b2.report.updated.includes(A.genNodeId(x.shot_id)) && b2.link.seed_sent[x.shot_id] === 777, 'a new seed for the clip reaches the card when the card still holds the old one');
+  const typed = JSON.parse(JSON.stringify(b2.project)); typed.nodes.find((n) => n.id === A.genNodeId(x.shot_id)).params.seed = 99; x.seed = 1234;
+  const b3 = build(p2, typed, b2.link);
+  ok(gx(b3).params.seed === 99, 'a seed the producer typed in the canvas is kept, not overwritten');
+  x.seed = undefined; const b4 = build(p2, b2.project, b2.link);
+  ok(gx(b4).params.seed === -1, 'clearing the clip seed puts the card back to random');
+  const b5 = build(p2, b4.project, b4.link); ok(b5.report.updated.length === 0 && b5.project.nodes.length === b4.project.nodes.length, 'building again with the same seeds changes nothing');
+  const noSeed = A.buildCanvasFromDirector(p2, { ...reg2, get: (id) => (id === 'video-generate' ? { ...reg2.get(id), params: { seconds: { min: 5.2, max: 15 } }, defaults: { seconds: 8 } } : reg2.get(id)) }, null, null, 'f', { generator: 'video-generate', episodeId: e.episode_id, now: NOW });
+  ok(!('seed' in noSeed.project.nodes.find((n) => n.id === A.genNodeId(x.shot_id)).params), 'a card without a seed setting is left alone');
+}
 
 // ---- the real registry
 if (real) {

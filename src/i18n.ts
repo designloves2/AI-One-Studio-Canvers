@@ -1,11 +1,26 @@
 import { create } from 'zustand';
 import { KO_CARDS } from './i18n.cards';
+import { KO_DIRECTOR } from './i18n.director';
 
 export type Lang = 'ko' | 'en';
 
 const KO: Record<string, string> = {
   // chrome
   // Director mode
+  'How generation is started': '생성을 시작하는 방식', Manual: '수동', 'Approval required': '승인 후 실행', 'Step by step': '한 단계씩', Hybrid: '혼합',
+  'Run next': '다음 샷 실행', 'Run all approved': '승인된 샷 모두 실행', 'Sync results': '결과 가져오기', 'Results added': '추가된 결과', 'No new results.': '새 결과가 없습니다.',
+  'Manual: nothing is generated from this screen. Generate in Canvas mode.': '수동: 이 화면에서는 아무것도 생성하지 않습니다. 캔버스 모드에서 생성하세요.',
+  'Approval required: each approved shot has a Run button and asks before it starts.': '승인 후 실행: 승인된 샷마다 실행 버튼이 있고, 시작 전에 물어봅니다.',
+  'Step by step: "Run next" runs the next approved shot, one at a time, and asks every time.': '한 단계씩: "다음 샷 실행"이 승인된 다음 샷 하나만 실행하고, 매번 물어봅니다.',
+  'Hybrid: "Run all approved" asks once, then runs the approved shots one after another and stops at the first failure.': '혼합: "승인된 샷 모두 실행"은 한 번 묻고 승인된 샷을 차례로 실행하며, 처음 실패에서 멈춥니다.',
+  'Manual mode: nothing is run from this screen.': '수동 모드: 이 화면에서는 아무것도 실행하지 않습니다.', 'Only approved shots can be run.': '승인된 샷만 실행할 수 있습니다.',
+  'No approved shot is waiting to run.': '실행을 기다리는 승인된 샷이 없습니다.', 'In step-by-step mode use "Run next".': '한 단계씩 모드에서는 "다음 샷 실행"을 쓰세요.', 'Use the Run button of a shot.': '샷의 실행 버튼을 쓰세요.',
+  'This shot has no cards in the canvas yet. Press "Update Canvers canvas".': '이 샷은 캔버스에 카드가 아직 없습니다. "Canvers 캔버스 갱신"을 누르세요.', 'Unknown shot.': '알 수 없는 샷입니다.',
+  'Make the Canvers canvas first.': '먼저 Canvers 캔버스를 만드세요.', 'The prompts changed after the canvas was made. Press "Update Canvers canvas" first.': '캔버스를 만든 뒤 프롬프트가 바뀌었습니다. 먼저 "Canvers 캔버스 갱신"을 누르세요.',
+  'The linked canvas is not open.': '연결된 캔버스를 열지 못했습니다.', 'A card of this shot is missing in the canvas. Press "Update Canvers canvas".': '이 샷의 카드가 캔버스에 없습니다. "Canvers 캔버스 갱신"을 누르세요.',
+  'This shot is already running.': '이 샷은 이미 실행 중입니다.', 'Run these shots now? Generating uses the GPU and takes time.': '이 샷들을 지금 실행할까요? 생성은 GPU를 쓰고 시간이 걸립니다.',
+  'A shot failed. The rest were not started.': '샷 하나가 실패했습니다. 나머지는 시작하지 않았습니다.', 'Cancelled. The rest were not started.': '취소했습니다. 나머지는 시작하지 않았습니다.',
+  Picked: '선택됨', 'Pick this result': '이 결과 선택',
   'Card made for each shot': '샷마다 만들 카드', 'Make Canvers canvas': 'Canvers 캔버스 만들기', 'Update Canvers canvas': 'Canvers 캔버스 갱신', 'Open in Canvas': '캔버스에서 열기',
   'Save the project to keep the link to this canvas.': '이 캔버스와의 연결을 남기려면 프로젝트를 저장하세요.', 'Add at least one shot first.': '먼저 샷을 하나 이상 추가하세요.',
   'Cards made': '만든 카드', 'Cards updated': '갱신한 카드', 'Cards made again (deleted in the canvas)': '다시 만든 카드 (캔버스에서 지워져 있었음)',
@@ -74,6 +89,7 @@ const KO: Record<string, string> = {
   'Nothing here yet.': '아직 아무것도 없습니다.', 'Connect an input first.': '먼저 입력을 연결하세요.',
 };
 for (const [k, v] of Object.entries(KO_CARDS)) if (!(k in KO)) KO[k] = v;
+for (const [k, v] of Object.entries(KO_DIRECTOR)) if (!(k in KO)) KO[k] = v;
 
 interface LangState { lang: Lang; setLang: (l: Lang) => void }
 

@@ -235,4 +235,6 @@ export async function connectOpenRouterKey(key: string) {
 }
 
 /** LLM settings for the Live Canvas chat: its own when chosen in Settings, otherwise undefined (= the main LLM). */
+/** the LLM settings of the Director crew (undefined = follow the main LLM) */
+export const directorLlmSettings = (): LlmSettings | undefined => { const { director } = useSettings.getState(); return director.same ? undefined : director.llm; };
 export const liveLlmSettings = (): LlmSettings | undefined => { const { live } = useSettings.getState(); return live.same ? undefined : live.llm; };

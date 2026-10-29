@@ -19,7 +19,7 @@ export const appRegistry: RegistryLike = {
       id: d.id,
       inputs: d.inputs.map((i) => ({ id: i.id, type: i.type, optional: i.optional, multi: i.multi })),
       outputs: d.outputs.map((o) => ({ id: o.id, type: o.type })),
-      engineId: eng?.id, params, defaults: defaultParams(d, eng?.id),
+      engineId: eng?.id, engines: d.engines?.map((e) => e.id), params, defaults: defaultParams(d, eng?.id),
     };
   },
 };

@@ -23,7 +23,7 @@ const throws = (f) => { try { f(); return false; } catch { return true; } };
 
 // ---- model
 const p = M.newDirectorProject('Demo');
-const sc = M.newScene(p, 'Opening'); const sh = M.newShot(p, sc.scene_id); const as = M.newAsset(p, { name: 'hero', role: 'character', source: { kind: 'library', id: 7 }, note: '' });
+const ep = M.newEpisode(p, 1, 'E1'); const sc = M.newScene(p, ep.episode_id, 'Opening'); const sh = M.newShot(p, sc.scene_id); const as = M.newAsset(p, { name: 'hero', role: 'character', source: { kind: 'library', id: 7 }, note: '' });
 sh.asset_ids.push(as.asset_id);
 ok(M.isId(p.project_id, 'dp') && M.isId(sh.shot_id, 'sh') && !M.isId('sh_short'), 'ids have the fixed shape');
 ok(new Set(Array.from({ length: 2000 }, () => M.newId('sh'))).size === 2000, '2000 ids are all different');
