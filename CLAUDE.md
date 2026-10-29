@@ -81,6 +81,12 @@
 - 알려진 제한: 소리 없는 mp4 는 VHS 로더가 실패, 소스 프레임 수를 길이×24 로 추정(±1프레임).
 - 다음 할 일은 스튜디오 세션(`TJ_STUDIO_ONE-10월`)이 `SPEC_RELAY_*` 로 보낸다. 상세 이력은 `CHANGELOG.md`, 방향·메모는 `docs/HANDOFF.md`.
 
+### 진행 중: 뮤직비디오 음악 단계 (2026-10-29, 로직은 커밋 276511d, 앱 화면·연결은 작업 중)
+- 사용자 결정: 뮤직비디오 음악은 **업로드·AI 생성 둘 다**, 화면에서 고르거나 채팅 명령으로 선택.
+- 끝난 것(시험 통과: `npm run test:director` 7개 스크립트, tsc 0): 스키마 v5(`DirectorProject.music`, `StageId 'music'`, `CanvasLink.purpose 'music'`, `final_node_id`, `music_nodes`), `src/director/music.ts`(섹션·songMap·musicBlockers·songText), workflow 음악 단계(`hasMusicStep`/`nextGlobal`, 승인 시 길이 확정·1편 고정), ai.ts 음악 프롬프트/검증/적용, adapter `buildMusicCanvas`+마무리 노드(stitch/audio), execution `applyMusicResult`/`applyEpisodeFinal`.
+- 남은 일: canvasAction 곡 업로드(`importFile`)·생성(`music-generate`, 엔진 acestep/yue2/minimax)·에셋 등록·`finishEpisode` / store job 'music'·`music.generate` 명령·채팅으로 source 선택 / DirectorView 음악 단계 화면(뮤직비디오만 캐스팅과 시나리오 사이) / demoCrew 음악 분기+데모 오디오 / i18n·CSS / 데모로만 브라우저 확인(실제 LLM·GPU 금지) / CHANGELOG·계획서 갱신 후 커밋.
+- 그 뒤 후보: 광고 화면비 버전(16:9/9:16/1:1), 브이로그 내레이션 전용 칸, 의상 변형 이미지 편집, 생성 중 클립별 진행 표시, 좁은 창 편 스트립 확인.
+
 ### Director Mode 진행 (미릴리즈, 2026-10-29, 커밋됨 — 버전 올림·릴리즈 전)
 - 된 것(코드 + 시험): 채팅 중심 화면, 브리프→캐스팅→시나리오→편별(작성·캔버스·생성·검토) 진행선, **편마다 자기 단계**(여러 편 동시 진행·한 편만 되돌리기), 회차 선택 줄·여러 편 체크, 위쪽 단계 클릭으로 다시 보기(보기는 상태를 바꾸지 않음), 캐스트 이미지 선택(생성/에셋 라이브러리/갤러리)과 끝까지 따라오기(캔버스에 `@imageN` 순서로 Load Image 연결, 엔진 h3-ref), 자동/수동 생성 선택(수동 = 캔버스 열기·ZIP), 클립별 시드·다시 생성·선택 클립 배치·여러 편 배치(한 번 확인), 이어서 만들기, 편 ZIP, 디렉터 전용 LLM 설정.
 - **브라우저로 직접 확인한 것(데모 작업팀)**: 브리프~생성 선택, 라이브러리 이미지로 캐스팅, 캔버스 연결(카드·선·엔진·프롬프트 순서), ZIP 다운로드, 자동 시작 확인창 취소, **편 3개 동시 작성·일괄 승인·캔버스 3개 생성·생성 단계 동시 진행, 회차 줄 이동, 위 단계 눌러 다시 보기(상태 불변), 생성 범위(이 편/체크한 편/이 단계 모든 편 = 27클립 확인창, 취소 시 변화 없음), 클립 체크·시드·선택 클립 확인창, 한 편만 되돌리기(클립·캔버스 유지), 모델 설정 창(4가지 백엔드)**. **아직 못 본 것**: 배치 진행 표시(실제 생성 중 모습)·좁은 창에서 회차 줄.
