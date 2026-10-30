@@ -320,7 +320,7 @@ function applySeries(p: DirectorProject, patch: Partial<DirectorSeries>, notes: 
 const refKey = (n: string) => n.trim().toLowerCase();
 
 /** a new name for a cast entry: everything that used the old one follows */
-function renameReference(p: DirectorProject, r: DirectorProject['references'][number], to: string) {
+export function renameReference(p: DirectorProject, r: DirectorProject['references'][number], to: string) {
   const old = r.name; r.name = to;
   const swap = (a?: string[]) => a?.map((n) => (n === old ? to : n));
   for (const s of p.shots) { s.cast = swap(s.cast)!; if (s.location === old) s.location = to; }

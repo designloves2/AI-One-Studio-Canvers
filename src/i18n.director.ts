@@ -79,6 +79,11 @@ export const KO_DIRECTOR: Record<string, string> = {
   'Pass all clips that have a result': '결과 있는 클립 모두 합격',
   'Your verdict on the joined video': '합친 영상 판정', 'Watch the whole video. If something must change, tell the crew in the chat (for example: "make clip 3 darker", "leave out clip 5", "change the ending"): the clips that change go back to be generated again. If it is good, approve to finish this episode.': '영상 전체를 보세요. 고칠 곳이 있으면 채팅으로 작업팀에게 말하세요(예: "3번 클립을 더 어둡게", "5번 클립 빼줘", "엔딩 바꿔줘"). 바뀐 클립은 다시 생성하러 돌아갑니다. 좋으면 승인해서 이 편을 끝냅니다.',
   'Back to the clips': '클립으로 돌아가기', 'Clips in this video': '이 영상의 클립', 'Leave at least one clip in the video.': '영상에 넣을 클립이 하나도 없습니다.',
+  // the producer's own changes (cast / scenario / clips)
+  'Name': '이름', 'Remove this entry': '이 항목 빼기', 'Remove this entry?': '이 항목을 뺄까요? (클립과 편에서도 빠집니다)', 'That name already exists.': '같은 이름이 이미 있습니다.',
+  'Add a cast entry yourself': '직접 추가하기', 'Add a cast entry': '캐스팅 항목 추가', 'Describe how it looks': '모습을 설명하세요', 'Add': '추가', 'Cancel': '취소',
+  'Story line': '줄거리', 'Take out': '빼기', 'Add cast / place': '출연자·장소 추가',
+  'Add a clip': '클립 추가', 'Delete this clip': '이 클립 삭제', 'Delete this clip?': '이 클립을 삭제할까요?', 'Picture (for reading)': '화면 (보기용)', 'Picture (the model gets this, English)': '화면 (모델 입력, 영어)',
   // song step / finished video
   'New look': '새 모습', 'The same one with another costume, hair or look (a new entry)': '같은 인물·장소의 다른 의상·머리·분위기 (새 항목)', 'Describe the new look (costume, hair, age, season …)': '새 모습을 설명하세요 (의상, 머리, 나이, 계절 …)',
   'Other screen ratios': '다른 화면비', 'Make the same piece in more ratios (for example an ad as 16:9, 9:16 and 1:1). Each ratio gets its own canvas with the same prompts, cast images and seeds; you generate them in the Canvas.': '같은 작품을 다른 화면비로도 만듭니다(예: 광고를 16:9, 9:16, 1:1로). 화면비마다 같은 프롬프트·캐스트 이미지·시드의 캔버스가 따로 만들어지고, 생성은 캔버스에서 합니다.', 'Make the canvases for the other ratios': '다른 화면비 캔버스 만들기', 'Canvases made': '만든 캔버스',

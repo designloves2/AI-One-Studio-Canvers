@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useDirector } from '../store/director';
 import { useT } from '../i18n';
-import { askText, notify } from '../ui/dialog';
+import { askConfirm, askText, notify } from '../ui/dialog';
 import { viewUrl } from '../backend/comfy';
 import { getGallery, type GalleryItem } from '../backend/studio';
 import { listAssets, libThumb, type LibAsset } from '../backend/assetlib';
@@ -11,8 +11,8 @@ import { assetKey, mediaKey, useIsBlurred, useSensitive } from '../backend/sensi
 import { BACKENDS } from '../backend/llm';
 import { Llm } from '../panels/SettingsPanel';
 import { resultUrl } from './media';
-import { CREW_LABEL } from './ai';
-import { episodeByNo, findReference, newAsset, newReference, shotsOfEpisode, syncShotAssets } from './model';
+import { CREW_LABEL, renameReference } from './ai';
+import { episodeByNo, findReference, newAsset, newReference, newShot, shotsOfEpisode, syncShotAssets } from './model';
 import { newSeed } from './execution';
 import { applyMusicPatch, defaultSections, newMusic, pickedAudio, songMap } from './music';
 import { finishEpisode, generateSong, pickSong, registerSong, syncFinalFromCanvas, uploadSong } from './musicAction';
@@ -24,7 +24,7 @@ import { blockers, hasMusicStep, EPISODE_STAGES, epStageIndex, episodeBlockers, 
 import { localizeMsg } from './localize';
 import { attachPanZoom } from '../ui/panZoom';
 import { castEngines, extraAspects, makeVersionCanvases, versionLinks, downloadEpisodePackages, generateBatch, generateCast, linkOfCasting, linkOfEpisode, openLinkedCanvas, registerCast, syncCastFromCanvas, syncResultsFromCanvas } from './canvasAction';
-import type { DirectorProject, DirectorReference, DirectorShot, ResultRef, StageId } from './types';
+import type { DirectorProject, DirectorReference, DirectorShot, ReferenceKind, ResultRef, StageId } from './types';
 
 const STEPS: { id: StageId; label: string }[] = [
   { id: 'brief', label: 'Brief' }, { id: 'references', label: 'Casting' }, { id: 'music', label: 'Song' }, { id: 'series', label: 'Scenario' },
@@ -166,11 +166,11 @@ function StagePanel({ p, ro, view }: { p: DirectorProject; ro: boolean; view: St
   if (view === 'brief') return <BriefCard p={p} />;
   if (view === 'references') return <CastGrid p={p} ro={ro} />;
   if (view === 'music' && hasMusicStep(p)) return <MusicCard p={p} ro={ro} />;
-  if (view === 'series') return <ScenarioList p={p} />;
+  if (view === 'series') return <ScenarioList p={p} ro={ro} />;
   if (!productionOpen(p)) return <div className="dx-page"><p className="dirx-muted">{T('Opens when the scenario is approved')}</p></div>;
   const ep = episodeByNo(p, p.workflow.episode_no);
   if (!ep || ep.stage === 'idle') return <EpisodeIdle p={p} ro={ro} />;
-  if (view === 'episode') return <EpisodeCard p={p} />;
+  if (view === 'episode') return <EpisodeCard p={p} ro={ro} />;
   if (view === 'canvas') return <CanvasCard p={p} />;
   if (view === 'review') return <ReviewCard p={p} ro={ro} />;
   return <GenerateCard p={p} ro={ro} review={false} />;
@@ -416,10 +416,10 @@ function CastViewer({ items, index, onIndex, onClose }: { items: { name: string;
 }
 
 const KIND: Record<string, { icon: keyof typeof ICONS; label: string; cls: string }> = { character: { icon: 'user', label: 'Actors', cls: 'k-char' }, location: { icon: 'pin', label: 'Locations', cls: 'k-loc' }, prop: { icon: 'box', label: 'Props', cls: 'k-prop' } };
-function CastCard({ r, onPick, onMake, onRegister, onChoose, onSavePrompt, onVariant, onOpenImage, ro, busy }: { r: DirectorReference; onVariant?: () => void; onPick: () => void; onMake: () => void; onRegister: () => void; onChoose: (id: string) => void; onSavePrompt: (text: string) => void; onOpenImage?: () => void; ro: boolean; busy: boolean }) {
+function CastCard({ r, onPick, onMake, onRegister, onChoose, onSavePrompt, onRemove, onVariant, onOpenImage, ro, busy }: { r: DirectorReference; onVariant?: () => void; onPick: () => void; onMake: () => void; onRegister: () => void; onChoose: (id: string) => void; onSavePrompt: (text: string, name: string) => void; onRemove?: () => void; onOpenImage?: () => void; ro: boolean; busy: boolean }) {
   const T = useT(); const pick = r.results.find((x) => x.picked); const k = KIND[r.kind];
   const fmtOfProject = useDirector((x) => x.project?.series.format);
-  const [showPrompt, setShowPrompt] = useState(false); const [draft, setDraft] = useState<string | null>(null);
+  const [showPrompt, setShowPrompt] = useState(false); const [draft, setDraft] = useState<string | null>(null); const [nameDraft, setNameDraft] = useState<string | null>(null);
   const shown = r.description;
   return (
     <article className={`dx-cast ${k.cls}`}>
@@ -437,9 +437,11 @@ function CastCard({ r, onPick, onMake, onRegister, onChoose, onSavePrompt, onVar
         </div>
         {showPrompt && (
           <div className="dx-promptbox">
+            <label className="dx-field">{T('Name')}<input disabled={ro} value={nameDraft ?? r.name} onChange={(e) => setNameDraft(e.target.value)} /></label>
             <textarea rows={5} disabled={ro} value={draft ?? shown} onChange={(e) => setDraft(e.target.value)} />
             <small>{T('This text is all there is: when the image is made, the image model\'s own prompt writer turns it into that model\'s prompt.')}</small>
-            {draft !== null && draft !== shown && <div className="dx-btns"><button className="btn small" onClick={() => setDraft(null)}>{T('Undo')}</button><button className="btn small primary" disabled={ro} onClick={() => { onSavePrompt(draft); setDraft(null); }}>{T('Apply')}</button></div>}
+            {((draft !== null && draft !== shown) || (nameDraft !== null && nameDraft.trim() !== r.name)) && <div className="dx-btns"><button className="btn small" onClick={() => { setDraft(null); setNameDraft(null); }}>{T('Undo')}</button><button className="btn small primary" disabled={ro} onClick={() => { onSavePrompt(draft ?? shown, (nameDraft ?? r.name).trim()); setDraft(null); setNameDraft(null); }}>{T('Apply')}</button></div>}
+            {onRemove && <div className="dx-btns"><button className="btn small danger" disabled={ro} onClick={onRemove}>{T('Remove this entry')}</button></div>}
           </div>)}
       </div>
     </article>
@@ -464,6 +466,23 @@ function CastGrid({ p, ro }: { p: DirectorProject; ro: boolean }) {
   const register = (ids?: string[]) => guard(async () => { const n = await registerCast({ refIds: ids }); await notify(n ? `${T('Registered')}: ${n}` : T('Nothing to register.')); });
   const choose = (r: DirectorReference, resultId: string) => edit((x) => { const q = x.references.find((z) => z.ref_id === r.ref_id)!; q.results.forEach((z) => { z.picked = z.result_id === resultId; }); q.asset_id = undefined; });
   const regMode = p.settings.cast_register ?? 'auto';
+  // the producer's own changes: add an entry by hand, rename / re-describe one, take one out (nothing here asks the crew)
+  const [adding, setAdding] = useState<{ kind: ReferenceKind; name: string; desc: string } | null>(null);
+  const nameTaken = (n: string, except?: string) => p.references.some((q) => q.status !== 'rejected' && q.ref_id !== except && q.name.trim().toLowerCase() === n.trim().toLowerCase());
+  const addEntry = () => {
+    if (!adding) return; const nm = adding.name.trim(); if (!nm) return;
+    if (nameTaken(nm)) { void notify(T('That name already exists.')); return; }
+    edit((x) => { const old = x.references.find((q) => q.status === 'rejected' && q.name.trim().toLowerCase() === nm.toLowerCase()); if (old) { old.status = 'proposed'; old.kind = adding.kind; old.description = adding.desc.trim(); } else newReference(x, adding.kind, nm, adding.desc.trim()); });
+    setAdding(null);
+  };
+  const saveEntry = (r: DirectorReference, text: string, name: string) => {
+    if (name && name !== r.name && nameTaken(name, r.ref_id)) { void notify(T('That name already exists.')); return; }
+    edit((x) => { const q = x.references.find((z) => z.ref_id === r.ref_id); if (!q) return; q.description = text.trim(); if (name && name !== q.name) renameReference(x, q, name); });
+  };
+  const removeEntry = async (r: DirectorReference) => {
+    if (!(await askConfirm(`${T('Remove this entry?')}\n${r.name}`))) return;
+    edit((x) => { const q = x.references.find((z) => z.ref_id === r.ref_id); if (q) q.status = 'rejected'; for (const s of x.shots) { s.cast = s.cast.filter((n) => n !== r.name); if (s.location === r.name) s.location = ''; } for (const e of x.episodes) { if (e.cast) e.cast = e.cast.filter((n) => n !== r.name); if (e.locations) e.locations = e.locations.filter((n) => n !== r.name); } });
+  };
   // a new look (costume, hair, age, season) of a cast entry: a new entry that says it is a variant of the first one; its prompt is the base prompt + the change
   const variant = async (r: DirectorReference) => {
     const what = (await askText(`${T('Describe the new look (costume, hair, age, season …)')}\n${r.name}`))?.trim(); if (!what) return;
@@ -489,11 +508,20 @@ function CastGrid({ p, ro }: { p: DirectorProject; ro: boolean }) {
           <button className="btn" disabled={ro || busy || !toRegister.length} onClick={() => void register()}>{T('Register all now')} ({toRegister.length})</button>
         </div>
       </section>
+      <section className="dx-block"><h4><Ico n="user" />{T('Add a cast entry yourself')}</h4>
+        {!adding ? <div className="dx-btns"><button className="btn" disabled={ro} onClick={() => setAdding({ kind: 'character', name: '', desc: '' })}>+ {T('Add a cast entry')}</button></div> : (
+          <div className="dx-addform">
+            <select value={adding.kind} onChange={(ev) => setAdding({ ...adding, kind: ev.target.value as ReferenceKind })}>{(['character', 'location', 'prop'] as const).map((k) => <option key={k} value={k}>{T(k === 'character' ? vocabOf(p.series.format).character : k === 'location' ? vocabOf(p.series.format).location : vocabOf(p.series.format).prop)}</option>)}</select>
+            <input placeholder={T('Name')} value={adding.name} onChange={(ev) => setAdding({ ...adding, name: ev.target.value })} />
+            <textarea rows={3} placeholder={T('Describe how it looks')} value={adding.desc} onChange={(ev) => setAdding({ ...adding, desc: ev.target.value })} />
+            <div className="dx-btns"><button className="btn primary" disabled={!adding.name.trim()} onClick={addEntry}>{T('Add')}</button><button className="btn" onClick={() => setAdding(null)}>{T('Cancel')}</button></div>
+          </div>)}
+      </section>
       {live.length > 0 && <Meter done={made} total={live.length} label={`${made} / ${live.length} ${T('images ready')}`} />}
       {(['character', 'location', 'prop'] as const).map((kind) => {
         const items = live.filter((r) => r.kind === kind); if (!items.length) return null;
         return <section key={kind} className="dx-group"><h4 className={KIND[kind].cls}><Ico n={KIND[kind].icon} />{T(kind === 'character' ? vocabOf(p.series.format).characters : kind === 'location' ? vocabOf(p.series.format).locations : vocabOf(p.series.format).props)} <small>{items.length}</small></h4>
-          <div className="dx-castgrid">{items.map((r) => <CastCard key={r.ref_id} r={r} ro={ro} busy={busy} onVariant={r.kind !== 'prop' && !r.variant_of ? () => void variant(r) : undefined} onPick={() => setPicking(r.ref_id)} onMake={() => void makeOne(r)} onRegister={() => void register([r.ref_id])} onChoose={(id) => choose(r, id)} onSavePrompt={(text) => edit((x) => { const q = x.references.find((z) => z.ref_id === r.ref_id); if (q) q.description = text.trim(); })} onOpenImage={r.results.some((x) => x.picked) ? () => setViewing(r.ref_id) : undefined} />)}</div></section>;
+          <div className="dx-castgrid">{items.map((r) => <CastCard key={r.ref_id} r={r} ro={ro} busy={busy} onVariant={r.kind !== 'prop' && !r.variant_of ? () => void variant(r) : undefined} onPick={() => setPicking(r.ref_id)} onMake={() => void makeOne(r)} onRegister={() => void register([r.ref_id])} onChoose={(id) => choose(r, id)} onSavePrompt={(text, name) => saveEntry(r, text, name)} onRemove={() => void removeEntry(r)} onOpenImage={r.results.some((x) => x.picked) ? () => setViewing(r.ref_id) : undefined} />)}</div></section>;
       })}
       {picking && <CastPicker refId={picking} onClose={() => setPicking(null)} />}
       {viewIndex >= 0 && <CastViewer items={viewItems} index={viewIndex} onIndex={(i) => setViewing(madeRefs[i]?.ref_id ?? null)} onClose={() => setViewing(null)} />}
@@ -570,8 +598,9 @@ function MusicCard({ p, ro }: { p: DirectorProject; ro: boolean }) {
 }
 
 // ---- scenario
-function ScenarioList({ p }: { p: DirectorProject }) {
-  const T = useT(); const eps = [...p.episodes].sort((a, b) => a.no - b.no);
+function ScenarioList({ p, ro }: { p: DirectorProject; ro: boolean }) {
+  const T = useT(); const edit = useDirector((x) => x.edit); const eps = [...p.episodes].sort((a, b) => a.no - b.no);
+  const setEp = (id: string, fn: (e: DirectorProject['episodes'][number]) => void) => edit((x) => { const q = x.episodes.find((z) => z.episode_id === id); if (q) fn(q); });
   return (
     <div className="dx-page">
       <Working p={p} />
@@ -580,22 +609,30 @@ function ScenarioList({ p }: { p: DirectorProject }) {
       <CastStrip p={p} />
       <section className="dx-group"><h4><Ico n="list" />{T(p.series.total_episodes > 1 ? 'Episodes' : vocabOf(p.series.format).scenario)} <small>{eps.length}</small></h4>
         <div className="dx-epgrid">{eps.map((e) => (
-          <article key={e.episode_id} className={`dx-epcard st-${e.status}`}><span className="no">{e.no}</span><div><b>{e.title.replace(/^\d+화:\s*/, '')}</b><p>{e.logline}</p><EpisodeRefs p={p} e={e} /></div></article>))}</div>
+          <article key={e.episode_id} className={`dx-epcard st-${e.status}`}><span className="no">{e.no}</span><div>{ro ? <><b>{e.title.replace(/^\d+화:\s*/, '')}</b><p>{e.logline}</p></> : <div className="dx-edfields"><input key={`t${e.title}`} defaultValue={e.title.replace(/^\d+화:\s*/, '')} aria-label={T('Title')} onBlur={(ev) => { const v = ev.target.value.trim(); if (v !== e.title.replace(/^\d+화:\s*/, '')) setEp(e.episode_id, (q) => { q.title = v; }); }} /><textarea key={`l${e.logline}`} rows={2} defaultValue={e.logline} aria-label={T('Story line')} onBlur={(ev) => { const v = ev.target.value.trim(); if (v !== e.logline) setEp(e.episode_id, (q) => { q.logline = v; }); }} /></div>}<EpisodeRefs p={p} e={e} ro={ro} /></div></article>))}</div>
       </section>
     </div>
   );
 }
 
 /** the cast, props and places of an episode (what the scenario decided; before that was decided, the names written in its story line) */
-function EpisodeRefs({ p, e }: { p: DirectorProject; e: DirectorProject['episodes'][number] }) {
-  const T = useT();
+function EpisodeRefs({ p, e, ro }: { p: DirectorProject; e: DirectorProject['episodes'][number]; ro?: boolean }) {
+  const T = useT(); const edit = useDirector((x) => x.edit);
   const named = [...(e.cast ?? []), ...(e.locations ?? [])].map((n) => findReference(p, n)).filter((r): r is DirectorReference => !!r && r.status !== 'rejected');
   const refs = named.length ? named : p.references.filter((r) => castInText(p, `${e.title} ${e.logline}`).includes(r.name));
   const anyPlace = p.references.some((r) => r.kind === 'location' && r.status !== 'rejected');
+  const addable = p.references.filter((r) => r.status !== 'rejected' && !refs.includes(r));
+  // the producer's own change of an episode's cast and places (the first change starts from what is shown now)
+  const setRefs = (fn: (q: DirectorProject['episodes'][number]) => void) => edit((x) => {
+    const q = x.episodes.find((z) => z.episode_id === e.episode_id); if (!q) return;
+    if (!q.cast && !q.locations) { q.cast = refs.filter((r) => r.kind !== 'location').map((r) => r.name); q.locations = refs.filter((r) => r.kind === 'location').map((r) => r.name); }
+    q.cast = q.cast ?? []; q.locations = q.locations ?? []; fn(q);
+  });
   return (
-    <div className="dx-avs">{[...new Set(refs)].map((r) => <span key={r.ref_id} className="dx-strip-item"><Avatar r={r} size={22} /><em>{r.name}</em></span>)}
+    <div className="dx-avs">{[...new Set(refs)].map((r) => <span key={r.ref_id} className="dx-strip-item"><Avatar r={r} size={22} /><em>{r.name}</em>{!ro && <button className="dx-x" title={T('Take out')} onClick={() => setRefs((q) => { q.cast = (q.cast ?? []).filter((n) => n !== r.name); q.locations = (q.locations ?? []).filter((n) => n !== r.name); })}>×</button>}</span>)}
       {!refs.some((r) => r.kind !== 'location') && <small className="dx-warn">{T('No cast yet')}</small>}
-      {anyPlace && !refs.some((r) => r.kind === 'location') && <small className="dx-warn">{T('No place yet')}</small>}</div>
+      {anyPlace && !refs.some((r) => r.kind === 'location') && <small className="dx-warn">{T('No place yet')}</small>}
+      {!ro && addable.length > 0 && <select className="dx-addsel" value="" onChange={(ev) => { const r = addable.find((z) => z.ref_id === ev.target.value); if (r) setRefs((q) => { const l = r.kind === 'location' ? q.locations! : q.cast!; if (!l.includes(r.name)) l.push(r.name); }); }}><option value="">+ {T('Add cast / place')}</option>{addable.map((r) => <option key={r.ref_id} value={r.ref_id}>{r.name}</option>)}</select>}</div>
   );
 }
 
@@ -656,8 +693,10 @@ function EpisodeHead({ p, icon }: { p: DirectorProject; icon: keyof typeof ICONS
     </>
   );
 }
-function EpisodeCard({ p }: { p: DirectorProject }) {
+function EpisodeCard({ p, ro }: { p: DirectorProject; ro: boolean }) {
+  const T = useT(); const edit = useDirector((x) => x.edit);
   const e = episodeByNo(p, p.workflow.episode_no);
+  const editable = !ro && !!e && e.stage === 'episode' && e.stage_status !== 'working';   // the producer's own changes, while the clips wait for approval
   const writing = e?.stage === 'episode' && e.stage_status === 'working';   // while the crew writes, nothing old is shown
   const scenes = e && !writing ? p.scenes.filter((s) => s.episode_id === e.episode_id).sort((a, b) => a.order - b.order) : [];
   let n = 0;
@@ -665,9 +704,44 @@ function EpisodeCard({ p }: { p: DirectorProject }) {
     <div className="dx-page"><Working p={p} />{writing ? <header className="dx-hero small"><h2>{e?.title.replace(/^\d+화:\s*/, '')}</h2>{e?.logline && <p>{e.logline}</p>}</header> : <EpisodeHead p={p} icon="film" />}
       {scenes.map((sc) => (
         <section key={sc.scene_id} className="dx-group"><h4><span className="sceneno">{sc.order}</span>{sc.title} <small>{sc.summary}</small></h4>
-          <div className="dx-clips">{p.shots.filter((s) => s.scene_id === sc.scene_id).sort((a, b) => a.order - b.order).map((s) => <ClipCard key={s.shot_id} s={s} n={++n} />)}</div>
+          <div className="dx-clips">{p.shots.filter((s) => s.scene_id === sc.scene_id).sort((a, b) => a.order - b.order).map((s) => editable ? <ClipEditor key={s.shot_id} p={p} s={s} n={++n} /> : <ClipCard key={s.shot_id} s={s} n={++n} />)}</div>
+          {editable && <div className="dx-btns"><button className="btn small" onClick={() => edit((x) => { const prev = x.shots.filter((q) => q.scene_id === sc.scene_id).sort((a, b) => a.order - b.order).at(-1); const ns = newShot(x, sc.scene_id); if (prev) { ns.cast = [...prev.cast]; ns.location = prev.location; } })}>+ {T('Add a clip')}</button></div>}
         </section>))}
     </div>
+  );
+}
+
+/** the producer changes a clip by hand (picture, lines, sound, who is in it, where): nothing here asks the crew */
+function ClipEditor({ p, s, n }: { p: DirectorProject; s: DirectorShot; n: number }) {
+  const T = useT(); const edit = useDirector((x) => x.edit);
+  const live = p.references.filter((r) => r.status !== 'rejected');
+  const change = (fn: (q: DirectorShot) => void) => edit((x) => {
+    const q = x.shots.find((z) => z.shot_id === s.shot_id); if (!q) return; fn(q);
+    q.passed = undefined; if (q.results.length && ['approved', 'review', 'done', 'ready'].includes(q.status)) q.status = 'draft';   // a changed clip has to be made / looked at again
+    syncShotAssets(x);
+  });
+  const text = (label: string, key: 'prompt_ko' | 'prompt_en' | 'dialogue' | 'sound' | 'music', rows = 2) => (
+    <label className="dx-field wide">{T(label)}<textarea key={`${key}${s[key]}`} rows={rows} defaultValue={s[key]} onBlur={(ev) => { const v = ev.target.value.trim(); if (v !== s[key]) change((q) => { q[key] = v; }); }} /></label>);
+  const inCast = new Set([...s.cast, ...(s.location ? [s.location] : [])]);
+  const addable = live.filter((r) => r.kind !== 'location' && !s.cast.includes(r.name));
+  const places = live.filter((r) => r.kind === 'location');
+  const remove = async () => {
+    if (!(await askConfirm(`${T('Delete this clip?')}\n#${n}`))) return;
+    edit((x) => { x.shots = x.shots.filter((q) => q.shot_id !== s.shot_id); const sc = x.scenes.find((z) => z.scene_id === s.scene_id); if (sc) sc.shot_ids = sc.shot_ids.filter((id) => id !== s.shot_id); x.shots.filter((q) => q.scene_id === s.scene_id).sort((a, b) => a.order - b.order).forEach((q, i) => { q.order = i + 1; }); });
+  };
+  return (
+    <article className="dx-clip dx-clip-edit">
+      <header><span className="num">{n}</span><span className="pill">{s.duration_sec}s</span><button className="btn small danger" style={{ marginLeft: 'auto' }} onClick={() => void remove()}>{T('Delete this clip')}</button></header>
+      {text('Picture (for reading)', 'prompt_ko')}
+      {text('Picture (the model gets this, English)', 'prompt_en', 3)}
+      {text('Dialogue', 'dialogue')}{text('Sound', 'sound')}{text('Music', 'music')}
+      <div className="dx-avs">
+        {s.cast.map((c) => { const r = findReference(p, c); return <span key={c} className="dx-strip-item">{r ? <Avatar r={r} size={20} /> : <Ico n="user" />}<em>{c}</em><button className="dx-x" title={T('Take out')} onClick={() => change((q) => { q.cast = q.cast.filter((z) => z !== c); })}>×</button></span>; })}
+        {!s.cast.length && <small className="dx-warn">{T('No cast yet')}</small>}
+        {addable.length > 0 && <select className="dx-addsel" value="" onChange={(ev) => { if (ev.target.value) change((q) => { if (!q.cast.includes(ev.target.value)) q.cast.push(ev.target.value); }); }}><option value="">+ {T('Add cast / place')}</option>{addable.map((r) => <option key={r.ref_id} value={r.name}>{r.name}</option>)}</select>}
+      </div>
+      <label className="dx-field">{T('Place')}<select value={inCast.has(s.location) ? s.location : ''} onChange={(ev) => change((q) => { q.location = ev.target.value; })}><option value="">{T('No place yet')}</option>{places.map((r) => <option key={r.ref_id} value={r.name}>{r.name}</option>)}</select></label>
+    </article>
   );
 }
 
