@@ -9,6 +9,7 @@ import { useSettings, type LlmSettings } from '../store/settings';
 import { useGraph } from '../store/graph';
 import { assetKey, mediaKey, useIsBlurred, useSensitive } from '../backend/sensitive';
 import { BACKENDS } from '../backend/llm';
+import { estTokens, useLlmLog } from '../backend/llmLog';
 import { Llm } from '../panels/SettingsPanel';
 import { resultUrl } from './media';
 import { CREW_LABEL, renameReference } from './ai';
@@ -905,6 +906,24 @@ function llmLabel(same: boolean, main: LlmSettings, own: LlmSettings, T: (k: str
 }
 
 /** the Director's own model settings (the same four backends as everywhere else), opened right from the chat box */
+/** the recent LLM calls: what went in, what came out, how long it took (the ComfyUI console does not show this) */
+function LlmLog() {
+  const T = useT(); const entries = useLlmLog((s) => s.entries); const clear = useLlmLog((s) => s.clear);
+  const rows = [...entries].reverse();
+  return (
+    <section className="dx-block"><h4><Ico n="list" />{T('Recent LLM calls')} <button className="linkbtn" onClick={clear}>{T('Clear')}</button></h4>
+      {!rows.length ? <p className="dirx-muted">{T('Nothing yet. Every call of the crew is listed here with its size and speed.')}</p> : (
+        <table className="dx-llmlog"><thead><tr><th>{T('Time')}</th><th>{T('Model')}</th><th>{T('In')}</th><th>{T('Out')}</th><th>{T('Seconds')}</th><th>tok/s</th></tr></thead>
+          <tbody>{rows.map((r) => { const tin = r.usage?.input ?? estTokens(r.inChars), tout = r.usage?.output ?? estTokens(r.outChars); return (
+            <tr key={r.id} className={r.ok ? '' : 'bad'} title={r.error ?? ''}>
+              <td>{new Date(r.at).toLocaleTimeString()}</td><td>{r.backend} · {(r.model || '').split(/[\\/]/).pop()}</td>
+              <td>{r.inChars.toLocaleString()} {T('chars')} (~{tin.toLocaleString()} tok)</td><td>{r.ok ? `${r.outChars.toLocaleString()} ${T('chars')} (~${tout.toLocaleString()} tok)` : T('failed')}</td>
+              <td>{(r.ms / 1000).toFixed(1)}</td><td>{r.ok && r.ms > 0 ? (tout / (r.ms / 1000)).toFixed(1) : '-'}</td></tr>); })}</tbody></table>)}
+      <p className="dirx-muted">{T('Token numbers are estimates from the characters unless the server reports its own.')}</p>
+    </section>
+  );
+}
+
 function ModelDialog({ onClose }: { onClose: () => void }) {
   const T = useT();
   const [demoOn, setDemoOn] = useState(useDirector.getState().demo);
@@ -913,7 +932,7 @@ function ModelDialog({ onClose }: { onClose: () => void }) {
       <div className="dx-modal-box wide">
         <header><b>{T('Model settings')}</b><span className="dirx-muted">{T('Used by the Director crew only')}</span><button className="dir-x" onClick={onClose}>✕</button></header>
         <label className="dx-check demo-switch"><input type="checkbox" checked={demoOn} onChange={(e) => { useDirector.getState().setDemo(e.target.checked); setDemoOn(e.target.checked); }} />{T('Demo: go through every step without an LLM or a GPU (stand-in pictures)')}</label>
-        <div className="dx-modal-scroll settings"><Llm target="director" /></div>
+        <div className="dx-modal-scroll settings"><Llm target="director" /><LlmLog /></div>
       </div>
     </div>
   );

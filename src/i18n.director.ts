@@ -79,6 +79,7 @@ export const KO_DIRECTOR: Record<string, string> = {
   'Pass all clips that have a result': '결과 있는 클립 모두 합격',
   'Your verdict on the joined video': '합친 영상 판정', 'Watch the whole video. If something must change, tell the crew in the chat (for example: "make clip 3 darker", "leave out clip 5", "change the ending"): the clips that change go back to be generated again. If it is good, approve to finish this episode.': '영상 전체를 보세요. 고칠 곳이 있으면 채팅으로 작업팀에게 말하세요(예: "3번 클립을 더 어둡게", "5번 클립 빼줘", "엔딩 바꿔줘"). 바뀐 클립은 다시 생성하러 돌아갑니다. 좋으면 승인해서 이 편을 끝냅니다.',
   'Back to the clips': '클립으로 돌아가기', 'Clips in this video': '이 영상의 클립', 'Leave at least one clip in the video.': '영상에 넣을 클립이 하나도 없습니다.',
+  'Recent LLM calls': '최근 LLM 호출', 'Clear': '지우기', 'Nothing yet. Every call of the crew is listed here with its size and speed.': '아직 없습니다. 작업팀이 LLM 을 부를 때마다 입력·출력 크기와 속도가 여기에 쌓입니다.', 'Seconds': '초', 'chars': '자', 'Token numbers are estimates from the characters unless the server reports its own.': '토큰 수는 서버가 알려 주지 않으면 글자 수로 어림한 값입니다.',
   // the producer's own changes (cast / scenario / clips)
   'Name': '이름', 'Remove this entry': '이 항목 빼기', 'Remove this entry?': '이 항목을 뺄까요? (클립과 편에서도 빠집니다)', 'That name already exists.': '같은 이름이 이미 있습니다.',
   'Add a cast entry yourself': '직접 추가하기', 'Add a cast entry': '캐스팅 항목 추가', 'Describe how it looks': '모습을 설명하세요', 'Add': '추가', 'Cancel': '취소',

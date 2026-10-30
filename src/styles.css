@@ -733,5 +733,6 @@ button.save-state.dirty { cursor: pointer; } button.save-state.dirty:hover { bac
 .dx-addform { display: flex; flex-direction: column; gap: 6px; max-width: 520px; } .dx-addform textarea, .dx-addform input { font: inherit; }
 .dx-clip-edit .dx-field.wide { display: flex; flex-direction: column; gap: 2px; font-size: 11px; } .dx-clip-edit textarea { width: 100%; font: inherit; font-size: 12.5px; }
 .btn.danger { color: #d9534f; }
+.dx-llmlog { width: 100%; border-collapse: collapse; font-size: 11.5px; } .dx-llmlog th, .dx-llmlog td { text-align: left; padding: 3px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; } .dx-llmlog tr.bad td { color: #d9534f; }
 .dx-passrow { display: flex; gap: 10px; align-items: center; margin-top: 6px; }
 .dx-hideable { display: contents; } .dx-hideable.hid img { filter: blur(14px) brightness(.8); }

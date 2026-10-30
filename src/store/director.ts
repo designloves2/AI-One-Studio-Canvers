@@ -10,7 +10,7 @@ import { deleteDirectorProject, listDirectorProjects, openDirectorProject, saveD
 import { directorLlmSettings, runLlm } from '../backend/llm';
 
 /** the real crew: the LLM chosen in Settings (same backends as the Live Canvas) */
-const realCrew: LlmFn = (system, prompt) => runLlm({ system, prompt, max_tokens: 7000, temperature: 0.6, llm: directorLlmSettings() });
+const realCrew: LlmFn = (system, prompt) => runLlm({ system, prompt, max_tokens: 7000, temperature: 0.6, llm: directorLlmSettings(), tag: 'director' });
 
 export type BatchItemState = 'waiting' | 'running' | 'done' | 'failed' | 'cancelled' | 'skipped';
 /** progress of a batch generation (several episodes / chosen clips); shown in the generate step */

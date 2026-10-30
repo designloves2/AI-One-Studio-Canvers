@@ -4,6 +4,7 @@
 //   openrouter → OpenRouter cloud models
 //   custom     → Connect Custom (any OpenAI-compatible server)
 // All four are served by ComfyUI-TJ_NODE_STUDIO_ONE's /tj_studio_one/llm/* and /tj_shared/* routes.
+import { useLlmLog } from './llmLog';
 import { acquireLocalLlm, type NoticePlace } from './llmGuard';
 import type { Asset } from '../types';
 import { getJson, postJson } from './http';
@@ -120,6 +121,8 @@ export interface LlmRequest {
   max_tokens?: number;
   /** use these LLM settings instead of the main ones (Live Canvas has its own) */
   llm?: LlmSettings;
+  /** a short name for the call in the LLM log (for example 'director') */
+  tag?: string;
 }
 
 const toDataUrl = (b: Blob) => new Promise<string>((res, rej) => {
@@ -176,10 +179,22 @@ function llmFor(req: LlmRequest): LlmSettings {
   return req.images?.length && !vision.same ? vision.llm : llm;
 }
 
+/** what the server reported for the call that just finished (read right after it) */
+let lastUsage: { input?: number; output?: number } | undefined;
+
 export async function runLlm(req: LlmRequest): Promise<string> {
   const l = llmFor(req);
   const release = await acquireLocalLlm(l.backend, req.where);
-  try { return await runLlmNow({ ...req, llm: l }, false); } finally { release(); }
+  const t0 = Date.now(); const inChars = (req.system?.length ?? 0) + (req.prompt?.length ?? 0) + (req.refine?.length ?? 0);
+  const model = l.backend === 'local' ? l.gguf_model : l.backend === 'comfy' ? l.text_encoder_name : l.backend === 'openrouter' ? l.or_model_text : l.custom_model;
+  try {
+    const out = await runLlmNow({ ...req, llm: l }, false);
+    useLlmLog.getState().add({ tag: req.tag ?? '', backend: l.backend, model: String(model ?? ''), inChars, outChars: out.length, ms: Date.now() - t0, ok: true, usage: lastUsage });
+    return out;
+  } catch (e) {
+    useLlmLog.getState().add({ tag: req.tag ?? '', backend: l.backend, model: String(model ?? ''), inChars, outChars: 0, ms: Date.now() - t0, ok: false, error: (e as Error).message.slice(0, 200) });
+    throw e;
+  } finally { release(); }
 }
 
 async function runLlmNow(req: LlmRequest, retried: boolean): Promise<string> {
@@ -225,6 +240,8 @@ async function runLlmNow(req: LlmRequest, retried: boolean): Promise<string> {
   }
   if (!res.ok && !retried && /last_prompt_id/.test(res.error ?? '')) { await warmUpServer(); return runLlmNow(req, true); }
   if (!res.ok) throw new Error(res.error || 'LLM request failed');
+  const u = (res as { usage?: { input_tokens?: number; output_tokens?: number; prompt_tokens?: number; completion_tokens?: number } }).usage;
+  lastUsage = u ? { input: u.input_tokens ?? u.prompt_tokens, output: u.output_tokens ?? u.completion_tokens } : undefined;
   return (res.result ?? '').trim();
 }
 
