@@ -200,7 +200,16 @@ export function repairJson(src: string): string {
   return s + stack.reverse().join('');
 }
 
-export function parseReply(raw: string): AiReply {
+/** a model that thinks aloud: only what comes after the thinking is the answer (<think>…</think>, also a lone closing tag) */
+export function stripThinking(raw: string): string {
+  let s = raw;
+  const close = Math.max(s.lastIndexOf('</think>'), s.lastIndexOf('</thinking>'));
+  if (close >= 0 && !/<think(?:ing)?>/i.test(s.slice(0, close))) s = s.slice(s.indexOf('>', close) + 1);   // a lone closing tag: the thinking had no opening tag
+  return s.replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, '').replace(/<think(?:ing)?>[\s\S]*$/i, '');
+}
+
+export function parseReply(rawReply: string): AiReply {
+  const raw = stripThinking(rawReply);
   let s = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
   const a = s.indexOf('{');
   if (a < 0) throw new Error('no JSON object in the reply');
@@ -488,7 +497,7 @@ export async function directorTurn(p: DirectorProject, userText: string, llm: Ll
     const system = buildSystem(p, opt.previous) + (err ? `\n\nYOUR PREVIOUS REPLY WAS REJECTED: ${err}. Return the complete corrected JSON object.` : '');
     let raw = '';
     try { raw = await llm(system, base); } catch (e) { throw e; }
-    lastRaw = raw;
+    lastRaw = stripThinking(raw) || raw;
     try {
       const r = parseReply(raw);
       if (kickoff === 'brief' && r.series && !isFormat(r.series.format)) { const f = detectFormat(p.chat.filter((m) => m.role === 'user').map((m) => m.text).join(' ')); if (f) r.series.format = f; }

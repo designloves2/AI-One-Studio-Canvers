@@ -277,6 +277,9 @@ ok(m2.schema_version === 5 && m2.series.format === 'drama' && m2.workflow.stage 
   ok(good('{"say":"a",\n"series":{"title":"t"}\n"brief":{"text":"b"}}')?.brief?.text === 'b', 'a missing comma before the next key is mended');
   const cut = good('{"say":"a","references":[{"name":"A","description":"긴 설명이 끊기');
   ok(cut?.references?.[0]?.name === 'A', 'a reply that was cut off is closed and the complete part is kept');
+  ok(good('<think>maybe {"say":"wrong"} hmm</think>\n{"say":"right"}')?.say === 'right', 'thinking before the answer is dropped (also braces inside the thinking)');
+  ok(good('long thoughts without an opening tag...</think>{"say":"ok"}')?.say === 'ok', 'only what comes after a lone closing think tag is the answer');
+  ok(good('{"say":"x"}<think>after</think>')?.say === 'x', 'thinking after the answer is dropped');
   ok(good('no json here at all') === null, 'a reply without JSON is still refused');
   let said = ''; const bad = async () => 'I think the best cast would be a sister pair and so on, no braces';
   try { await AI.directorTurn(M.newDirectorProject('E'), 'x', bad, { maxAttempts: 1 }); } catch (e) { said = e.message; }
