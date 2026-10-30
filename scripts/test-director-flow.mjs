@@ -282,6 +282,28 @@ ok(m2.schema_version === 5 && m2.series.format === 'drama' && m2.workflow.stage 
   try { await AI.directorTurn(M.newDirectorProject('E'), 'x', bad, { maxAttempts: 1 }); } catch (e) { said = e.message; }
   ok(/The model answered: I think the best cast/.test(said), 'the error shows the beginning of what the model answered');
 }
+// ---- small requests: casting by kind, the scenario as a frame + groups of episodes, an episode as groups of clips
+{
+  const q = M.newDirectorProject('P'); q.series.total_episodes = 20; q.series.episode_seconds = 90; q.series.clip_seconds = 10; q.series.format = 'drama';
+  ok(AI.planParts(q, 'references').map((x) => x.kind).join() === 'character,location,prop', 'casting is asked in three parts: people, places, props');
+  const c = M.newReference(q, 'character', 'A', 'a'); c.status = 'approved';
+  ok(AI.planParts(q, 'references').map((x) => x.kind).join() === 'location,prop', 'a retry asks only for the kinds that are still missing');
+  const sp = AI.planParts(q, 'series'); ok(sp.length === 4 && sp[0].overview && sp[1].from === 1 && sp[1].to === 8 && sp[3].to === 20, 'the scenario is a story frame + groups of 8 episodes');
+  const ep = AI.planParts(q, 'episode'); ok(ep.length === 2 && ep[0].clips.join() === '1,5' && ep[1].clips.join() === '6,9', 'nine clips are asked in groups of five');
+  ok(/EXACTLY 5/.test(AI.kickoffInstruction(q, 'episode', ep[0])) && /ONLY clips 6 to 9/.test(AI.kickoffInstruction(q, 'episode', ep[1])), 'the instruction names the group');
+  // casting part: needs its own kind
+  ok(/kind "location"/.test(AI.checkReply(q, { say: '', references: [{ kind: 'character', name: 'B' }] }, 'references', { kind: 'location' })) && AI.checkReply(q, { say: '', references: [{ name: 'Hall' }] }, 'references', { kind: 'location' }) === null && AI.checkReply(q, { say: '' }, 'references', { kind: 'prop' }) === null, 'a casting part must carry its own kind (props may be none)');
+  // scenario parts
+  ok(/synopsis/.test(AI.checkReply(q, { say: '' }, 'series', { overview: true })) && AI.checkReply(q, { say: '', series: { synopsis: 's' } }, 'series', { overview: true }) === null, 'the story frame needs the synopsis');
+  const grp = (a, b) => ({ say: '', episodes: Array.from({ length: b - a + 1 }, (_, i) => ({ no: a + i, title: 't' + (a + i), logline: 'l', cast: ['A'], locations: [] })) });
+  ok(AI.checkReply(q, grp(1, 8), 'series', { from: 1, to: 8 }) === null && /exactly 8/.test(AI.checkReply(q, grp(1, 7), 'series', { from: 1, to: 8 })) && /exactly 4/.test(AI.checkReply(q, grp(9, 20), 'series', { from: 17, to: 20 })), 'a group of episodes must be exactly the numbers asked for');
+  // clips are added after the ones already written
+  q.workflow.episode_no = 1; M.newEpisode(q, 1, 'E');
+  const plan = (n, tag) => ({ say: '', episode_plan: { no: 1, scenes: [{ title: 'S' + tag, clips: Array.from({ length: n }, (_, i) => ({ prompt_en: tag + i, cast: ['A'], location: '' })) }] } });
+  AI.applyReply(q, plan(5, 'a')); AI.applyReply(q, plan(4, 'b'), { append: true });
+  const all = M.shotsOfEpisode(q, M.episodeByNo(q, 1).episode_id);
+  ok(all.length === 9 && all[0].prompt_en === 'a0' && all[5].prompt_en === 'b0' && all.reduce((s, x) => s + x.duration_sec, 0) === 90, 'a second group of clips is added after the first; the lengths follow the plan (9 clips = 90 s)');
+}
 // ---- demo stand-in pictures
 {
   const svg = (u) => decodeURIComponent(u.slice(u.indexOf(',') + 1));

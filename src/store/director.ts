@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { CrewRole, DirectorProject, StageId } from '../director/types';
 import { addChat, episodeByNo, newDirectorProject, safeProjectName, shotsOfEpisode, touch } from '../director/model';
-import { CREW_LABEL, defaultCrew, directorTurn, kickoffInstruction, type LlmFn } from '../director/ai';
+import { CREW_LABEL, defaultCrew, directorTurn, kickoffInstruction, planParts, type LlmFn } from '../director/ai';
 import { approveEpisode, approveStage, blockers, EPISODE_STAGES, GLOBAL_STAGES, markEpisodeFailed, markEpisodeReview, markEpisodeWorking, markFailed, markReview, markWorking, productionOpen, reopenEpisode, startEpisodes, startFromIntake, type ApproveResult, type Kickoff } from '../director/workflow';
 import { demoCrew } from '../director/demoCrew';
 import { localizeMsg } from '../director/localize';
@@ -117,10 +117,24 @@ export const useDirector = create<DirectorState>((set, get) => {
       } else {
         const work = structuredClone(get().project!);
         if (k === 'episode') work.workflow.episode_no = no!;   // the crew writes this episode (the instruction names it)
-        const res = await directorTurn(work, kickoffInstruction(work, k), crew(), { kickoff: k, previous: await previousTexts(work) });
+        // a long answer is where a model slips: the step is asked in small parts (casting by kind, the scenario as a frame + groups of episodes, an episode as groups of clips)
+        const previous = await previousTexts(work);
+        const parts = planParts(work, k, no);
+        const says: string[] = [], notes: string[] = []; let crewRole: CrewRole | undefined, done = 0;
+        const label = (i: number) => (parts.length > 1 ? ` (${i + 1}/${parts.length})` : '');
+        try {
+          for (let i = 0; i < parts.length; i++) {
+            const res = await directorTurn(work, kickoffInstruction(work, k, parts[i]), crew(), { kickoff: k, previous, part: parts[i] });
+            says.push(res.reply.say); notes.push(...res.notes); crewRole = crewRole ?? res.reply.crew; done++;
+          }
+        } catch (e) {
+          // what was written before the part that failed is kept; a retry only redoes the rest
+          if (done) commit((x) => { takeOver(x, work); });
+          throw new Error(parts.length > 1 ? `${(e as Error).message}\n[${done}/${parts.length}${done ? ', kept' : ''}] ${label(done).trim()}` : (e as Error).message);
+        }
         commit((x) => {
           takeOver(x, work);
-          addChat(x, 'assistant', (k === 'episode' ? `${no}: ` : '') + res.reply.say, { crew: res.reply.crew ?? defaultCrew(k === 'episode' ? 'episode' : stage), notes: res.notes });
+          addChat(x, 'assistant', (k === 'episode' ? `${no}: ` : '') + says.filter(Boolean).join(' '), { crew: crewRole ?? defaultCrew(k === 'episode' ? 'episode' : stage), notes });
           if (isEp) markEpisodeReview(x, no!); else markReview(x, k as StageId);
         });
       }
