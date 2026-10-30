@@ -97,7 +97,7 @@
 
 ### 최종 검토 시사회 · MP 설정 (2026-10-30, 커밋 e6d7b39, 화면 검증 전)
 - `ReviewCard`(DirectorView): 합쳐진 영상 큰 화면 + `dx-minis`(클립 작은 영상 + 한 줄 설명). 합치기(`FinalBlock`)는 '생성·확인' 단계에만 있음. 수정 = 채팅 → `store.send`가 편을 execute 로 되돌림.
-- MP: `DirectorSeries.start_mp/final_mp`, `series.mpRanges/defaultMps/turboSettings`, `adapter.genParams`(h3_plain 의 megapixels), `ai.applySeries`, 브리프 `BriefTiles`의 '그림 크기(MP)' 칸. opencode(OpenRouter 세션) 작업분이 같은 커밋에 섞여 있음.
+- MP: `DirectorSeries.start_mp/final_mp`, `series.mpRanges/defaultMps/turboSettings`, `adapter.genParams`(h3_plain 의 megapixels), `ai.applySeries`, 브리프 `BriefTiles`의 '그림 크기(MP)' 칸.
 
 ### 실사용 피드백 7건 반영 (2026-10-30, 코드 완료 — 화면 검증 전, `npm run test:director` 통과)
 - 사용자가 실제 LLM 으로 써 본 문제: ① 캐스팅 수정 LLM 결과가 카드에 안 반영 ② 캐스팅 프롬프트가 모델별로 강화되지 않음(카드엔 설정 언어 한 가지면 됨) ③ 시나리오의 레퍼런스(특히 장소) 누락·수정 안 보임 ④ 편 작성 시작 화면에 찌꺼기 ⑤ 클립에 출연자 누락 ⑥ 생성/검토를 합치고 클립별 합격 + 선택 합치기 ⑦ 검토 = 합쳐진 최종 영상.
