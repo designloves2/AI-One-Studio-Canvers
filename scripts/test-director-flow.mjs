@@ -266,6 +266,22 @@ ok(m2.schema_version === 5 && m2.series.format === 'drama' && m2.workflow.stage 
   const res = await AI.directorTurn(free, 'hi', llmF);
   ok(res.reply.crew === 'producer_desk', 'the music director does not speak in an ad');
 }
+// ---- a model's slightly broken JSON is mended, a hopeless reply says what the model answered
+{
+  const good = (s) => { try { return AI.parseReply(s); } catch (e) { return null; } };
+  ok(good('```json\n{"say":"hi","edits":[]}\n```')?.say === 'hi', 'a code block is read');
+  ok(good('Sure! Here it is:\n{"say":"안녕"}\nHope this helps')?.say === '안녕', 'talk before and after the JSON is ignored');
+  ok(good('{"say":"줄\n바꿈","x":1}')?.say === '줄\n바꿈', 'a line break inside a text is mended');
+  ok(good('{"say":"그가 "안녕" 이라고 말했다","x":1}')?.say === '그가 "안녕" 이라고 말했다', 'quotes inside a text are mended');
+  ok(good('{"say":"a","references":[{"name":"A"}\n{"name":"B"}]}')?.references?.length === 2, 'a missing comma between entries is mended');
+  ok(good('{"say":"a",\n"series":{"title":"t"}\n"brief":{"text":"b"}}')?.brief?.text === 'b', 'a missing comma before the next key is mended');
+  const cut = good('{"say":"a","references":[{"name":"A","description":"긴 설명이 끊기');
+  ok(cut?.references?.[0]?.name === 'A', 'a reply that was cut off is closed and the complete part is kept');
+  ok(good('no json here at all') === null, 'a reply without JSON is still refused');
+  let said = ''; const bad = async () => 'I think the best cast would be a sister pair and so on, no braces';
+  try { await AI.directorTurn(M.newDirectorProject('E'), 'x', bad, { maxAttempts: 1 }); } catch (e) { said = e.message; }
+  ok(/The model answered: I think the best cast/.test(said), 'the error shows the beginning of what the model answered');
+}
 // ---- demo stand-in pictures
 {
   const svg = (u) => decodeURIComponent(u.slice(u.indexOf(',') + 1));

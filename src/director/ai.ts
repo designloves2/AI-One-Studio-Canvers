@@ -130,13 +130,51 @@ export function kickoffInstruction(p: DirectorProject, k: Exclude<Kickoff, 'canv
 }
 
 // ------------------------------------------------------------------ reading the reply
+/**
+ * Mend the usual damage of a model's JSON so a reply is not thrown away for a small slip: a line break or an unescaped quote inside a text,
+ * a missing comma between entries, a trailing comma, a reply that was cut off (open texts, lists and objects are closed).
+ */
+export function repairJson(src: string): string {
+  const out: string[] = []; const stack: string[] = [];
+  let inStr = false;
+  const nextSig = (i: number) => { while (i < src.length && /\s/.test(src[i])) i++; return src[i]; };
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i];
+    if (inStr) {
+      if (c === '\\') { out.push(c, src[i + 1] ?? ''); i++; continue; }
+      if (c === '"') {
+        const n = nextSig(i + 1);
+        if (n === undefined || n === ',' || n === '}' || n === ']' || n === ':') { inStr = false; out.push(c); } else out.push('\\"');   // a quote inside the text
+        continue;
+      }
+      if (c === '\n') { out.push('\\n'); continue; }
+      if (c === '\r') continue;
+      if (c === '\t') { out.push('\\t'); continue; }
+      out.push(c); continue;
+    }
+    if (c === '"') { inStr = true; out.push(c); continue; }
+    if (c === '{' || c === '[') stack.push(c === '{' ? '}' : ']');
+    else if (c === '}' || c === ']') stack.pop();
+    out.push(c);
+  }
+  if (inStr) out.push('"');
+  let s = out.join('').replace(/,\s*$/, '');
+  s = s.replace(/([}\]])(\s*)(?=[{\["])/g, '$1,$2').replace(/("|\d|true|false|null)(\s*\n\s*)(?="[^"\n]*"\s*:)/g, '$1,$2').replace(/,(\s*[}\]])/g, '$1');
+  return s + stack.reverse().join('');
+}
+
 export function parseReply(raw: string): AiReply {
   let s = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
-  const a = s.indexOf('{'), b = s.lastIndexOf('}');
-  if (a < 0 || b <= a) throw new Error('no JSON object in the reply');
-  s = s.slice(a, b + 1);
+  const a = s.indexOf('{');
+  if (a < 0) throw new Error('no JSON object in the reply');
+  const b = s.lastIndexOf('}');
+  s = b > a ? s.slice(a, b + 1) : s.slice(a);
   let o: unknown;
-  try { o = JSON.parse(s); } catch { o = JSON.parse(s.replace(/,\s*([}\]])/g, '$1')); }
+  try { o = JSON.parse(s); } catch {
+    try { o = JSON.parse(s.replace(/,\s*([}\]])/g, '$1')); } catch {
+      try { o = JSON.parse(repairJson(b > a ? raw.slice(raw.indexOf('{')) : s)); } catch (e) { throw new Error(`the reply is not valid JSON (${(e as Error).message})`); }
+    }
+  }
   if (!o || typeof o !== 'object' || Array.isArray(o)) throw new Error('the reply is not a JSON object');
   const r = o as AiReply;
   if (typeof r.say !== 'string') r.say = '';
@@ -395,13 +433,14 @@ export async function directorTurn(p: DirectorProject, userText: string, llm: Ll
   const kickoff = opt.kickoff ?? 'free';
   const recent = p.chat.slice(-12).map((m) => `${m.role === 'user' ? 'Producer' : CREW_LABEL[m.crew ?? 'producer_desk']}: ${clip(m.text, 400)}`).join('\n');
   const base = `${recent ? `CONVERSATION SO FAR\n${recent}\n\n` : ''}Producer: ${userText}\n\nReply with the JSON object only.`;
-  let err = '', reply: AiReply | null = null, attempts = 0;
+  let err = '', reply: AiReply | null = null, attempts = 0, lastRaw = '';
   const max = opt.maxAttempts ?? 3;
   while (attempts < max && !reply) {
     attempts++;
     const system = buildSystem(p, opt.previous) + (err ? `\n\nYOUR PREVIOUS REPLY WAS REJECTED: ${err}. Return the complete corrected JSON object.` : '');
     let raw = '';
     try { raw = await llm(system, base); } catch (e) { throw e; }
+    lastRaw = raw;
     try {
       const r = parseReply(raw);
       if (kickoff === 'brief' && r.series && !isFormat(r.series.format)) { const f = detectFormat(p.chat.filter((m) => m.role === 'user').map((m) => m.text).join(' ')); if (f) r.series.format = f; }
@@ -411,7 +450,7 @@ export async function directorTurn(p: DirectorProject, userText: string, llm: Ll
       reply = r;
     } catch (e) { err = (e as Error).message; }
   }
-  if (!reply) throw new Error(`The crew could not produce a usable answer (${err}). Try again, or pick a stronger LLM in Settings.`);
+  if (!reply) throw new Error(`The crew could not produce a usable answer (${err}). Try again, or pick a stronger LLM in Settings.${lastRaw.trim() ? `\nThe model answered: ${lastRaw.trim().replace(/\s+/g, ' ').slice(0, 300)}${lastRaw.trim().length > 300 ? '…' : ''}` : '\nThe model answered nothing.'}`);
   const notes = reply.intent === 'approve' ? [] : applyReply(p, reply, { free: kickoff === 'free', episode: kickoff === 'episode' ? p.workflow.episode_no : undefined });
   return { reply, notes, attempts };
 }
