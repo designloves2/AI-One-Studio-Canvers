@@ -24,7 +24,9 @@ import { FORMAT_IDS, FORMATS, vocabOf } from './formats';
 import { blockers, hasMusicStep, EPISODE_STAGES, epStageIndex, episodeBlockers, episodeState, GLOBAL_STAGES, productionOpen, stageIndex } from './workflow';
 import { localizeMsg } from './localize';
 import { attachPanZoom } from '../ui/panZoom';
-import { castEngines, extraAspects, makeVersionCanvases, versionLinks, downloadEpisodePackages, generateBatch, generateCast, linkOfCasting, linkOfEpisode, openLinkedCanvas, registerCast, syncCastFromCanvas, syncResultsFromCanvas } from './canvasAction';
+import { castEngineOf, castEngines, confirmCastPrompt, extraAspects, makeVersionCanvases, versionLinks, downloadEpisodePackages, generateBatch, generateCast, linkOfCasting, linkOfEpisode, openCastingCanvas, openLinkedCanvas, registerCast, syncCastFromCanvas, syncResultsFromCanvas, writeCastPrompts } from './canvasAction';
+import { castPromptText, hasCastPrompt } from './adapter';
+import { formatFor } from '../backend/promptStyle';
 import type { DirectorProject, DirectorReference, DirectorShot, ReferenceKind, ResultRef, StageId } from './types';
 
 const STEPS: { id: StageId; label: string }[] = [
@@ -417,11 +419,17 @@ function CastViewer({ items, index, onIndex, onClose }: { items: { name: string;
 }
 
 const KIND: Record<string, { icon: keyof typeof ICONS; label: string; cls: string }> = { character: { icon: 'user', label: 'Actors', cls: 'k-char' }, location: { icon: 'pin', label: 'Locations', cls: 'k-loc' }, prop: { icon: 'box', label: 'Props', cls: 'k-prop' } };
-function CastCard({ r, onPick, onMake, onRegister, onChoose, onSavePrompt, onRemove, onVariant, onOpenImage, ro, busy }: { r: DirectorReference; onVariant?: () => void; onPick: () => void; onMake: () => void; onRegister: () => void; onChoose: (id: string) => void; onSavePrompt: (text: string, name: string) => void; onRemove?: () => void; onOpenImage?: () => void; ro: boolean; busy: boolean }) {
+function CastCard({ r, onPick, onMake, onRegister, onChoose, onSavePrompt, onRemove, onVariant, onOpenImage, onWritePrompt, onConfirmPrompt, promptFormat, promptEngine, promptReady, writing, ro, busy }: {
+  r: DirectorReference; onVariant?: () => void; onPick: () => void; onMake: () => void; onRegister: () => void; onChoose: (id: string) => void;
+  onSavePrompt: (text: string, name: string) => void; onRemove?: () => void; onOpenImage?: () => void;
+  onWritePrompt: () => void; onConfirmPrompt: (text: string) => void; promptFormat: string; promptEngine?: string; promptReady: boolean; writing: boolean; ro: boolean; busy: boolean;
+}) {
   const T = useT(); const pick = r.results.find((x) => x.picked); const k = KIND[r.kind];
   const fmtOfProject = useDirector((x) => x.project?.series.format);
   const [showPrompt, setShowPrompt] = useState(false); const [draft, setDraft] = useState<string | null>(null); const [nameDraft, setNameDraft] = useState<string | null>(null);
+  const [pdraft, setPdraft] = useState<string | null>(null);
   const shown = r.description;
+  const ptext = r.prompt_en ?? ''; const pshown = pdraft ?? ptext;
   return (
     <article className={`dx-cast ${k.cls}`}>
       <div className="dx-cast-img">{pick ? <img src={img(pick)} alt={r.name} loading="lazy" title={onOpenImage ? T('Click to enlarge') : undefined} onClick={onOpenImage} /> : <div className="empty"><Ico n="image" /><span>{T('No image yet')}</span></div>}
@@ -429,8 +437,20 @@ function CastCard({ r, onPick, onMake, onRegister, onChoose, onSavePrompt, onRem
         {r.asset_id && <span className="asset"><Ico n="check" />{T('Asset')}</span>}</div>
       <div className="dx-cast-body"><b>{r.name}</b>{r.variant_of && <em><Ico n="link" />{T('look of')} {r.variant_of}</em>}<p>{r.description}</p>
         {r.results.length > 1 && <div className="dx-cands" title={T('Other takes: click one to use it')}>{r.results.map((x) => <button key={x.result_id} className={x.picked ? 'on' : ''} disabled={ro} onClick={() => onChoose(x.result_id)}><img src={img(x)} alt="" loading="lazy" /></button>)}</div>}
+        <div className={`dx-castprompt${promptReady ? ' ok' : ''}`}>
+          <div className="dx-castprompt-head"><b><Ico n="edit" />{T('Image prompt')}</b><em>{promptReady ? `✓ ${T('Checked')}` : ptext.trim() ? T('Check this prompt') : T('No prompt yet')}</em></div>
+          {ptext.trim()
+            ? <textarea rows={4} disabled={ro || writing} value={pshown} onChange={(ev) => setPdraft(ev.target.value)} />
+            : <p>{T('Write the prompt for this image model first. The image is made only from a prompt you have checked.')}</p>}
+          <small>{T('Prompt format')}: {promptFormat}{r.prompt_engine && r.prompt_engine !== promptEngine ? ` · ${T('written for another model')}` : ''}</small>
+          <div className="dx-btns">
+            <button className="btn small" disabled={ro || writing} onClick={() => { setPdraft(null); onWritePrompt(); }}>{writing ? `… ${T('Writing')}` : ptext.trim() ? T('Write the prompt again') : T('Write the image prompt')}</button>
+            {ptext.trim() && (pdraft !== null || !promptReady) && <button className="btn small primary" disabled={ro || writing || !pshown.trim()} onClick={() => { onConfirmPrompt(pshown); setPdraft(null); }}>{T('Check this prompt')}</button>}
+            <button className="btn small" disabled={ro || writing} title={T('Send the description to the image model as it is, without the LLM step')} onClick={() => { onConfirmPrompt(castPromptText(r)); setPdraft(null); }}>{T('Use the description as it is')}</button>
+          </div>
+        </div>
         <div className="dx-cast-actions">
-          <button className="btn small" disabled={ro || busy} onClick={onMake}>{pick ? `↻ ${T('Make again')}` : T('Make this one')}</button>
+          <button className="btn small" disabled={ro || busy || !promptReady} title={!promptReady ? T('Make and check the image prompt first') : undefined} onClick={onMake}>{pick ? `↻ ${T('Make again')}` : T('Make this one')}</button>
           <button className="btn small" disabled={ro} onClick={onPick}>{pick ? T('Change image') : T('Choose from Library / Gallery')}</button>
           {onVariant && <button className="btn small" disabled={ro || busy} title={T('The same one with another costume, hair or look (a new entry)')} onClick={onVariant}>+ {T('New look')}</button>}
           {pick && !r.asset_id && <button className="btn small" disabled={ro || busy} onClick={onRegister}>{T('Register as asset')}</button>}
@@ -440,7 +460,7 @@ function CastCard({ r, onPick, onMake, onRegister, onChoose, onSavePrompt, onRem
           <div className="dx-promptbox">
             <label className="dx-field">{T('Name')}<input disabled={ro} value={nameDraft ?? r.name} onChange={(e) => setNameDraft(e.target.value)} /></label>
             <textarea rows={5} disabled={ro} value={draft ?? shown} onChange={(e) => setDraft(e.target.value)} />
-            <small>{T('This text is all there is: when the image is made, the image model\'s own prompt writer turns it into that model\'s prompt.')}</small>
+            <small>{T('This text is the source. A prompt for the chosen image model is written from it; check that prompt before the image is made.')}</small>
             {((draft !== null && draft !== shown) || (nameDraft !== null && nameDraft.trim() !== r.name)) && <div className="dx-btns"><button className="btn small" onClick={() => { setDraft(null); setNameDraft(null); }}>{T('Undo')}</button><button className="btn small primary" disabled={ro} onClick={() => { onSavePrompt(draft ?? shown, (nameDraft ?? r.name).trim()); setDraft(null); setNameDraft(null); }}>{T('Apply')}</button></div>}
             {onRemove && <div className="dx-btns"><button className="btn small danger" disabled={ro} onClick={onRemove}>{T('Remove this entry')}</button></div>}
           </div>)}
@@ -449,12 +469,19 @@ function CastCard({ r, onPick, onMake, onRegister, onChoose, onSavePrompt, onRem
   );
 }
 function CastGrid({ p, ro }: { p: DirectorProject; ro: boolean }) {
-  const T = useT(); const edit = useDirector((x) => x.edit); const [busy, setBusy] = useState(false); const [picking, setPicking] = useState<string | null>(null); const [viewing, setViewing] = useState<string | null>(null);
+  const T = useT(); const edit = useDirector((x) => x.edit); const demo = useDirector((x) => x.demo);
+  const [busy, setBusy] = useState(false); const [picking, setPicking] = useState<string | null>(null); const [viewing, setViewing] = useState<string | null>(null);
+  const [writing, setWriting] = useState<string | null>(null);
   const live = p.references.filter((r) => r.status !== 'rejected');
   const made = live.filter((r) => r.results.some((x) => x.picked)).length;
   const link = linkOfCasting(p);
   const engines = castEngines();
-  const engine = p.settings.cast_engine && engines.some((e) => e.id === p.settings.cast_engine) ? p.settings.cast_engine : engines[0]?.id;
+  const engine = castEngineOf(p);
+  const promptFormat = formatFor('image-generate', engine).model_format;
+  const readyOf = (r: DirectorReference) => hasCastPrompt(r, engine);
+  const needPrompt = live.filter((r) => !readyOf(r));
+  const readyCount = live.length - needPrompt.length;
+  const needWrite = live.filter((r) => !(r.prompt_en ?? '').trim() || (!!r.prompt_engine && r.prompt_engine !== engine));
   const toRegister = live.filter((r) => r.results.some((x) => x.picked) && !r.asset_id);
   const madeRefs = live.filter((r) => r.results.some((x) => x.picked));
   const viewItems = madeRefs.map((r) => ({ name: r.name, url: img(r.results.find((x) => x.picked)) }));
@@ -463,6 +490,15 @@ function CastGrid({ p, ro }: { p: DirectorProject; ro: boolean }) {
   const report = async (r: Awaited<ReturnType<typeof generateCast>>) => { if (r.failed) await notify(`${T('Failed')}: ${r.failed}`); else if (!r.cancelled && !r.made) await notify(T('Every cast entry already has an image.')); };
   const makeAll = () => guard(async () => report(await generateCast({ engine })));
   const makeOne = (r: DirectorReference) => guard(async () => report(await generateCast({ refIds: [r.ref_id], engine, newSeed: r.results.some((x) => x.picked) })));
+  // the order: check the card, then write (and check) the image prompt, then make the image
+  const writeOne = (r: DirectorReference) => guard(async () => { setWriting(r.ref_id); try { await writeCastPrompts({ refIds: [r.ref_id], engine, force: true }); } finally { setWriting(null); } });
+  const writeAll = () => guard(async () => {
+    if (!needWrite.length) { await notify(T('Every prompt is written.')); return; }
+    if (!(await askConfirm(`${T('Write the prompts for all of them? The LLM writes one prompt per entry.')}\n\n${needWrite.map((r) => r.name).join(', ')} (${needWrite.length})`))) return;
+    setWriting('*'); try { await writeCastPrompts({ refIds: needWrite.map((r) => r.ref_id), engine, force: true }); } finally { setWriting(null); }
+  });
+  const confirmPrompt = (r: DirectorReference, text: string) => confirmCastPrompt(r.ref_id, text, engine);
+  const openCanvas = () => guard(async () => { await openCastingCanvas({ engine }); });
   const sync = () => guard(async () => { const n = await syncCastFromCanvas(); await notify(n ? `${T('Results added')}: ${n}` : T('No new results.')); });
   const register = (ids?: string[]) => guard(async () => { const n = await registerCast({ refIds: ids }); await notify(n ? `${T('Registered')}: ${n}` : T('Nothing to register.')); });
   const choose = (r: DirectorReference, resultId: string) => edit((x) => { const q = x.references.find((z) => z.ref_id === r.ref_id)!; q.results.forEach((z) => { z.picked = z.result_id === resultId; }); q.asset_id = undefined; });
@@ -478,7 +514,7 @@ function CastGrid({ p, ro }: { p: DirectorProject; ro: boolean }) {
   };
   const saveEntry = (r: DirectorReference, text: string, name: string) => {
     if (name && name !== r.name && nameTaken(name, r.ref_id)) { void notify(T('That name already exists.')); return; }
-    edit((x) => { const q = x.references.find((z) => z.ref_id === r.ref_id); if (!q) return; q.description = text.trim(); if (name && name !== q.name) renameReference(x, q, name); });
+    edit((x) => { const q = x.references.find((z) => z.ref_id === r.ref_id); if (!q) return; if (text.trim() !== q.description) q.prompt_ok = false; q.description = text.trim(); if (name && name !== q.name) renameReference(x, q, name); });
   };
   const removeEntry = async (r: DirectorReference) => {
     if (!(await askConfirm(`${T('Remove this entry?')}\n${r.name}`))) return;
@@ -493,13 +529,16 @@ function CastGrid({ p, ro }: { p: DirectorProject; ro: boolean }) {
     <div className="dx-page">
       <Working p={p} />
       <PageHead icon="user" title={T(vocabOf(p.series.format).cast)} sub={T('Actors, locations and props are cast first; the story is written with them.')}
-        right={link && <button className="btn" onClick={() => void openLinkedCanvas(link.canvas_file).catch((e) => notify((e as Error).message))}>{T('Open in Canvas')}</button>} />
+        right={<button className="btn" disabled={ro || busy || demo} title={demo ? T('The demo does not make canvas files. Turn the demo off to build the real canvas.') : T('Look at the cast cards in the Canvas, change a card\'s model and run it there. The canvas is temporary: it goes away when the casting is approved.')} onClick={() => void openCanvas()}>{link ? T('Open in Canvas') : T('Open the casting canvas')}</button>} />
       <section className="dx-block"><h4><Ico n="image" />{T('Make the cast images')}</h4>
         <div className="dx-btns">
           <label className="dx-field">{T('Image model')}<select disabled={ro || busy} value={engine} onChange={(ev) => edit((x) => { x.settings.cast_engine = ev.target.value; })}>{engines.map((e) => <option key={e.id} value={e.id}>{e.label}</option>)}</select></label>
-          <button className="btn primary" disabled={ro || busy || !live.length || p.workflow.status.references === 'working' || made === live.length} onClick={() => void makeAll()}>{T('Generate all')} ({live.length - made})</button>
+          <button className="btn" disabled={ro || busy || !needWrite.length} onClick={() => void writeAll()}>{writing === '*' ? `… ${T('Writing')}` : `${T('Write all prompts')} (${needWrite.length})`}</button>
+          <button className="btn primary" disabled={ro || busy || !live.length || p.workflow.status.references === 'working' || made === live.length || needPrompt.length > 0} title={needPrompt.length ? T('Check every prompt first: the image is made only from a checked prompt.') : undefined} onClick={() => void makeAll()}>{T('Generate all')} ({live.length - made})</button>
           <button className="btn" disabled={ro || !link} onClick={() => void sync()}>{T('Sync results')}</button>
         </div>
+        <p className="dirx-muted">{T('Prompt format')}: <b>{promptFormat}</b> · {T('Prompts checked')}: {readyCount} / {live.length}</p>
+        <p className="dirx-muted">{T('The order is: check the card, write the prompt for this image model, check the prompt, then make the image. A checked prompt is sent to the model as it is (no second rewrite).')}</p>
         <p className="dirx-muted">{T('Or make one entry at a time on its card, choose an image from the Asset Library or the Gallery, or make one again for a different take.')}</p>
       </section>
       <section className="dx-block"><h4><Ico n="box" />{T('Register as assets')}</h4>
@@ -522,7 +561,7 @@ function CastGrid({ p, ro }: { p: DirectorProject; ro: boolean }) {
       {(['character', 'location', 'prop'] as const).map((kind) => {
         const items = live.filter((r) => r.kind === kind); if (!items.length) return null;
         return <section key={kind} className="dx-group"><h4 className={KIND[kind].cls}><Ico n={KIND[kind].icon} />{T(kind === 'character' ? vocabOf(p.series.format).characters : kind === 'location' ? vocabOf(p.series.format).locations : vocabOf(p.series.format).props)} <small>{items.length}</small></h4>
-          <div className="dx-castgrid">{items.map((r) => <CastCard key={r.ref_id} r={r} ro={ro} busy={busy} onVariant={r.kind !== 'prop' && !r.variant_of ? () => void variant(r) : undefined} onPick={() => setPicking(r.ref_id)} onMake={() => void makeOne(r)} onRegister={() => void register([r.ref_id])} onChoose={(id) => choose(r, id)} onSavePrompt={(text, name) => saveEntry(r, text, name)} onRemove={() => void removeEntry(r)} onOpenImage={r.results.some((x) => x.picked) ? () => setViewing(r.ref_id) : undefined} />)}</div></section>;
+          <div className="dx-castgrid">{items.map((r) => <CastCard key={r.ref_id} r={r} ro={ro} busy={busy} promptFormat={promptFormat} promptEngine={engine} promptReady={readyOf(r)} writing={writing === r.ref_id || writing === '*'} onWritePrompt={() => void writeOne(r)} onConfirmPrompt={(text) => confirmPrompt(r, text)} onVariant={r.kind !== 'prop' && !r.variant_of ? () => void variant(r) : undefined} onPick={() => setPicking(r.ref_id)} onMake={() => void makeOne(r)} onRegister={() => void register([r.ref_id])} onChoose={(id) => choose(r, id)} onSavePrompt={(text, name) => saveEntry(r, text, name)} onRemove={() => void removeEntry(r)} onOpenImage={r.results.some((x) => x.picked) ? () => setViewing(r.ref_id) : undefined} />)}</div></section>;
       })}
       {picking && <CastPicker refId={picking} onClose={() => setPicking(null)} />}
       {viewIndex >= 0 && <CastViewer items={viewItems} index={viewIndex} onIndex={(i) => setViewing(madeRefs[i]?.ref_id ?? null)} onClose={() => setViewing(null)} />}

@@ -71,6 +71,10 @@ export interface DirectorReference {
   ref_id: string; kind: ReferenceKind; name: string; description: string; prompt_en: string;
   /** the same prompt in Korean, for reading and for asking for changes (English is what the model gets) */
   prompt_ko?: string;
+  /** the producer looked at prompt_en and accepted it: only a checked prompt is used to make the image */
+  prompt_ok?: boolean;
+  /** the image model prompt_en was written for (an engine id of Image Generate); a prompt of another model is not used */
+  prompt_engine?: string;
   status: 'proposed' | 'approved' | 'rejected';
   results: ResultRef[];
   /** name of the base entry when this is a costume / look variant of it */
@@ -154,6 +158,8 @@ export interface CanvasLink {
   seed_sent?: Record<string, number>;
   /** casting canvas: the image engine each cast card was last given (an engine chosen in the canvas is kept) */
   engine_sent?: Record<string, string>;
+  /** casting canvas: the auto-enhance setting each cast card was last given (a switch flipped in the canvas is kept) */
+  enhance_sent?: Record<string, boolean>;
 }
 
 export interface DirectorWorkflow {

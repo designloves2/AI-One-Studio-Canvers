@@ -360,7 +360,7 @@ export function applyReply(p: DirectorProject, r: AiReply, opt: { free?: boolean
   for (const x of r.references ?? []) {
     if (!x?.name) continue;
     const cur = p.references.find((q) => refKey(q.name) === refKey(x.name));
-    if (cur) { if (opt.free || cur.status !== 'approved') { if (x.description) { cur.description = x.description; if (cur.results.length) notes.push(`${cur.name}: the old image is kept, generate again to see the change`); } } continue; }
+    if (cur) { if (opt.free || cur.status !== 'approved') { if (x.description) { cur.description = x.description; cur.prompt_ok = false; if (cur.results.length) notes.push(`${cur.name}: the old image is kept, generate again to see the change`); } } continue; }
     const nr = newReference(p, (['character', 'location', 'prop'] as const).includes(x.kind as ReferenceKind) ? (x.kind as ReferenceKind) : 'character', x.name.trim(), x.description || x.prompt_ko || x.prompt_en || '', '');
     if (x.variant_of && findReference(p, x.variant_of)) nr.variant_of = findReference(p, x.variant_of)!.name;
   }

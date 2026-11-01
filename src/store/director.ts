@@ -284,6 +284,10 @@ export const useDirector = create<DirectorState>((set, get) => {
       commit((x) => { result = approveStage(x); if (!result.ok) addChat(x, 'assistant', localizeMsg(result.reason ?? ''), { crew: 'producer_desk' }); });
       const r = result as ApproveResult | null;
       if (r?.ok) {
+        // the casting canvas was a temporary workbench: its images are in the cast entries now, so it goes away
+        if (r.from === 'references') {
+          try { const { removeCastingCanvas } = await import('../director/canvasAction'); await removeCastingCanvas(); } catch { /* only the helper file: the approval stands */ }
+        }
         follow(r);
         if (r.kickoff) await runJobs([{ k: r.kickoff }]);
         else if (r.to === 'episode' && get().project?.series.total_episodes === 1) await get().startEpisodes([1]);   // one piece: there is no episode to choose, the crew starts writing it

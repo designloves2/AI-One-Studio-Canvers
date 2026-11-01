@@ -5,7 +5,7 @@
 //   - a card the registry does not know is never swapped for another one: that shot is skipped and listed in report.missing
 //   - positions, parameters and results a user changed in the canvas are kept
 import type { Asset, GraphEdge, GraphNode, Primitive, Project } from '../types';
-import type { CanvasLink, DirectorProject, DirectorShot } from './types';
+import type { CanvasLink, DirectorProject, DirectorReference, DirectorShot } from './types';
 import { castOf, newId, shotsOfEpisode } from './model';
 import { composeClipPrompt } from './compose';
 
@@ -256,6 +256,18 @@ export const castPromptText = (r: { kind: string; description: string; prompt_en
 export const refGenNodeId = (refId: string) => `n_${refId}_gen`;
 
 /**
+ * Is there a prompt the producer has checked, written for this image model? Only then is prompt_en sent to the card as it is
+ * (and the card's own prompt writer stays off). Without one the description is used and the model's writer runs, as before.
+ */
+export const hasCastPrompt = (r: Pick<DirectorReference, 'prompt_en' | 'prompt_ok' | 'prompt_engine'>, engine?: string): boolean => {
+  const text = (r.prompt_en ?? '').trim();
+  if (!r.prompt_ok || !text) return false;
+  return !engine || !r.prompt_engine || r.prompt_engine === engine;
+};
+/** what the Prompt card of a cast entry holds: the checked prompt for this model, or the description the crew wrote */
+export const castPromptOf = (r: DirectorReference, engine?: string) => (hasCastPrompt(r, engine) ? r.prompt_en.trim() : castPromptText(r));
+
+/**
  * The canvas that makes the cast images: one Prompt card + one Image Generate card per cast entry (not the rejected ones).
  * Same rules as the episode canvas: fixed card ids, nothing duplicated, the user's moves / settings / own prompt text are kept.
  */
@@ -273,13 +285,15 @@ export function buildCastingCanvas(p: DirectorProject, reg: RegistryLike, existi
   const engine = wantEngine && genDef?.engines?.includes(wantEngine) ? wantEngine : genDef?.engineId;
   const pe = (engine && genDef?.perEngine?.[engine]) || (genDef ? { params: genDef.params, defaults: genDef.defaults } : { params: {}, defaults: {} });
   const engineSent: Record<string, string> = { ...(prev?.engine_sent ?? {}) };
+  const enhanceSent: Record<string, boolean> = { ...(prev?.enhance_sent ?? {}) };
   const prevSeed = prev?.seed_sent ?? {}; const seedSent: Record<string, number> = { ...prevSeed };
-  const castParams = (r: DirectorProject['references'][number]): Record<string, Primitive> => {
+  const castParams = (r: DirectorProject['references'][number], engineId?: string): Record<string, Primitive> => {
     const params: Record<string, Primitive> = { ...pe.defaults };
     const want = r.kind === 'character' ? '3:4' : r.kind === 'location' ? p.series.aspect : '1:1';   // a person is shown full-body (tall), a place wide, a prop square
     if (pe.params.aspect?.options?.includes(want)) params.aspect = want;
     if (pe.params.seed && r.seed !== undefined && r.seed >= 0) params.seed = r.seed;
-    if (pe.params.auto_enhance) params.auto_enhance = true;   // each model's own prompt writer turns the description into the model's prompt
+    // a checked prompt is already in this model's format, so the writer must not rewrite it again
+    if (pe.params.auto_enhance) params.auto_enhance = !hasCastPrompt(r, engineId);
     return params;
   };
   const wired = promptDef && genDef ? { out: textOut(promptDef), inn: textIn(genDef, reg, 'text') } : null;
@@ -312,7 +326,7 @@ export function buildCastingCanvas(p: DirectorProject, reg: RegistryLike, existi
       y += 420; continue;
     }
     if (!promptDef || !genDef || !wired?.out || !wired.inn) { report.missing.push({ ref_id: r.ref_id, reason: !promptDef ? 'card "prompt" is not in the registry' : !genDef ? 'card "image-generate" is not in the registry' : 'no text port to connect' }); continue; }
-    const text = castPromptText(r);
+    const text = castPromptOf(r, engine);
     const tid = refTextNodeId(r.ref_id), gid = refGenNodeId(r.ref_id);
     let tn = byNode.get(tid);
     if (!tn) {
@@ -323,15 +337,25 @@ export function buildCastingCanvas(p: DirectorProject, reg: RegistryLike, existi
     else report.keptUserText.push(tid);
     let gn = byNode.get(gid);
     if (!gn) {
-      gn = { id: gid, defId: 'image-generate', x: COL_GEN_X, y, params: castParams(r), engineId: engine, results: [], activeResult: 0, title: r.name };
+      gn = { id: gid, defId: 'image-generate', x: COL_GEN_X, y, params: castParams(r, engine), engineId: engine, results: [], activeResult: 0, title: r.name };
       nodes.push(gn); byNode.set(gid, gn); (prev?.refs?.some((x) => x.ref_id === r.ref_id) ? report.recreated : report.created).push(gid);
       engineSent[r.ref_id] = engine ?? ''; if (pe.params.seed) seedSent[r.ref_id] = Number(gn.params.seed ?? -1);
+      if (pe.params.auto_enhance) enhanceSent[r.ref_id] = !hasCastPrompt(r, engine);
     } else {
       // another model was chosen: the card follows while it still holds the model the adapter gave it (a model picked in the canvas is the producer's)
       const was = engineSent[r.ref_id] ?? genDef.engineId;
       if (engine && gn.engineId === was && was !== engine) {
-        const keepSeed = gn.params.seed; gn.engineId = engine; gn.params = { ...castParams(r), ...(keepSeed !== undefined ? { seed: keepSeed } : {}) }; engineSent[r.ref_id] = engine; report.updated.push(gid);
+        const keepSeed = gn.params.seed; gn.engineId = engine; gn.params = { ...castParams(r, engine), ...(keepSeed !== undefined ? { seed: keepSeed } : {}) }; engineSent[r.ref_id] = engine; report.updated.push(gid);
+        if (pe.params.auto_enhance) enhanceSent[r.ref_id] = !hasCastPrompt(r, engine);
       } else if (engineSent[r.ref_id] === undefined) engineSent[r.ref_id] = gn.engineId ?? '';
+      // the prompt was checked (or changed) after the canvas was built: the card's own writer follows, but a switch the producer flipped is kept
+      if (pe.params.auto_enhance && sent[r.ref_id] === text && typeof gn.params.auto_enhance === 'boolean') {
+        const want = !hasCastPrompt(r, engine), had = enhanceSent[r.ref_id];
+        if (had === undefined || gn.params.auto_enhance === had) {
+          if (gn.params.auto_enhance !== want) { gn.params = { ...gn.params, auto_enhance: want }; if (!report.updated.includes(gid)) report.updated.push(gid); }
+          enhanceSent[r.ref_id] = want;
+        }
+      }
       // the seed of this cast entry (a new take): same rule as the clips
       if (pe.params.seed) {
         const wantSeed = r.seed !== undefined && r.seed >= 0 ? r.seed : -1; const wasSeed = prevSeed[r.ref_id] ?? -1;
@@ -345,7 +369,7 @@ export function buildCastingCanvas(p: DirectorProject, reg: RegistryLike, existi
     y += 420;
   }
   const project: Project = { app: 'ai-one-studio-canvers', version: 1, id: existing?.id ?? p.project_id, name: existing?.name ?? `${p.name} casting`, nodes, edges, updatedAt: now };
-  const link: CanvasLink = { canvas_id: prev?.canvas_id ?? newId('cv'), canvas_file: canvasFile, shots: [], purpose: 'casting', refs, created_at: prev?.created_at ?? now, prompt_sent: sent, engine_sent: engineSent, seed_sent: seedSent };
+  const link: CanvasLink = { canvas_id: prev?.canvas_id ?? newId('cv'), canvas_file: canvasFile, shots: [], purpose: 'casting', refs, created_at: prev?.created_at ?? now, prompt_sent: sent, engine_sent: engineSent, seed_sent: seedSent, enhance_sent: enhanceSent };
   return { project, link, report };
 }
 

@@ -691,6 +691,16 @@ button.save-state.dirty { cursor: pointer; } button.save-state.dirty:hover { bac
 /* casting: model, one-by-one generation, candidates */
 .dx-field { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); } .dx-field select { background: var(--bg); border: 1px solid var(--line2); border-radius: 7px; padding: 5px 8px; color: var(--fg); }
 .dx-cast-actions { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; } .dx-cast-actions .btn.small { margin-top: 0; }
+/* casting: the image prompt is written and checked before an image is made */
+.dx-castprompt { display: flex; flex-direction: column; gap: 5px; margin-top: 6px; padding: 8px 9px; border: 1px solid var(--line2); border-radius: 9px; background: var(--bg); }
+.dx-castprompt.ok { border-color: color-mix(in srgb, var(--acc) 55%, var(--line2)); }
+.dx-castprompt-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 2px 8px; }
+.dx-castprompt-head b { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--fg); }
+.dx-castprompt-head em { font-style: normal; font-size: 11px; color: var(--muted); white-space: nowrap; }
+.dx-castprompt.ok .dx-castprompt-head em { color: var(--acc); font-weight: 600; }
+.dx-castprompt textarea { width: 100%; box-sizing: border-box; resize: vertical; min-height: 64px; background: var(--bg2); border: 1px solid var(--line2); border-radius: 7px; padding: 6px 7px; color: var(--fg); font-size: 12px; line-height: 1.45; }
+.dx-castprompt p { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.4; }
+.dx-castprompt small { font-size: 11px; color: var(--muted); line-height: 1.35; word-break: keep-all; }
 .dx-cands { display: flex; gap: 4px; flex-wrap: wrap; } .dx-cands button { width: 34px; height: 34px; padding: 0; border: 2px solid var(--line2); border-radius: 6px; overflow: hidden; background: var(--bg); } .dx-cands button.on { border-color: var(--acc); } .dx-cands img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
 /* editable brief settings, prompt box, demo badge */

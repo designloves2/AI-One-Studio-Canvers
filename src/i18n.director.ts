@@ -71,7 +71,17 @@ export const KO_DIRECTOR: Record<string, string> = {
   // side menu
   'Director projects': '디렉터 프로젝트', 'Start a new project by writing in the chat. To continue an earlier one, name it: "…1편에 이어서 2편을 만들자".': '새 프로젝트는 채팅창에 쓰면 시작됩니다. 이전 작품에 이어 만들려면 이름을 말하세요: "…1편에 이어서 2편을 만들자".',
   // casting is one description, the scenario names the cast and places of every episode, per-clip check, final review
-  'Edit description': '설명 고치기', "This text is all there is: when the image is made, the image model's own prompt writer turns it into that model's prompt.": '이 글이 전부입니다. 이미지를 만들 때 이미지 모델 전용 프롬프트 작성기가 이 글로 그 모델에 맞는 프롬프트를 만듭니다.',
+  'Edit description': '설명 고치기', 'This text is the source. A prompt for the chosen image model is written from it; check that prompt before the image is made.': '이 글이 원본입니다. 고른 이미지 모델에 맞는 프롬프트를 이 글에서 만들고, 확인한 뒤 이미지를 만듭니다.',
+  // casting: the prompt is written (in the model's format) and checked BEFORE any image is made
+  'Image prompt': '이미지 프롬프트', 'No prompt yet': '프롬프트 없음', 'Check this prompt': '이 프롬프트 확인', Checked: '확인됨', Writing: '작성 중',
+  'Write the image prompt': '이미지 프롬프트 만들기', 'Write the prompt again': '프롬프트 다시 만들기', 'Write all prompts': '프롬프트 전체 만들기',
+  'Prompt format': '프롬프트 형식', 'Prompts checked': '프롬프트 확인', 'written for another model': '다른 모델용으로 작성됨',
+  'Write the prompt for this image model first. The image is made only from a prompt you have checked.': '먼저 이 이미지 모델에 맞는 프롬프트를 만드세요. 확인한 프롬프트로만 이미지를 만듭니다.',
+  'Use the description as it is': '설명 그대로 쓰기', 'Send the description to the image model as it is, without the LLM step': 'LLM 단계 없이 설명을 그대로 이미지 모델에 보냅니다',
+  'Make and check the image prompt first': '이미지 프롬프트를 먼저 만들고 확인하세요', 'Check every prompt first: the image is made only from a checked prompt.': '모든 프롬프트를 먼저 확인하세요. 확인한 프롬프트로만 이미지를 만듭니다.',
+  'The order is: check the card, write the prompt for this image model, check the prompt, then make the image. A checked prompt is sent to the model as it is (no second rewrite).': '순서: 카드 내용 확인 → 이미지 모델용 프롬프트 만들기 → 프롬프트 확인 → 이미지 만들기. 확인한 프롬프트는 다시 고치지 않고 그대로 모델에 보냅니다.',
+  'Write the prompts for all of them? The LLM writes one prompt per entry.': '프롬프트를 모두 만들까요? 항목마다 LLM이 프롬프트를 하나씩 씁니다.', 'Every prompt is written.': '모든 프롬프트가 작성되어 있습니다.',
+  'Open the casting canvas': '캐스팅 캔버스 열기', "Look at the cast cards in the Canvas, change a card's model and run it there. The canvas is temporary: it goes away when the casting is approved.": '캔버스에서 섭외 카드를 보고, 카드마다 모델을 바꿔 실행할 수 있습니다. 임시 캔버스라 캐스팅을 승인하면 없어집니다.',
   'No cast yet': '인물·소품 없음', 'No place yet': '장소 없음',
   'Generate & check': '생성·확인', 'Final review': '최종 검토', 'Passed': '합격', 'Pass': '합격', 'Left out': '제외', 'In the joined video': '합친 영상에 넣기', 'The clip is good: it can be joined': '이 클립이 좋습니다: 합칠 수 있습니다',
   'Every clip that stays in the video must be passed first.': '영상에 남는 클립은 모두 먼저 합격이어야 합니다.', 'clips are left out of the joined video.': '개 클립은 합친 영상에서 빠집니다.',

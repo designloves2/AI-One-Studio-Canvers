@@ -5,13 +5,16 @@ import { useGraph } from '../store/graph';
 import type { BatchItemState } from '../store/director';
 import { askConfirm, notify } from '../ui/dialog';
 import { t as tr } from '../i18n';
-import { canvasFileName, listCanvases, loadCanvas, saveCanvas } from '../backend/canvases';
+import { canvasFileName, deleteCanvas, listCanvases, loadCanvas, saveCanvas } from '../backend/canvases';
 import { download, openSavedCanvas, runNode } from '../engine/actions';
 import { registerAsset } from '../backend/assetlib';
 import { assetOfResult, resultUrl } from './media';
 import { buildEpisodePackage, type PackageResult } from './exportPackage';
 import { buildZip } from './zip';
-import { buildCanvasFromDirector, buildCastingCanvas, refGenNodeId, type AdapterReport } from './adapter';
+import { buildCanvasFromDirector, buildCastingCanvas, castPromptText, hasCastPrompt, refGenNodeId, type AdapterReport } from './adapter';
+import { stripThinking } from './ai';
+import { runLlm } from '../backend/llm';
+import { formatFor, NO_AESTHETIC } from '../backend/promptStyle';
 import { pickedAudio } from './music';
 import { assetFromFile } from '../backend/comfy';
 import { appRegistry } from './adapterRegistry';
@@ -21,7 +24,7 @@ import { demoClipResult, demoRefResult, pushPicked } from './demoMedia';
 import { newSeed } from './execution';
 import { castOf, episodeByNo, findReference, newAsset, shotsOfEpisode, syncShotAssets } from './model';
 import { turboSettings } from './series';
-import type { CanvasLink, DirectorProject } from './types';
+import type { CanvasLink, DirectorProject, DirectorReference } from './types';
 import type { Asset, Project } from '../types';
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
@@ -140,6 +143,93 @@ export async function runFromDirector(plan: RunPlan, no?: number, opt: { skipCon
 /** the image models the cast can be generated with (the engines of the Image Generate card: Krea 2, Qwen Image, Z-Image, ...) */
 export const castEngines = (): { id: string; label: string }[] => (byId.get('image-generate')?.engines ?? []).map((e) => ({ id: e.id, label: e.label }));
 const engineLabel = (id?: string) => castEngines().find((e) => e.id === id)?.label ?? id ?? '';
+/** the casting engine the project uses now (unknown ids fall back to the card's default) */
+export const castEngineOf = (p: DirectorProject, want?: string): string | undefined => {
+  const def = byId.get('image-generate');
+  const w = want ?? p.settings.cast_engine;
+  return w && def?.engines?.some((e) => e.id === w) ? w : (def?.engines?.find((e) => e.default) ?? def?.engines?.[0])?.id;
+};
+/** the picked image of every cast entry, ready to be put into a canvas as a Load Image card */
+const pickedCastAssets = (p: DirectorProject): Record<string, Asset> => {
+  const out: Record<string, Asset> = {};
+  for (const r of p.references) { const pick = r.results.find((x) => x.picked); if (pick && !pick.data_url) out[r.ref_id] = assetOfResult(pick, `ba_${r.ref_id}`); }
+  return out;
+};
+
+/**
+ * Keep every concrete fact of the crew's description (a Korean person must not come back as a generic foreigner).
+ * The model format is still the server's (model_formats.json); this only says what may not be dropped.
+ */
+export const CAST_PROMPT_RULE = 'Keep every concrete detail of the source exactly as written — above all the nationality or ethnicity (a Korean person stays Korean), age, gender, skin tone, hair, eyes, body, clothing, the place and any wording that must appear. Translate the words, never replace a detail with a generic or a different one.';
+
+/**
+ * Write the image prompt of cast entries with the image model's own prompt writer (the same /tj_studio_one/llm/enhance the
+ * card's "Auto enhance" uses, with that model's format from model_formats.json). The result is stored, NOT used: the producer checks it first.
+ * `force` rewrites entries that already have a prompt; without it only the ones that have nothing (or nothing for this model) are written.
+ */
+export async function writeCastPrompts(opt: { refIds?: string[]; engine?: string; force?: boolean } = {}): Promise<number> {
+  const d = useDirector.getState(); const p = d.project;
+  if (!p) throw new Error('no project');
+  if (d.readOnly) throw new Error(tr('Read-only (saved by a newer version)'));
+  const engine = castEngineOf(p, opt.engine);
+  const targets = p.references.filter((r) => r.status !== 'rejected' && (!opt.refIds || opt.refIds.includes(r.ref_id)) && (opt.force || !hasCastPrompt(r, engine)));
+  if (!targets.length) return 0;
+  if (isDemo()) {   // no LLM in the demo: the description itself stands in for the written prompt
+    for (const r of targets) d.edit((x) => { const q = x.references.find((z) => z.ref_id === r.ref_id)!; q.prompt_en = castPromptText(q); q.prompt_ok = false; q.prompt_engine = engine; });
+    return targets.length;
+  }
+  const style = { ...formatFor('image-generate', engine), aesthetic: NO_AESTHETIC, extra_instructions: CAST_PROMPT_RULE };
+  let made = 0;
+  for (const r of targets) {
+    const raw = await runLlm({ system: '', prompt: castPromptText(r), style, where: 'bottom', tag: 'cast prompt' });
+    const out = stripThinking(raw).trim();
+    d.edit((x) => { const q = x.references.find((z) => z.ref_id === r.ref_id); if (!q) return; q.prompt_en = out || castPromptText(q); q.prompt_ok = false; q.prompt_engine = engine; });
+    made++;
+  }
+  return made;
+}
+
+/** The producer accepted the prompt on the card: from now on the image is made from exactly this text. */
+export const confirmCastPrompt = (refId: string, text: string, engine?: string) => useDirector.getState().edit((x) => {
+  const q = x.references.find((r) => r.ref_id === refId); if (!q) return;
+  q.prompt_en = text.trim(); q.prompt_ok = true; q.prompt_engine = engine;
+});
+
+/**
+ * Build (or update) the casting canvas and open it in the Canvas screen, without generating anything.
+ * It is a temporary workbench: the cards can be looked at, a card's model can be changed and run by hand;
+ * the canvas is removed when the casting is approved (removeCastingCanvas).
+ */
+export async function openCastingCanvas(opt: { engine?: string } = {}): Promise<string> {
+  const d = useDirector.getState(); const p = d.project;
+  if (!p) throw new Error('no project');
+  if (d.readOnly) throw new Error(tr('Read-only (saved by a newer version)'));
+  if (isDemo()) throw new Error(tr('The demo does not make canvas files. Turn the demo off to build the real canvas.'));
+  let prev = linkOfCasting(p); if (prev && isDemoLink(prev)) prev = null;
+  const file = prev?.canvas_file ?? `${canvasFileName(p.name)} - casting`;
+  const existing = await existingCanvas(file, !!prev);
+  const res = buildCastingCanvas(p, appRegistry, existing, prev, file, { engineId: opt.engine, baseAssets: pickedCastAssets(p) });
+  if (res.report.missing.length) throw new Error(`${tr('Not built')}: ${res.report.missing[0].reason}`);
+  await saveCanvas(file, res.project);
+  setLink(res.link);
+  await openLinkedCanvas(file);
+  return file;
+}
+
+/** The casting canvas is temporary: once the cast is approved its link and file go away (the images are already in the cast entries). */
+export async function removeCastingCanvas(): Promise<void> {
+  const d = useDirector.getState(); const p = d.project;
+  const link = p && linkOfCasting(p);
+  if (!p || !link) return;
+  const demo = isDemoLink(link);
+  d.edit((x) => { x.canvas_links = x.canvas_links.filter((l) => l.canvas_id !== link.canvas_id); });
+  if (demo) return;
+  try {
+    const g = useGraph.getState();
+    if (g.canvasFile === link.canvas_file) g.newProject();   // the file is about to be gone: do not leave it open (and saved again)
+    await deleteCanvas(link.canvas_file);
+  } catch { /* the file may already be gone; the link is enough */ }
+}
 
 /**
  * Casting: build the casting canvas (a Prompt + Image Generate card per cast entry, with the chosen image model) and, after a yes, make the images one after another.
@@ -151,6 +241,14 @@ export async function generateCast(opt: { refIds?: string[]; engine?: string; ne
   const d = useDirector.getState();
   if (!d.project) throw new Error('no project');
   if (d.readOnly) throw new Error(tr('Read-only (saved by a newer version)'));
+  // the order is: the card is checked, then its prompt is written and checked, only then is the image made.
+  // (a variant whose base image exists is an edit of that image, not a text-only generation: it needs no prompt of its own)
+  const before = d.project;
+  const engineNow = castEngineOf(before, opt.engine);
+  const wanted = (opt.refIds ? before.references.filter((r) => opt.refIds!.includes(r.ref_id)) : before.references.filter((r) => r.status !== 'rejected' && !r.results.some((x) => x.picked))).filter((r) => r.status !== 'rejected');
+  const editedFromBase = (r: DirectorReference) => { const b = r.variant_of ? before.references.find((x) => x.name === r.variant_of) : undefined; return !!b?.results.find((x) => x.picked && !x.data_url); };
+  const unprepared = wanted.filter((r) => !editedFromBase(r) && !hasCastPrompt(r, engineNow));
+  if (unprepared.length) throw new Error(`${tr('Make and check the image prompt first')}\n${unprepared.map((r) => r.name).join(', ')}`);
   // the model belongs to the project (it is remembered); a new seed belongs to the entries that are made again
   d.edit((x) => { if (opt.engine) x.settings.cast_engine = opt.engine; if (opt.newSeed && opt.refIds) reseedRefs(x, opt.refIds); });
   const p = useDirector.getState().project!;
@@ -169,9 +267,7 @@ export async function generateCast(opt: { refIds?: string[]; engine?: string; ne
   const file = prev?.canvas_file ?? `${canvasFileName(p.name)} - casting`;
   const existing = await existingCanvas(file, !!prev);
   // a new look is edited from the picked image of the entry it is a look of (the same face)
-  const baseAssets: Record<string, Asset> = {};
-  for (const r of p.references) { const pick = r.results.find((x) => x.picked); if (pick && !pick.data_url) baseAssets[r.ref_id] = assetOfResult(pick, `ba_${r.ref_id}`); }
-  const res = buildCastingCanvas(p, appRegistry, existing, prev, file, { engineId: opt.engine, baseAssets });
+  const res = buildCastingCanvas(p, appRegistry, existing, prev, file, { engineId: opt.engine, baseAssets: pickedCastAssets(p) });
   if (res.report.missing.length) throw new Error(`${tr('Not built')}: ${res.report.missing[0].reason}`);
   await saveCanvas(file, res.project);
   setLink(res.link);

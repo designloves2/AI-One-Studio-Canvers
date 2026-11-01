@@ -87,8 +87,8 @@ if (real) {
 {
   const reg3 = { compatible: (a, b) => a === b, get: (id) => ({
     prompt: { id, inputs: [], outputs: [{ id: 'text', type: 'text' }], params: {}, defaults: { text: '' } },
-    'image-generate': { id, inputs: [{ id: 'text', type: 'text' }], outputs: [{ id: 'image', type: 'image' }], engineId: 'krea2', engines: ['krea2', 'qwen21', 'zimage'], params: { aspect: { options: ['1:1', '3:4', '16:9'] }, seed: {} }, defaults: { aspect: '1:1', seed: -1, steps: 8 },
-      perEngine: { krea2: { params: { aspect: { options: ['1:1', '3:4', '16:9'] }, seed: {} }, defaults: { aspect: '1:1', seed: -1, steps: 8 } }, qwen21: { params: { aspect: { options: ['1:1', '3:4'] }, seed: {} }, defaults: { aspect: '1:1', seed: -1, steps: 20, cfg: 4 } }, zimage: { params: { size: {}, seed: {} }, defaults: { size: 1024, seed: -1 } } } },
+    'image-generate': { id, inputs: [{ id: 'text', type: 'text' }], outputs: [{ id: 'image', type: 'image' }], engineId: 'krea2', engines: ['krea2', 'qwen21', 'zimage'], params: { aspect: { options: ['1:1', '3:4', '16:9'] }, seed: {}, auto_enhance: {} }, defaults: { aspect: '1:1', seed: -1, steps: 8, auto_enhance: false },
+      perEngine: { krea2: { params: { aspect: { options: ['1:1', '3:4', '16:9'] }, seed: {}, auto_enhance: {} }, defaults: { aspect: '1:1', seed: -1, steps: 8, auto_enhance: false } }, qwen21: { params: { aspect: { options: ['1:1', '3:4'] }, seed: {}, auto_enhance: {} }, defaults: { aspect: '1:1', seed: -1, steps: 20, cfg: 4, auto_enhance: false } }, zimage: { params: { size: {}, seed: {}, auto_enhance: {} }, defaults: { size: 1024, seed: -1, auto_enhance: false } } } },
   })[id] };
   const p2 = M.newDirectorProject('C'); p2.series.aspect = '16:9';
   const a1 = M.newReference(p2, 'character', 'Aya', 'girl', 'a girl'), a2 = M.newReference(p2, 'location', 'Hall', 'hall', 'a hall');
@@ -118,6 +118,19 @@ if (real) {
   const typed = JSON.parse(JSON.stringify(s1.project)); typed.nodes.find((n) => n.id === A.refGenNodeId(a1.ref_id)).params.seed = 9; a1.seed = 500;
   ok(gen(bc(p2, typed, s1.link), a1).params.seed === 9, 'a seed typed in the canvas is kept');
   a1.seed = 321; const again = bc(p2, s1.project, s1.link); ok(again.report.updated.length === 0 && again.project.nodes.length === s1.project.nodes.length, 'building again with the same choices changes nothing');
+  // the image prompt: written and checked first, then sent to the model as it is
+  ok(!A.hasCastPrompt(a1, 'krea2') && A.castPromptOf(a1, 'krea2') === A.castPromptText(a1), 'no checked prompt: the description is the source');
+  a1.prompt_en = 'a Korean woman in her twenties, short black hair, studio portrait'; a1.prompt_ok = false; a1.prompt_engine = 'krea2';
+  ok(!A.hasCastPrompt(a1, 'krea2') && A.castPromptOf(a1, 'krea2') === A.castPromptText(a1), 'a prompt that was not checked yet is not used');
+  a1.prompt_ok = true;
+  const c4 = bc(p2, null, null);
+  ok(c4.project.nodes.find((n) => n.id === A.refTextNodeId(a1.ref_id)).params.text === a1.prompt_en && gen(c4, a1).params.auto_enhance === false, 'a checked prompt goes to the prompt card as it is, and the card has no second rewrite');
+  ok(A.hasCastPrompt(a1, 'krea2') && !A.hasCastPrompt(a1, 'qwen21'), 'a prompt written for one model is not used for another');
+  const c5 = bc(p2, null, null, { engineId: 'qwen21' });
+  ok(c5.project.nodes.find((n) => n.id === A.refTextNodeId(a1.ref_id)).params.text === A.castPromptText(a1) && gen(c5, a1).params.auto_enhance === true, 'another model: the description is used and that model\'s own writer runs');
+  a1.prompt_ok = false; const c6 = bc(p2, null, null); ok(c6.project.nodes.find((n) => n.id === A.refTextNodeId(a1.ref_id)).params.text === A.castPromptText(a1) && gen(c6, a1).params.auto_enhance === true, 'unchecking a prompt puts the description and the writer back');
+  a1.prompt_ok = true; a1.prompt_en = '';
+  ok(!A.hasCastPrompt(a1, 'krea2'), 'an empty prompt is never checked');
 }
 
 // ---- the package
