@@ -81,6 +81,19 @@
 - 알려진 제한: 소리 없는 mp4 는 VHS 로더가 실패, 소스 프레임 수를 길이×24 로 추정(±1프레임).
 - 다음 할 일은 스튜디오 세션(`TJ_STUDIO_ONE-10월`)이 `SPEC_RELAY_*` 로 보낸다. 상세 이력은 `CHANGELOG.md`, 방향·메모는 `docs/HANDOFF.md`.
 
+### ★ 최신 진행 요약 — Director 캐스팅→시나리오→편별 UI 개편 + H3 공식 프롬포트 (= 이 세션, 2026-11-01, 푸시 완료)
+**현재 편별 흐름(사용자 관점)**: `편작성(한 편씩, 이전 편이 끝나야 다음)` → 승인 → **`프롬포트 생성 및 확인`**(5단계, 이전 명칭 캔버스): 클립마다 **공식 Minimax H3 (Video) 시스템 프롬포트**로 공식 6섹션 브리프(subject_definitions/summary/retention_analysis/detailed_description+[Shot 1]+<Subject N> (S1) says, <d>/overall_soundscape/non_diegetic_music)를 **한 개씩 순차 생성**(카드 "생성중…"→빈 칸부터 채워짐)하고 그리드에서 수정 → **"생성용 캔버스 확인"**(이전 명칭 캔버스에서 열기)이 수정분을 캔버스 프롬포트 카드에 반영. 대사는 공식 프롬포트 룰3(`<d>[Language]…</d>` 번역 금지)대로 원문 보존. "여러 편 함께" 제거됨.
+**이 세션 구현(전부 단위 시험 `npm run test:director` + `npm run typecheck` 통과)**:
+- 캐스팅: 카드 개별 삭제, **다시 캐스팅(전체/배우/장소/소품)** — `store.recast`+`ai.recastInstruction`+`model.dropReferences`, 채팅창 폭 드래그(`--dock-w`, localStorage), 오른쪽 결과 90% 폭, 카드 그리드 최대(캐스팅 5/시나리오 4/편작성 4/프롬포트 4/생성·확인 4).
+- 프롬포트 그리드(캔버스·생성·확인 단계): `compose.clipPromptOf`(원문 조합, S1/S2 페르소나 + `(S1) <d>` 대사) + `prompt_user`(사용자 수정/공식 브리프 저장) + `model.shotSubjects` + "적용"/"생성용 캔버스 확인". `compose.ts`는 **공식 강화 입력용 원문 정보**(References/Dialogue/Sound/Music) — 공식 6섹션은 LLM이 표시용으로 생성.
+- LLM 오류 완화: 묶음 일부 보존(`planParts` 재계산·`unitProgress` 동적 루프·그룹 1~N 허용), 오류 시 **모델 원문 보기/다운로드**(`ChatMsg.raw`, `CrewError`), 시나리오 "빠진 편 추가".
+- **공식 H3 프롬포트 생성**: `canvasAction.generateClipPrompts`(클립당 `runLlm({style: formatFor('video-generate', h3-ref)})` → `shot.prompt_user`, `prompt_busy` 생성중). runJob('canvas')는 **캔버스 먼저 생성+5단계 노출 후 순차 생성**. 데모는 `demoOfficialBrief`(공식 형태 스텐드인, sleep 간격).
+- 순차 편작성: `workflow.startEpisodes`(이전 편 done만), `episode.handoff`(최종 검토 승인 시 `episodeHandoff` 저장 → 다음 편 지시문에 포함), "여러 편 함께" UI/스토어 제거.
+- 라벨: 5단계 `캔버스`→`프롬포트 생성 및 확인`, 열기 버튼 `생성용 캔버스 확인`.
+**진행 중 프로젝트 보존**: `director/막장드라마로 배신, 욕망, 비밀, 반전이 있….json`(10부작, 1편 작성 후 승인 대기) — **삭제 금지**, 사용자 `start.bat` 재시작 후 편작성 승인부터 이어서 진행하면 새 로직이 적용된다.
+**커밋(이 세션, 전부 origin/main)**: `6cf20b6`(캐스팅 관리·화면 폭) `221f391`(프롬포트 그리드) `22bfd22`(LLM 부분 보존·원문 다운로드·순차 편작성·대사 `<d>`) `1af1d69`(Ref2VA S1/S2 + "여러 편 함께" 제거) `7b0b703`(공식 3섹션 초안) `eef1564`(공식 Minimax H3 (Video) 시스템 프롬포트로 클립별 브리프 생성 + Ref2vaBox) `9b54341`(한 개씩 순차 생성·빈 칸 시작·생성용 캔버스 확인 동작) `2e5b653`(라벨: 프롬포트 생성 및 확인/생성용 캔버스 확인) `eda5569`/`fdf0fe0`(문서/정리). 참고: `7b0b703`의 3섹션(integrated_multimodal_description)은 사용자가 공식 6섹션 구조를 제시해 `eef1564`에서 6섹션 방식으로 대체됨.
+**남은 것(실기 검증 필요, 데모로는 안 됨)**: 실제 LLM(사용자 서버 설정)로 클립별 공식 브리프가 한 개씩 생성·표시되는지, 공식 브리프가 실제 ref2va 렌더에서 인물·대사로 파싱되는지, LLM 실패 시 원문 보존 동작. 데모(포트 8766)는 공식 브리프 대신 형태를 흉내 낸 스텐드인을 씀.
+
 ### 뮤직비디오 음악 단계 (2026-10-29, 앱 화면까지 코드 완료, 데모 브라우저 확인은 일부만)
 - 사용자 결정: 뮤직비디오 음악은 **업로드·AI 생성 둘 다**, 화면에서 고르거나 채팅 명령으로 선택.
 - 로직(커밋 276511d, `npm run test:director` 7개 스크립트): 스키마 v5(`DirectorProject.music`, `StageId 'music'`, `CanvasLink.purpose 'music'`, `final_node_id`, `music_nodes`), `src/director/music.ts`, workflow 음악 단계(`hasMusicStep`/`nextGlobal`), ai.ts 음악 프롬프트/검증/적용, adapter `buildMusicCanvas`·`finish` 옵션(스티치 + 노래 얹기), execution `applyMusicResult`/`applyEpisodeFinal`.
