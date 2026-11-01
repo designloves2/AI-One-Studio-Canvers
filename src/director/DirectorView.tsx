@@ -32,9 +32,9 @@ import type { DirectorProject, DirectorReference, DirectorShot, ReferenceKind, R
 
 const STEPS: { id: StageId; label: string }[] = [
   { id: 'brief', label: 'Brief' }, { id: 'references', label: 'Casting' }, { id: 'music', label: 'Song' }, { id: 'series', label: 'Scenario' },
-  { id: 'episode', label: 'Episode' }, { id: 'canvas', label: 'Canvas' }, { id: 'execute', label: 'Generate & check' }, { id: 'review', label: 'Final review' },
+  { id: 'episode', label: 'Episode' }, { id: 'canvas', label: 'Prompts & check' }, { id: 'execute', label: 'Generate & check' }, { id: 'review', label: 'Final review' },
 ];
-const NEXT_LABEL: Partial<Record<StageId, string>> = { brief: 'Casting', references: 'Scenario', music: 'Scenario', series: 'Episode', episode: 'Canvas', canvas: 'Generate & check', execute: 'Final review', review: 'Next episode' };
+const NEXT_LABEL: Partial<Record<StageId, string>> = { brief: 'Casting', references: 'Scenario', music: 'Scenario', series: 'Episode', episode: 'Prompts & check', canvas: 'Generate & check', execute: 'Final review', review: 'Next episode' };
 const STATUS_TEXT: Record<string, string> = { idle: 'waiting', working: 'the crew is working…', review_required: 'waiting for your approval', approved: 'approved', failed: 'failed', completed: 'finished', blocked: 'blocked' };
 const EXAMPLES = [
   '막장 드라마 하나 만들자. 장편이고 30부작, 편당 1분 30초 구성으로 16:9 비율이며 7+1 Kimchy 모드로 생성하고 싶어.',
@@ -867,7 +867,7 @@ function PromptGrid({ p, ro, apply }: { p: DirectorProject; ro: boolean; apply?:
   };
   return (
     <section className="dx-block"><h4><Ico n="edit" />{T('Video prompts')} <small>{done} / {shots.length} {T(generating ? 'generated' : 'edited')}{generating ? ' …' : ''}</small></h4>
-      <p className="dirx-muted">{generating ? T('Generating the official H3 prompt of each clip one by one…') : T('This is the text each video generator card gets. Review and fix the clips below; "Open in Canvas" puts them all on the canvas prompt cards, and your settings in the canvas are kept.')}</p>
+      <p className="dirx-muted">{generating ? T('Generating the official H3 prompt of each clip one by one…') : T('Review and fix the prompts below; "Verify the generation canvas" puts them all on the canvas prompt cards, and your settings in the canvas are kept.')}</p>
       <div className="dx-btns">
         {apply && <button className="btn small primary" disabled={ro || generating} title={T('Put the prompts on the canvas prompt cards so the next generation uses them.')} onClick={() => void apply()}>{T('Apply to the canvas prompt cards')}</button>}
         {done > 0 && <button className="btn small" disabled={ro || generating} onClick={() => void resetAll()}>{T('Reset all prompts')}</button>}
@@ -923,7 +923,7 @@ function CanvasCard({ p, ro }: { p: DirectorProject; ro: boolean }) {
         <section className="dx-block"><h4><Ico n="film" />{T('The episode is set up as a canvas')}</h4>
           <p className="dx-prose"><b>{link.canvas_file}</b></p>
           <div className="dx-tiles two"><Tile icon="clip" value={String(shots.length)} label={T('Clips')} tone="b" /><Tile icon="bolt" value={PRESET_LABEL[p.series.preset]} label={`${T('with the shared 7+1 card')} · ${p.series.resolution}`} tone="a" /></div>
-          <div className="dx-btns"><button className="btn primary" disabled={ro || busy} title={T('Put the edited prompts on the canvas prompt cards and open the canvas. Your settings in the canvas are kept, and nothing runs by itself.')} onClick={() => void applyAndOpen()}>{T('Open in Canvas')}</button></div>
+          <div className="dx-btns"><button className="btn primary" disabled={ro || busy} title={T('Put the edited prompts on the canvas prompt cards and open the canvas. Your settings in the canvas are kept, and nothing runs by itself.')} onClick={() => void applyAndOpen()}>{T('Verify the generation canvas')}</button></div>
         </section>) : <p className="dirx-muted">{T('The canvas is being built…')}</p>}
       {link && <VersionsBlock p={p} />}
     </div>
