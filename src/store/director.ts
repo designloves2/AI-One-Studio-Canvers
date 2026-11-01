@@ -39,17 +39,12 @@ interface DirectorState {
   /** which step the producer is LOOKING at (looking never changes the project) and which episode the episode steps show */
   view: StageId;
   focus: number;
-  /** episodes ticked for a batch (writing, approving, generating several at once) and clips ticked in the generate step */
-  selEpisodes: number[];
+  /** clips ticked in the generate step */
   selClips: string[];
-  batchMode: boolean;
   batch: BatchProgress | null;
   setDemo(v: boolean): void;
   setView(s: StageId): void;
   setFocus(no: number): void;
-  toggleEpisode(no: number): void;
-  setSelEpisodes(nos: number[]): void;
-  setBatchMode(v: boolean): void;
   toggleClip(id: string): void;
   setSelClips(ids: string[]): void;
   setBatch(b: BatchProgress | null): void;
@@ -172,13 +167,10 @@ export const useDirector = create<DirectorState>((set, get) => {
 
   return {
     project: null, file: null, dirty: false, readOnly: false, notes: [], list: [], busy: false, demo: readDemo(),
-    view: 'brief', focus: 1, selEpisodes: [], selClips: [], batchMode: false, batch: null,
+    view: 'brief', focus: 1, selClips: [], batch: null,
     setDemo: (demo) => { try { sessionStorage.setItem(DEMO_KEY, demo ? '1' : '0'); } catch { /* ignore */ } set({ demo }); },
     setView: (view) => set({ view }),
     setFocus: (focus) => set({ focus, selClips: [] }),
-    toggleEpisode: (no) => set({ selEpisodes: get().selEpisodes.includes(no) ? get().selEpisodes.filter((n) => n !== no) : [...get().selEpisodes, no].sort((a, b) => a - b) }),
-    setSelEpisodes: (selEpisodes) => set({ selEpisodes: [...new Set(selEpisodes)].sort((a, b) => a - b) }),
-    setBatchMode: (batchMode) => set({ batchMode, selEpisodes: batchMode ? get().selEpisodes : [] }),
     toggleClip: (id) => set({ selClips: get().selClips.includes(id) ? get().selClips.filter((x) => x !== id) : [...get().selClips, id] }),
     setSelClips: (selClips) => set({ selClips }),
     setBatch: (batch) => set({ batch }),
@@ -186,7 +178,7 @@ export const useDirector = create<DirectorState>((set, get) => {
     open: async (name) => {
       const r = await openDirectorProject(name);
       const focus = startFocus(r.project);
-      set({ project: r.project, file: name, dirty: false, readOnly: r.readOnly, notes: [...(r.migratedFrom !== undefined ? [`migrated from schema ${r.migratedFrom}`] : []), ...r.warnings], focus, view: frontierView(r.project, focus), selEpisodes: [], selClips: [], batchMode: false, batch: null });
+      set({ project: r.project, file: name, dirty: false, readOnly: r.readOnly, notes: [...(r.migratedFrom !== undefined ? [`migrated from schema ${r.migratedFrom}`] : []), ...r.warnings], focus, view: frontierView(r.project, focus), selClips: [], batch: null });
     },
     save: async () => {
       const { project, readOnly } = get();
@@ -203,7 +195,7 @@ export const useDirector = create<DirectorState>((set, get) => {
       if (get().file === name) set({ project: null, file: null, dirty: false, readOnly: false, notes: [] });
       await get().refreshList();
     },
-    close: () => set({ project: null, file: null, dirty: false, readOnly: false, notes: [], view: 'brief', focus: 1, selEpisodes: [], selClips: [], batchMode: false, batch: null }),
+    close: () => set({ project: null, file: null, dirty: false, readOnly: false, notes: [], view: 'brief', focus: 1, selClips: [], batch: null }),
     edit: (fn) => {
       const { project, readOnly } = get();
       if (!project || readOnly) return;

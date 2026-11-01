@@ -40,7 +40,7 @@ export const KO_DIRECTOR: Record<string, string> = {
   'not started': '시작 전', writing: '작성 중', 'waiting for approval': '승인 대기', canvas: '캔버스', 'Opens when the scenario is approved': '시나리오를 승인하면 열립니다', 'Look at this step': '이 단계 보기',
   'Several episodes together': '여러 편 함께', All: '전체', 'Not started': '시작 전인 편', 'At this step': '이 단계인 편', None: '해제', 'Tick episodes above': '위에서 편을 체크하세요',
   'Start writing': '작성 시작', 'This episode has not been started': '이 편은 아직 시작하지 않았습니다', 'Start writing this episode': '이 편 작성 시작',
-  'The crew writes its clips from the scenario and the cast. You can start several episodes at once with "Several episodes together".': '작업팀이 시나리오와 출연진으로 이 편의 클립을 씁니다. "여러 편 함께"로 여러 편을 한꺼번에 시작할 수도 있습니다.',
+  'The crew writes its clips from the scenario and the cast. Episodes are written one at a time: an episode starts after the one before it is finished.': '작업팀이 시나리오와 출연진으로 이 편의 클립을 씁니다. 편은 한 편씩 씁니다. 이전 편이 끝나야 이 편을 시작할 수 있습니다.',
   'Select this clip': '이 클립 선택', Seed: '시드', random: '무작위', 'A new random seed': '새 무작위 시드', 'Make this clip again with a new seed': '새 시드로 이 클립만 다시 생성', 'Make again': '다시 생성',
   'Which episodes': '대상 편', 'This episode': '이 편', 'Ticked episodes': '체크한 편', 'Every episode at this step': '이 단계의 모든 편', 'If an episode fails': '편이 실패하면',
   'Stop at the first failure': '처음 실패에서 멈춤', 'Skip the failed episode and go on': '실패한 편은 건너뛰고 계속', 'Generate the ticked clips': '체크한 클립 생성', 'with new seeds': '새 시드로',

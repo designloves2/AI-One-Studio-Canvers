@@ -9,6 +9,7 @@
 // A shot only ever runs when the user pressed a button for it and answered the question.
 import type { GraphNode } from '../types';
 import { clipPromptOf } from './compose';
+import { castPersonas } from './model';
 import type { CanvasLink, DirectorProject, DirectorShot, ExecutionMode, ResultRef, ShotStatus } from './types';
 
 export const EXECUTION_MODES: ExecutionMode[] = ['manual', 'approval_required', 'step_by_step', 'hybrid'];
@@ -47,7 +48,7 @@ export function planRun(mode: ExecutionMode, p: DirectorProject, link: CanvasLin
 /** Shots whose card still holds an older prompt than the Director text (running now would generate the old text). */
 export function staleShots(p: DirectorProject, link: CanvasLink, only?: string[]): string[] {
   const sent = link.prompt_sent ?? {};
-  return p.shots.filter((s) => (!only || only.includes(s.shot_id)) && sent[s.shot_id] !== clipPromptOf(s, p.series.language)).map((s) => s.shot_id);
+  return p.shots.filter((s) => (!only || only.includes(s.shot_id)) && sent[s.shot_id] !== clipPromptOf(s, p.series.language, castPersonas(p, s))).map((s) => s.shot_id);
 }
 
 export type RunOutcome = 'ok' | 'error' | 'cancelled';

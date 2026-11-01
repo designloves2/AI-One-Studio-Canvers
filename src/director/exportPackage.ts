@@ -6,7 +6,7 @@
 //   clips.json      the same as data
 //   assets/...      the cast images, when they could be fetched; the ones that could not are listed in manifest.missing (never pretended)
 import { clipPromptOf } from './compose';
-import { castOf, episodeByNo, shotsOfEpisode } from './model';
+import { castOf, castPersonas, episodeByNo, shotsOfEpisode } from './model';
 import { safeName, utf8, type ZipFile } from './zip';
 import type { DirectorProject } from './types';
 import type { Project } from '../types';
@@ -43,12 +43,12 @@ export async function buildEpisodePackage(p: DirectorProject, canvas: Project | 
     `Format: ${p.series.aspect}, ${p.series.resolution}, clips of ${p.series.clip_seconds}s, ${shots.length} clips (${Math.round(shots.reduce((a, s) => a + s.duration_sec, 0) * 10) / 10}s).`, ''];
   shots.forEach((s, i) => {
     const cast = castOf(p, s);
-    md.push(`## Clip ${i + 1} (${s.duration_sec}s${s.camera ? `, ${s.camera}` : ''})`, '', '```', clipPromptOf(s, p.series.language), '```');
+    md.push(`## Clip ${i + 1} (${s.duration_sec}s${s.camera ? `, ${s.camera}` : ''})`, '', '```', clipPromptOf(s, p.series.language, castPersonas(p, s)), '```');
     if (cast.length) md.push('', 'Reference images, in this order: ' + cast.map((r, k) => `@image${k + 1} = ${r.name}${assetPath.has(r.ref_id) ? ` (${assetPath.get(r.ref_id)})` : ' (file not included)'}`).join(', '));
     md.push('');
   });
   files.push({ path: 'prompts.md', data: utf8(md.join('\n')) }); included.push('prompts.md');
-  files.push({ path: 'clips.json', data: utf8(JSON.stringify(shots.map((s, i) => ({ clip: i + 1, duration_sec: s.duration_sec, camera: s.camera, prompt_en: s.prompt_en, prompt_ko: s.prompt_ko, dialogue: s.dialogue, sound: s.sound, music: s.music, cast: s.cast, location: s.location, prompt_for_model: clipPromptOf(s, p.series.language) })), null, 1)) }); included.push('clips.json');
+  files.push({ path: 'clips.json', data: utf8(JSON.stringify(shots.map((s, i) => ({ clip: i + 1, duration_sec: s.duration_sec, camera: s.camera, prompt_en: s.prompt_en, prompt_ko: s.prompt_ko, dialogue: s.dialogue, sound: s.sound, music: s.music, cast: s.cast, location: s.location, prompt_for_model: clipPromptOf(s, p.series.language, castPersonas(p, s)) })), null, 1)) }); included.push('clips.json');
   if (canvas) { files.push({ path: 'canvas.canvers.json', data: utf8(JSON.stringify(canvas, null, 1)) }); included.push('canvas.canvers.json'); }
   files.push({ path: 'README.md', data: utf8(['# Production package', '',
     'Made by AI ONE Studio Canvers, Director mode.', '',

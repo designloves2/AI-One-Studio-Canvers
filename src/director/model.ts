@@ -98,6 +98,11 @@ export function castOf(p: DirectorProject, s: Pick<DirectorShot, 'cast' | 'locat
   return out;
 }
 
+/** the people (character cast entries) of a clip, in the clip's cast order: in an H3 Ref2VA prompt they are the personas S1, S2, ... */
+export function castPersonas(p: DirectorProject, s: Pick<DirectorShot, 'cast'>): string[] {
+  return (s.cast ?? []).map((n) => findReference(p, n)).filter((r): r is DirectorReference => !!r && r.kind === 'character' && r.status !== 'rejected').map((r) => r.name);
+}
+
 /** Fill each clip's asset_ids from its cast and location: the registered assets of the approved cast entries. Returns how many clips changed. */
 export function syncShotAssets(p: DirectorProject): number {
   let changed = 0;

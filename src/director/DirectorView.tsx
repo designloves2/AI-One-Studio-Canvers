@@ -14,7 +14,7 @@ import { Llm } from '../panels/SettingsPanel';
 import { resultUrl } from './media';
 import { composeClipPrompt } from './compose';
 import { CREW_LABEL, renameReference } from './ai';
-import { episodeByNo, findReference, newAsset, newEpisode, newReference, newShot, shotsOfEpisode, syncShotAssets } from './model';
+import { castPersonas, episodeByNo, findReference, newAsset, newEpisode, newReference, newShot, shotsOfEpisode, syncShotAssets } from './model';
 import { newSeed } from './execution';
 import { applyMusicPatch, defaultSections, newMusic, pickedAudio, songMap } from './music';
 import { finishEpisode, generateSong, pickSong, registerSong, syncFinalFromCanvas, uploadSong } from './musicAction';
@@ -143,16 +143,13 @@ function Progress({ p }: { p: DirectorProject }) {
   );
 }
 
-/** every episode as a chip with its own state; click = look at it, "several episodes" = tick some and act on them together */
+/** every episode as a chip with its own state; click = look at it; writing and approving are one episode at a time */
 function EpisodeStrip({ p }: { p: DirectorProject }) {
   const T = useT(); const d = useDirector();
   const eps = [...p.episodes].sort((a, b) => a.no - b.no);
-  const sel = d.batchMode ? d.selEpisodes : [d.focus];
   const byNo = (n: number) => episodeByNo(p, n);
-  const can = {
-    start: sel.filter((n) => byNo(n)?.stage === 'idle'),
-    approve: sel.filter((n) => { const e = byNo(n); return !!e && e.stage === d.view && e.stage_status === 'review_required'; }),
-  };
+  const cur = byNo(d.focus);
+  const canApprove = !!cur && cur.stage === d.view && cur.stage_status === 'review_required';
   const isEpView = (EPISODE_STAGES as StageId[]).includes(d.view);
   return (
     <div className="dx-epstrip">
@@ -160,24 +157,15 @@ function EpisodeStrip({ p }: { p: DirectorProject }) {
         {eps.map((e) => {
           const st = episodeState(e);
           return (
-            <button key={e.episode_id} className={`dx-ep s-${st}${d.focus === e.no ? ' cur' : ''}${d.selEpisodes.includes(e.no) && d.batchMode ? ' sel' : ''}`} title={`${e.no}. ${e.title} — ${T(EPISODE_STATE_TEXT[st])}`} onClick={() => d.setFocus(e.no)}>
-              {d.batchMode && <input type="checkbox" checked={d.selEpisodes.includes(e.no)} onClick={(ev) => ev.stopPropagation()} onChange={() => d.toggleEpisode(e.no)} />}
+            <button key={e.episode_id} className={`dx-ep s-${st}${d.focus === e.no ? ' cur' : ''}`} title={`${e.no}. ${e.title} — ${T(EPISODE_STATE_TEXT[st])}`} onClick={() => d.setFocus(e.no)}>
               <b>{e.no}</b><i />
             </button>
           );
         })}
       </div>
       <div className="dx-eps-bar">
-        <label className="dx-check"><input type="checkbox" checked={d.batchMode} onChange={(ev) => d.setBatchMode(ev.target.checked)} />{T('Several episodes together')}</label>
-        {d.batchMode && <>
-          <button className="linkbtn" onClick={() => d.setSelEpisodes(eps.map((e) => e.no))}>{T('All')}</button>
-          <button className="linkbtn" onClick={() => d.setSelEpisodes(eps.filter((e) => e.stage === 'idle').map((e) => e.no))}>{T('Not started')}</button>
-          <button className="linkbtn" onClick={() => d.setSelEpisodes(eps.filter((e) => e.stage === d.view).map((e) => e.no))}>{T('At this step')}</button>
-          <button className="linkbtn" onClick={() => d.setSelEpisodes([])}>{T('None')}</button>
-          <span className="dirx-muted">{d.selEpisodes.length ? d.selEpisodes.join(', ') : T('Tick episodes above')}</span>
-        </>}
         <span className="dx-eps-act">
-          {isEpView && <button className="btn" disabled={d.busy || d.readOnly || !can.approve.length} onClick={() => void d.approveEpisodes(can.approve)}>✓ {T('Approve')} ({can.approve.length})</button>}
+          {isEpView && <button className="btn" disabled={d.busy || d.readOnly || !canApprove} onClick={() => void d.approveEpisodes([d.focus])}>✓ {T('Approve')}</button>}
         </span>
       </div>
     </div>
@@ -235,7 +223,7 @@ function EpisodeIdle({ p, ro }: { p: DirectorProject; ro: boolean }) {
       <header className="dx-hero small"><div className="dx-tags"><span>{T('Episode')} {p.workflow.episode_no} / {p.series.total_episodes}</span><span>{T('not started')}</span></div>
         <h2>{e?.title.replace(/^\d+화:\s*/, '') || `${T('Episode')} ${p.workflow.episode_no}`}</h2>{e?.logline && <p>{e.logline}</p>}</header>
       <section className="dx-block"><h4><Ico n="film" />{T('This episode has not been started')}</h4>
-        <p className="dx-prose">{T('The crew writes its clips from the scenario and the cast. You can start several episodes at once with "Several episodes together".')}</p>
+        <p className="dx-prose">{T('The crew writes its clips from the scenario and the cast. Episodes are written one at a time: an episode starts after the one before it is finished.')}</p>
         <div className="dx-btns"><button className="btn primary big" disabled={ro || d.busy} onClick={() => void d.startEpisodes([p.workflow.episode_no])}>{T('Start writing this episode')}</button></div></section>
     </div>
   );
@@ -880,12 +868,12 @@ function PromptGrid({ p, ro, apply }: { p: DirectorProject; ro: boolean; apply?:
 function ShotPrompt({ p, s, n, ro }: { p: DirectorProject; s: DirectorShot; n: number; ro: boolean }) {
   const T = useT(); const edit = useDirector((x) => x.edit);
   const scene = p.scenes.find((z) => z.scene_id === s.scene_id);
-  const composed = composeClipPrompt(s, p.series.language);
+  const composed = composeClipPrompt(s, p.series.language, castPersonas(p, s));
   const [text, setText] = useState(s.prompt_user ?? composed);
   const edited = !!s.prompt_user?.trim();
   const commit = () => {
     const t = text.trim();
-    edit((x) => { const q = x.shots.find((z) => z.shot_id === s.shot_id); if (!q) return; q.prompt_user = t === composeClipPrompt(q, x.series.language) ? undefined : t; });
+    edit((x) => { const q = x.shots.find((z) => z.shot_id === s.shot_id); if (!q) return; q.prompt_user = t === composeClipPrompt(q, x.series.language, castPersonas(x, q)) ? undefined : t; });
   };
   const restore = () => { edit((x) => { const q = x.shots.find((z) => z.shot_id === s.shot_id); if (q) q.prompt_user = undefined; }); setText(composed); };
   return (
@@ -974,7 +962,7 @@ function FinalBlock({ p, ro, shots }: { p: DirectorProject; ro: boolean; shots: 
 function GenerateCard({ p, ro, review }: { p: DirectorProject; ro: boolean; review: boolean }) {
   const T = useT(); const d = useDirector(); const edit = d.edit;
   const [busy, setBusy] = useState(false);
-  const [scope, setScope] = useState<'one' | 'ticked' | 'all'>('one');
+  const [scope, setScope] = useState<'one' | 'all'>('one');
   const [onFail, setOnFail] = useState<'stop' | 'skip'>('stop');
   const [newSeeds, setNewSeeds] = useState(true);
   const mode = p.settings.generation;
@@ -983,7 +971,7 @@ function GenerateCard({ p, ro, review }: { p: DirectorProject; ro: boolean; revi
   const e = episodeByNo(p, no); const shots = e ? shotsOfEpisode(p, e.episode_id) : [];
   const have = shots.filter((s) => s.results.some((r) => r.picked)).length;
   const refsUsed = [...new Set(shots.flatMap((s) => [...s.cast, ...(s.location ? [s.location] : [])]))];
-  const nosOf = (): number[] => (scope === 'one' ? [no] : scope === 'ticked' ? (d.selEpisodes.length ? d.selEpisodes : [no]) : p.episodes.filter((x) => x.stage === 'execute').map((x) => x.no));
+  const nosOf = (): number[] => (scope === 'one' ? [no] : p.episodes.filter((x) => x.stage === 'execute').map((x) => x.no));
   const approvedCount = nosOf().reduce((a, n) => { const ee = episodeByNo(p, n); return a + (ee ? shotsOfEpisode(p, ee.episode_id).filter((s) => s.status === 'approved').length : 0); }, 0);
   const choose = (g: 'auto' | 'manual') => edit((x) => { x.settings.generation = g; x.settings.execution_mode = g === 'auto' ? 'hybrid' : 'manual'; });
   const guard = async (f: () => Promise<void>) => { setBusy(true); try { await f(); } catch (er) { await notify((er as Error).message); } finally { setBusy(false); } };
@@ -1009,7 +997,7 @@ function GenerateCard({ p, ro, review }: { p: DirectorProject; ro: boolean; revi
         <section className="dx-block"><h4><Ico n={mode === 'auto' ? 'bolt' : 'film'} />{T(mode === 'auto' ? 'Automatic' : 'Manual')} <button className="linkbtn" disabled={ro} onClick={() => choose(mode === 'auto' ? 'manual' : 'auto')}>{T(mode === 'auto' ? 'Switch to manual' : 'Switch to automatic')}</button></h4>
           {!review && (
             <div className="dx-scope"><span>{T('Which episodes')}</span>
-              {(['one', 'ticked', 'all'] as const).map((k) => <label key={k}><input type="radio" name="scope" checked={scope === k} onChange={() => setScope(k)} />{T(k === 'one' ? 'This episode' : k === 'ticked' ? 'Ticked episodes' : 'Every episode at this step')}{k === 'ticked' ? ` (${d.selEpisodes.length})` : k === 'all' ? ` (${p.episodes.filter((x) => x.stage === 'execute').length})` : ''}</label>)}
+              {(['one', 'all'] as const).map((k) => <label key={k}><input type="radio" name="scope" checked={scope === k} onChange={() => setScope(k)} />{T(k === 'one' ? 'This episode' : 'Every episode at this step')}{k === 'all' ? ` (${p.episodes.filter((x) => x.stage === 'execute').length})` : ''}</label>)}
               <select value={onFail} onChange={(ev) => setOnFail(ev.target.value as 'stop' | 'skip')} title={T('If an episode fails')}><option value="stop">{T('Stop at the first failure')}</option><option value="skip">{T('Skip the failed episode and go on')}</option></select>
             </div>)}
           {mode === 'auto' && <>
