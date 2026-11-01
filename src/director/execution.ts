@@ -47,7 +47,7 @@ export function planRun(mode: ExecutionMode, p: DirectorProject, link: CanvasLin
 /** Shots whose card still holds an older prompt than the Director text (running now would generate the old text). */
 export function staleShots(p: DirectorProject, link: CanvasLink, only?: string[]): string[] {
   const sent = link.prompt_sent ?? {};
-  return p.shots.filter((s) => (!only || only.includes(s.shot_id)) && sent[s.shot_id] !== clipPromptOf(s)).map((s) => s.shot_id);
+  return p.shots.filter((s) => (!only || only.includes(s.shot_id)) && sent[s.shot_id] !== clipPromptOf(s, p.series.language)).map((s) => s.shot_id);
 }
 
 export type RunOutcome = 'ok' | 'error' | 'cancelled';

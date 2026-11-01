@@ -59,6 +59,8 @@ export interface DirectorEpisode {
   cast?: string[]; locations?: string[];
   /** this episode's own place in the production line (several episodes can be in progress at the same time) */
   stage: EpisodeStage; stage_status: StageStatus;
+  /** the summary stored when the episode was finished (what the producer approved, edits included): the next episode is written to continue from here */
+  handoff?: string;
 }
 
 export type ReferenceKind = 'character' | 'location' | 'prop';
@@ -172,7 +174,7 @@ export interface DirectorWorkflow {
   episode_no: number;
 }
 
-export interface ChatMsg { id: string; role: 'user' | 'assistant'; text: string; at: string; stage: StageId; /** who answered (assistant messages) */ crew?: CrewRole; notes?: string[]; error?: boolean }
+export interface ChatMsg { id: string; role: 'user' | 'assistant'; text: string; at: string; stage: StageId; /** who answered (assistant messages) */ crew?: CrewRole; notes?: string[]; error?: boolean; /** when the crew could not answer: the raw text the model really returned, so the producer can see what happened and fix it by hand */ raw?: string }
 
 export interface DirectorProject {
   app: 'ai-one-studio-canvers';

@@ -2,7 +2,7 @@
 // The crew reads the whole earlier project (settings, cast, scenario, every episode's clips) and the new project starts with the same cast
 // (same images, same registered assets: nothing is cast or generated again). Pure (no DOM, no network).
 import { newId, shotsOfEpisode } from './model';
-import type { DirectorProject, DirectorReference } from './types';
+import type { DirectorProject, DirectorEpisode, DirectorReference } from './types';
 
 const norm = (s: string) => s.toLowerCase().replace(/[\s\-_.,:;!?'"()\[\]{}~·]+/g, '');
 /** "용의 눈동자 2편 초안" -> "용의 눈동자": the part number and what follows it are not the series name */
@@ -28,6 +28,24 @@ export function matchProjects(text: string, entries: ProjectRef[], exclude: stri
 }
 
 const clip = (v: unknown, n: number) => { const s = String(v ?? '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n) + '…' : s; };
+
+/**
+ * The compact record of ONE finished episode, ready for the next one to continue from: the producer's approved result (their manual edits included).
+ * The dialogue and the picture lines are kept verbatim (never translated).
+ */
+export function episodeHandoff(p: DirectorProject, e: DirectorEpisode): string {
+  const scenes = p.scenes.filter((x) => x.episode_id === e.episode_id).sort((a, b) => a.order - b.order);
+  const lines = [`EPISODE ${e.no} "${e.title}": ${e.logline}`];
+  if (e.cast?.length) lines.push(`cast: ${e.cast.join(', ')}`);
+  if (e.locations?.length) lines.push(`places: ${e.locations.join(', ')}`);
+  for (const sc of scenes) {
+    lines.push(`scene ${sc.order} "${sc.title}": ${clip(sc.summary, 220)}`);
+    for (const sh of p.shots.filter((x) => x.scene_id === sc.scene_id).sort((a, b) => a.order - b.order)) {
+      lines.push(`  clip: ${clip(sh.prompt_en, 200)}${sh.dialogue ? ` | dialogue: "${sh.dialogue}"` : ''}${sh.sound ? ` | sound: "${clip(sh.sound, 90)}"` : ''}`);
+    }
+  }
+  return lines.join('\n');
+}
 
 /**
  * Everything the crew needs to continue `q`, as compact text. The newest episodes get the most detail; the total stays under `maxChars`

@@ -32,13 +32,28 @@ export function planParts(p: DirectorProject, k: Kickoff | 'free', no?: number):
     return out.length ? out : [{ from: 1, to: Math.min(n, EPISODE_GROUP) }];
   }
   if (k === 'episode') {
-    const total = splitSeconds(p.series.episode_seconds, usableClipSeconds(p.series.clip_seconds).value).length; const out: Part[] = [];
-    for (let a = 1; a <= total; a += CLIP_GROUP) out.push({ clips: [a, Math.min(total, a + CLIP_GROUP - 1)] });
+    const total = splitSeconds(p.series.episode_seconds, usableClipSeconds(p.series.clip_seconds).value).length;
+    const ep = episodeByNo(p, no ?? p.workflow.episode_no);
+    const written = ep ? shotsOfEpisode(p, ep.episode_id).length : 0;
+    if (written >= total) return [{ clips: [1, total] }];   // nothing missing: a single part, the last one in the caller's loop reports "done"
+    const out: Part[] = [];
+    for (let a = Math.min(total, written + 1); a <= total; a += CLIP_GROUP) out.push({ clips: [a, Math.min(total, a + CLIP_GROUP - 1)] });
     return out;
   }
   void no;
   return [undefined];
 }
+
+/** How many units of a step are done already (for the "keep writing until it is all there" loop): episodes = clips written in the episode; series = the synopsis + every "written" episode. */
+export function unitProgress(p: DirectorProject, k: 'series' | 'episode', no?: number): number {
+  if (k === 'episode') { const ep = episodeByNo(p, no ?? p.workflow.episode_no); return ep ? shotsOfEpisode(p, ep.episode_id).length : 0; }
+  const live = p.references.some((r) => r.status !== 'rejected');
+  const written = p.episodes.filter((e) => e.logline.trim() && (!live || !!(e.cast?.length || e.locations?.length))).length;
+  return (p.series.synopsis.trim() ? 1 : 0) + written;
+}
+
+/** the number of clips a whole episode is split into (what the crew has to write in the end) */
+export const plannedEpisodeClips = (p: DirectorProject) => splitSeconds(p.series.episode_seconds, usableClipSeconds(Number(p.series.clip_seconds)).value).length;
 
 export const ASPECTS = ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'];
 export type Intent = 'work' | 'revise' | 'approve' | 'ask';
@@ -124,6 +139,7 @@ Reply with ONE JSON object only (no markdown). All keys are optional except "say
 THIS WORK IS A ${f.label.toUpperCase()}. ${f.guide}
 RULES
 - Picture and sound prompts are written in English; "say" and prompt_ko are ${lang}. Keep every clip's picture description self-contained (characters described again, no "as before").
+- Dialogue is the spoken lines in the language they were written: a Korean line stays Korean, a Japanese line stays Japanese. Never translate dialogue. Any sentence wrapped as <d>...</d> (a dialogue in its original language) must be used exactly as it is.
 - THE ORDER OF WORK: brief -> casting (actors, places, props are cast and their images are made FIRST) -> scenario (the series plan and every episode are written ONLY with the approved CAST) -> clips.
 - A clip is one continuous shot of the length given by the app. The lead and the other main characters are the same people in every episode: the same CAST entry, the same face. Only costume and place change: for a new costume or a new look of a place, add a variant entry (variant_of) at casting time or with set_reference.
 - Every clip names its cast and location with the exact CAST names; never invent a name that is not in CAST. EVERY person who appears or speaks in a clip is in that clip's cast (also one who only speaks off screen), every prop that appears or is used in a clip is in that clip's cast too, and EVERY clip has a location. Each episode lists its cast (its people AND props) and its places in "episodes"; no episode may be left without cast or without a place.
@@ -150,7 +166,7 @@ export function kickoffInstruction(p: DirectorProject, k: Exclude<Kickoff, 'canv
   }
   if (k === 'series' && !f.multi) return `Write the ${vocabOf(s.format).scenario.toLowerCase()} of this ${f.label.toLowerCase()} with the approved CAST: "series.synopsis" and "series.logline", and "episodes" with EXACTLY 1 entry (no 1, a title and one line that says what the piece is about). ${f.guide}`;
   if (k === 'series' && part && 'overview' in part) return `Write only the story frame of the whole series with the approved CAST: "series.synopsis" (the whole arc of all ${s.total_episodes} episodes, with the turning points and the ending) and "series.logline". Do NOT write "episodes" now: they are written next, in groups, from this frame.`;
-  if (k === 'series' && part && 'from' in part) return `Write episodes ${part.from} to ${part.to} of the series (the story frame is in SYNOPSIS; episodes already written are in EPISODES: continue from them without repeating anything). "episodes" with EXACTLY ${part.to - part.from + 1} entries numbered ${part.from} to ${part.to} (a title and one story line each; name the main cast and the costume or place changes in the story line) and for EACH episode "cast" (every CAST person and important prop who appears in it) and "locations" (every CAST place it happens in), with the exact CAST names; no episode without cast and without a place. Hooks and a cliffhanger at the end of each episode.`;
+  if (k === 'series' && part && 'from' in part) return `Write episodes ${part.from} to ${part.to} of the series (the story frame is in SYNOPSIS; episodes already written are in EPISODES: continue from them without repeating anything). "episodes" with 1 to ${part.to - part.from + 1} entries numbered ${part.from} to ${part.to} (a title and one story line each; name the main cast and the costume or place changes in the story line). Fewer is fine: the ones that are still missing are asked again. For EACH episode write "cast" (every CAST person and important prop who appears in it) and "locations" (every CAST place it happens in), with the exact CAST names; no episode without cast and without a place. Hooks and a cliffhanger at the end of each episode.`;
   if (k === 'series') return `Write the scenario of the whole series with the approved CAST: "series.synopsis" and "series.logline" updates, and "episodes" with EXACTLY ${s.total_episodes} entries numbered 1 to ${s.total_episodes} (a title and one story line each; name the main cast and the costume or place changes in the story line) and for EACH episode "cast" (every CAST person and important prop who appears in it) and "locations" (every CAST place it happens in), with the exact CAST names; no episode without cast and without a place, and every CAST entry is used in at least one episode. The episodes must build one story arc with hooks and a cliffhanger at the end of each episode. The leads appear throughout; use the supporting cast, places and props where they fit.`;
   if (k === 'references' && part && 'kind' in part) {
     const V = vocabOf(s.format); const lang = s.language === 'en' ? 'English' : 'Korean';
@@ -163,7 +179,10 @@ export function kickoffInstruction(p: DirectorProject, k: Exclude<Kickoff, 'canv
   const songMapText = f.id === 'musicvideo' && p.music?.sections.length ? ` THE SONG MAP (which part of the song each clip covers): ${songMap(p.music.duration_sec, s.clip_seconds, p.music.sections).map((c) => `clip ${c.no} = ${c.from}-${c.to}s ${c.section ?? ''}`).join('; ')}. Each clip's picture follows its part of the song, "music" says which part it is, "dialogue" holds the lyric line sung in that clip (or is empty).` : '';
   const epNow = episodeByNo(p, no);
   const cl = epNow && (epNow.cast?.length || epNow.locations?.length) ? ` This episode's cast (people and props): ${(epNow.cast ?? []).join(', ') || '-'}; its places: ${(epNow.locations ?? []).join(', ') || '-'}. Use exactly these people, props and places: every person and every prop that appears or is used in a clip is in that clip's "cast", and every clip has a location. Never invent a person, prop or place that is not in this list.` : ' Every person and prop that appears is in the cast of that clip, and every clip has a location.';
-  return `Write ${f.multi ? `episode ${no} ("${epNow?.title ?? ''}")` : `the whole ${f.label.toLowerCase()}`}. Use "episode_plan" with scenes and clips.${cl} ${part && 'clips' in part ? `ONLY clips ${part.clips[0]} to ${part.clips[1]} of the episode (clips are numbered in order across the whole episode; the clips already written are listed under EPISODE CLIPS: continue from them without repeating): EXACTLY ${part.clips[1] - part.clips[0] + 1} clips in total across the scenes you return (the app sets their lengths: ${parts.slice(part.clips[0] - 1, part.clips[1]).join(', ')} seconds)` : `EXACTLY ${parts.length} clips in total across all scenes (the app sets their lengths: ${parts.join(', ')} seconds)`}. Every clip needs prompt_en, prompt_ko, camera, dialogue (may be empty), sound and music.${songMapText}`;
+  // the finished episode's approved handoff (manual edits included) is the start of the next one
+  const prev = no > 1 ? episodeByNo(p, no - 1) : undefined;
+  const handoff = prev && prev.stage === 'done' && prev.handoff ? `THE PREVIOUS EPISODE, exactly as the producer approved it (manual edits included):\n${prev.handoff}\nThe next episodes continue exactly from where it ended - same cast, same places, the story moves on (no recap of earlier episodes).\n\n` : '';
+  return `${handoff}Write ${f.multi ? `episode ${no} ("${epNow?.title ?? ''}")` : `the whole ${f.label.toLowerCase()}`}. Use "episode_plan" with scenes and clips.${cl} ${part && 'clips' in part ? `ONLY clips ${part.clips[0]} to ${part.clips[1]} of the episode (clips are numbered in order across the whole episode; the clips already written are listed under EPISODE CLIPS: continue from them without repeating): 1 to ${part.clips[1] - part.clips[0] + 1} clips in total across the scenes you return. Fewer is fine: only the missing clips are asked again (the app sets their lengths: ${parts.slice(part.clips[0] - 1, part.clips[1]).join(', ')} seconds)` : `EXACTLY ${parts.length} clips in total across all scenes (the app sets their lengths: ${parts.join(', ')} seconds)`}. Every clip needs prompt_en, prompt_ko, camera, dialogue (may be empty), sound and music.${songMapText}`;
 }
 
 /**
@@ -269,7 +288,13 @@ export function checkReply(p: DirectorProject, r: AiReply, kickoff: Kickoff | 'f
     const lo = part && 'from' in part ? part.from : 1, hi = part && 'from' in part ? part.to : n;
     const eps = r.episodes ?? [];
     const nos = new Set(eps.map((e) => Number(e.no)));
-    if (eps.length !== hi - lo + 1 || [...Array(hi - lo + 1)].some((_, i) => !nos.has(lo + i))) return `"episodes" must have exactly ${hi - lo + 1} entries numbered ${lo} to ${hi} (got ${eps.length})`;
+    if (part && 'from' in part) {
+      // a group may under-deliver: what is there is kept and only the missing numbers are asked again
+      if (eps.length < 1 || eps.length > hi - lo + 1) return `"episodes" must have 1 to ${hi - lo + 1} entries numbered ${lo} to ${hi} (got ${eps.length})`;
+      if (eps.some((e) => Number(e.no) < lo || Number(e.no) > hi)) return `episode numbers must be between ${lo} and ${hi}`;
+    } else if (eps.length !== hi - lo + 1 || [...Array(hi - lo + 1)].some((_, i) => !nos.has(lo + i))) {
+      return `"episodes" must have exactly ${hi - lo + 1} entries numbered ${lo} to ${hi} (got ${eps.length})`;
+    }
     if (eps.some((e) => !String(e.title ?? '').trim() && !String(e.logline ?? '').trim())) return 'every episode needs a title or a logline';
     const live = p.references.filter((x) => x.status !== 'rejected');
     if (live.length) {
@@ -301,7 +326,10 @@ export function checkReply(p: DirectorProject, r: AiReply, kickoff: Kickoff | 'f
     const plan = r.episode_plan;
     const clips = plan?.scenes?.flatMap((x) => x.clips ?? []) ?? [];
     if (!plan || !clips.length) return 'the reply needs "episode_plan" with scenes and clips';
-    if (clips.length !== want) return `"episode_plan" must have exactly ${want} clips in total (got ${clips.length})`;
+    if (part && 'clips' in part) {
+      // a group may under-deliver: what is there is kept and only the missing clips are asked again
+      if (clips.length < 1 || clips.length > want) return `"episode_plan" must have 1 to ${want} clips in total (got ${clips.length})`;
+    } else if (clips.length !== want) return `"episode_plan" must have exactly ${want} clips in total (got ${clips.length})`;
     if (clips.some((c) => !String(c?.prompt_en ?? '').trim())) return 'every clip needs prompt_en';
     const live = p.references.filter((r) => r.status !== 'rejected');
     if (live.length) {
@@ -492,6 +520,12 @@ function applyEdit(p: DirectorProject, e: Edit, notes: string[]) {
 // ------------------------------------------------------------------ one turn
 export interface TurnResult { reply: AiReply; notes: string[]; attempts: number }
 
+/** the crew failed to give a usable JSON answer; `raw` is the model's real (last) output so the producer can see and fix it by hand */
+export class CrewError extends Error {
+  readonly raw: string;
+  constructor(msg: string, raw: string) { super(msg); this.name = 'CrewError'; this.raw = raw; }
+}
+
 /**
  * Ask the model, check the reply, ask again (up to `maxAttempts`) with what was wrong, then apply it to `p`.
  * `p` is only changed after a reply passed the check. `userText` is what the producer typed (or the automatic instruction for a kickoff).
@@ -517,11 +551,14 @@ export async function directorTurn(p: DirectorProject, userText: string, llm: Ll
       reply = r;
     } catch (e) { err = (e as Error).message; }
   }
-  if (!reply) throw new Error(`The crew could not produce a usable answer (${err}). Try again, or pick a stronger LLM in Settings.${lastRaw.trim() ? `\nThe model answered: ${lastRaw.trim().replace(/\s+/g, ' ').slice(0, 300)}${lastRaw.trim().length > 300 ? '…' : ''}` : '\nThe model answered nothing.'}`);
+  if (!reply) throw new CrewError(`The crew could not produce a usable answer (${err}). Try again, or pick a stronger LLM in Settings.${lastRaw.trim() ? `\nMake sure the answer looks like the JSON above. The model said:\n${crisp(lastRaw, 900)}` : '\nThe model answered nothing.'}`, lastRaw.slice(0, 30000));
   if (opt.part && 'kind' in opt.part) for (const x of reply.references ?? []) if (x && !x.kind) x.kind = opt.part.kind;   // an entry without a kind belongs to the kind that was asked for
   const notes = reply.intent === 'approve' ? [] : applyReply(p, reply, { free: kickoff === 'free', episode: kickoff === 'episode' ? p.workflow.episode_no : undefined, append: !!opt.part && 'clips' in opt.part && opt.part.clips[0] > 1 });
   return { reply, notes, attempts };
 }
+
+/** a short, single-spaced excerpt of the model's answer (for the error message; the full text is kept on the message for download) */
+const crisp = (s: string, n: number) => { const t = s.replace(/\s+/g, ' ').trim(); return t.length > n ? `${t.slice(0, n)}…` : t; };
 
 const formatNow = (p: DirectorProject, r: AiReply) => (isFormat(r.series?.format) ? r.series!.format : p.series.format);
 

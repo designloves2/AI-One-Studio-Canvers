@@ -135,7 +135,7 @@ export function buildCanvasFromDirector(p: DirectorProject, reg: RegistryLike, e
     if (!genDef) { report.missing.push({ shot_id: sh.shot_id, reason: `card "${kind}" is not in the registry` }); continue; }
     if (!wired?.out || !wired.inn) { report.missing.push({ shot_id: sh.shot_id, reason: `no text port to connect "prompt" to "${kind}"` }); continue; }
     if (sh.scene_id !== lastScene) { if (lastScene) y += SCENE_GAP; lastScene = sh.scene_id; }
-    const promptText = clipPromptOf(sh);
+    const promptText = clipPromptOf(sh, p.series.language);
     if (!sh.prompt_en.trim()) report.emptyPrompt.push(sh.shot_id);
     if (sh.asset_ids.length) report.assetsNotWired.push(sh.shot_id);
 

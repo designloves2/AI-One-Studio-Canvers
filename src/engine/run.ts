@@ -219,7 +219,8 @@ function imageRunner(mode: (c: Ctx) => ImageMode): Runner {
     if ((m === 't2i' || m === 'edit' || m === 'i2i' || m === 'inpaint' || m === 'outpaint') && !job.prompt && m !== 'outpaint') throw new Error('Prompt is empty');
     if (p.auto_enhance && job.prompt && m !== 'outpaint' && m !== 'removebg') {
       c.progress(1, 'enhancing prompt…');
-      const style = { ...formatFor(c.def.id, c.engineId), aesthetic: NO_AESTHETIC, extra_instructions: '' };
+      // sentences wrapped in <d>..</d> are dialogue in its original language: they must stay exactly as they are, never translated
+      const style = { ...formatFor(c.def.id, c.engineId), aesthetic: NO_AESTHETIC, extra_instructions: 'Dialogue: sentences wrapped in <d> </d> are spoken lines in their original language (a Korean line stays Korean, a Japanese line stays Japanese). Use the text inside <d> </d> exactly as it is - never translate, never rewrite, never remove the <d> </d> markers.' };
       job.prompt = (await runLlm({ system: '', prompt: job.prompt, style, where: 'bottom' })) || job.prompt;
     }
     const built = await buildImageGraph(job);

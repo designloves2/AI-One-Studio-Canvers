@@ -73,7 +73,7 @@ ok(r3b.project.nodes.find((n) => n.id === A.textNodeId(b.shot_id)).params.text =
 ok(!mod.nodes.some((n) => n === r3.project.nodes[0]), 'the canvas passed in is not mutated');
 
 // ---- the producer's own video prompt in the Director grid (the Canvas step) always wins
-ok(C.clipPromptOf({ prompt_en: 'x', dialogue: 'd', sound: 's', music: 'm', cast: ['A'], location: 'L', prompt_user: '' }) === 'x\nReferences: @image1 = A, @image2 = L\nDialogue: d\nSound: s\nMusic: m', 'without a user prompt the effective prompt is the composed text');
+ok(C.clipPromptOf({ prompt_en: 'x', dialogue: 'd', sound: 's', music: 'm', cast: ['A'], location: 'L', prompt_user: '' }) === 'x\nReferences: @image1 = A, @image2 = L\nDialogue: <d>[Korean]d</d>\nSound: s\nMusic: m', 'without a user prompt the effective prompt is the composed text (the dialogue is wrapped so no LLM step translates it)');
 ok(C.clipPromptOf({ prompt_en: 'x', prompt_user: '  MY OWN  ' }) === 'MY OWN', 'a prompt the producer wrote replaces the composed text');
 const own = JSON.parse(JSON.stringify(r1.project));
 own.nodes.find((n) => n.id === A.textNodeId(c.shot_id)).params.text = 'STALE CANVAS WORDS';

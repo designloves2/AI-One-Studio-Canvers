@@ -10,6 +10,7 @@
 // A step only moves on when it is waiting for review (`review_required`). Approving twice, or approving a step that is still working,
 // does nothing: that is what stops double clicks and retried events from running a step twice.
 import { episodeByNo, shotsOfEpisode, syncShotAssets } from './model';
+import { episodeHandoff } from './continuity';
 import { musicBlockers } from './music';
 import type { DirectorEpisode, DirectorProject, EpisodeStage, StageId, StageStatus } from './types';
 
@@ -138,8 +139,8 @@ export const markEpisodeReview = (p: DirectorProject, no: number) => { const e =
 export const markEpisodeFailed = (p: DirectorProject, no: number) => { const e = episodeByNo(p, no); if (e) e.stage_status = 'failed'; };
 
 /**
- * Start writing the clips of these episodes (the ones that have not started). Returns the numbers that were started, in order.
- * Several can be started at once; the crew writes them one after another, each keeps its own place in the line.
+ * Start writing the NEXT episode in line: the one whose predecessor is finished (the previous one's approved content is how it continues).
+ * Several numbers may be given, but only the next valid one starts; writing one episode at a time.
  */
 export function startEpisodes(p: DirectorProject, nos: number[]): number[] {
   if (!productionOpen(p)) return [];
@@ -147,7 +148,9 @@ export function startEpisodes(p: DirectorProject, nos: number[]): number[] {
   for (const no of [...new Set(nos)].sort((a, b) => a - b)) {
     const e = episodeByNo(p, no);
     if (!e || e.stage !== 'idle') continue;
-    setEp(e, 'episode', 'working'); started.push(no);
+    const prev = no > 1 ? episodeByNo(p, no - 1) : undefined;
+    if (prev && prev.stage !== 'done') continue;   // write in order: an episode waits for the one before it
+    setEp(e, 'episode', 'working'); started.push(no); break;   // only the next one in line starts
   }
   return started;
 }
@@ -169,6 +172,7 @@ export function approveEpisode(p: DirectorProject, no: number): ApproveResult {
     shotsOfEpisode(p, ep.episode_id).forEach((s) => { if (s.status === 'draft' || s.status === 'ready') s.status = 'approved'; });
   }
   if (from === 'review') {
+    ep.handoff = episodeHandoff(p, ep);   // what the producer approved is kept: the next episode is written to continue from here
     setEp(ep, 'done', 'completed');
     const finished = p.episodes.length > 0 && p.episodes.every((e) => e.stage === 'done');
     return { ok: true, from, to: 'done', episode_no: no, kickoff: null, finished };

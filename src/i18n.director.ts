@@ -171,4 +171,12 @@ export const KO_DIRECTOR: Record<string, string> = {
   'Reset the edited prompts back to the original?': '수정한 프롬포트를 원래 글자로 되돌릴까요?',
   'This is the text each video generator card gets. Review and fix the clips below; "Open in Canvas" puts them all on the canvas prompt cards, and your settings in the canvas are kept.': '각 영상 생성 카드가 받는 텍스트입니다. 아래 클립들을 검토하고 고친 뒤 "캔버스에서 열기"를 누르면 전부 캔버스 프롬포트 카드에 적용됩니다(캔버스에서 바꾼 설정은 유지됩니다).',
   'Put the edited prompts on the canvas prompt cards and open the canvas. Your settings in the canvas are kept, and nothing runs by itself.': '수정한 프롬포트를 캔버스 프롬포트 카드에 적용하고 캔버스를 엽니다. 캔버스에서 바꾼 설정은 유지됩니다. 자동 실행은 하지 않습니다.',
+  'Apply to the canvas prompt cards': '캔버스 프롬포트 카드에 적용',
+  'Put the prompts on the canvas prompt cards so the next generation uses them.': '프롬포트를 캔버스 프롬포트 카드에 반영해 다음 생성에서 이 글을 쓰게 합니다.',
+  'Applied to the canvas prompt cards: the next generation uses these texts.': '캔버스 프롬포트 카드에 반영했습니다. 다음 생성은 수정된 글을 사용합니다.',
+  // the crew failed: the model's original answer, shown and downloadable
+  'The model\'s original answer': '모델이 보낸 원문 답변',
+  'Download the answer': '답변 다운로드',
+  'Add the missing episodes': '빠진 편 추가',
+  'The crew did not write these; add a blank row and fill it yourself': '작업팀이 쓰지 않은 편입니다. 빈 줄을 추가해 직접 채워 보세요',
 };

@@ -131,6 +131,17 @@
 - **작품 종류(완료)**: `series.format` = drama / film / ad / musicvideo / vlog / short (스키마 4, 3→4 마이그레이션 = drama). `src/director/formats.ts`(순수): 종류별 화면 용어 `vocabOf`(캐스팅 = 배우·장소·소품 / 모델·제품 / 아티스트·의상 / 진행자…, 시나리오 = 스토리보드·구성안…), 기본 숫자(광고 30초·6초 클립, 뮤직비디오 3분, 숏폼 9:16 30초…), 작업팀 지침 `guide`, 말로 종류 읽기 `detectFormat`. 작업팀은 브리프에서 종류를 정하고(빠뜨리면 사용자의 말에서 읽음) 그 종류의 지침을 시스템 프롬프트에 받음. 1편짜리 종류는 회차 줄을 숨기고 시나리오 승인 뒤 작성이 자동 시작. 브리프 맨 위에 "작품 종류" 드롭다운. 데모 작업팀도 종류별 캐스팅·클립(광고 엔드카드, 뮤직비디오 구간, 브이로그 내레이션 대사, 숏폼 훅). 브라우저 확인: 광고 한 문장 → 광고로 인식·30초·6초 클립 5개·용어 변경·회차 줄 숨김·자동 작성·엔드카드. **미구현**: 광고 비율별(16:9·9:16·1:1) 버전 생성, 뮤직비디오 음악 단계(사용자 업로드 + AI 생성 병행, 화면 선택 또는 채팅 명령), 브이로그 전용 내레이션 필드(현재는 클립의 `dialogue`가 내레이션 역할).
 - 다음 할 일: ① (완료) 편별 UI ② (완료) 결과 우클릭 에셋 등록 ③ (완료) 캐스팅 모델·일괄/개별·등록 ④ (완료) 브리프 설정 드롭다운·캐스팅 프롬프트·전 단계 데모 ⑤ 사용자가 데모로 단계별 확인하며 주는 수정 피드백 반영 ⑥ 음악 생성·에셋화 ⑦ 실제 LLM·GPU 시험(사용자가 서버가 비었다고 할 때만) ⑧ 좁은 창 회차 줄 확인.
 
+### LLM 오류 완화 · 생성·확인 프롬포트 · 순차 편작성 · 대사 보존 (2026-11-01, 단위 시험 통과 + 데모 브라우저 일부 확인)
+- **원문 답변 보기/다운로드(#4)**: `ChatMsg.raw` 추가, `ai.directorTurn` 실패 시 `CrewError`(`raw` 포함, 메시지에 앞부분 요약)를 던지고, `store`의 3곳 catch(runJob/send/recast)가 `raw`를 오류 채팅에 붙임. `ChatDock`이 오류 메시지에 `.dirx-raw` details(모델이 보낸 원문, 다운로드 버튼)를 렌더.
+- **묶음 일부 보존(#4)**: `planParts`가 episode는 **이미 쓴 클립 수 기준**으로, series는 기존 격차 기준으로 다시 계산 → `runJob`의 series/episode를 **동적 루프**(`unitProgress`로 진행도, 무진척이면 실패해 기존 것 보존)로 바꿈. `checkReply`는 part(그룹)일 때 **1~N개 허용**(몇 개만 와도 진행, 번호 범위 초과·개수 초과만 거절), part 없을 땐 기존처럼 정확 수량. 지시문도 "EXACTLY N"→"1 to N, 빠진 것만 다시"로. `ai.unitProgress`/`plannedEpisodeClips` export. 데모 크루도 그대로 응답 가능.
+- **생성·확인 프롬포트(#1)**: `PromptGrid`에 `apply` prop 추가(적용 버튼), `GenerateCard`에 `PromptGrid` 삽입 + `applyPrompts` = `makeEpisodeCanvas(no)`(캔버스 카드에 반영) 후 안내. 캔버스 단계는 기존 "캔버스에서 열기"가 적용 겸함.
+- **대사 보존(#2)**: `composeClipPrompt(s, lang)`이 대사를 `<d>[Ko/English]…</d>`로 감쌈(호출부가 `p.series.language` 전달: adapter/staleShots/exportPackage/ShotPrompt). `engine/run.ts` 자동강화 `extra_instructions`에 "`<d>..</d>`는 원문 그대로", 시스템 규칙에 "대사는 번역 금지·`<d>` 그대로" 추가.
+- **순차 편작성(#3)**: `DirectorEpisode.handoff`, `continuity.episodeHandoff`(최종 검토 승인 시 저장, `workflow.approveEpisode` review 분기), `workflow.startEpisodes`가 **이전 편이 done일 때만 다음 한 편 시작**(여러 개 줘도 한 편만), 저장소가 "이전 편을 먼저 완성" 안내. `kickoffInstruction('episode')`이 이전 편의 handoff를 지시문에 포함. 편 스트립에서 동시 작성(Start writing) 버튼 제거(작성은 편 페이지에서).
+- 시나리오 수동 추가(#4c): `ScenarioList`에 "빠진 편 추가"(`newEpisode`로 빈 행).
+- 시험: flow/adapter 갱신(묶음 일부 허용, 순차 start, handoff·지시문, 오류 문구 "The model said", clipPromptOf `<d>`), `npm run typecheck`·`npm run test:director` 전체 통과.
+- 데모 브라우저(8766, **신규 탭에서만 신뢰** — 이전 탭은 stale 캐시로 강제 진행되어 재탭 필요): 생성·확인 단계에 프롬포트 카드 3장 + "적용" 버튼, 클립 2 수정 → 파일에 `prompt_user` 저장 확인, 오류 유발(`__directorLlm`이 비JSON) 시 채팅에 "모델이 보낸 원문 답변" + 다운로드 버튼 확인.
+- **확인 못 한 것**: 실제 LLM/GPU로 묶음 일부 보존·순차 편작성·대사 보존 작동, `engine/run.ts` 강화가 `<d>`를 지키는지(모델 의존), 캔버스 파일에 적용된 반영의 실기.
+
 ### 캔버스 단계: 클립별 영상 프롬포트 검토·수정 + 생성 유지 (#4/#5) (2026-11-01, 데모 브라우저 확인 · 실제 GPU 미확인)
 - 목적: 편 작성 승인 → 전체 클립을 영상 프롬포트로 만들어 캔버스 탭에서 클립별로 보고 고치고, "캔버스에서 열기"로 전부 캔버스 카드에 적용하며, 생성·확인으로 넘어가도 적용된 프롬포트·캔버스 설정을 유지한 채 생성을 진행.
 - 데이터: `DirectorShot.prompt_user`(사용자가 쓴 전체 프롬포트; 있으면 조합본 대신 사용). `compose.clipPromptOf` = `prompt_user || composeClipPrompt`. **이 글을 보여 주거나 stale을 판정하거나 패키지에 넣는 곳은 모두 `clipPromptOf`를 쓴다**: `adapter`(캔버스 프롬포트 카드 글), `execution.staleShots`, `exportPackage`(prompts.md, clips.json의 prompt_for_model).

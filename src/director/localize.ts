@@ -21,6 +21,7 @@ const RULES: [RegExp, (m: RegExpExecArray) => string][] = [
   [/^The crew is still working on this step\.$/, () => '작업팀이 아직 이 단계를 작업 중입니다.'],
   [/^Nothing is waiting for approval\.$/, () => '승인을 기다리는 것이 없습니다.'],
   [/^The whole series is finished\.$/, () => '시리즈 전체가 완성되었습니다.'],
+  [/^Finish the previous episode first\.$/, () => '이전 편을 먼저 완성해 주세요.'],
 ];
 
 /** `msg` in Korean when the UI is Korean and the sentence is one of the known rules; otherwise unchanged */

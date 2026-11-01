@@ -516,6 +516,10 @@ button.save-state.dirty { cursor: pointer; } button.save-state.dirty:hover { bac
 .dirx-log:empty { display: none; }
 .dirx-msg { max-width: 82%; padding: 7px 11px; border-radius: 12px; line-height: 1.45; white-space: pre-wrap; background: var(--bg3); align-self: flex-start; } .dirx-msg.user { align-self: flex-end; background: var(--acc); color: #fff; } .dirx-msg.err { border: 1px solid var(--bad); }
 .dirx-msg small { display: block; color: var(--muted); } .dirx-who { display: block; font-size: 10.5px; color: var(--acc2); margin-bottom: 2px; }
+.dirx-raw { margin-top: 6px; border: 1px dashed var(--line2); border-radius: 8px; padding: 6px 8px; }
+.dirx-raw summary { cursor: pointer; font-size: 11px; color: var(--warn); user-select: none; }
+.dirx-raw summary em { font-style: normal; color: var(--muted); font-size: 10px; }
+.dirx-raw pre { max-height: 180px; overflow: auto; white-space: pre-wrap; word-break: break-word; font-size: 10.5px; background: var(--bg); padding: 6px; border-radius: 6px; margin: 6px 0; }
 .dirx-approve { display: flex; align-items: center; gap: 10px; padding: 6px 16px; flex-wrap: wrap; } .dirx-hint { color: var(--muted); font-size: 12px; }
 .dirx-input { display: flex; gap: 8px; padding: 6px 16px 12px; } .dirx-input textarea { flex: 1; background: var(--bg); border: 1px solid var(--line2); border-radius: 10px; padding: 8px 10px; color: var(--fg); font: inherit; resize: none; outline: none; } .dirx-input textarea:focus { border-color: var(--acc); }
 .dirp { display: flex; flex-direction: column; gap: 6px; padding: 10px; overflow-y: auto; }

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { CrewRole, DirectorProject, ReferenceKind, StageId } from '../director/types';
 import { addChat, dropReferences, episodeByNo, newDirectorProject, safeProjectName, shotsOfEpisode, syncShotAssets, touch } from '../director/model';
-import { CREW_LABEL, defaultCrew, directorTurn, kickoffInstruction, planParts, recastInstruction, type LlmFn } from '../director/ai';
+import { CREW_LABEL, defaultCrew, directorTurn, kickoffInstruction, planParts, plannedEpisodeClips, recastInstruction, unitProgress, type LlmFn } from '../director/ai';
 import { approveEpisode, approveStage, blockers, EPISODE_STAGES, GLOBAL_STAGES, markEpisodeFailed, markEpisodeReview, markEpisodeWorking, markFailed, markReview, markWorking, productionOpen, reopenEpisode, startEpisodes, startFromIntake, type ApproveResult, type Kickoff } from '../director/workflow';
 import { demoCrew } from '../director/demoCrew';
 import { localizeMsg } from '../director/localize';
@@ -97,6 +97,7 @@ async function previousTexts(p: DirectorProject): Promise<string[]> {
 export const useDirector = create<DirectorState>((set, get) => {
   const crew = (): LlmFn => (import.meta.env.DEV && (window as unknown as { __directorLlm?: LlmFn }).__directorLlm) || (get().demo ? demoCrew : realCrew);
   const commit = (fn: (p: DirectorProject) => void) => get().edit(fn);
+  const rawOf = (e: unknown) => (e as { raw?: string } | null)?.raw;   // the crew's original answer, kept for the producer to see / fix
 
   /** take over what the crew changed in the working copy (never the places of the episodes in their lines: those are the app's) */
   const takeOver = (x: DirectorProject, work: DirectorProject) => {
@@ -119,20 +120,33 @@ export const useDirector = create<DirectorState>((set, get) => {
       } else {
         const work = structuredClone(get().project!);
         if (k === 'episode') work.workflow.episode_no = no!;   // the crew writes this episode (the instruction names it)
-        // a long answer is where a model slips: the step is asked in small parts (casting by kind, the scenario as a frame + groups of episodes, an episode as groups of clips)
+        // a long answer is where a model slips: the step is asked in small parts (casting by kind, the scenario as a frame + groups of episodes, an episode as groups of clips).
+        // groups may under-deliver: what the crew DID write is kept, and only the missing part is asked again.
         const previous = await previousTexts(work);
-        const parts = planParts(work, k, no);
         const says: string[] = [], notes: string[] = []; let crewRole: CrewRole | undefined, done = 0;
-        const label = (i: number) => (parts.length > 1 ? ` (${i + 1}/${parts.length})` : '');
         try {
-          for (let i = 0; i < parts.length; i++) {
-            const res = await directorTurn(work, kickoffInstruction(work, k, parts[i]), crew(), { kickoff: k, previous, part: parts[i] });
-            says.push(res.reply.say); notes.push(...res.notes); crewRole = crewRole ?? res.reply.crew; done++;
+          if (k === 'series' || k === 'episode') {
+            const target = k === 'episode' ? plannedEpisodeClips(work) : work.series.total_episodes + (work.series.synopsis.trim() ? 0 : 1);
+            let guard = 0;
+            while (guard++ < 80 && unitProgress(work, k, no) < target) {
+              const part = planParts(work, k, no)[0];
+              const before = unitProgress(work, k, no);
+              const res = await directorTurn(work, kickoffInstruction(work, k, part), crew(), { kickoff: k, previous, part });
+              says.push(res.reply.say); notes.push(...res.notes); crewRole = crewRole ?? res.reply.crew; done++;
+              if (unitProgress(work, k, no) <= before) throw new Error('The crew wrote nothing new this time (the reply was rejected or only repeated what already exists). Change the model in Settings, or write this part by hand.');
+            }
+            if (unitProgress(work, k, no) < target) throw new Error('The crew did not finish the whole thing (some parts were rejected). What came through is kept: say "continue" or change the model, then try the step again.');
+          } else {
+            const parts = planParts(work, k, no);
+            for (let i = 0; i < parts.length; i++) {
+              const res = await directorTurn(work, kickoffInstruction(work, k, parts[i]), crew(), { kickoff: k, previous, part: parts[i] });
+              says.push(res.reply.say); notes.push(...res.notes); crewRole = crewRole ?? res.reply.crew; done++;
+            }
           }
         } catch (e) {
-          // what was written before the part that failed is kept; a retry only redoes the rest
+          // what was written before the failing part is kept; a retry only redoes the rest
           if (done) commit((x) => { takeOver(x, work); });
-          throw new Error(parts.length > 1 ? `${(e as Error).message}\n[${done}/${parts.length}${done ? ', kept' : ''}] ${label(done).trim()}` : (e as Error).message);
+          throw new Error(done ? `${(e as Error).message}\n[${done} part(s) written and kept]` : (e as Error).message);
         }
         commit((x) => {
           takeOver(x, work);
@@ -141,7 +155,7 @@ export const useDirector = create<DirectorState>((set, get) => {
         });
       }
     } catch (e) {
-      commit((x) => { addChat(x, 'assistant', (isEp ? `${no}: ` : '') + (e as Error).message, { crew: 'producer_desk', error: true }); if (isEp) markEpisodeFailed(x, no!); else markFailed(x, k as StageId); });
+      commit((x) => { addChat(x, 'assistant', (isEp ? `${no}: ` : '') + (e as Error).message, { crew: 'producer_desk', error: true, ...(rawOf(e) ? { raw: rawOf(e) } : {}) }); if (isEp) markEpisodeFailed(x, no!); else markFailed(x, k as StageId); });
     }
   };
   const runJobs = async (jobs: { k: Exclude<Kickoff, null>; no?: number }[]) => {
@@ -265,7 +279,7 @@ export const useDirector = create<DirectorState>((set, get) => {
           return;
         }
       } catch (e) {
-        commit((x) => { addChat(x, 'assistant', (e as Error).message, { crew: 'producer_desk', error: true }); });
+        commit((x) => { addChat(x, 'assistant', (e as Error).message, { crew: 'producer_desk', error: true, ...(rawOf(e) ? { raw: rawOf(e) } : {}) }); });
       } finally { set({ busy: false }); }
     },
 
@@ -313,9 +327,16 @@ export const useDirector = create<DirectorState>((set, get) => {
 
     startEpisodes: async (nos) => {
       if (!get().project || get().busy || get().readOnly) return;
+      const p0 = get().project!;
+      const asked = nos[0] ?? 1;
+      const e = episodeByNo(p0, asked);
+      const prev = e && asked > 1 ? episodeByNo(p0, asked - 1) : undefined;
       let started: number[] = [];
       commit((x) => { started = startEpisodes(x, nos); });
-      if (!started.length) { commit((x) => { addChat(x, 'assistant', localizeMsg(productionOpen(x) ? 'Nothing is waiting for approval.' : 'Approve the scenario first.'), { crew: 'producer_desk' }); }); return; }
+      if (!started.length) {
+        commit((x) => { addChat(x, 'assistant', !productionOpen(x) ? localizeMsg('Approve the scenario first.') : prev && prev.stage !== 'done' ? `${asked}: ${localizeMsg('Finish the previous episode first.')}` : localizeMsg('Nothing is waiting for approval.'), { crew: 'producer_desk' }); });
+        return;
+      }
       set({ focus: started[0], view: 'episode' });
       await runJobs(started.map((no) => ({ k: 'episode' as const, no })));
     },
@@ -363,7 +384,7 @@ export const useDirector = create<DirectorState>((set, get) => {
         // the casting canvas was built from the old entries: it is stale now
         try { const { removeCastingCanvas } = await import('../director/canvasAction'); await removeCastingCanvas(); } catch { /* the helper file only */ }
       } catch (e) {
-        commit((x) => { x.workflow.stage = wasStage; x.workflow.status.references = wasStatus; addChat(x, 'assistant', (e as Error).message, { crew: 'art', error: true }); });
+        commit((x) => { x.workflow.stage = wasStage; x.workflow.status.references = wasStatus; addChat(x, 'assistant', (e as Error).message, { crew: 'art', error: true, ...(rawOf(e) ? { raw: rawOf(e) } : {}) }); });
       } finally { set({ busy: false }); }
     },
 

@@ -89,33 +89,32 @@ a = W.approveStage(p);
 ok(a.ok && a.to === 'episode' && a.kickoff === null && p.workflow.stage === 'episode' && W.productionOpen(p), 'approving the scenario OPENS production; the producer chooses which episodes to start (nothing is started by itself)');
 ok(W.approveStage(p).ok === false, 'the global line has nothing more to approve');
 
-// ---- 4. start several episodes at once; each has its own place in the line
-ok(W.startEpisodes(p, [1, 2, 3]).join() === '1,2,3' && W.startEpisodes(p, [1, 2]).length === 0, 'episodes 1, 2 and 3 are started together; starting them again does nothing');
-ok([1, 2, 3].every((n) => M.episodeByNo(p, n).stage === 'episode' && M.episodeByNo(p, n).stage_status === 'working') && M.episodeByNo(p, 4).stage === 'idle', 'three are writing, the fourth has not started');
+// ---- 4. episodes are written ONE AT A TIME: only the next one in line starts, after the one before it is finished
+ok(W.startEpisodes(p, [1, 2, 3]).join() === '1' && W.startEpisodes(p, [2]).length === 0, 'episodes are written one at a time: only the next one in line starts');
+ok(M.episodeByNo(p, 1).stage === 'episode' && M.episodeByNo(p, 1).stage_status === 'working' && M.episodeByNo(p, 2).stage === 'idle' && M.episodeByNo(p, 3).stage === 'idle', 'episode 1 is writing; the others wait for it to be finished');
 ok(W.approveEpisode(p, 4).ok === false && W.approveEpisode(p, 1).ok === false, 'a not-started episode, or one still being written, cannot be approved');
 const writeEp = async (no, n) => { p.workflow.episode_no = no; script.push(ep(n, { episode_plan: { no, scenes: [{ title: 'A', summary: 's', clips: clips(Math.ceil(n / 2)) }, { title: 'B', summary: 's', clips: clips(Math.floor(n / 2)) }] } })); const rr = await AI.directorTurn(p, AI.kickoffInstruction(p, 'episode'), llm, { kickoff: 'episode' }); W.markEpisodeReview(p, no); return rr; };
 script.push(ep(8), ep(9, { episode_plan: { no: 1, scenes: [{ title: 'A', summary: '', clips: clips(9, ['Nobody']) }] } }), ep(9));
 p.workflow.episode_no = 1;
 r = await AI.directorTurn(p, AI.kickoffInstruction(p, 'episode'), llm, { kickoff: 'episode' }); W.markEpisodeReview(p, 1);
 ok(r.attempts === 3, 'episode 1: 8 clips, then an unknown cast name, then 9 good clips: two rejections');
-await writeEp(2, 9); await writeEp(3, 9);
 const e1 = M.episodeByNo(p, 1); const shots = M.shotsOfEpisode(p, e1.episode_id);
 ok(shots.length === 9 && shots.every((s) => s.duration_sec === 10) && e1.status === 'drafted', 'episode 1 is nine clips of 10 s');
-ok([2, 3].every((n) => M.shotsOfEpisode(p, M.episodeByNo(p, n).episode_id).length === 9) && p.shots.length === 27, 'episodes 2 and 3 were written next to it; nothing of episode 1 changed');
+ok(M.shotsOfEpisode(p, M.episodeByNo(p, 2).episode_id).length === 0, 'episode 2 is not written yet (it waits for episode 1 to be finished)');
 ok(shots.every((s) => s.cast[0] === 'Minji' && s.location === 'Villa') && shots[0].asset_ids.length === 0, 'clips name their cast; no asset is wired until the images are registered as assets');
 ok(shots[0].dialogue === 'Minji: Why?' && shots[0].sound === 'rain' && shots[0].music === 'strings', 'dialogue, sound and music are written per clip');
 ok(C.composeClipPrompt(shots[0]).split('\n').length === 5 && C.composeClipPrompt(shots[1]).includes('Sound: rain'), 'the Prompt card text = picture + References + Dialogue + Sound + Music');
 const asset = M.newAsset(p, { name: 'Minji', role: 'character', source: { kind: 'library', id: 11 }, note: '' });
 p.references.find((x) => x.name === 'Minji').asset_id = asset.asset_id;
-ok(M.syncShotAssets(p) === 27, 'a registered asset of the lead is attached to every clip (of every episode) that casts her');
+ok(M.syncShotAssets(p) === 9, 'a registered asset of the lead is attached to every clip that casts her');
 ok(W.episodeBlockers(p, 1).length === 0, 'episode 1 can be approved');
 const bad = JSON.parse(JSON.stringify(p)); M.shotsOfEpisode(bad, e1.episode_id)[0].duration_sec = 14;
-ok(W.episodeBlockers(bad, 1).length >= 1 && W.episodeBlockers(bad, 2).length === 0, 'clips that do not add up / are too long block only THAT episode');
+ok(W.episodeBlockers(bad, 1).length >= 1, 'clips that do not add up / are too long block that episode');
 
 // ---- 5. approve each episode on its own; revising by chat changes one clip only
 a = W.approveEpisode(p, 1);
 ok(a.ok && a.to === 'canvas' && a.kickoff === 'canvas' && a.episode_no === 1 && e1.stage === 'canvas' && e1.stage_status === 'working' && M.shotsOfEpisode(p, e1.episode_id).every((s) => s.status === 'approved'), 'approving episode 1 fixes its clips as approved and starts ITS canvas');
-ok(M.episodeByNo(p, 2).stage === 'episode' && M.episodeByNo(p, 2).stage_status === 'review_required' && M.shotsOfEpisode(p, M.episodeByNo(p, 2).episode_id).every((s) => s.status === 'draft'), 'episodes 2 and 3 are still waiting for their own approval, untouched');
+ok(M.episodeByNo(p, 2).stage === 'idle' && M.shotsOfEpisode(p, M.episodeByNo(p, 2).episode_id).length === 0, 'episodes 2 and 3 are untouched, waiting for episode 1');
 ok(W.approveEpisode(p, 1).ok === false, 'approving episode 1 again while its canvas is being built does nothing (no double run)');
 p.workflow.episode_no = 1;
 script.push({ crew: 'cinematographer', say: '2번 클립을 클로즈업으로 바꿨습니다.', intent: 'revise', edits: [{ op: 'set_clip', episode: 1, clip: 2, prompt_en: 'extreme close-up of Minji, tears', camera: 'close-up' }] });
@@ -128,9 +127,9 @@ ok(JSON.stringify(M.shotsOfEpisode(p, M.episodeByNo(p, 2).episode_id)) === other
 script.push({ crew: 'producer_desk', say: '승인 확인했습니다.', intent: 'approve' });
 r = await AI.directorTurn(p, '좋아 승인할게', llm);
 ok(r.reply.intent === 'approve' && r.notes.length === 0, 'the crew recognises "approve" and changes nothing itself (the app does the approval)');
-// episodes 2 and 3 move forward together; episode 1 stays behind and can be reopened
-ok(W.approveEpisode(p, 2).ok && W.approveEpisode(p, 3).ok && M.episodeByNo(p, 2).stage === 'canvas' && M.episodeByNo(p, 3).stage === 'canvas', 'episodes 2 and 3 are approved one after the other and both go to the canvas step');
-W.markEpisodeReview(p, 1); W.markEpisodeReview(p, 2); W.markEpisodeReview(p, 3);
+// an idle episode (2) cannot be approved; episode 1 moves on to its own canvas step
+ok(W.approveEpisode(p, 2).ok === false, 'an episode that has not started cannot be approved');
+W.markEpisodeReview(p, 1);
 ok(W.approveEpisode(p, 1).ok === false && /not been built/.test(W.approveEpisode(p, 1).reason), 'the canvas step cannot be approved before the canvas exists');
 const link = { canvas_id: 'cv_aaaaaaaaaaaa', canvas_file: 'f', shots: [], created_at: '', episode_id: e1.episode_id }; p.canvas_links.push(link);
 ok(W.approveEpisode(p, 1).ok && e1.stage === 'execute' && e1.stage_status === 'review_required', 'with a canvas, episode 1 goes on to the generate step');
@@ -150,7 +149,7 @@ ok(/not passed yet/.test(W.approveEpisode(p, 1).reason), 'a clip made again (ano
 e1shots[1].results = e1shots[1].results.filter((x) => x.result_id !== 'rs_new'); e1shots[1].results.forEach((x) => { x.picked = true; });
 ok(W.approveEpisode(p, 1).ok && e1.stage === 'review', 'passed clips + a joined video: it goes to the final review');
 // go back with ONE episode, change, come forward again
-ok(W.reopenEpisode(p, 1, 'episode') && e1.stage === 'episode' && e1.stage_status === 'review_required' && M.episodeByNo(p, 2).stage === 'canvas', 'episode 1 goes back to writing; episode 2 stays where it was');
+ok(W.reopenEpisode(p, 1, 'episode') && e1.stage === 'episode' && e1.stage_status === 'review_required' && M.episodeByNo(p, 2).stage === 'idle', 'episode 1 goes back to writing; episode 2 stays where it was');
 ok(M.shotsOfEpisode(p, e1.episode_id).every((s) => s.results.length === 1) && p.canvas_links.length === 1, 'nothing that was made is deleted by going back (results, canvas)');
 ok(W.reopenEpisode(p, 1, 'review') === false && W.reopenEpisode(p, 4, 'episode') === false && W.reopenEpisode(p, 1, 'brief') === false, 'you cannot "go back" forward, to a not-started episode, or to a global step with this');
 ok(W.approveEpisode(p, 1).ok && e1.stage === 'canvas', 'approving again goes forward from there (canvas is rebuilt idempotently, results stay)');
@@ -158,6 +157,14 @@ ok(W.approveEpisode(p, 1).ok && e1.stage === 'canvas', 'approving again goes for
 e1.stage = 'review'; e1.stage_status = 'review_required';
 e1.final = undefined; ok(/no joined video/.test(W.approveEpisode(p, 1).reason), 'the final review needs the joined video'); e1.final = { result_id: 'rs_final', file: { filename: 'final.mp4', subfolder: '', type: 'output' }, kind: 'video', created_at: '', picked: true };
 ok(W.approveEpisode(p, 1).ok && e1.stage === 'done' && e1.stage_status === 'completed' && !W.approveEpisode(p, 1).ok, 'review approved: episode 1 is done');
+// episode 2 starts only now, and its writing is told about episode 1's approved content (handoff)
+ok(!!e1.handoff && e1.handoff.startsWith('EPISODE 1'), 'the finished episode keeps its approved summary (handoff) for the next one');
+ok(W.startEpisodes(p, [2]).join() === '2' && W.startEpisodes(p, [3]).length === 0, 'episode 2 starts only after episode 1 is finished');
+await writeEp(2, 9);
+ok(M.shotsOfEpisode(p, M.episodeByNo(p, 2).episode_id).length === 9, 'episode 2 is written next');
+p.workflow.episode_no = 2;
+const ep2instr = AI.kickoffInstruction(p, 'episode');
+ok(ep2instr.includes('THE PREVIOUS EPISODE') && ep2instr.includes('EPISODE 1'), "the next episode's instruction carries the previous episode's approved content");
 ok(W.reopenEpisode(p, 1, 'execute') && e1.stage === 'execute', 'a finished episode can be reopened at the generate step to make clips again');
 ok(W.episodeState(e1) === 'generating' && W.episodeState(M.episodeByNo(p, 4)) === 'idle', 'the episode strip words follow the line');
 // reopening the global line leaves production alone
@@ -283,7 +290,7 @@ ok(m2.schema_version === 5 && m2.series.format === 'drama' && m2.workflow.stage 
   ok(good('no json here at all') === null, 'a reply without JSON is still refused');
   let said = ''; const bad = async () => 'I think the best cast would be a sister pair and so on, no braces';
   try { await AI.directorTurn(M.newDirectorProject('E'), 'x', bad, { maxAttempts: 1 }); } catch (e) { said = e.message; }
-  ok(/The model answered: I think the best cast/.test(said), 'the error shows the beginning of what the model answered');
+  ok(/The model said:[\s\S]*I think the best cast/.test(said), 'the error shows the beginning of what the model answered');
 }
 // ---- small requests: casting by kind, the scenario as a frame + groups of episodes, an episode as groups of clips
 {
@@ -293,13 +300,16 @@ ok(m2.schema_version === 5 && m2.series.format === 'drama' && m2.workflow.stage 
   ok(AI.planParts(q, 'references').map((x) => x.kind).join() === 'location,prop', 'a retry asks only for the kinds that are still missing');
   const sp = AI.planParts(q, 'series'); ok(sp.length === 4 && sp[0].overview && sp[1].from === 1 && sp[1].to === 8 && sp[3].to === 20, 'the scenario is a story frame + groups of 8 episodes');
   const ep = AI.planParts(q, 'episode'); ok(ep.length === 2 && ep[0].clips.join() === '1,5' && ep[1].clips.join() === '6,9', 'nine clips are asked in groups of five');
-  ok(/EXACTLY 5/.test(AI.kickoffInstruction(q, 'episode', ep[0])) && /ONLY clips 6 to 9/.test(AI.kickoffInstruction(q, 'episode', ep[1])), 'the instruction names the group');
+  ok(/1 to 5 clips/.test(AI.kickoffInstruction(q, 'episode', ep[0])) && /ONLY clips 6 to 9/.test(AI.kickoffInstruction(q, 'episode', ep[1])), 'the instruction names the group');
   // casting part: needs its own kind
   ok(/kind "location"/.test(AI.checkReply(q, { say: '', references: [{ kind: 'character', name: 'B' }] }, 'references', { kind: 'location' })) && AI.checkReply(q, { say: '', references: [{ name: 'Hall' }] }, 'references', { kind: 'location' }) === null && AI.checkReply(q, { say: '' }, 'references', { kind: 'prop' }) === null, 'a casting part must carry its own kind (props may be none)');
   // scenario parts
   ok(/synopsis/.test(AI.checkReply(q, { say: '' }, 'series', { overview: true })) && AI.checkReply(q, { say: '', series: { synopsis: 's' } }, 'series', { overview: true }) === null, 'the story frame needs the synopsis');
   const grp = (a, b) => ({ say: '', episodes: Array.from({ length: b - a + 1 }, (_, i) => ({ no: a + i, title: 't' + (a + i), logline: 'l', cast: ['A'], locations: [] })) });
-  ok(AI.checkReply(q, grp(1, 8), 'series', { from: 1, to: 8 }) === null && /exactly 8/.test(AI.checkReply(q, grp(1, 7), 'series', { from: 1, to: 8 })) && /exactly 4/.test(AI.checkReply(q, grp(9, 20), 'series', { from: 17, to: 20 })), 'a group of episodes must be exactly the numbers asked for');
+  ok(AI.checkReply(q, grp(1, 8), 'series', { from: 1, to: 8 }) === null && AI.checkReply(q, grp(1, 7), 'series', { from: 1, to: 8 }) === null, 'a group may under-deliver (the missing ones are asked again)');
+  const over = grp(9, 20); ok(/1 to 4 entries/.test(AI.checkReply(q, over, 'series', { from: 17, to: 20 })), 'a group may not return more than it was asked for');
+  const wrongNo = { say: '', episodes: [17, 18, 19, 20].map(() => ({ no: 9, title: 'x', logline: 'l', cast: ['A'], locations: [] })) };
+  ok(/between 17 and 20/.test(AI.checkReply(q, wrongNo, 'series', { from: 17, to: 20 })), 'a number outside the group is rejected');
   // clips are added after the ones already written
   q.workflow.episode_no = 1; M.newEpisode(q, 1, 'E');
   const plan = (n, tag) => ({ say: '', episode_plan: { no: 1, scenes: [{ title: 'S' + tag, clips: Array.from({ length: n }, (_, i) => ({ prompt_en: tag + i, cast: ['A'], location: '' })) }] } });

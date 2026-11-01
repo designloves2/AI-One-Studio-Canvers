@@ -14,7 +14,7 @@ import { Llm } from '../panels/SettingsPanel';
 import { resultUrl } from './media';
 import { composeClipPrompt } from './compose';
 import { CREW_LABEL, renameReference } from './ai';
-import { episodeByNo, findReference, newAsset, newReference, newShot, shotsOfEpisode, syncShotAssets } from './model';
+import { episodeByNo, findReference, newAsset, newEpisode, newReference, newShot, shotsOfEpisode, syncShotAssets } from './model';
 import { newSeed } from './execution';
 import { applyMusicPatch, defaultSections, newMusic, pickedAudio, songMap } from './music';
 import { finishEpisode, generateSong, pickSong, registerSong, syncFinalFromCanvas, uploadSong } from './musicAction';
@@ -177,7 +177,6 @@ function EpisodeStrip({ p }: { p: DirectorProject }) {
           <span className="dirx-muted">{d.selEpisodes.length ? d.selEpisodes.join(', ') : T('Tick episodes above')}</span>
         </>}
         <span className="dx-eps-act">
-          {d.view === 'episode' && <button className="btn" disabled={d.busy || d.readOnly || !can.start.length} onClick={() => void d.startEpisodes(can.start)}>{T('Start writing')} ({can.start.length})</button>}
           {isEpView && <button className="btn" disabled={d.busy || d.readOnly || !can.approve.length} onClick={() => void d.approveEpisodes(can.approve)}>✓ {T('Approve')} ({can.approve.length})</button>}
         </span>
       </div>
@@ -705,12 +704,16 @@ function MusicCard({ p, ro }: { p: DirectorProject; ro: boolean }) {
 function ScenarioList({ p, ro }: { p: DirectorProject; ro: boolean }) {
   const T = useT(); const edit = useDirector((x) => x.edit); const eps = [...p.episodes].sort((a, b) => a.no - b.no);
   const setEp = (id: string, fn: (e: DirectorProject['episodes'][number]) => void) => edit((x) => { const q = x.episodes.find((z) => z.episode_id === id); if (q) fn(q); });
+  const missing: number[] = [];
+  for (let no = 1; no <= p.series.total_episodes; no++) if (!eps.some((e) => e.no === no)) missing.push(no);
+  const addMissing = () => edit((x) => { for (const no of missing) if (!x.episodes.some((e) => e.no === no)) newEpisode(x, no, ''); });
   return (
     <div className="dx-page">
       <Working p={p} />
       <header className="dx-hero small"><div className="dx-tags"><span>{p.series.genre}</span><span>{eps.length} {T('episodes')}</span></div>
         <h2>{p.series.logline || p.series.title}</h2>{p.series.synopsis && <p>{p.series.synopsis}</p>}</header>
       <CastStrip p={p} />
+      {missing.length > 0 && !ro && <div className="dx-btns"><button className="btn small" onClick={addMissing} title={T('The crew did not write these; add a blank row and fill it yourself')}>+ {T('Add the missing episodes')} ({missing.length})</button></div>}
       <section className="dx-group"><h4><Ico n="list" />{T(p.series.total_episodes > 1 ? 'Episodes' : vocabOf(p.series.format).scenario)} <small>{eps.length}</small></h4>
         <div className="dx-epgrid">{eps.map((e) => (
           <article key={e.episode_id} className={`dx-epcard st-${e.status}`}><span className="no">{e.no}</span><div>{ro ? <><b>{e.title.replace(/^\d+화:\s*/, '')}</b><p>{e.logline}</p></> : <div className="dx-edfields"><input key={`t${e.title}`} defaultValue={e.title.replace(/^\d+화:\s*/, '')} aria-label={T('Title')} onBlur={(ev) => { const v = ev.target.value.trim(); if (v !== e.title.replace(/^\d+화:\s*/, '')) setEp(e.episode_id, (q) => { q.title = v; }); }} /><textarea key={`l${e.logline}`} rows={2} defaultValue={e.logline} aria-label={T('Story line')} onBlur={(ev) => { const v = ev.target.value.trim(); if (v !== e.logline) setEp(e.episode_id, (q) => { q.logline = v; }); }} /></div>}<EpisodeRefs p={p} e={e} ro={ro} /></div></article>))}</div>
@@ -851,7 +854,7 @@ function ClipEditor({ p, s, n }: { p: DirectorProject; s: DirectorShot; n: numbe
 
 // ---- canvas
 /** the full video prompts of the episode, one editable card per clip: the producer reviews and fixes the text the canvas Prompt cards will hold */
-function PromptGrid({ p, ro }: { p: DirectorProject; ro: boolean }) {
+function PromptGrid({ p, ro, apply }: { p: DirectorProject; ro: boolean; apply?: () => void }) {
   const T = useT(); const edit = useDirector((x) => x.edit);
   const e = episodeByNo(p, p.workflow.episode_no);
   if (!e) return null;
@@ -865,7 +868,10 @@ function PromptGrid({ p, ro }: { p: DirectorProject; ro: boolean }) {
   return (
     <section className="dx-block"><h4><Ico n="edit" />{T('Video prompts')} <small>{edited} / {shots.length} {T('edited')}</small></h4>
       <p className="dirx-muted">{T('This is the text each video generator card gets. Review and fix the clips below; "Open in Canvas" puts them all on the canvas prompt cards, and your settings in the canvas are kept.')}</p>
-      {edited > 0 && <div className="dx-btns"><button className="btn small" disabled={ro} onClick={() => void resetAll()}>{T('Reset all prompts')}</button></div>}
+      <div className="dx-btns">
+        {apply && <button className="btn small primary" disabled={ro} title={T('Put the prompts on the canvas prompt cards so the next generation uses them.')} onClick={() => void apply()}>{T('Apply to the canvas prompt cards')}</button>}
+        {edited > 0 && <button className="btn small" disabled={ro} onClick={() => void resetAll()}>{T('Reset all prompts')}</button>}
+      </div>
       <div className="dx-canvasgrid">{shots.map((s, i) => <ShotPrompt key={`${s.shot_id}:${(s.prompt_user ?? '').trim() ? 'e' : 'o'}`} p={p} s={s} n={i + 1} ro={ro} />)}</div>
     </section>
   );
@@ -874,12 +880,12 @@ function PromptGrid({ p, ro }: { p: DirectorProject; ro: boolean }) {
 function ShotPrompt({ p, s, n, ro }: { p: DirectorProject; s: DirectorShot; n: number; ro: boolean }) {
   const T = useT(); const edit = useDirector((x) => x.edit);
   const scene = p.scenes.find((z) => z.scene_id === s.scene_id);
-  const composed = composeClipPrompt(s);
+  const composed = composeClipPrompt(s, p.series.language);
   const [text, setText] = useState(s.prompt_user ?? composed);
   const edited = !!s.prompt_user?.trim();
   const commit = () => {
     const t = text.trim();
-    edit((x) => { const q = x.shots.find((z) => z.shot_id === s.shot_id); if (!q) return; q.prompt_user = t === composeClipPrompt(q) ? undefined : t; });
+    edit((x) => { const q = x.shots.find((z) => z.shot_id === s.shot_id); if (!q) return; q.prompt_user = t === composeClipPrompt(q, x.series.language) ? undefined : t; });
   };
   const restore = () => { edit((x) => { const q = x.shots.find((z) => z.shot_id === s.shot_id); if (q) q.prompt_user = undefined; }); setText(composed); };
   return (
@@ -985,11 +991,14 @@ function GenerateCard({ p, ro, review }: { p: DirectorProject; ro: boolean; revi
   const run = (opt: { nos: number[]; clipIds?: string[]; newSeeds?: boolean }) => guard(async () => { await report(await generateBatch({ ...opt, onFail })); });
   const sync = () => guard(async () => { let n = 0; for (const x of nosOf()) n += await syncResultsFromCanvas(x); await notify(n ? `${T('Results added')}: ${n}` : T('No new results.')); });
   const zip = () => guard(async () => { const rs = await downloadEpisodePackages(nosOf()); await notify(rs.map((r) => `${r.zipName} — ${r.included.length} ${T('files')}${r.missing.length ? ` (${T('Not included')}: ${r.missing.map((m) => m.name).join(', ')})` : ''}`).join('\n')); });
+  // the edited prompts of this episode go onto the canvas prompt cards now (the next generation uses exactly this text)
+  const applyPrompts = () => guard(async () => { await makeEpisodeCanvas(no); await notify(T('Applied to the canvas prompt cards: the next generation uses these texts.')); });
   const ticked = shots.filter((s) => d.selClips.includes(s.shot_id)).map((s) => s.shot_id);
   return (
     <div className="dx-page"><Working p={p} /><EpisodeHead p={p} icon={review ? 'check' : 'play'} />
       <CastStrip p={p} names={refsUsed} />
       <Meter done={have} total={shots.length} label={`${have} / ${shots.length} ${T('clips generated')}`} />
+      <PromptGrid p={p} ro={ro} apply={() => void applyPrompts()} />
       {!review && !mode && (
         <section className="dx-choose"><h3>{T('How do you want to make this episode?')}</h3>
           <div className="dx-choose-grid">
@@ -1121,6 +1130,10 @@ function ChatDock({ p, T }: { p: DirectorProject | null; T: (k: string) => strin
           <div key={m.id} className={`dirx-msg ${m.role}${m.error ? ' err' : ''}`}>
             {m.role === 'assistant' && <span className="dirx-who">{T(CREW_LABEL[m.crew ?? 'producer_desk'])}</span>}
             <div>{m.text}</div>{m.notes?.map((n, i) => <small key={i}>• {n}</small>)}
+            {m.error && m.raw && <details className="dirx-raw"><summary>{T('The model\'s original answer')} · <em>{(m.raw.length / 1000).toFixed(1)}k</em></summary>
+              <pre>{m.raw}</pre>
+              <button className="btn small" onClick={() => { const b = new Blob([m.raw!], { type: 'text/plain;charset=utf-8' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `llm-answer-${m.id}.txt`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 3000); }}>{T('Download the answer')}</button>
+            </details>}
           </div>))}
         {d.busy && <div className="dirx-msg assistant"><span className="dirx-spin" /> {T('The crew is working…')}</div>}
         <div ref={end} />
