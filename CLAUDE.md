@@ -139,8 +139,8 @@
 - **순차 편작성(#3)**: `DirectorEpisode.handoff`, `continuity.episodeHandoff`(최종 검토 승인 시 저장, `workflow.approveEpisode` review 분기), `workflow.startEpisodes`가 **이전 편이 done일 때만 다음 한 편 시작**(여러 개 줘도 한 편만), 저장소가 "이전 편을 먼저 완성" 안내. `kickoffInstruction('episode')`이 이전 편의 handoff를 지시문에 포함. 편 스트립에서 동시 작성(Start writing) 버튼 제거(작성은 편 페이지에서).
 - 시나리오 수동 추가(#4c): `ScenarioList`에 "빠진 편 추가"(`newEpisode`로 빈 행).
 - 시험: flow/adapter 갱신(묶음 일부 허용, 순차 start, handoff·지시문, 오류 문구 "The model said", clipPromptOf `<d>`), `npm run typecheck`·`npm run test:director` 전체 통과.
-- 데모 브라우저(8766, **신규 탭에서만 신뢰** — 이전 탭은 stale 캐시로 강제 진행되어 재탭 필요): 생성·확인 단계에 프롬포트 카드 3장 + "적용" 버튼, 클립 2 수정 → 파일에 `prompt_user` 저장 확인, 오류 유발(`__directorLlm`이 비JSON) 시 채팅에 "모델이 보낸 원문 답변" + 다운로드 버튼 확인.
-- **확인 못 한 것**: 실제 LLM/GPU로 묶음 일부 보존·순차 편작성·대사 보존 작동, `engine/run.ts` 강화가 `<d>`를 지키는지(모델 의존), 캔버스 파일에 적용된 반영의 실기.
+- 데모 브라우저(8766)에서는 **캐스팅 데모 흐름**(브리프→캐스팅 5카드)과 vite가 새 코드(적용 버튼·순차 startEpisodes·recast)를 서빙하는 것까지 확인. **생성·확인 프롬포트 카드·"적용"·원문 답변 details의 브라우저 확인은 이번 라운드 탭 세션 문제로 미완료** — 로직은 단위 시험(adapter/flow)으로 커버.
+- **확인 못 한 것**: 실제 LLM/GPU로 묶음 일부 보존·순차 편작성·대사 보존 작동, `engine/run.ts` 강화가 `<d>`를 지키는지(모델 의존), 캔버스 파일에 적용된 반영의 실기, 생성·확인 프롬포트 카드·원문 답변 UI의 브라우저 확인.
 
 ### 캔버스 단계: 클립별 영상 프롬포트 검토·수정 + 생성 유지 (#4/#5) (2026-11-01, 데모 브라우저 확인 · 실제 GPU 미확인)
 - 목적: 편 작성 승인 → 전체 클립을 영상 프롬포트로 만들어 캔버스 탭에서 클립별로 보고 고치고, "캔버스에서 열기"로 전부 캔버스 카드에 적용하며, 생성·확인으로 넘어가도 적용된 프롬포트·캔버스 설정을 유지한 채 생성을 진행.
