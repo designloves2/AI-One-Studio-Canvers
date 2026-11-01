@@ -745,14 +745,13 @@ function ClipCard({ s, n, big, gen, sel, onSel, onAgain, ro }: { s: DirectorShot
     <article className={`dx-clip st-${s.status}${sel ? ' sel' : ''}`}>
       <header>{onSel && <input type="checkbox" className="dx-clip-check" checked={!!sel} onChange={onSel} title={T('Select this clip')} />}<span className="num">{n}</span><span className="pill">{s.duration_sec}s</span>{s.camera && <span className="pill cam">{s.camera}</span>}<span className={`stat s-${s.status}`}>{T(STATUS_KO[s.status])}</span>{pick && s.passed === pick.result_id && <span className="stat s-done">✓ {T('Passed')}</span>}{s.excluded && <span className="stat s-failed">{T('Left out')}</span>}</header>
       {s.status === 'generating' && live?.status === 'running' && <div className="dx-clipprog"><div><i style={{ width: `${Math.max(2, Math.min(100, Math.round(live.pct ?? 0)))}%` }} /></div><span>{Math.round(live.pct ?? 0)}%{live.label ? ` · ${live.label}` : ''}</span></div>}
-      <p className="pic">{s.prompt_ko || s.prompt_en}</p>
-      {s.prompt_ko && <p className="en">{s.prompt_en}</p>}
+      <p className="pic">{s.prompt_ko && <small>{T('Clip description')}</small>}{s.prompt_ko || s.prompt_en}</p>
+      {s.prompt_ko && s.prompt_en && <p className="en"><small>{T('Shot description')}</small>{s.prompt_en}</p>}
       {(s.dialogue || s.sound || s.music) && <ul className="voices">
         {s.dialogue && <li className="dlg" title={T(proj?.series.format === 'vlog' ? 'Narration' : 'Dialogue')}><Ico n="chat" />{proj?.series.format === 'vlog' && <b className="dx-voice">{T('Narration')}</b>}<span>{s.dialogue}</span></li>}
         {s.sound && <li className="snd"><Ico n="sound" /><span>{s.sound}</span></li>}
         {s.music && <li className="mus"><Ico n="music" /><span>{s.music}</span></li>}</ul>}
       {(s.cast.length > 0 || s.location) && <footer>{s.cast.map((c) => { const r = proj?.references.find((x) => x.name.toLowerCase() === c.toLowerCase()); return <i key={c}>{r ? <Avatar r={r} size={18} /> : <Ico n="user" />}{c}</i>; })}{s.location && <i className="loc">{(() => { const r = proj?.references.find((x) => x.name.toLowerCase() === s.location.toLowerCase()); return r ? <Avatar r={r} size={18} /> : <Ico n="pin" />; })()}{s.location}</i>}</footer>}
-      {proj && <Ref2vaBox p={proj} s={s} />}
       {big && pick && <div className="dx-preview">{pick.kind === 'video' ? <video src={img(pick)} controls preload="metadata" /> : <img src={img(pick)} alt="" />}</div>}
       <Thumbs s={s} />
       {gen && (
@@ -776,15 +775,6 @@ function Thumbs({ s }: { s: DirectorShot }) {
     <button key={r.result_id} className={r.picked ? 'on' : ''} title={r.picked ? T('Picked') : T('Pick this result')} onClick={() => edit((x) => { const q = x.shots.find((z) => z.shot_id === s.shot_id)!; q.results.forEach((z) => { z.picked = z.result_id === r.result_id; }); })}>
       {r.kind === 'video' ? <video src={img(r)} muted preload="metadata" /> : <img src={img(r)} alt="" loading="lazy" />}{r.picked && <i>✓</i>}
     </button>))}</div>;
-}
-
-/** the official H3 Ref2VA prompt of one clip, as the canvas prompt card will hold it (shown on every clip card so it is checked here, not only in the Canvas) */
-function Ref2vaBox({ p, s }: { p: DirectorProject; s: DirectorShot }) {
-  const T = useT();
-  const text = composeClipPrompt(s, p.series.language, shotSubjects(p, s));
-  return (
-    <details className="dx-ref2va"><summary>{T('Official H3 prompt (Ref2VA)')}</summary><pre>{text}</pre></details>
-  );
 }
 
 function EpisodeHead({ p, icon }: { p: DirectorProject; icon: keyof typeof ICONS }) {
@@ -837,8 +827,8 @@ function ClipEditor({ p, s, n }: { p: DirectorProject; s: DirectorShot; n: numbe
   return (
     <article className="dx-clip dx-clip-edit">
       <header><span className="num">{n}</span><span className="pill">{s.duration_sec}s</span><button className="btn small danger" style={{ marginLeft: 'auto' }} onClick={() => void remove()}>{T('Delete this clip')}</button></header>
-      {text('Picture (for reading)', 'prompt_ko')}
-      {text('Picture (the model gets this, English)', 'prompt_en', 3)}
+      {text('Clip description', 'prompt_ko', 3)}
+      {text('Shot description', 'prompt_en', 3)}
       {text('Dialogue', 'dialogue')}{text('Sound', 'sound')}{text('Music', 'music')}
       <div className="dx-avs">
         {s.cast.map((c) => { const r = findReference(p, c); return <span key={c} className="dx-strip-item">{r ? <Avatar r={r} size={20} /> : <Ico n="user" />}<em>{c}</em><button className="dx-x" title={T('Take out')} onClick={() => change((q) => { q.cast = q.cast.filter((z) => z !== c); })}>×</button></span>; })}
@@ -846,7 +836,6 @@ function ClipEditor({ p, s, n }: { p: DirectorProject; s: DirectorShot; n: numbe
         {addable.length > 0 && <select className="dx-addsel" value="" onChange={(ev) => { if (ev.target.value) change((q) => { if (!q.cast.includes(ev.target.value)) q.cast.push(ev.target.value); }); }}><option value="">+ {T('Add cast / place')}</option>{addable.map((r) => <option key={r.ref_id} value={r.name}>{r.name}</option>)}</select>}
       </div>
       <label className="dx-field">{T('Place')}<select value={inCast.has(s.location) ? s.location : ''} onChange={(ev) => change((q) => { q.location = ev.target.value; })}><option value="">{T('No place yet')}</option>{places.map((r) => <option key={r.ref_id} value={r.name}>{r.name}</option>)}</select></label>
-      <Ref2vaBox p={p} s={s} />
     </article>
   );
 }

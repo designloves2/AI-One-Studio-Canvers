@@ -34,10 +34,11 @@ function dialogueLines(d: string, sLabel: Map<string, number>, lang?: string): s
 /**
  * The source text of a clip (what the official H3 prompt-enrichment gets and what the card shows before it is generated).
  * `subjects` = the clip's references in picture order (cast people/props, then the place); the caller passes `model.shotSubjects(p, s)`.
+ * The text is written in the SYSTEM language (no English translation): `prompt_ko` = the clip description, `prompt_en` = the shot description.
  */
-export function composeClipPrompt(s: Pick<DirectorShot, 'prompt_en' | 'dialogue' | 'sound' | 'music'> & Partial<Pick<DirectorShot, 'cast' | 'location'>>, lang?: string, subjects: ShotSubject[] = []): string {
+export function composeClipPrompt(s: Pick<DirectorShot, 'prompt_ko' | 'prompt_en' | 'dialogue' | 'sound' | 'music'> & Partial<Pick<DirectorShot, 'cast' | 'location'>>, lang?: string, subjects: ShotSubject[] = []): string {
   const sLabel = new Map(subjects.filter((x) => x.kind === 'character').map((x, i) => [normSp(x.name), i + 1]));
-  const out = [s.prompt_en.trim()];
+  const out = [(s.prompt_ko ?? '').trim(), s.prompt_en.trim()].filter(Boolean);
   const names = [...new Set([...(s.cast ?? []), ...(s.location ? [s.location] : [])])];
   if (names.length) out.push(`References: ${names.map((n, i) => { const k = sLabel.get(normSp(n)); return `@image${i + 1} = ${n}${k ? ` (S${k})` : ''}`; }).join(', ')}`);
   out.push(...dialogueLines(s.dialogue ?? '', sLabel, lang));
@@ -49,7 +50,7 @@ export function composeClipPrompt(s: Pick<DirectorShot, 'prompt_en' | 'dialogue'
 
 /** The full video prompt of a clip as it is used: the producer's own text (she wrote one, or the official H3 brief was generated), else the source.
  *  Everything that shows this text or detects when the canvas is stale must use this. */
-export const clipPromptOf = (s: Pick<DirectorShot, 'prompt_user' | 'prompt_en' | 'dialogue' | 'sound' | 'music'> & Partial<Pick<DirectorShot, 'cast' | 'location'>>, lang?: string, subjects: ShotSubject[] = []): string => {
+export const clipPromptOf = (s: Pick<DirectorShot, 'prompt_user' | 'prompt_ko' | 'prompt_en' | 'dialogue' | 'sound' | 'music'> & Partial<Pick<DirectorShot, 'cast' | 'location'>>, lang?: string, subjects: ShotSubject[] = []): string => {
   const own = (s.prompt_user ?? '').trim();
   return own || composeClipPrompt(s, lang, subjects);
 };

@@ -83,7 +83,12 @@ export const demoCrew: LlmFn = async (system, user) => {
       if (fmtId === 'short') return { en: first ? 'Hook: a sudden surprising action in the first second, vertical frame' : last ? 'Payoff: the surprise resolves with a smile, loop back to the start' : 'Fast cut: the idea develops', kor: first ? '훅: 첫 1초의 의외의 행동' : last ? '마무리: 반전 후 미소, 처음으로 이어지는 루프' : '빠른 컷: 아이디어 전개', dialogue: '', sound: 'pop, whoosh', music: 'trending upbeat loop', camera: 'handheld' };
       return { en: `Shot ${i + 1} of episode ${epNo}: the lead walks through the lobby, tense mood, handheld camera`, kor: `${epNo}화 ${i + 1}번 클립: 주인공이 로비를 걷는다`, dialogue: i % 2 === 0 ? `${lead}: ${ko('이게 다 거짓말이었다고?', 'It was all a lie?')}` : '', sound: 'footsteps on marble, distant murmur', music: 'low strings swell', camera: i % 3 === 0 ? 'wide' : 'medium close-up' };
     };
-    const mk = (i: number) => { const x = beat(i); return { prompt_en: x.en, prompt_ko: x.kor, camera: x.camera, dialogue: x.dialogue ? (fmtId === 'drama' ? x.dialogue : x.dialogue) : '', sound: x.sound, music: x.music, cast: lead ? [lead] : [], location: place }; };
+    const mk = (i: number) => {
+      const x = beat(i);
+      // the clip fields are in the series language (no English translation): prompt_en = the shot description (camera / shot plan), prompt_ko = the scene content
+      const shotDesc = ko(`${x.camera} 촬영 · 10초를 1~3샷으로 구성, 카메라 무브 포함: ${x.kor}`, `${x.camera} shot · the 10s clip is built from 1-3 shots with a moving camera: ${x.en}`);
+      return { prompt_en: shotDesc, prompt_ko: x.kor, camera: x.camera, dialogue: x.dialogue ? (fmtId === 'drama' ? x.dialogue : x.dialogue) : '', sound: x.sound, music: x.music, cast: lead ? [lead] : [], location: place };
+    };
     if (rng) return JSON.stringify({ crew: 'director', say: ko(`${ca}~${cb}번 클립을 썼습니다.`, `Clips ${ca}-${cb} written.`), episode_plan: { no: epNo, scenes: [{ title: ko(`장면 ${ca}-${cb}`, `Scene ${ca}-${cb}`), summary: '', clips: Array.from({ length: cb - ca + 1 }, (_, i) => mk(ca - 1 + i)) }] } });
     return JSON.stringify({ crew: 'director', say: ko(`${epNo}화를 ${n}개 클립(각 ${clipSec}초)으로 구성했습니다.`, 'Episode written.'), episode_plan: { no: epNo, scenes: [
       { title: ko('도입', 'Opening'), summary: ko('긴장된 분위기로 시작', 'tense start'), clips: Array.from({ length: half }, (_, i) => mk(i)) },
