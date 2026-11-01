@@ -86,7 +86,7 @@
 **이 세션 구현(전부 단위 시험 `npm run test:director` + `npm run typecheck` 통과)**:
 - 캐스팅: 카드 개별 삭제, **다시 캐스팅(전체/배우/장소/소품)** — `store.recast`+`ai.recastInstruction`+`model.dropReferences`, 채팅창 폭 드래그(`--dock-w`, localStorage), 오른쪽 결과 90% 폭, 카드 그리드 최대(캐스팅 5/시나리오 4/편작성 4/프롬포트 4/생성·확인 4).
 - 프롬포트 그리드(캔버스·생성·확인 단계): `compose.clipPromptOf`(원문 조합, S1/S2 페르소나 + `(S1) <d>` 대사) + `prompt_user`(사용자 수정/공식 브리프 저장) + `model.shotSubjects` + "적용"/"생성용 캔버스 확인". `compose.ts`는 **공식 강화 입력용 원문 정보**(클립 설명+샷 설명/References/Dialogue/Sound/Music, 시스템 언어) — 공식 6섹션 브리프는 LLM이 표시용으로 생성.
-- **편작성 클립 카드(시스템 언어 기반)**: 공식 H3(Ref2VA) 표시 박스 제거. 필드 = **클립 설명**(prompt_ko, 시스템 언어) · **샷 설명**(prompt_en, 카메라 무빙+1~3샷, 시스템 언어) · 대사 · 음향 · 음악. 영어 번역 안 씀. 승인→프롬포트 생성 시 카드의 최종 수정 내용을 시스템 언어로 그대로 LLM 입력(대사 보존), 공식 H3가 영어 6섹션 브리프 생성.
+- **편작성 클립 카드(시스템 언어 = 설정 UI 언어)**: 공식 H3(Ref2VA) 표시 박스 제거. 필드 = **클립 설명**(prompt_ko) · **샷 설명**(prompt_en, 카메라 무빙+1~3샷) · 대사 · 음향 · 음악. 클립/샷 설명·음향·음악은 **설정의 UI 언어**(`useLang`/`canvers.lang` — 영어 UI면 영어, 한국어 UI면 한국어; `ai.uiLang()`)로 작성(영어 번역 안 함). 대사는 사용자가 요청한 언어(번역 금지). 승인→프롬포트 생성 시 카드의 최종 수정 내용을 시스템 언어로 그대로 LLM 입력, 공식 H3가 영어 6섹션 브리프 생성.
 - LLM 오류 완화: 묶음 일부 보존(`planParts` 재계산·`unitProgress` 동적 루프·그룹 1~N 허용), 오류 시 **모델 원문 보기/다운로드**(`ChatMsg.raw`, `CrewError`), 시나리오 "빠진 편 추가".
 - **공식 H3 프롬포트 생성**: `canvasAction.generateClipPrompts`(클립당 `runLlm({style: formatFor('video-generate', h3-ref)})` → `shot.prompt_user`, `prompt_busy` 생성중). runJob('canvas')는 **캔버스 먼저 생성+5단계 노출 후 순차 생성**. 데모는 `demoOfficialBrief`(공식 형태 스텐드인, sleep 간격).
 - 순차 편작성: `workflow.startEpisodes`(이전 편 done만), `episode.handoff`(최종 검토 승인 시 `episodeHandoff` 저장 → 다음 편 지시문에 포함), "여러 편 함께" UI/스토어 제거.
