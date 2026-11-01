@@ -12,6 +12,7 @@ import { BACKENDS } from '../backend/llm';
 import { estTokens, useLlmLog } from '../backend/llmLog';
 import { Llm } from '../panels/SettingsPanel';
 import { resultUrl } from './media';
+import { composeClipPrompt } from './compose';
 import { CREW_LABEL, renameReference } from './ai';
 import { episodeByNo, findReference, newAsset, newReference, newShot, shotsOfEpisode, syncShotAssets } from './model';
 import { newSeed } from './execution';
@@ -24,7 +25,7 @@ import { FORMAT_IDS, FORMATS, vocabOf } from './formats';
 import { blockers, hasMusicStep, EPISODE_STAGES, epStageIndex, episodeBlockers, episodeState, GLOBAL_STAGES, productionOpen, stageIndex } from './workflow';
 import { localizeMsg } from './localize';
 import { attachPanZoom } from '../ui/panZoom';
-import { castEngineOf, castEngines, confirmCastPrompt, extraAspects, makeVersionCanvases, versionLinks, downloadEpisodePackages, generateBatch, generateCast, linkOfCasting, linkOfEpisode, openCastingCanvas, openLinkedCanvas, registerCast, syncCastFromCanvas, syncResultsFromCanvas, writeCastPrompts } from './canvasAction';
+import { castEngineOf, castEngines, confirmCastPrompt, extraAspects, makeEpisodeCanvas, makeVersionCanvases, versionLinks, downloadEpisodePackages, generateBatch, generateCast, linkOfCasting, linkOfEpisode, openCastingCanvas, openLinkedCanvas, registerCast, syncCastFromCanvas, syncResultsFromCanvas, writeCastPrompts } from './canvasAction';
 import { castPromptText, hasCastPrompt } from './adapter';
 import { formatFor } from '../backend/promptStyle';
 import type { DirectorProject, DirectorReference, DirectorShot, ReferenceKind, ResultRef, StageId } from './types';
@@ -214,7 +215,7 @@ function StagePanel({ p, ro, view }: { p: DirectorProject; ro: boolean; view: St
   const ep = episodeByNo(p, p.workflow.episode_no);
   if (!ep || ep.stage === 'idle') return <EpisodeIdle p={p} ro={ro} />;
   if (view === 'episode') return <EpisodeCard p={p} ro={ro} />;
-  if (view === 'canvas') return <CanvasCard p={p} />;
+  if (view === 'canvas') return <CanvasCard p={p} ro={ro} />;
   if (view === 'review') return <ReviewCard p={p} ro={ro} />;
   return <GenerateCard p={p} ro={ro} review={false} />;
 }
@@ -849,16 +850,71 @@ function ClipEditor({ p, s, n }: { p: DirectorProject; s: DirectorShot; n: numbe
 }
 
 // ---- canvas
-function CanvasCard({ p }: { p: DirectorProject }) {
+/** the full video prompts of the episode, one editable card per clip: the producer reviews and fixes the text the canvas Prompt cards will hold */
+function PromptGrid({ p, ro }: { p: DirectorProject; ro: boolean }) {
+  const T = useT(); const edit = useDirector((x) => x.edit);
+  const e = episodeByNo(p, p.workflow.episode_no);
+  if (!e) return null;
+  const shots = shotsOfEpisode(p, e.episode_id);
+  if (!shots.length) return null;
+  const edited = shots.filter((s) => (s.prompt_user ?? '').trim()).length;
+  const resetAll = async () => {
+    if (!edited || !(await askConfirm(`${T('Reset the edited prompts back to the original?')}\n${edited} ${T('edited')}`))) return;
+    edit((x) => { for (const q of x.shots) q.prompt_user = undefined; });
+  };
+  return (
+    <section className="dx-block"><h4><Ico n="edit" />{T('Video prompts')} <small>{edited} / {shots.length} {T('edited')}</small></h4>
+      <p className="dirx-muted">{T('This is the text each video generator card gets. Review and fix the clips below; "Open in Canvas" puts them all on the canvas prompt cards, and your settings in the canvas are kept.')}</p>
+      {edited > 0 && <div className="dx-btns"><button className="btn small" disabled={ro} onClick={() => void resetAll()}>{T('Reset all prompts')}</button></div>}
+      <div className="dx-canvasgrid">{shots.map((s, i) => <ShotPrompt key={`${s.shot_id}:${(s.prompt_user ?? '').trim() ? 'e' : 'o'}`} p={p} s={s} n={i + 1} ro={ro} />)}</div>
+    </section>
+  );
+}
+
+function ShotPrompt({ p, s, n, ro }: { p: DirectorProject; s: DirectorShot; n: number; ro: boolean }) {
+  const T = useT(); const edit = useDirector((x) => x.edit);
+  const scene = p.scenes.find((z) => z.scene_id === s.scene_id);
+  const composed = composeClipPrompt(s);
+  const [text, setText] = useState(s.prompt_user ?? composed);
+  const edited = !!s.prompt_user?.trim();
+  const commit = () => {
+    const t = text.trim();
+    edit((x) => { const q = x.shots.find((z) => z.shot_id === s.shot_id); if (!q) return; q.prompt_user = t === composeClipPrompt(q) ? undefined : t; });
+  };
+  const restore = () => { edit((x) => { const q = x.shots.find((z) => z.shot_id === s.shot_id); if (q) q.prompt_user = undefined; }); setText(composed); };
+  return (
+    <article className={`dx-shotprompt${edited ? ' edited' : ''}`}>
+      <header><span className="num">{n}</span>{scene && <span className="pill">{scene.order}.{s.order}</span>}<span className="pill">{s.duration_sec}s</span>{edited ? <i className="ok">✓ {T('Edited')}</i> : <i>{T('Original')}</i>}</header>
+      <textarea rows={5} disabled={ro} value={text} onChange={(ev) => setText(ev.target.value)} onBlur={commit} aria-label={`${T('Video prompt of clip')} ${n}`} />
+      {edited && <div className="dx-btns"><button className="btn small" disabled={ro} onClick={restore}>{T('Restore the original')}</button></div>}
+    </article>
+  );
+}
+
+function CanvasCard({ p, ro }: { p: DirectorProject; ro: boolean }) {
   const T = useT(); const link = linkOfEpisode(p, p.workflow.episode_no); const e = episodeByNo(p, p.workflow.episode_no);
   const shots = e ? shotsOfEpisode(p, e.episode_id) : [];
+  const [busy, setBusy] = useState(false);
+  // "open": the edited prompts are put on the canvas prompt cards first (the user's own settings in the canvas are kept); nothing runs by itself
+  const applyAndOpen = async () => {
+    if (!e) return;
+    setBusy(true);
+    try {
+      await makeEpisodeCanvas(e.no);
+      const cur = useDirector.getState().project; const fresh = cur ? linkOfEpisode(cur, e.no) : null;
+      if (!fresh) { await notify(T('The canvas is being built…')); return; }
+      await openLinkedCanvas(fresh.canvas_file).catch((er) => notify((er as Error).message));
+    } catch (er) { await notify((er as Error).message); }
+    finally { setBusy(false); }
+  };
   return (
     <div className="dx-page"><Working p={p} /><EpisodeHead p={p} icon="clip" />
+      {shots.length > 0 && <PromptGrid p={p} ro={ro} />}
       {link ? (
         <section className="dx-block"><h4><Ico n="film" />{T('The episode is set up as a canvas')}</h4>
           <p className="dx-prose"><b>{link.canvas_file}</b></p>
           <div className="dx-tiles two"><Tile icon="clip" value={String(shots.length)} label={T('Clips')} tone="b" /><Tile icon="bolt" value={PRESET_LABEL[p.series.preset]} label={`${T('with the shared 7+1 card')} · ${p.series.resolution}`} tone="a" /></div>
-          <div className="dx-btns"><button className="btn primary" onClick={() => void openLinkedCanvas(link.canvas_file).catch((er) => notify((er as Error).message))}>{T('Open in Canvas')}</button></div>
+          <div className="dx-btns"><button className="btn primary" disabled={ro || busy} title={T('Put the edited prompts on the canvas prompt cards and open the canvas. Your settings in the canvas are kept, and nothing runs by itself.')} onClick={() => void applyAndOpen()}>{T('Open in Canvas')}</button></div>
         </section>) : <p className="dirx-muted">{T('The canvas is being built…')}</p>}
       {link && <VersionsBlock p={p} />}
     </div>

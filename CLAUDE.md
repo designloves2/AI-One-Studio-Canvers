@@ -131,6 +131,16 @@
 - **작품 종류(완료)**: `series.format` = drama / film / ad / musicvideo / vlog / short (스키마 4, 3→4 마이그레이션 = drama). `src/director/formats.ts`(순수): 종류별 화면 용어 `vocabOf`(캐스팅 = 배우·장소·소품 / 모델·제품 / 아티스트·의상 / 진행자…, 시나리오 = 스토리보드·구성안…), 기본 숫자(광고 30초·6초 클립, 뮤직비디오 3분, 숏폼 9:16 30초…), 작업팀 지침 `guide`, 말로 종류 읽기 `detectFormat`. 작업팀은 브리프에서 종류를 정하고(빠뜨리면 사용자의 말에서 읽음) 그 종류의 지침을 시스템 프롬프트에 받음. 1편짜리 종류는 회차 줄을 숨기고 시나리오 승인 뒤 작성이 자동 시작. 브리프 맨 위에 "작품 종류" 드롭다운. 데모 작업팀도 종류별 캐스팅·클립(광고 엔드카드, 뮤직비디오 구간, 브이로그 내레이션 대사, 숏폼 훅). 브라우저 확인: 광고 한 문장 → 광고로 인식·30초·6초 클립 5개·용어 변경·회차 줄 숨김·자동 작성·엔드카드. **미구현**: 광고 비율별(16:9·9:16·1:1) 버전 생성, 뮤직비디오 음악 단계(사용자 업로드 + AI 생성 병행, 화면 선택 또는 채팅 명령), 브이로그 전용 내레이션 필드(현재는 클립의 `dialogue`가 내레이션 역할).
 - 다음 할 일: ① (완료) 편별 UI ② (완료) 결과 우클릭 에셋 등록 ③ (완료) 캐스팅 모델·일괄/개별·등록 ④ (완료) 브리프 설정 드롭다운·캐스팅 프롬프트·전 단계 데모 ⑤ 사용자가 데모로 단계별 확인하며 주는 수정 피드백 반영 ⑥ 음악 생성·에셋화 ⑦ 실제 LLM·GPU 시험(사용자가 서버가 비었다고 할 때만) ⑧ 좁은 창 회차 줄 확인.
 
+### 캔버스 단계: 클립별 영상 프롬포트 검토·수정 + 생성 유지 (#4/#5) (2026-11-01, 데모 브라우저 확인 · 실제 GPU 미확인)
+- 목적: 편 작성 승인 → 전체 클립을 영상 프롬포트로 만들어 캔버스 탭에서 클립별로 보고 고치고, "캔버스에서 열기"로 전부 캔버스 카드에 적용하며, 생성·확인으로 넘어가도 적용된 프롬포트·캔버스 설정을 유지한 채 생성을 진행.
+- 데이터: `DirectorShot.prompt_user`(사용자가 쓴 전체 프롬포트; 있으면 조합본 대신 사용). `compose.clipPromptOf` = `prompt_user || composeClipPrompt`. **이 글을 보여 주거나 stale을 판정하거나 패키지에 넣는 곳은 모두 `clipPromptOf`를 쓴다**: `adapter`(캔버스 프롬포트 카드 글), `execution.staleShots`, `exportPackage`(prompts.md, clips.json의 prompt_for_model).
+- adapter: `prompt_user`가 설정된 클립은 카드 글을 **무조건 덮어씀**(그리드가 최신 사용자 의도 — `keptUserText` 우회). 설정 안 된 클립은 기존 규칙 그대로(캔버스에서 직접 고친 글은 유지). 기존 생성 카드의 파라미터·엔진·결과·위치는 건드리지 않으므로 캔버스에서 바꾼 옵션이 보존된다.
+- 화면: `CanvasCard`(이제 `ro` prop) 위에 `PromptGrid`(`.dx-canvasgrid` 최대 4열) — `ShotPrompt` 카드마다 텍스트 영역, "수정됨/원본" 배지, 카드별 "원래 글자로 되돌리기", 위쪽 "프롬포트 전체 되돌리기". 저장은 blur 시 `prompt_user`(조합본과 같아지면 삭제). React key = `shot_id:edited?`로 수정 상태 전환이 화면에 반영. "캔버스에서 열기" = `makeEpisodeCanvas`(적용) → `openLinkedCanvas`(열기만, 자동 실행 없음) — 데모는 열기 안내를 띄움.
+- 생성 때 유지(#5): `generateBatch`가 실행 전 `makeEpisodeCanvas`로 다시 빌드해도 adapter가 기존 카드를 보존하므로 적용된 프롬포트(`prompt_user`)와 캔버스 설정이 생성 카드에 그대로 남아 실행된다.
+- 시험: `scripts/test-director-adapter.mjs`에 `clipPromptOf`, 그리드 프롬포트 적용(스테일 카드도 덮어씀)·`prompt_sent` 갱신·지우면 조합본 복귀, `staleShots`가 `clipPromptOf` 기준으로 잡는지 추가. `npm run typecheck`·`npm run test:director` 통과.
+- 데모 브라우저(8766) 확인: 캐스팅(프롬토 확인 5/5 후 일괄 생성 5/5) → 시나리오 → 편 작성 3클립 승인 → **캔버스 탭에 3개 프롬포트 카드(4열)** → 2번 클립 수정 → "1/3 수정됨"·✓ 배지 → 저장 파일에 `prompt_user` 확정 → "캔버스에서 열기"(데모라 열기 안내, 적용 경로 실행) → 승인 → 생성·확인 자동 생성 **3/3** → 캔버스 탭 다시 보기(수정 유지) → "원래 글자로 되돌리기"로 0/3 복귀.
+- **확인 못 한 것**: 실제 캔버스 파일에 적용된 카드 글(GPU·ComfyUI `runNode`로 실제 프롬포트가 생성에 쓰이는지), 사용자가 캔버스에서 고친 엔진·옵션을 생성·확인에서 그대로 쓰는 실기 경로.
+
 ### 캐스팅 카드 관리 · 화면 폭 (2026-11-01, 데모 브라우저 확인)
 - 카드별 **개별 삭제**: `CastCard` 동작 줄에 `🗑 삭제` 버튼(기존 `removeEntry` 확인을 재사용, 설명창 안의 "Remove this entry" 제거). 편집창과 분리되어 찾기 쉬움.
 - **다시 캐스팅**(전체/배우/장소/소품): `store.recast(kinds)` — busy 가드, 작업 복사본에서 해당 종류만 `model.dropReferences`(이름을 편·클립에서도 정리, `variant_of` 연결 해제) 후 종류별로 `directorTurn(…, recastInstruction(work, kind), …, { kickoff:'references', part:{kind} })`. 전부 성공해야만 본 프로젝트에 교체 적용(`dropReferences` + 새 항목 push + `syncShotAssets`), 성공 시 `references` 다시 `review_required` + 캐스팅 임시 캔버스 제거. 실패·취소 시 원래 stage/status 복원 + 채팅 오류. `ai.recastInstruction`은 "Casting, one part at a time" + `every entry with kind "<kind>"` 문구 유지(데모·검사가 그대로 응답), 기존 이름·룩 재사용 금지 지시.

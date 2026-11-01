@@ -10,6 +10,8 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'canvers-adapter-'));
 const bundle = async (entry, out) => { await build({ entryPoints: [path.join(root, entry)], outfile: path.join(tmp, out), bundle: true, format: 'esm', platform: 'node', logLevel: 'silent' }); return import(pathToFileURL(path.join(tmp, out)).href); };
 const M = await bundle('src/director/model.ts', 'model.mjs');
 const A = await bundle('src/director/adapter.ts', 'adapter.mjs');
+const C = await bundle('src/director/compose.ts', 'compose.mjs');
+const E = await bundle('src/director/execution.ts', 'execution.mjs');
 let real = null; try { real = await bundle('src/director/adapterRegistry.ts', 'realreg.mjs'); } catch (e) { console.log('note: real registry could not be loaded in node:', e.message.split('\n')[0]); }
 
 let fails = 0;
@@ -69,6 +71,23 @@ ok(r3.link.prompt_sent[b.shot_id] === 'fox jumps', 'the kept card is still seen 
 const r3b = A.buildCanvasFromDirector(p, fake(), r3.project, r3.link, 'Film - director', { now: NOW });
 ok(r3b.project.nodes.find((n) => n.id === A.textNodeId(b.shot_id)).params.text === 'MY OWN WORDS', 'and stays kept on later builds');
 ok(!mod.nodes.some((n) => n === r3.project.nodes[0]), 'the canvas passed in is not mutated');
+
+// ---- the producer's own video prompt in the Director grid (the Canvas step) always wins
+ok(C.clipPromptOf({ prompt_en: 'x', dialogue: 'd', sound: 's', music: 'm', cast: ['A'], location: 'L', prompt_user: '' }) === 'x\nReferences: @image1 = A, @image2 = L\nDialogue: d\nSound: s\nMusic: m', 'without a user prompt the effective prompt is the composed text');
+ok(C.clipPromptOf({ prompt_en: 'x', prompt_user: '  MY OWN  ' }) === 'MY OWN', 'a prompt the producer wrote replaces the composed text');
+const own = JSON.parse(JSON.stringify(r1.project));
+own.nodes.find((n) => n.id === A.textNodeId(c.shot_id)).params.text = 'STALE CANVAS WORDS';
+const cshot = p.shots.find((s) => s.shot_id === c.shot_id); cshot.prompt_user = 'MY GRID PROMPT for the fox';
+const r6 = A.buildCanvasFromDirector(p, fake(), own, r1.link, 'Film - director', { now: NOW });
+ok(r6.project.nodes.find((n) => n.id === A.textNodeId(c.shot_id)).params.text === 'MY GRID PROMPT for the fox' && r6.link.prompt_sent[c.shot_id] === 'MY GRID PROMPT for the fox', 'a grid prompt is applied to the card even when the card holds an older text, and it is remembered as sent');
+ok(r6.report.keptUserText.length === 0, 'a grid prompt is not reported as unknown canvas text');
+// once the producer clears the grid prompt, the card falls back to the composed text (the canvas text is overridden again)
+delete cshot.prompt_user;
+const r6b = A.buildCanvasFromDirector(p, fake(), r6.project, r6.link, 'Film - director', { now: NOW });
+ok(r6b.project.nodes.find((n) => n.id === A.textNodeId(c.shot_id)).params.text === C.composeClipPrompt(cshot), 'clearing the grid prompt puts the composed text back on the card');
+ok(E.staleShots(p, r6.link).every((id) => id !== a.shot_id), 'a shot whose card follows the Director prompt is not stale against the sent prompts');
+const stale = { ...JSON.parse(JSON.stringify(r1.link)), prompt_sent: { ...r1.link.prompt_sent, [a.shot_id]: 'OLD' } };
+ok(E.staleShots(p, stale).includes(a.shot_id), 'a shot whose card holds an older prompt than the effective text is stale');
 
 // ---- user deleted cards / wire
 const del = JSON.parse(JSON.stringify(r1.project)); del.nodes = del.nodes.filter((n) => n.id !== A.genNodeId(c.shot_id)); del.edges = del.edges.filter((e) => e.id !== A.edgeId(c.shot_id));

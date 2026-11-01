@@ -7,7 +7,7 @@
 import type { Asset, GraphEdge, GraphNode, Primitive, Project } from '../types';
 import type { CanvasLink, DirectorProject, DirectorReference, DirectorShot } from './types';
 import { castOf, newId, shotsOfEpisode } from './model';
-import { composeClipPrompt } from './compose';
+import { composeClipPrompt, clipPromptOf } from './compose';
 
 export interface RegDef {
   id: string;
@@ -135,7 +135,7 @@ export function buildCanvasFromDirector(p: DirectorProject, reg: RegistryLike, e
     if (!genDef) { report.missing.push({ shot_id: sh.shot_id, reason: `card "${kind}" is not in the registry` }); continue; }
     if (!wired?.out || !wired.inn) { report.missing.push({ shot_id: sh.shot_id, reason: `no text port to connect "prompt" to "${kind}"` }); continue; }
     if (sh.scene_id !== lastScene) { if (lastScene) y += SCENE_GAP; lastScene = sh.scene_id; }
-    const promptText = composeClipPrompt(sh);
+    const promptText = clipPromptOf(sh);
     if (!sh.prompt_en.trim()) report.emptyPrompt.push(sh.shot_id);
     if (sh.asset_ids.length) report.assetsNotWired.push(sh.shot_id);
 
@@ -149,6 +149,10 @@ export function buildCanvasFromDirector(p: DirectorProject, reg: RegistryLike, e
       sent[sh.shot_id] = promptText;
     } else if (String(tn.params.text ?? '') === promptText) {
       sent[sh.shot_id] = promptText;   // already the same
+    } else if (sh.prompt_user?.trim() || String(tn.params.text ?? '') === promptText) {
+      // the producer wrote a prompt for this clip in the Director grid (or the card already holds it): the Director text wins
+      if (String(tn.params.text ?? '') !== promptText) { tn.params = { ...tn.params, text: promptText }; report.updated.push(tid); }
+      sent[sh.shot_id] = promptText;
     } else if (prevSent[sh.shot_id] !== undefined && String(tn.params.text ?? '') === prevSent[sh.shot_id]) {
       // untouched since the last build: follow the Director text
       tn.params = { ...tn.params, text: promptText }; report.updated.push(tid);

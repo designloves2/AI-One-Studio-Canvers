@@ -612,6 +612,14 @@ button.save-state.dirty { cursor: pointer; } button.save-state.dirty:hover { bac
 .dx-clips { display: grid; grid-template-columns: repeat(auto-fill, minmax(max(290px, calc((100% - 36px) / 4)), 1fr)); gap: 12px; }
 /* the prompt cards of the canvas step (a later feature): at most 4 columns */
 .dx-canvasgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(max(240px, calc((100% - 36px) / 4)), 1fr)); gap: 12px; }
+.dx-shotprompt { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px 12px; border-radius: 12px; background: var(--bg2); border: 1px solid var(--line); }
+.dx-shotprompt > header { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.dx-shotprompt > header .num { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--acc); color: #fff; font-size: 11px; font-weight: 700; }
+.dx-shotprompt > header .pill { font-size: 10.5px; padding: 2px 8px; border-radius: 999px; background: var(--bg3); border: 1px solid var(--line2); color: var(--muted); }
+.dx-shotprompt > header i { font-style: normal; margin-left: auto; font-size: 10.5px; color: var(--muted); } .dx-shotprompt > header i.ok { color: var(--acc2); }
+.dx-shotprompt textarea { width: 100%; resize: vertical; background: var(--bg); border: 1px solid var(--line2); border-radius: 8px; padding: 7px 9px; color: var(--fg); font-size: 12px; line-height: 1.5; }
+.dx-shotprompt.edited { border-color: color-mix(in srgb, var(--acc2) 45%, var(--line)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--acc2) 30%, transparent); }
+.dx-shotprompt.edited > header i.ok { font-weight: 600; }
 .dx-clip { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 14px; background: var(--bg2); border: 1px solid var(--line); }
 .dx-clip > header { display: flex; align-items: center; gap: 6px; } .dx-clip .num { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--acc); color: #fff; font-size: 11px; font-weight: 700; }
 .dx-clip .pill { font-size: 10.5px; padding: 2px 8px; border-radius: 999px; background: var(--bg3); border: 1px solid var(--line2); color: var(--muted); } .dx-clip .pill.cam { color: #4fd1e8; }

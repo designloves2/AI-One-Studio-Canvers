@@ -12,3 +12,10 @@ export function composeClipPrompt(s: Pick<DirectorShot, 'prompt_en' | 'dialogue'
   if (s.music?.trim()) lines.push(`Music: ${s.music.trim()}`);
   return lines.filter(Boolean).join('\n');
 }
+
+/** The full video prompt of a clip as it is used: the producer's own text (she wrote one in the Canvas step), else the composed one.
+ *  Everything that shows this text or detects when the canvas is stale must use this. */
+export const clipPromptOf = (s: Pick<DirectorShot, 'prompt_user' | 'prompt_en' | 'dialogue' | 'sound' | 'music'> & Partial<Pick<DirectorShot, 'cast' | 'location'>>): string => {
+  const own = (s.prompt_user ?? '').trim();
+  return own || composeClipPrompt(s);
+};

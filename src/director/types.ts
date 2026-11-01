@@ -134,6 +134,8 @@ export interface DirectorShot {
   passed?: string;
   /** left out of the joined episode */
   excluded?: boolean;
+  /** the producer's own full video prompt (what the canvas Prompt card holds): when written, it replaces the composed text */
+  prompt_user?: string;
   asset_ids: string[]; results: ResultRef[];
 }
 

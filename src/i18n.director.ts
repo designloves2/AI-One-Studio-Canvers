@@ -161,4 +161,14 @@ export const KO_DIRECTOR: Record<string, string> = {
   'The old entries of that kind and their images are replaced. The casting has to be approved again, and the story continues from the new cast.': '그 종류의 기존 항목과 이미지가 새것으로 바뀝니다. 캐스팅을 다시 승인해야 하며, 이후 이야기는 새 캐스팅으로 이어집니다.',
   'Drag to change the width of the chat': '끌어서 채팅창 폭 조절',
   'Double-click to reset': '두 번 클릭하면 기본 폭',
+  // canvas step: the per-clip video prompts the producer reviews and edits
+  'Video prompts': '영상 프롬포트',
+  'Video prompt of clip': '클립의 영상 프롬포트',
+  edited: '수정됨',
+  Original: '원본',
+  'Restore the original': '원래 글자로 되돌리기',
+  'Reset all prompts': '프롬포트 전체 되돌리기',
+  'Reset the edited prompts back to the original?': '수정한 프롬포트를 원래 글자로 되돌릴까요?',
+  'This is the text each video generator card gets. Review and fix the clips below; "Open in Canvas" puts them all on the canvas prompt cards, and your settings in the canvas are kept.': '각 영상 생성 카드가 받는 텍스트입니다. 아래 클립들을 검토하고 고친 뒤 "캔버스에서 열기"를 누르면 전부 캔버스 프롬포트 카드에 적용됩니다(캔버스에서 바꾼 설정은 유지됩니다).',
+  'Put the edited prompts on the canvas prompt cards and open the canvas. Your settings in the canvas are kept, and nothing runs by itself.': '수정한 프롬포트를 캔버스 프롬포트 카드에 적용하고 캔버스를 엽니다. 캔버스에서 바꾼 설정은 유지됩니다. 자동 실행은 하지 않습니다.',
 };
