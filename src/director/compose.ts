@@ -8,7 +8,7 @@ import type { DirectorShot } from './types';
 const langTag = (lang?: string) => (lang === 'en' ? 'English' : 'Korean');
 const normSp = (s: string) => s.toLowerCase().replace(/[\s·.,'"\-_]+/g, '');
 
-/** the spoken lines of a clip as H3 Ref2VA dialogue: one "Dialogue: (S<k>) <d>[lang]words</d>" line per speaker */
+/** The spoken lines of a clip as H3 Ref2VA dialogue: one "Dialogue: (S<k>) <d>[lang]words</d>" line per speaker */
 function dialogueLines(d: string, sOf: Map<string, number>, lang?: string): string[] {
   const tag = langTag(lang);
   const out: string[] = [];
@@ -29,20 +29,21 @@ function dialogueLines(d: string, sOf: Map<string, number>, lang?: string): stri
 }
 
 /**
- * The full video prompt of a clip as an H3 Ref2VA prompt. `people` = the persona names in order (S1, S2, ...) — the caller
- * passes the character cast entries of the clip. Without it the personas are not labeled.
+ * The full video prompt of a clip as an OFFICIAL Minimax H3 Ref2VA brief: the narrative in `integrated_multimodal_description`,
+ * the reference personas (@imageN = name (Sk)) and the spoken lines ((S1) <d>[lang]…</d>) inside it, then `overall_soundscape`
+ * and `non_diegetic_music` as the final two sections. `people` = the persona names in order (S1, S2, ...) — the caller passes
+ * the character cast entries of the clip. Dialogue is wrapped "<d>[language] words</d>" so any strengthening step keeps it verbatim.
  */
 export function composeClipPrompt(s: Pick<DirectorShot, 'prompt_en' | 'dialogue' | 'sound' | 'music'> & Partial<Pick<DirectorShot, 'cast' | 'location'>>, lang?: string, people: string[] = []): string {
   const sOf = new Map(people.map((n, i) => [normSp(n), i + 1]));
-  const lines = [s.prompt_en.trim()];
+  const out: string[] = [`integrated_multimodal_description: ${s.prompt_en.trim()}`];
   const names = [...new Set([...(s.cast ?? []), ...(s.location ? [s.location] : [])])];
-  if (names.length) {
-    lines.push(`References: ${names.map((n, i) => { const k = sOf.get(normSp(n)); return `@image${i + 1} = ${n}${k ? ` (S${k})` : ''}`; }).join(', ')}`);
-  }
-  lines.push(...dialogueLines(s.dialogue ?? '', sOf, lang));
-  if (s.sound?.trim()) lines.push(`Sound: ${s.sound.trim()}`);
-  if (s.music?.trim()) lines.push(`Music: ${s.music.trim()}`);
-  return lines.filter(Boolean).join('\n');
+  if (names.length) out.push(`References: ${names.map((n, i) => { const k = sOf.get(normSp(n)); return `@image${i + 1} = ${n}${k ? ` (S${k})` : ''}`; }).join(', ')}`);
+  out.push(...dialogueLines(s.dialogue ?? '', sOf, lang));
+  const sound = (s.sound ?? '').trim(), music = (s.music ?? '').trim();
+  if (sound) out.push('', `overall_soundscape: ${sound}`);
+  if (music) out.push('', `non_diegetic_music: ${music}`);
+  return out.join('\n');
 }
 
 /** The full video prompt of a clip as it is used: the producer's own text (she wrote one in the Canvas step), else the composed Ref2VA one.

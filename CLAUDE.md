@@ -132,8 +132,8 @@
 - 다음 할 일: ① (완료) 편별 UI ② (완료) 결과 우클릭 에셋 등록 ③ (완료) 캐스팅 모델·일괄/개별·등록 ④ (완료) 브리프 설정 드롭다운·캐스팅 프롬프트·전 단계 데모 ⑤ 사용자가 데모로 단계별 확인하며 주는 수정 피드백 반영 ⑥ 음악 생성·에셋화 ⑦ 실제 LLM·GPU 시험(사용자가 서버가 비었다고 할 때만) ⑧ 좁은 창 회차 줄 확인.
 
 ### 영상 프롬포트 Minimax H3 Ref2VA + "여러 편 함께" 제거 (2026-11-01, 단위 시험 통과)
-- **Ref2VA 조합(#4 보완)**: `compose.clipPromptOf(s, lang, people)` / `composeClipPrompt(s, lang, people)` — `people`(캐릭터 이름, 클립 cast 순서)로 **S1..Sn 페르소나**를 매기고, 레퍼런스 줄 `@imageN = 이름 (S1)`, 대사 줄 `Dialogue: (S1) <d>[Ko/English]…</d>`으로 조합. 대사 파서가 `S1: `/`(S1)`/`이름: ` 접두를 인식(미인식은 S1 기본). `model.castPersonas(p, s)` 추가. 호출부(adapter/staleShots/exportPackage/ShotPrompt)가 personas 전달 → 표시·stale 판정·ZIP 일관.
-- **작업팀 지시**: `buildSystem` RULES에 H3 Ref2VA 규칙(클립 cast의 인물 = S1.. 순서, prompt_en에 S1/S2로 서술, 대사는 "S1: 줄"·speaker 언어 그대로·번역 금지), episode 지시문에도 동일 + `<d>` 유지. `episode_plan.dialogue` 스키마 설명 갱신.
+- **Ref2VA 조합(#4 보완)**: `compose.clipPromptOf(s, lang, people)` / `composeClipPrompt(s, lang, people)` — `people`(캐릭터 이름, 클립 cast 순서)로 **S1..Sn 페르소나**를 매기고, **공식 H3 구조**로 조합: `integrated_multimodal_description:`(화면 묘사 + `References: @imageN = 이름 (S1)` + `Dialogue: (S1) <d>[Ko/English]…</d>`) → 빈 줄 → `overall_soundscape:` → 빈 줄 → `non_diegetic_music:`. 대사 파서가 `S1: `/`(S1)`/`이름: ` 접두를 인식(미인식은 S1 기본). `model.castPersonas(p, s)` 추가. 호출부(adapter/staleShots/exportPackage/ShotPrompt)가 personas 전달 → 표시·stale 판정·ZIP 일관.
+- **작업팀 지시**: `buildSystem` RULES에 H3 Ref2VA 규칙(클립 cast의 인물 = S1.. 순서, prompt_en에 S1/S2로 서술, 대사는 "S1: 줄"·speaker 언어 그대로·번역 금지), episode 지시문에도 동일 + 계약 포맷은 공식 섹션. `episode_plan.dialogue` 스키마 설명 갱신.
 - **"여러 편 함께" 제거**: `EpisodeStrip`에서 batchMode 체크박스·편 체크·배치 버튼 제거(승인은 포커스 편 하나), `GenerateCard`의 'ticked' 범위 제거, `DirectorState`에서 `selEpisodes`/`batchMode`/`toggleEpisode`/`setSelEpisodes`/`setBatchMode` 삭제. i18n 힌트 문구 갱신.
 - 확인: `tmp-ref2va.mjs`로 실제 조합 출력 확인(페르소나 S1/S2 + `(S1) <d>[Korean]…`), `npm run typecheck`, `npm run test:director` 통과. 사용자 진행 프로젝트(막장…10부작)는 보존(삭제하지 않음).
 
