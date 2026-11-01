@@ -50,7 +50,7 @@ const mk = () => {
 const { p, ep, hana, villa, ghost, shots } = mk();
 ok(M.castOf(p, shots[0]).map((r) => r.name).join() === 'Hana,Villa' && M.castOf(p, shots[2]).length === 0, 'castOf: cast first, then the place; a clip without cast has none');
 const ghostShot = { cast: ['Ghost', 'Nobody'], location: '' }; ok(M.castOf(p, ghostShot).length === 0, 'cast without an image, or unknown, is skipped');
-ok(C.composeClipPrompt(shots[0]).includes('References: @image1 = Hana, @image2 = Villa') && !C.composeClipPrompt(shots[2]).includes('References'), 'the prompt names the reference order (@image1 = Hana ...); no cast, no line');
+ok(C.composeClipPrompt(shots[0]).includes('References: @image1 = Hana, @image2 = Villa') && !C.composeClipPrompt(shots[2]).includes('References:'), 'the prompt names the reference order (@image1 = Hana ...); no cast, no line');
 
 // ---- adapter: connect the images
 const reg = { get: (id) => ({

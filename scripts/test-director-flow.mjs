@@ -103,7 +103,7 @@ ok(shots.length === 9 && shots.every((s) => s.duration_sec === 10) && e1.status 
 ok(M.shotsOfEpisode(p, M.episodeByNo(p, 2).episode_id).length === 0, 'episode 2 is not written yet (it waits for episode 1 to be finished)');
 ok(shots.every((s) => s.cast[0] === 'Minji' && s.location === 'Villa') && shots[0].asset_ids.length === 0, 'clips name their cast; no asset is wired until the images are registered as assets');
 ok(shots[0].dialogue === 'Minji: Why?' && shots[0].sound === 'rain' && shots[0].music === 'strings', 'dialogue, sound and music are written per clip');
-ok(C.composeClipPrompt(shots[0]).startsWith('integrated_multimodal_description:') && C.composeClipPrompt(shots[1]).includes('overall_soundscape: rain') && C.composeClipPrompt(shots[1]).includes('non_diegetic_music:'), 'the Prompt card text is the official H3 Ref2VA brief: integrated_multimodal_description + overall_soundscape + non_diegetic_music');
+ok(C.composeClipPrompt(shots[0]).includes('References: @image1 = Minji, @image2 = Villa') && C.composeClipPrompt(shots[0]).includes('Dialogue: (S1) <d>[Korean]') && C.composeClipPrompt(shots[1]).includes('Sound: rain') && C.composeClipPrompt(shots[1]).includes('Music: strings'), 'the Prompt card text is the clip source (picture + References + Dialogue + Sound + Music); the official H3 system prompt turns it into the brief');
 const asset = M.newAsset(p, { name: 'Minji', role: 'character', source: { kind: 'library', id: 11 }, note: '' });
 p.references.find((x) => x.name === 'Minji').asset_id = asset.asset_id;
 ok(M.syncShotAssets(p) === 9, 'a registered asset of the lead is attached to every clip that casts her');

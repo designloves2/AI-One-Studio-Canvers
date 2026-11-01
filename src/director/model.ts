@@ -1,4 +1,5 @@
 // Director Mode: ids, new project, validation and migration. Pure functions (no DOM, no network) so scripts/test-director*.mjs can run them.
+import type { ShotSubject } from './compose';
 import {
   DIRECTOR_SCHEMA_VERSION, type ChatMsg, type DirectorAsset, type DirectorEpisode, type DirectorProject, type DirectorReference, type DirectorScene, type DirectorShot,
   type ReferenceKind, type StageId, type StageStatus,
@@ -101,6 +102,17 @@ export function castOf(p: DirectorProject, s: Pick<DirectorShot, 'cast' | 'locat
 /** the people (character cast entries) of a clip, in the clip's cast order: in an H3 Ref2VA prompt they are the personas S1, S2, ... */
 export function castPersonas(p: DirectorProject, s: Pick<DirectorShot, 'cast'>): string[] {
   return (s.cast ?? []).map((n) => findReference(p, n)).filter((r): r is DirectorReference => !!r && r.kind === 'character' && r.status !== 'rejected').map((r) => r.name);
+}
+
+/** the clip's subjects for an H3 full-reference prompt, in picture order (cast people and props, then the place): name, kind and description */
+export function shotSubjects(p: DirectorProject, s: Pick<DirectorShot, 'cast' | 'location'>): ShotSubject[] {
+  const seen = new Set<string>(); const out: ShotSubject[] = [];
+  for (const n of [...(s.cast ?? []), ...(s.location ? [s.location] : [])]) {
+    const r = findReference(p, n);
+    if (!r || r.status === 'rejected' || seen.has(r.name.toLowerCase())) continue;
+    seen.add(r.name.toLowerCase()); out.push({ name: r.name, kind: r.kind, description: r.description });
+  }
+  return out;
 }
 
 /** Fill each clip's asset_ids from its cast and location: the registered assets of the approved cast entries. Returns how many clips changed. */

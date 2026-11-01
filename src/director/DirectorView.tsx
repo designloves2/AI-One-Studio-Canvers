@@ -14,7 +14,7 @@ import { Llm } from '../panels/SettingsPanel';
 import { resultUrl } from './media';
 import { composeClipPrompt } from './compose';
 import { CREW_LABEL, renameReference } from './ai';
-import { castPersonas, episodeByNo, findReference, newAsset, newEpisode, newReference, newShot, shotsOfEpisode, syncShotAssets } from './model';
+import { episodeByNo, findReference, newAsset, newEpisode, newReference, newShot, shotsOfEpisode, shotSubjects, syncShotAssets } from './model';
 import { newSeed } from './execution';
 import { applyMusicPatch, defaultSections, newMusic, pickedAudio, songMap } from './music';
 import { finishEpisode, generateSong, pickSong, registerSong, syncFinalFromCanvas, uploadSong } from './musicAction';
@@ -752,6 +752,7 @@ function ClipCard({ s, n, big, gen, sel, onSel, onAgain, ro }: { s: DirectorShot
         {s.sound && <li className="snd"><Ico n="sound" /><span>{s.sound}</span></li>}
         {s.music && <li className="mus"><Ico n="music" /><span>{s.music}</span></li>}</ul>}
       {(s.cast.length > 0 || s.location) && <footer>{s.cast.map((c) => { const r = proj?.references.find((x) => x.name.toLowerCase() === c.toLowerCase()); return <i key={c}>{r ? <Avatar r={r} size={18} /> : <Ico n="user" />}{c}</i>; })}{s.location && <i className="loc">{(() => { const r = proj?.references.find((x) => x.name.toLowerCase() === s.location.toLowerCase()); return r ? <Avatar r={r} size={18} /> : <Ico n="pin" />; })()}{s.location}</i>}</footer>}
+      {proj && <Ref2vaBox p={proj} s={s} />}
       {big && pick && <div className="dx-preview">{pick.kind === 'video' ? <video src={img(pick)} controls preload="metadata" /> : <img src={img(pick)} alt="" />}</div>}
       <Thumbs s={s} />
       {gen && (
@@ -775,6 +776,15 @@ function Thumbs({ s }: { s: DirectorShot }) {
     <button key={r.result_id} className={r.picked ? 'on' : ''} title={r.picked ? T('Picked') : T('Pick this result')} onClick={() => edit((x) => { const q = x.shots.find((z) => z.shot_id === s.shot_id)!; q.results.forEach((z) => { z.picked = z.result_id === r.result_id; }); })}>
       {r.kind === 'video' ? <video src={img(r)} muted preload="metadata" /> : <img src={img(r)} alt="" loading="lazy" />}{r.picked && <i>✓</i>}
     </button>))}</div>;
+}
+
+/** the official H3 Ref2VA prompt of one clip, as the canvas prompt card will hold it (shown on every clip card so it is checked here, not only in the Canvas) */
+function Ref2vaBox({ p, s }: { p: DirectorProject; s: DirectorShot }) {
+  const T = useT();
+  const text = composeClipPrompt(s, p.series.language, shotSubjects(p, s));
+  return (
+    <details className="dx-ref2va"><summary>{T('Official H3 prompt (Ref2VA)')}</summary><pre>{text}</pre></details>
+  );
 }
 
 function EpisodeHead({ p, icon }: { p: DirectorProject; icon: keyof typeof ICONS }) {
@@ -836,6 +846,7 @@ function ClipEditor({ p, s, n }: { p: DirectorProject; s: DirectorShot; n: numbe
         {addable.length > 0 && <select className="dx-addsel" value="" onChange={(ev) => { if (ev.target.value) change((q) => { if (!q.cast.includes(ev.target.value)) q.cast.push(ev.target.value); }); }}><option value="">+ {T('Add cast / place')}</option>{addable.map((r) => <option key={r.ref_id} value={r.name}>{r.name}</option>)}</select>}
       </div>
       <label className="dx-field">{T('Place')}<select value={inCast.has(s.location) ? s.location : ''} onChange={(ev) => change((q) => { q.location = ev.target.value; })}><option value="">{T('No place yet')}</option>{places.map((r) => <option key={r.ref_id} value={r.name}>{r.name}</option>)}</select></label>
+      <Ref2vaBox p={p} s={s} />
     </article>
   );
 }
@@ -868,12 +879,12 @@ function PromptGrid({ p, ro, apply }: { p: DirectorProject; ro: boolean; apply?:
 function ShotPrompt({ p, s, n, ro }: { p: DirectorProject; s: DirectorShot; n: number; ro: boolean }) {
   const T = useT(); const edit = useDirector((x) => x.edit);
   const scene = p.scenes.find((z) => z.scene_id === s.scene_id);
-  const composed = composeClipPrompt(s, p.series.language, castPersonas(p, s));
+  const composed = composeClipPrompt(s, p.series.language, shotSubjects(p, s));
   const [text, setText] = useState(s.prompt_user ?? composed);
   const edited = !!s.prompt_user?.trim();
   const commit = () => {
     const t = text.trim();
-    edit((x) => { const q = x.shots.find((z) => z.shot_id === s.shot_id); if (!q) return; q.prompt_user = t === composeClipPrompt(q, x.series.language, castPersonas(x, q)) ? undefined : t; });
+    edit((x) => { const q = x.shots.find((z) => z.shot_id === s.shot_id); if (!q) return; q.prompt_user = t === composeClipPrompt(q, x.series.language, shotSubjects(x, q)) ? undefined : t; });
   };
   const restore = () => { edit((x) => { const q = x.shots.find((z) => z.shot_id === s.shot_id); if (q) q.prompt_user = undefined; }); setText(composed); };
   return (

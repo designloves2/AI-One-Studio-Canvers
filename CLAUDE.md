@@ -137,6 +137,14 @@
 - **"여러 편 함께" 제거**: `EpisodeStrip`에서 batchMode 체크박스·편 체크·배치 버튼 제거(승인은 포커스 편 하나), `GenerateCard`의 'ticked' 범위 제거, `DirectorState`에서 `selEpisodes`/`batchMode`/`toggleEpisode`/`setSelEpisodes`/`setBatchMode` 삭제. i18n 힌트 문구 갱신.
 - 확인: `tmp-ref2va.mjs`로 실제 조합 출력 확인(페르소나 S1/S2 + `(S1) <d>[Korean]…`), `npm run typecheck`, `npm run test:director` 통과. 사용자 진행 프로젝트(막장…10부작)는 보존(삭제하지 않음).
 
+### 영상 프롬포트 = 공식 Minimax H3 (Video) 시스템 프롬포트로 생성 (2026-11-01, 단위 시험 통과; 실제 LLM 생성 미확인)
+- **사용자 지적 반영**: H3 공식 형식을 임의 재구성하지 말 것, **공식 시스템 프롬포트(model_formats.json "Minimax H3 (Video)") 그대로 사용**, 대사 보존(이미 그 프롬포트 룰3에 포함)만 유지.
+- `compose.clipPromptOf/composeClipPrompt`를 **공식 강화의 입력용 원문 정보**로 되돌림: `화면묘사 + References: @imageN = 이름 (S1)… + Dialogue: (S1) <d>[lang]…</d> + Sound + Music`. (사람 only S1.. 페르소나; shotSubjects 파라미터 유지.)
+- **`canvasAction.generateClipPrompts`**: 편 작성 승인 → 캔버스 단계(runJob 'canvas')에서 클립마다 `runLlm({ style: formatFor('video-generate', h3-ref|h3), prompt: composeClipPrompt(원문) })`으로 **공식 6섹션 브리프**(subject_definitions/summary/retention_analysis/detailed_description([Shot 1], <Subject N> (S1) says, <d>)/overall_soundscape/non_diegetic_music)를 생성, `shot.prompt_user` 저장. 데모에서만 `demoOfficialBrief`(공식 모양 결정적 스텐드인). `force/clipIds` 옵션.
+- **편작성 표시**: `Ref2vaBox`(클립 카드·편집 카드·캔버스 그리드)가 `composeClipPrompt`/생성된 `prompt_user`를 표시.
+- RULES/지시: 작업팀은 원문(사람 S1/S2, 대사 "S1: 줄" 원어)을 쓰고, 공식 프롬포트가 브리프로 강화한다고 명시(팩션 문구 제거).
+- 주의: `generateClipPrompts`는 실제 LLM 호출(클립마다) — 비용 영향. 실패 시 `prompt_user` = 원문으로 두어 그리드 보존. 실제 렌더 파싱은 사용자 서버 실기로 확인 필요.
+
 ### LLM 오류 완화 · 생성·확인 프롬포트 · 순차 편작성 · 대사 보존 (2026-11-01, 단위 시험 통과 + 데모 브라우저 일부 확인)
 - **원문 답변 보기/다운로드(#4)**: `ChatMsg.raw` 추가, `ai.directorTurn` 실패 시 `CrewError`(`raw` 포함, 메시지에 앞부분 요약)를 던지고, `store`의 3곳 catch(runJob/send/recast)가 `raw`를 오류 채팅에 붙임. `ChatDock`이 오류 메시지에 `.dirx-raw` details(모델이 보낸 원문, 다운로드 버튼)를 렌더.
 - **묶음 일부 보존(#4)**: `planParts`가 episode는 **이미 쓴 클립 수 기준**으로, series는 기존 격차 기준으로 다시 계산 → `runJob`의 series/episode를 **동적 루프**(`unitProgress`로 진행도, 무진척이면 실패해 기존 것 보존)로 바꿈. `checkReply`는 part(그룹)일 때 **1~N개 허용**(몇 개만 와도 진행, 번호 범위 초과·개수 초과만 거절), part 없을 땐 기존처럼 정확 수량. 지시문도 "EXACTLY N"→"1 to N, 빠진 것만 다시"로. `ai.unitProgress`/`plannedEpisodeClips` export. 데모 크루도 그대로 응답 가능.

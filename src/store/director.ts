@@ -109,7 +109,8 @@ export const useDirector = create<DirectorState>((set, get) => {
     const stage = p0.workflow.stage;
     try {
       if (k === 'canvas') {
-        const { makeEpisodeCanvas, describeReport } = await import('../director/canvasAction');
+        const { makeEpisodeCanvas, describeReport, generateClipPrompts } = await import('../director/canvasAction');
+        await generateClipPrompts({ no });   // the official Minimax H3 (Video) prompt of every clip, shown and editable before approval
         const r = await makeEpisodeCanvas(no!);
         commit((x) => { addChat(x, 'assistant', `${r.file}\n${describeReport(r.report)}`, { crew: 'cinematographer' }); markEpisodeReview(x, no!); });
       } else {
