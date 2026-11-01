@@ -131,6 +131,14 @@
 - **작품 종류(완료)**: `series.format` = drama / film / ad / musicvideo / vlog / short (스키마 4, 3→4 마이그레이션 = drama). `src/director/formats.ts`(순수): 종류별 화면 용어 `vocabOf`(캐스팅 = 배우·장소·소품 / 모델·제품 / 아티스트·의상 / 진행자…, 시나리오 = 스토리보드·구성안…), 기본 숫자(광고 30초·6초 클립, 뮤직비디오 3분, 숏폼 9:16 30초…), 작업팀 지침 `guide`, 말로 종류 읽기 `detectFormat`. 작업팀은 브리프에서 종류를 정하고(빠뜨리면 사용자의 말에서 읽음) 그 종류의 지침을 시스템 프롬프트에 받음. 1편짜리 종류는 회차 줄을 숨기고 시나리오 승인 뒤 작성이 자동 시작. 브리프 맨 위에 "작품 종류" 드롭다운. 데모 작업팀도 종류별 캐스팅·클립(광고 엔드카드, 뮤직비디오 구간, 브이로그 내레이션 대사, 숏폼 훅). 브라우저 확인: 광고 한 문장 → 광고로 인식·30초·6초 클립 5개·용어 변경·회차 줄 숨김·자동 작성·엔드카드. **미구현**: 광고 비율별(16:9·9:16·1:1) 버전 생성, 뮤직비디오 음악 단계(사용자 업로드 + AI 생성 병행, 화면 선택 또는 채팅 명령), 브이로그 전용 내레이션 필드(현재는 클립의 `dialogue`가 내레이션 역할).
 - 다음 할 일: ① (완료) 편별 UI ② (완료) 결과 우클릭 에셋 등록 ③ (완료) 캐스팅 모델·일괄/개별·등록 ④ (완료) 브리프 설정 드롭다운·캐스팅 프롬프트·전 단계 데모 ⑤ 사용자가 데모로 단계별 확인하며 주는 수정 피드백 반영 ⑥ 음악 생성·에셋화 ⑦ 실제 LLM·GPU 시험(사용자가 서버가 비었다고 할 때만) ⑧ 좁은 창 회차 줄 확인.
 
+### 캐스팅 카드 관리 · 화면 폭 (2026-11-01, 데모 브라우저 확인)
+- 카드별 **개별 삭제**: `CastCard` 동작 줄에 `🗑 삭제` 버튼(기존 `removeEntry` 확인을 재사용, 설명창 안의 "Remove this entry" 제거). 편집창과 분리되어 찾기 쉬움.
+- **다시 캐스팅**(전체/배우/장소/소품): `store.recast(kinds)` — busy 가드, 작업 복사본에서 해당 종류만 `model.dropReferences`(이름을 편·클립에서도 정리, `variant_of` 연결 해제) 후 종류별로 `directorTurn(…, recastInstruction(work, kind), …, { kickoff:'references', part:{kind} })`. 전부 성공해야만 본 프로젝트에 교체 적용(`dropReferences` + 새 항목 push + `syncShotAssets`), 성공 시 `references` 다시 `review_required` + 캐스팅 임시 캔버스 제거. 실패·취소 시 원래 stage/status 복원 + 채팅 오류. `ai.recastInstruction`은 "Casting, one part at a time" + `every entry with kind "<kind>"` 문구 유지(데모·검사가 그대로 응답), 기존 이름·룩 재사용 금지 지시.
+- **채팅창 폭 조절**: `DirectorView`에 `.dirx-split` 구분선(드래그·Arrow 키·두 번 클릭 기본값), CSS `--dock-w`(기본 `min(42%, 560px)`), 클램프 `300px ~ (body−420px)`, `localStorage 'canvers.director.dock'`, ≤900px은 숨김. 기존 `max-width:560px` 제거.
+- **결과 90%**: `.dx-page` = `width:90%; margin:0 auto`(기존 `max-width:980px` 제거), ≤900px `width:100%`.
+- **카드 그리드 최대 열**: `repeat(auto-fill, minmax(max(<기존최소>, calc((100%−gap)/N)), 1fr))` — 캐스팅(`.dx-castgrid`) 5 · 시나리오(`.dx-epgrid`) 4 · 편+생성·확인(공용 `.dx-clips`) 4 · 예비 `.dx-canvasgrid` 4. 폭이 줄면 자동 감소. ≤900px `.dx-castgrid`는 150px 자유(계속 1~5).
+- 시험: `scripts/test-director-flow.mjs`에 `recastInstruction`·`dropReferences` 검사 추가. `npm run typecheck`·`npm run test:director` 통과. 실행 전/후 데모 브라우저(8766)로 삭제·다시 캐스팅(배우만)·구분선·그리드 열 수(와이드/중간/좁은 폭) 확인.
+
 ### 캐스팅: 프롬프트 확인 뒤 이미지 생성 + 임시 캐스팅 캔버스 (2026-11-01, 데모 브라우저 확인 · 실제 LLM/생성 미확인)
 - 사용자 지시: **캐스팅 카드 → 카드 내용 확인 → 이미지 프롬프트 생성 → 프롬프트 확인 → 이미지 생성** 순서. 이유: 설명에 "한국인"이라고 썼는데 외국인 얼굴이 나왔다 — 서버의 일반 강화 프롬프트가 국적을 떨어뜨리기 때문. 이제 만들기 전에 프롬프트를 눈으로 보고 고칠 수 있다.
 - **위 "실사용 피드백 7건"의 "설명 하나 + `auto_enhance:true`" 는 이 작업으로 대체됨.** 확인한 프롬프트가 있으면 그것을 그대로 쓰고 `auto_enhance:false`(두 번 고치지 않음), 없으면 예전처럼 설명 + `auto_enhance:true`.

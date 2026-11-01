@@ -110,6 +110,19 @@ export function syncShotAssets(p: DirectorProject): number {
   return changed;
 }
 
+/** The cast entries of these kinds leave the project: their names are taken out of the episodes and clips too, and a look
+ *  that pointed at one of them loses its base. Returns the entries that were dropped. */
+export function dropReferences(p: DirectorProject, kinds: ReferenceKind[]): DirectorReference[] {
+  const gone = p.references.filter((r) => kinds.includes(r.kind));
+  if (!gone.length) return [];
+  const names = new Set(gone.map((r) => r.name));
+  p.references = p.references.filter((r) => !kinds.includes(r.kind));
+  for (const s of p.shots) { s.cast = s.cast.filter((n) => !names.has(n)); if (s.location && names.has(s.location)) s.location = ''; }
+  for (const e of p.episodes) { if (e.cast) e.cast = e.cast.filter((n) => !names.has(n)); if (e.locations) e.locations = e.locations.filter((n) => !names.has(n)); }
+  for (const r of p.references) if (r.variant_of && names.has(r.variant_of)) r.variant_of = undefined;
+  return gone;
+}
+
 /** shots of one episode in play order (scene order, then clip order) */
 export function shotsOfEpisode(p: DirectorProject, episode_id: string): DirectorShot[] {
   const scenes = p.scenes.filter((s) => s.episode_id === episode_id).sort((a, b) => a.order - b.order);

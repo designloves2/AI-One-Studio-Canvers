@@ -1,7 +1,7 @@
 import { create } from 'zustand';
-import type { CrewRole, DirectorProject, StageId } from '../director/types';
-import { addChat, episodeByNo, newDirectorProject, safeProjectName, shotsOfEpisode, touch } from '../director/model';
-import { CREW_LABEL, defaultCrew, directorTurn, kickoffInstruction, planParts, type LlmFn } from '../director/ai';
+import type { CrewRole, DirectorProject, ReferenceKind, StageId } from '../director/types';
+import { addChat, dropReferences, episodeByNo, newDirectorProject, safeProjectName, shotsOfEpisode, syncShotAssets, touch } from '../director/model';
+import { CREW_LABEL, defaultCrew, directorTurn, kickoffInstruction, planParts, recastInstruction, type LlmFn } from '../director/ai';
 import { approveEpisode, approveStage, blockers, EPISODE_STAGES, GLOBAL_STAGES, markEpisodeFailed, markEpisodeReview, markEpisodeWorking, markFailed, markReview, markWorking, productionOpen, reopenEpisode, startEpisodes, startFromIntake, type ApproveResult, type Kickoff } from '../director/workflow';
 import { demoCrew } from '../director/demoCrew';
 import { localizeMsg } from '../director/localize';
@@ -74,6 +74,8 @@ interface DirectorState {
   retry(): Promise<void>;
   /** the crew writes the song (style, lyrics, structure) or proposes the structure of the uploaded song */
   writeSong(): Promise<void>;
+  /** cast these kinds again: the old entries of those kinds (and their images) are replaced by what the crew proposes */
+  recast(kinds: ReferenceKind[]): Promise<void>;
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -329,6 +331,40 @@ export const useDirector = create<DirectorState>((set, get) => {
       if (!project || busy || get().readOnly || project.workflow.stage !== 'music') return;
       commit((x) => { markWorking(x, 'music'); });
       await runJobs([{ k: 'music' }]);
+    },
+
+    recast: async (kinds) => {
+      const { project, busy } = get();
+      if (!project || busy || get().readOnly) return;
+      const castKinds = (['character', 'location', 'prop'] as ReferenceKind[]).filter((k) => kinds.includes(k));
+      if (!castKinds.length) return;
+      const wasStage = project.workflow.stage, wasStatus = project.workflow.status.references;
+      set({ busy: true });
+      commit((x) => { markWorking(x, 'references'); });
+      try {
+        const work = structuredClone(get().project!);
+        const previous = await previousTexts(work);
+        dropReferences(work, castKinds);   // the old entries are gone from the working copy: the crew cannot reuse them
+        const says: string[] = [], notes: string[] = []; let role: CrewRole | undefined;
+        for (const kind of castKinds) {
+          const res = await directorTurn(work, recastInstruction(work, kind), crew(), { kickoff: 'references', part: { kind }, previous });
+          says.push(res.reply.say); notes.push(...res.notes); role = role ?? res.reply.crew;
+          if (kind !== 'prop' && !work.references.some((r) => r.kind === kind)) throw new Error(`The crew proposed no new ${kind} entries.`);
+        }
+        const fresh = work.references.filter((r) => castKinds.includes(r.kind));
+        // only now the old entries are replaced: a failure above leaves the cast as it was
+        commit((x) => {
+          dropReferences(x, castKinds);
+          x.references.push(...fresh);
+          syncShotAssets(x);
+          x.workflow.stage = 'references'; markReview(x, 'references');
+          addChat(x, 'assistant', says.filter(Boolean).join(' '), { crew: role ?? 'art', notes });
+        });
+        // the casting canvas was built from the old entries: it is stale now
+        try { const { removeCastingCanvas } = await import('../director/canvasAction'); await removeCastingCanvas(); } catch { /* the helper file only */ }
+      } catch (e) {
+        commit((x) => { x.workflow.stage = wasStage; x.workflow.status.references = wasStatus; addChat(x, 'assistant', (e as Error).message, { crew: 'art', error: true }); });
+      } finally { set({ busy: false }); }
     },
 
     retry: async () => {

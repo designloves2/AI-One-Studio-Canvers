@@ -149,4 +149,16 @@ export const KO_DIRECTOR: Record<string, string> = {
   'Previous cast': '이전 캐스팅',
   'Next cast': '다음 캐스팅',
   'Close viewer': '닫기',
+  // cast again, deleting a card, the chat width
+  Delete: '삭제',
+  'Delete this cast entry': '이 캐스팅 항목 삭제',
+  'Cast again': '다시 캐스팅',
+  'What to cast again': '다시 캐스팅할 대상',
+  'All of them': '전체',
+  'There is nothing to cast again.': '다시 캐스팅할 항목이 없습니다.',
+  'Cast these again? The entries and their images are replaced, and the casting has to be approved again.': '이 항목들을 다시 캐스팅할까요? 기존 항목과 이미지가 바뀌고, 캐스팅을 다시 승인해야 합니다.',
+  'images will be replaced': '개의 이미지가 바뀝니다',
+  'The old entries of that kind and their images are replaced. The casting has to be approved again, and the story continues from the new cast.': '그 종류의 기존 항목과 이미지가 새것으로 바뀝니다. 캐스팅을 다시 승인해야 하며, 이후 이야기는 새 캐스팅으로 이어집니다.',
+  'Drag to change the width of the chat': '끌어서 채팅창 폭 조절',
+  'Double-click to reset': '두 번 클릭하면 기본 폭',
 };

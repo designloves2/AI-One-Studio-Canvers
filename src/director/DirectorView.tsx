@@ -46,18 +46,58 @@ const EXAMPLES = [
 
 /** Director mode: the producer talks in the chat on the left; the results of the crew are on the right; each approval moves the line on.
  *  The steps on top can be clicked at any time to look at them again; looking never changes anything. */
+const DOCK_KEY = 'canvers.director.dock';
+const readDockW = () => { try { const n = Number(localStorage.getItem(DOCK_KEY)); return Number.isFinite(n) && n >= 300 ? n : null; } catch { return null; } };
+
 export function DirectorView() {
   const T = useT();
   const d = useDirector();
   const p = d.project;
+  const body = useRef<HTMLDivElement>(null);
+  const [dockW, setDockW] = useState<number | null>(readDockW);
   useEffect(() => { void d.refreshList(); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
+  // the producer's own chat width survives a reload (a CSS variable on the split body; the narrow layout ignores it)
+  useEffect(() => {
+    const el = body.current; if (!el) return;
+    if (dockW) el.style.setProperty('--dock-w', `${dockW}px`); else el.style.removeProperty('--dock-w');
+  }, [dockW]);
+  const startDrag = (ev: React.PointerEvent<HTMLDivElement>) => {
+    const el = body.current; if (!el) return;
+    ev.preventDefault();
+    const rect = el.getBoundingClientRect();
+    const max = Math.max(300, rect.width - 420);
+    const dock = el.querySelector<HTMLElement>('.dirx-dock');
+    let w = Math.min(max, Math.max(300, Math.round(dock?.getBoundingClientRect().width ?? rect.width * 0.42)));
+    const move = (e: PointerEvent) => {
+      w = Math.min(max, Math.max(300, Math.round(e.clientX - rect.left)));
+      el.style.setProperty('--dock-w', `${w}px`); el.classList.add('resizing');
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up);
+      el.classList.remove('resizing'); setDockW(w);
+      try { localStorage.setItem(DOCK_KEY, String(w)); } catch { /* ignore */ }
+    };
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+  };
+  const nudge = (by: number) => {
+    const el = body.current; if (!el) return;
+    const max = Math.max(300, el.getBoundingClientRect().width - 420);
+    const dock = el.querySelector<HTMLElement>('.dirx-dock');
+    const cur = dockW ?? Math.round(dock?.getBoundingClientRect().width ?? 0);
+    const w = Math.min(max, Math.max(300, cur + by));
+    setDockW(w); try { localStorage.setItem(DOCK_KEY, String(w)); } catch { /* ignore */ }
+  };
+  const resetDock = () => { setDockW(null); try { localStorage.removeItem(DOCK_KEY); } catch { /* ignore */ } };
   // the episode steps show the episode in focus
   const pv = p ? { ...p, workflow: { ...p.workflow, episode_no: d.focus } } : null;
   return (
     <div className="dirx">
       {pv && <Progress p={pv} />}
-      <div className="dirx-body">
+      <div className="dirx-body" ref={body}>
         <ChatDock p={pv} T={T} />
+        <div className="dirx-split" role="separator" aria-orientation="vertical" tabIndex={0} aria-label={T('Drag to change the width of the chat')} title={`${T('Drag to change the width of the chat')} · ${T('Double-click to reset')}`}
+          onPointerDown={startDrag} onDoubleClick={resetDock}
+          onKeyDown={(e) => { if (e.key === 'ArrowLeft') { e.preventDefault(); nudge(-24); } else if (e.key === 'ArrowRight') { e.preventDefault(); nudge(24); } }} />
         <div className="dirx-result">{pv && pv.workflow.stage !== 'intake' ? <StagePanel p={pv} ro={d.readOnly} view={d.view} /> : <Welcome />}</div>
       </div>
     </div>
@@ -220,6 +260,8 @@ const ICONS: Record<string, string> = {
   play: 'M7 4l13 8-13 8z',
   image: 'M4 5h16v14H4zM4 16l5-5 4 4 3-3 4 4M9 9.5h.01',
   list: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
+  trash: 'M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14M10 11v6M14 11v6',
+  again: 'M20 12a8 8 0 11-2.3-5.7M20 4v5h-5',
 };
 const Ico = ({ n }: { n: keyof typeof ICONS }) => <svg className="dx-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={ICONS[n]} /></svg>;
 const Tile = ({ icon, value, label, sub, tone }: { icon: keyof typeof ICONS; value: string; label: string; sub?: string; tone?: string }) => (
@@ -455,6 +497,7 @@ function CastCard({ r, onPick, onMake, onRegister, onChoose, onSavePrompt, onRem
           {onVariant && <button className="btn small" disabled={ro || busy} title={T('The same one with another costume, hair or look (a new entry)')} onClick={onVariant}>+ {T('New look')}</button>}
           {pick && !r.asset_id && <button className="btn small" disabled={ro || busy} onClick={onRegister}>{T('Register as asset')}</button>}
           <button className={`btn small${showPrompt ? ' on' : ''}`} onClick={() => setShowPrompt(!showPrompt)}>{T('Edit description')}</button>
+          {onRemove && <button className="btn small danger" disabled={ro} title={T('Delete this cast entry')} onClick={onRemove}>🗑 {T('Delete')}</button>}
         </div>
         {showPrompt && (
           <div className="dx-promptbox">
@@ -462,7 +505,6 @@ function CastCard({ r, onPick, onMake, onRegister, onChoose, onSavePrompt, onRem
             <textarea rows={5} disabled={ro} value={draft ?? shown} onChange={(e) => setDraft(e.target.value)} />
             <small>{T('This text is the source. A prompt for the chosen image model is written from it; check that prompt before the image is made.')}</small>
             {((draft !== null && draft !== shown) || (nameDraft !== null && nameDraft.trim() !== r.name)) && <div className="dx-btns"><button className="btn small" onClick={() => { setDraft(null); setNameDraft(null); }}>{T('Undo')}</button><button className="btn small primary" disabled={ro} onClick={() => { onSavePrompt(draft ?? shown, (nameDraft ?? r.name).trim()); setDraft(null); setNameDraft(null); }}>{T('Apply')}</button></div>}
-            {onRemove && <div className="dx-btns"><button className="btn small danger" disabled={ro} onClick={onRemove}>{T('Remove this entry')}</button></div>}
           </div>)}
       </div>
     </article>
@@ -470,8 +512,10 @@ function CastCard({ r, onPick, onMake, onRegister, onChoose, onSavePrompt, onRem
 }
 function CastGrid({ p, ro }: { p: DirectorProject; ro: boolean }) {
   const T = useT(); const edit = useDirector((x) => x.edit); const demo = useDirector((x) => x.demo);
+  const recastFn = useDirector((x) => x.recast); const globalBusy = useDirector((x) => x.busy);
   const [busy, setBusy] = useState(false); const [picking, setPicking] = useState<string | null>(null); const [viewing, setViewing] = useState<string | null>(null);
   const [writing, setWriting] = useState<string | null>(null);
+  const [recastKind, setRecastKind] = useState<'all' | ReferenceKind>('all');
   const live = p.references.filter((r) => r.status !== 'rejected');
   const made = live.filter((r) => r.results.some((x) => x.picked)).length;
   const link = linkOfCasting(p);
@@ -520,6 +564,15 @@ function CastGrid({ p, ro }: { p: DirectorProject; ro: boolean }) {
     if (!(await askConfirm(`${T('Remove this entry?')}\n${r.name}`))) return;
     edit((x) => { const q = x.references.find((z) => z.ref_id === r.ref_id); if (q) q.status = 'rejected'; for (const s of x.shots) { s.cast = s.cast.filter((n) => n !== r.name); if (s.location === r.name) s.location = ''; } for (const e of x.episodes) { if (e.cast) e.cast = e.cast.filter((n) => n !== r.name); if (e.locations) e.locations = e.locations.filter((n) => n !== r.name); } });
   };
+  // cast again: the crew proposes new entries of the chosen kinds; the old ones (and their images) are replaced only when it worked
+  const recastNow = async () => {
+    const kinds: ReferenceKind[] = recastKind === 'all' ? ['character', 'location', 'prop'] : [recastKind];
+    const items = live.filter((r) => kinds.includes(r.kind));
+    if (!items.length) { await notify(T('There is nothing to cast again.')); return; }
+    const made = items.filter((r) => r.results.some((x) => x.picked)).length;
+    if (!(await askConfirm(`${T('Cast these again? The entries and their images are replaced, and the casting has to be approved again.')}\n\n${items.map((r) => r.name).join(', ')}${made ? `\n${made} ${T('images will be replaced')}` : ''}`))) return;
+    await guard(async () => { await recastFn(kinds); });
+  };
   // a new look (costume, hair, age, season) of a cast entry: a new entry that says it is a variant of the first one; its prompt is the base prompt + the change
   const variant = async (r: DirectorReference) => {
     const what = (await askText(`${T('Describe the new look (costume, hair, age, season …)')}\n${r.name}`))?.trim(); if (!what) return;
@@ -556,6 +609,16 @@ function CastGrid({ p, ro }: { p: DirectorProject; ro: boolean }) {
             <textarea rows={3} placeholder={T('Describe how it looks')} value={adding.desc} onChange={(ev) => setAdding({ ...adding, desc: ev.target.value })} />
             <div className="dx-btns"><button className="btn primary" disabled={!adding.name.trim()} onClick={addEntry}>{T('Add')}</button><button className="btn" onClick={() => setAdding(null)}>{T('Cancel')}</button></div>
           </div>)}
+      </section>
+      <section className="dx-block"><h4><Ico n="again" />{T('Cast again')}</h4>
+        <div className="dx-btns">
+          <label className="dx-field">{T('What to cast again')}<select disabled={ro || busy || globalBusy} value={recastKind} onChange={(ev) => setRecastKind(ev.target.value as 'all' | ReferenceKind)}>
+            <option value="all">{T('All of them')}</option>
+            {(['character', 'location', 'prop'] as const).map((k) => <option key={k} value={k}>{T(k === 'character' ? vocabOf(p.series.format).characters : k === 'location' ? vocabOf(p.series.format).locations : vocabOf(p.series.format).props)}</option>)}
+          </select></label>
+          <button className="btn" disabled={ro || busy || globalBusy || !live.length} onClick={() => void recastNow()}>{globalBusy ? `… ${T('The crew is working…')}` : T('Cast again')}</button>
+        </div>
+        <p className="dirx-muted">{T('The old entries of that kind and their images are replaced. The casting has to be approved again, and the story continues from the new cast.')}</p>
       </section>
       {live.length > 0 && <Meter done={made} total={live.length} label={`${made} / ${live.length} ${T('images ready')}`} />}
       {(['character', 'location', 'prop'] as const).map((kind) => {

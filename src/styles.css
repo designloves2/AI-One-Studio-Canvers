@@ -531,20 +531,26 @@ button.save-state.dirty { cursor: pointer; } button.save-state.dirty:hover { bac
 @media (max-width: 900px) { .dirx-log, .dirx-approve, .dirx-input { width: calc(100% - 20px); } }
 
 /* split: the chat on the left, the crew's results (brief, cast, scenario, clips ...) on the right */
-.dirx-body { flex: 1; min-height: 0; display: flex; }
-.dirx-body .dirx-dock { width: 42%; min-width: 340px; max-width: 560px; flex: none; max-height: none; border-right: 1px solid var(--line); background: var(--bg2); padding-bottom: 12px; }
+.dirx-body { --dock-w: min(42%, 560px); flex: 1; min-height: 0; display: flex; }
+.dirx-body .dirx-dock { width: clamp(300px, var(--dock-w), calc(100% - 420px)); min-width: 0; flex: none; max-height: none; border-right: 1px solid var(--line); background: var(--bg2); padding-bottom: 12px; }
 .dirx-body .dirx-log { flex: 1; max-height: none; width: 100%; padding: 12px; }
 .dirx-body .dirx-log:empty { display: block; }
 .dirx-body .dirx-approve { width: 100%; padding: 6px 12px; }
 .dirx-body .dirx-input { width: calc(100% - 24px); }
 .dirx-body .dirx-msg { max-width: 92%; }
 .dirx-body .dirx-result { flex: 1; min-width: 0; }
-@media (max-width: 900px) { .dirx-body { flex-direction: column-reverse; } .dirx-body .dirx-dock { width: 100%; max-width: none; min-width: 0; height: 52%; border-right: 0; border-top: 1px solid var(--line2); } }
+/* the producer drags this to give the chat more or less room (double-click = the default width); the width is kept in localStorage */
+.dirx-split { flex: none; width: 9px; cursor: col-resize; position: relative; outline: none; }
+.dirx-split::before { content: ''; position: absolute; inset: 0 3px; border-radius: 3px; background: var(--line); opacity: .55; transition: background .15s, opacity .15s; }
+.dirx-split:hover::before, .dirx-split:focus-visible::before, .dirx-body.resizing .dirx-split::before { background: var(--acc); opacity: 1; }
+.dirx-body.resizing { cursor: col-resize; user-select: none; }
+@media (max-width: 900px) { .dirx-body { flex-direction: column-reverse; } .dirx-body .dirx-dock { width: 100%; max-width: none; min-width: 0; height: 52%; border-right: 0; border-top: 1px solid var(--line2); } .dirx-split { display: none; } }
 /* chat style: messages sit at the bottom, right above the box, and grow upward (the newest is always next to the input) */
 .dirx-body .dirx-log > :first-child { margin-top: auto; }
 
 /* ---- result panels: designed pages instead of lists ---- */
-.dx-page { max-width: 980px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+/* the result takes 90% of its column (big monitors had too much empty margin); on a narrow window it takes all of it */
+.dx-page { width: 90%; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
 .dx-ico { width: 18px; height: 18px; flex: none; }
 .dx-hero { position: relative; overflow: hidden; border-radius: 18px; padding: 26px 28px 24px; border: 1px solid var(--line2);
   background: radial-gradient(900px 260px at 100% 0%, color-mix(in srgb, var(--acc) 38%, transparent), transparent 70%), linear-gradient(135deg, color-mix(in srgb, var(--acc) 16%, var(--bg2)), var(--bg2) 70%); }
@@ -584,7 +590,8 @@ button.save-state.dirty { cursor: pointer; } button.save-state.dirty:hover { bac
 .dx-group > h4.k-char .dx-ico { color: #b48cff; } .dx-group > h4.k-loc .dx-ico { color: var(--acc2); } .dx-group > h4.k-prop .dx-ico { color: #f0c24b; }
 .sceneno { width: 22px; height: 22px; border-radius: 50%; display: inline-grid; place-items: center; background: var(--acc); color: #fff; font-size: 11px; }
 /* ---- casting cards ---- */
-.dx-castgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
+/* at most 5 columns: the minimum grows with the page, so a narrower page fits fewer columns by itself */
+.dx-castgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(max(190px, calc((100% - 48px) / 5)), 1fr)); gap: 12px; }
 .dx-cast { border-radius: 14px; overflow: hidden; background: var(--bg2); border: 1px solid var(--line); display: flex; flex-direction: column; }
 .dx-cast-img { position: relative; aspect-ratio: 3 / 4; background: var(--bg); } .dx-cast-img img { width: 100%; height: 100%; object-fit: cover; display: block; cursor: zoom-in; }
 .dx-cast-img .empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: var(--muted); font-size: 11px; background: repeating-linear-gradient(135deg, var(--bg), var(--bg) 10px, color-mix(in srgb, var(--bg3) 60%, var(--bg)) 10px, color-mix(in srgb, var(--bg3) 60%, var(--bg)) 20px); } .dx-cast-img .empty .dx-ico { width: 26px; height: 26px; opacity: .6; }
@@ -594,14 +601,17 @@ button.save-state.dirty { cursor: pointer; } button.save-state.dirty:hover { bac
 .dx-cast-body { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 4px; } .dx-cast-body b { font-size: 14px; } .dx-cast-body p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .dx-cast-body em { font-style: normal; display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--acc2); } .dx-cast-body em .dx-ico { width: 12px; height: 12px; }
 /* ---- scenario ---- */
-.dx-epgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.dx-epgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(max(260px, calc((100% - 30px) / 4)), 1fr)); gap: 10px; }
 .dx-epcard { display: flex; gap: 12px; padding: 12px 14px; border-radius: 12px; background: var(--bg2); border: 1px solid var(--line); } .dx-epcard .no { flex: none; width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; font-weight: 700; background: color-mix(in srgb, var(--acc) 24%, var(--bg3)); }
 .dx-epcard b { font-size: 13.5px; } .dx-epcard p { margin: 3px 0 0; color: var(--muted); font-size: 12px; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .dx-epcard.st-approved .no { background: var(--acc2); color: #04140c; }
 /* ---- episode timeline + clips ---- */
 .dx-bar.line { gap: 3px; } .dx-bar.line i { padding: 7px 0; flex-direction: row; justify-content: center; background: var(--bg3); border-color: var(--line2); } .dx-bar.line i em { font-size: 11px; color: var(--fg); }
 .dx-bar.line i.s-approved, .dx-bar.line i.s-done { background: color-mix(in srgb, var(--acc2) 30%, var(--bg3)); border-color: color-mix(in srgb, var(--acc2) 55%, transparent); } .dx-bar.line i.s-generating { background: color-mix(in srgb, var(--acc) 40%, var(--bg3)); } .dx-bar.line i.s-failed { background: color-mix(in srgb, var(--bad) 40%, var(--bg3)); } .dx-bar.line i.s-review { background: color-mix(in srgb, #f0c24b 28%, var(--bg3)); }
-.dx-clips { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 12px; }
+/* episode writing, generate & check: at most 4 columns */
+.dx-clips { display: grid; grid-template-columns: repeat(auto-fill, minmax(max(290px, calc((100% - 36px) / 4)), 1fr)); gap: 12px; }
+/* the prompt cards of the canvas step (a later feature): at most 4 columns */
+.dx-canvasgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(max(240px, calc((100% - 36px) / 4)), 1fr)); gap: 12px; }
 .dx-clip { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 14px; background: var(--bg2); border: 1px solid var(--line); }
 .dx-clip > header { display: flex; align-items: center; gap: 6px; } .dx-clip .num { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--acc); color: #fff; font-size: 11px; font-weight: 700; }
 .dx-clip .pill { font-size: 10.5px; padding: 2px 8px; border-radius: 999px; background: var(--bg3); border: 1px solid var(--line2); color: var(--muted); } .dx-clip .pill.cam { color: #4fd1e8; }
@@ -619,6 +629,7 @@ button.save-state.dirty { cursor: pointer; } button.save-state.dirty:hover { bac
   .dirx-body .dirx-dock { height: auto; max-height: 50%; }
   .dirx-body .dirx-log { flex: 0 1 auto; max-height: 150px; }
   .dirx-body .dirx-input textarea { min-height: 72px; }
+  .dx-page { width: 100%; }
   .dx-castgrid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
   .dx-cast-img { aspect-ratio: 4 / 5; }
 }

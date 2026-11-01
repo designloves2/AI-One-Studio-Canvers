@@ -166,6 +166,16 @@ export function kickoffInstruction(p: DirectorProject, k: Exclude<Kickoff, 'canv
   return `Write ${f.multi ? `episode ${no} ("${epNow?.title ?? ''}")` : `the whole ${f.label.toLowerCase()}`}. Use "episode_plan" with scenes and clips.${cl} ${part && 'clips' in part ? `ONLY clips ${part.clips[0]} to ${part.clips[1]} of the episode (clips are numbered in order across the whole episode; the clips already written are listed under EPISODE CLIPS: continue from them without repeating): EXACTLY ${part.clips[1] - part.clips[0] + 1} clips in total across the scenes you return (the app sets their lengths: ${parts.slice(part.clips[0] - 1, part.clips[1]).join(', ')} seconds)` : `EXACTLY ${parts.length} clips in total across all scenes (the app sets their lengths: ${parts.join(', ')} seconds)`}. Every clip needs prompt_en, prompt_ko, camera, dialogue (may be empty), sound and music.${songMapText}`;
 }
 
+/**
+ * The instruction for casting ONE kind again (the producer pressed "cast again"): the entries of that kind are being replaced,
+ * so nothing of them may be reused. Keeping the phrase "Casting, one part at a time" and the kind line means the same reply checks apply.
+ */
+export function recastInstruction(p: DirectorProject, kind: ReferenceKind): string {
+  const V = vocabOf(p.series.format); const lang = p.series.language === 'en' ? 'English' : 'Korean';
+  const what = kind === 'character' ? `the ${V.characters.toLowerCase()} (the leads and the important supporting cast, each with a precise look: age, build, face, hair, usual clothes)` : kind === 'location' ? `the main ${V.locations.toLowerCase()} that suit the cast and the story (architecture, light, mood)` : `the key ${V.props.toLowerCase()}${p.series.format === 'ad' ? ' (the product is a prop entry with its exact look; no logo, no text on it)' : ''}`;
+  return `Casting, one part at a time (${V.cast}): the producer wants ${what} cast AGAIN. The entries of this kind that were cast before are being replaced: do not reuse their names or their looks, and do not list entries of the other kinds. Use "references" with ${kind === 'prop' ? '0 to 6' : kind === 'location' ? '2 to 6' : '3 to 8'} NEW entries, every entry with kind "${kind}", a "name" and a "description" in ${lang} (no separate prompt). A clearly different costume or look of a person is its own entry with variant_of set to the base entry.`;
+}
+
 // ------------------------------------------------------------------ reading the reply
 /**
  * Mend the usual damage of a model's JSON so a reply is not thrown away for a small slip: a line break or an unescaped quote inside a text,

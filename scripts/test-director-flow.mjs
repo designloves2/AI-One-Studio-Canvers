@@ -307,6 +307,28 @@ ok(m2.schema_version === 5 && m2.series.format === 'drama' && m2.workflow.stage 
   const all = M.shotsOfEpisode(q, M.episodeByNo(q, 1).episode_id);
   ok(all.length === 9 && all[0].prompt_en === 'a0' && all[5].prompt_en === 'b0' && all.reduce((s, x) => s + x.duration_sec, 0) === 90, 'a second group of clips is added after the first; the lengths follow the plan (9 clips = 90 s)');
 }
+// ---- cast again: one kind at a time, and the old names leave the story before the new ones come in
+{
+  const q = M.newDirectorProject('R'); q.series.format = 'drama'; q.series.language = 'ko';
+  const lead = M.newReference(q, 'character', 'Minji', 'a lead'); lead.status = 'approved';
+  const look = M.newReference(q, 'character', 'Minji (white dress)', 'a look'); look.variant_of = 'Minji'; look.status = 'approved';
+  M.newReference(q, 'location', 'Hall', 'a hall').status = 'approved';
+  const ep = M.newEpisode(q, 1, 'E'); ep.cast = ['Minji', 'Minji (white dress)']; ep.locations = ['Hall'];
+  const sc = M.newScene(q, ep.episode_id); const sh = M.newShot(q, sc.scene_id); sh.cast = ['Minji']; sh.location = 'Hall';
+  const instr = AI.recastInstruction(q, 'character');
+  ok(/Casting, one part at a time/.test(instr) && /every entry with kind "character"/.test(instr) && !/every entry with kind "location"/.test(instr), 'casting again is asked one kind at a time');
+  ok(/cast AGAIN/.test(instr) && /do not reuse their names/.test(instr) && /NEW entries/.test(instr), 'the crew is told the old names and looks are replaced, not reused');
+  const places = M.dropReferences(q, ['location']);
+  ok(places.length === 1 && places[0].name === 'Hall' && !q.references.some((r) => r.kind === 'location'), 'the chosen kind leaves the cast');
+  ok(ep.locations.length === 0 && sh.location === '' && ep.cast.length === 2 && sh.cast.join() === 'Minji', 'its names leave the episodes and clips; the other kinds stay');
+  ok(q.references.find((r) => r.name === 'Minji (white dress)').variant_of === 'Minji', 'a look keeps its base while the base is still cast');
+  const people = M.dropReferences(q, ['character']);
+  ok(people.length === 2 && !q.references.some((r) => r.kind === 'character') && ep.cast.length === 0 && sh.cast.length === 0, 'dropping people takes their names out of the cast, the episodes and the clips');
+  // the reply of the recast lands on the (already emptied) project: only the asked kind comes back
+  const fake = async () => JSON.stringify({ crew: 'art', say: 'again', references: [{ name: 'New lead', description: 'x' }] });
+  await AI.directorTurn(q, AI.recastInstruction(q, 'character'), fake, { kickoff: 'references', part: { kind: 'character' } });
+  ok(q.references.length === 1 && q.references[0].name === 'New lead' && q.references[0].kind === 'character', 'the new entries of the asked kind take the place of the old ones');
+}
 // ---- demo stand-in pictures
 {
   const svg = (u) => decodeURIComponent(u.slice(u.indexOf(',') + 1));
