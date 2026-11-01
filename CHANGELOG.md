@@ -7,10 +7,10 @@
 ### 영상 프롬포트를 OFFICIAL Minimax H3 (Video) 시스템 프롬포트로 생성 (2026-11-01, 단위 시험 통과)
 - **요점을 바로잡았습니다**: 공식 H3 프롬포트 형식을 제가 임의로 짜내지 않고, **model_formats.json의 공식 "Minimax H3 (Video)" 시스템 프롬포트 그대로** 사용합니다.
 - 카드/그리드의 조합문은 **공식 강화의 입력용 "원문 정보"**(화면 묘사 + `References: @imageN = 이름 (S1)…` + `Dialogue: (S1) <d>[한국어]…</d>` + Sound + Music)로 되돌립니다. 대사는 `(S1)... <d>`로 묶여 원문 그대로입니다.
-- **편 작성 승인(→캔버스 단계) 시 `generateClipPrompts`**: 클립마다 **공식 H3 시스템 프롬포트**(`formatFor('video-generate')` = 알려주신 그 instruction)로 그 원문 정보를 강화해, `subject_definitions / summary / retention_analysis / detailed_description([Shot 1]…/<Subject N> (S1) says, <d>) / overall_soundscape / non_diegetic_music` **공식 6섹션 브리프**를 생성 → `shot.prompt_user`로 저장 → 캔버스/그리드/클립카드에 표시·수정 → 캔버스에 적용. 대사 보존은 공식 프롬포트 룰3이 이미 보장합니다(추가 지시 없음).
-- **편작성(클립 카드)에 `Ref2vaBox`**: 편작성/편집 클립마다 공식 H3 조합 결과를 펼쳐 볼 수 있습니다.
-- 검증: `npm run typecheck`, `npm run test:director` 전체 통과(compose를 원문 정보 형태로 되돌리고 시험 갱신). 데모에서 캔버스 단계 프롬포트 생성 경로 연결 확인.
-- **확인 못 한 것**: 실제 LLM(깜짝 설정된 모델)로 공식 브리프가 생성되는지(모델·서버 의존), 생성된 브리프가 실제 ref2va 렌더에서 인물·대사로 파싱되는지.
+- **편 작성 승인(→캔버스 단계) 시 `generateClipPrompts`**: **한 클립씩 순차로** 공식 H3 시스템 프롬포트를 돌려 **공식 6섹션 브리프**(subject_definitions/summary/retention_analysis/detailed_description([Shot 1]…/<Subject N> (S1) says, <d>)/overall_soundscape/non_diegetic_music)를 생성합니다. 그리드는 **처음엔 비어 있고**, 각 카드에 "프롬포트 생성중…"이 뜨고 결과가 나오면 표시된 뒤 다음 카드로 넘어갑니다(전부 동시에 만들지 않음). 결과는 `shot.prompt_user`로 저장 → 5단계 그리드에서 수정 → **"캔버스에서 열기"**가 사용자 수정분을 최종 반영해 캔버스 프롬포트 카드에 적용하고 엽니다.
+- **편작성(클립 카드)에 `Ref2vaBox`**: 편작성/편집 클립마다 해당 조합 결과를 펼쳐 볼 수 있습니다.
+- 검증: `npm run typecheck`, `npm run test:director` 전체 통과. 데모에서 캔버스 단계 프롬포트가 하나씩 채워지는 흐름 연결 확인.
+- **확인 못 한 것**: 실제 LLM(서버 설정)로 브리프가 생성·`생성중` 표시가 돼 있는지(_ 사용자 서버 실기 필요), 생성된 브리프가 실제 ref2va 렌더에서 인물·대사로 파싱되는지.
 
 ### 영상 프롬포트를 Minimax H3 Ref2VA 형식으로 + 편 작성에서 "여러 편 함께" 제거 (2026-11-01, 단위 시험 통과)
 - **편 작성의 영상 프롬포트를 Minimax H3 Ref2VA 공식 구조로 직접 출력**합니다: `integrated_multimodal_description:`(화면 묘사 + `References: @imageN = 이름 (S1)…` + `Dialogue: (S1) <d>[한국어/English]…</d>`) → `overall_soundscape:` → `non_diegetic_music:`의 3개 섹션. 클립의 인물(character 캐스팅)은 **S1, S2…**로, **대사는 `(S1) <d>…</d>`로 묶어** 강화·작성 단계가 번역하지 않고 원문 그대로 보존하게 합니다(작업팀 작성 규칙·캔버스 자동강화 지시·어댑터/패키지 모두 같은 규칙).

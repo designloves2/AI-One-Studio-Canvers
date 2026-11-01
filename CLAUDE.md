@@ -140,7 +140,8 @@
 ### 영상 프롬포트 = 공식 Minimax H3 (Video) 시스템 프롬포트로 생성 (2026-11-01, 단위 시험 통과; 실제 LLM 생성 미확인)
 - **사용자 지적 반영**: H3 공식 형식을 임의 재구성하지 말 것, **공식 시스템 프롬포트(model_formats.json "Minimax H3 (Video)") 그대로 사용**, 대사 보존(이미 그 프롬포트 룰3에 포함)만 유지.
 - `compose.clipPromptOf/composeClipPrompt`를 **공식 강화의 입력용 원문 정보**로 되돌림: `화면묘사 + References: @imageN = 이름 (S1)… + Dialogue: (S1) <d>[lang]…</d> + Sound + Music`. (사람 only S1.. 페르소나; shotSubjects 파라미터 유지.)
-- **`canvasAction.generateClipPrompts`**: 편 작성 승인 → 캔버스 단계(runJob 'canvas')에서 클립마다 `runLlm({ style: formatFor('video-generate', h3-ref|h3), prompt: composeClipPrompt(원문) })`으로 **공식 6섹션 브리프**(subject_definitions/summary/retention_analysis/detailed_description([Shot 1], <Subject N> (S1) says, <d>)/overall_soundscape/non_diegetic_music)를 생성, `shot.prompt_user` 저장. 데모에서만 `demoOfficialBrief`(공식 모양 결정적 스텐드인). `force/clipIds` 옵션.
+- **`canvasAction.generateClipPrompts`(순차)**: 편 작성 승인 → runJob('canvas')에서 **먼저 캔버스 생성+`markEpisodeReview`(5단계 화면 노출)**, 그다음 **클립마다 공식 H3(6섹션 브리프)를 한 개씩** 생성. `shot.prompt_busy`(임시)로 카드에 "프롬포트 생성중…" 표시 → 결과 저장 → 다음 카드. 실패 시 그 클립은 `prompt_user`=원문으로 보존, 전체는 실패로 안 떨어짐. 데모는 `demoOfficialBrief`를 `sleep(260)` 간격으로 순차 적용. 강된 형식은 공식 시스템 프롬포트(`formatFor('video-generate', h3-ref)`)가 결정(속임수 없음).
+- **그리드 빈 시작·순차 표시**: PromptGrid/ShotPrompt — `prompt_user` 없으면 카드가 **빈 텍스트(placeholder "프롬프트 없음")** + "대기 중", `prompt_busy`면 "프롬포트 생성중…"(스피너)·비활성, 완료면 "✓ 수정됨". 헤더에 `done/total 생성됨` 진행. "캔버스에서 열기"가 사용자 최종 수정분을 캔버스 카드에 반영 후 열기(자동 실행 없음).
 - **편작성 표시**: `Ref2vaBox`(클립 카드·편집 카드·캔버스 그리드)가 `composeClipPrompt`/생성된 `prompt_user`를 표시.
 - RULES/지시: 작업팀은 원문(사람 S1/S2, 대사 "S1: 줄" 원어)을 쓰고, 공식 프롬포트가 브리프로 강화한다고 명시(팩션 문구 제거).
 - 주의: `generateClipPrompts`는 실제 LLM 호출(클립마다) — 비용 영향. 실패 시 `prompt_user` = 원문으로 두어 그리드 보존. 실제 렌더 파싱은 사용자 서버 실기로 확인 필요.

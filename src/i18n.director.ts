@@ -180,4 +180,8 @@ export const KO_DIRECTOR: Record<string, string> = {
   'Add the missing episodes': '빠진 편 추가',
   'The crew did not write these; add a blank row and fill it yourself': '작업팀이 쓰지 않은 편입니다. 빈 줄을 추가해 직접 채워 보세요',
   'Official H3 prompt (Ref2VA)': '공식 H3 프롬포트 (Ref2VA)',
+  'Generating prompt': '프롬포트 생성중',
+  Waiting: '대기 중',
+  generated: '생성됨',
+  'Generating the official H3 prompt of each clip one by one…': '클립별 공식 H3 프롬포트를 하나씩 생성 중입니다…',
 };

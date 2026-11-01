@@ -138,6 +138,8 @@ export interface DirectorShot {
   excluded?: boolean;
   /** the producer's own full video prompt (what the canvas Prompt card holds): when written, it replaces the composed text */
   prompt_user?: string;
+  /** transient: the official H3 prompt of this clip is being generated right now (shown as "생성중" on the card) */
+  prompt_busy?: boolean;
   asset_ids: string[]; results: ResultRef[];
 }
 

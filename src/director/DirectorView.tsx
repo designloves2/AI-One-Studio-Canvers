@@ -859,17 +859,18 @@ function PromptGrid({ p, ro, apply }: { p: DirectorProject; ro: boolean; apply?:
   if (!e) return null;
   const shots = shotsOfEpisode(p, e.episode_id);
   if (!shots.length) return null;
-  const edited = shots.filter((s) => (s.prompt_user ?? '').trim()).length;
+  const done = shots.filter((s) => (s.prompt_user ?? '').trim()).length;
+  const generating = shots.some((s) => s.prompt_busy);
   const resetAll = async () => {
-    if (!edited || !(await askConfirm(`${T('Reset the edited prompts back to the original?')}\n${edited} ${T('edited')}`))) return;
+    if (!done || !(await askConfirm(`${T('Reset the edited prompts back to the original?')}\n${done} ${T('edited')}`))) return;
     edit((x) => { for (const q of x.shots) q.prompt_user = undefined; });
   };
   return (
-    <section className="dx-block"><h4><Ico n="edit" />{T('Video prompts')} <small>{edited} / {shots.length} {T('edited')}</small></h4>
-      <p className="dirx-muted">{T('This is the text each video generator card gets. Review and fix the clips below; "Open in Canvas" puts them all on the canvas prompt cards, and your settings in the canvas are kept.')}</p>
+    <section className="dx-block"><h4><Ico n="edit" />{T('Video prompts')} <small>{done} / {shots.length} {T(generating ? 'generated' : 'edited')}{generating ? ' …' : ''}</small></h4>
+      <p className="dirx-muted">{generating ? T('Generating the official H3 prompt of each clip one by one…') : T('This is the text each video generator card gets. Review and fix the clips below; "Open in Canvas" puts them all on the canvas prompt cards, and your settings in the canvas are kept.')}</p>
       <div className="dx-btns">
-        {apply && <button className="btn small primary" disabled={ro} title={T('Put the prompts on the canvas prompt cards so the next generation uses them.')} onClick={() => void apply()}>{T('Apply to the canvas prompt cards')}</button>}
-        {edited > 0 && <button className="btn small" disabled={ro} onClick={() => void resetAll()}>{T('Reset all prompts')}</button>}
+        {apply && <button className="btn small primary" disabled={ro || generating} title={T('Put the prompts on the canvas prompt cards so the next generation uses them.')} onClick={() => void apply()}>{T('Apply to the canvas prompt cards')}</button>}
+        {done > 0 && <button className="btn small" disabled={ro || generating} onClick={() => void resetAll()}>{T('Reset all prompts')}</button>}
       </div>
       <div className="dx-canvasgrid">{shots.map((s, i) => <ShotPrompt key={`${s.shot_id}:${(s.prompt_user ?? '').trim() ? 'e' : 'o'}`} p={p} s={s} n={i + 1} ro={ro} />)}</div>
     </section>
@@ -880,18 +881,21 @@ function ShotPrompt({ p, s, n, ro }: { p: DirectorProject; s: DirectorShot; n: n
   const T = useT(); const edit = useDirector((x) => x.edit);
   const scene = p.scenes.find((z) => z.scene_id === s.scene_id);
   const composed = composeClipPrompt(s, p.series.language, shotSubjects(p, s));
-  const [text, setText] = useState(s.prompt_user ?? composed);
+  const [text, setText] = useState(s.prompt_user ?? '');
   const edited = !!s.prompt_user?.trim();
+  const busy = !!s.prompt_busy;   // the official H3 prompt of this clip is being generated right now
   const commit = () => {
     const t = text.trim();
     edit((x) => { const q = x.shots.find((z) => z.shot_id === s.shot_id); if (!q) return; q.prompt_user = t === composeClipPrompt(q, x.series.language, shotSubjects(x, q)) ? undefined : t; });
   };
-  const restore = () => { edit((x) => { const q = x.shots.find((z) => z.shot_id === s.shot_id); if (q) q.prompt_user = undefined; }); setText(composed); };
+  const restore = () => { edit((x) => { const q = x.shots.find((z) => z.shot_id === s.shot_id); if (q) q.prompt_user = undefined; }); setText(''); };
   return (
     <article className={`dx-shotprompt${edited ? ' edited' : ''}`}>
-      <header><span className="num">{n}</span>{scene && <span className="pill">{scene.order}.{s.order}</span>}<span className="pill">{s.duration_sec}s</span>{edited ? <i className="ok">✓ {T('Edited')}</i> : <i>{T('Original')}</i>}</header>
-      <textarea rows={5} disabled={ro} value={text} onChange={(ev) => setText(ev.target.value)} onBlur={commit} aria-label={`${T('Video prompt of clip')} ${n}`} />
-      {edited && <div className="dx-btns"><button className="btn small" disabled={ro} onClick={restore}>{T('Restore the original')}</button></div>}
+      <header><span className="num">{n}</span>{scene && <span className="pill">{scene.order}.{s.order}</span>}<span className="pill">{s.duration_sec}s</span>
+        {busy ? <i className="ok"><span className="dirx-spin" />{T('Generating prompt')}</i> : edited ? <i className="ok">✓ {T('Edited')}</i> : <i>{T('Waiting')}</i>}</header>
+      {edited ? <textarea rows={5} disabled={ro || busy} value={text} onChange={(ev) => setText(ev.target.value)} onBlur={commit} aria-label={`${T('Video prompt of clip')} ${n}`} />
+        : <textarea rows={5} disabled={ro || busy} value={text} onChange={(ev) => setText(ev.target.value)} onBlur={commit} aria-label={`${T('Video prompt of clip')} ${n}`} placeholder={T('No prompt yet')} />}
+      {edited && <div className="dx-btns"><button className="btn small" disabled={ro || busy} onClick={restore}>{T('Restore the original')}</button></div>}
     </article>
   );
 }

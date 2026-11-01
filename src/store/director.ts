@@ -110,9 +110,10 @@ export const useDirector = create<DirectorState>((set, get) => {
     try {
       if (k === 'canvas') {
         const { makeEpisodeCanvas, describeReport, generateClipPrompts } = await import('../director/canvasAction');
-        await generateClipPrompts({ no });   // the official Minimax H3 (Video) prompt of every clip, shown and editable before approval
-        const r = await makeEpisodeCanvas(no!);
+        const r = await makeEpisodeCanvas(no!);   // the canvas step shows first (cards hold the clip source text)
         commit((x) => { addChat(x, 'assistant', `${r.file}\n${describeReport(r.report)}`, { crew: 'cinematographer' }); markEpisodeReview(x, no!); });
+        // then the official Minimax H3 (Video) prompt of each clip is generated ONE clip at a time, filling the prompt grid as it goes
+        try { await generateClipPrompts({ no }); } catch (e) { commit((x) => { addChat(x, 'assistant', (e as Error).message, { crew: 'cinematographer', error: true }); }); }
       } else {
         const work = structuredClone(get().project!);
         if (k === 'episode') work.workflow.episode_no = no!;   // the crew writes this episode (the instruction names it)
