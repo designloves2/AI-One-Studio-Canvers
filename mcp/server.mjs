@@ -4035,6 +4035,10 @@ var init_i18n_director = __esm({
       "Back to the clips": "\uD074\uB9BD\uC73C\uB85C \uB3CC\uC544\uAC00\uAE30",
       "Clips in this video": "\uC774 \uC601\uC0C1\uC758 \uD074\uB9BD",
       "Leave at least one clip in the video.": "\uC601\uC0C1\uC5D0 \uB123\uC744 \uD074\uB9BD\uC774 \uD558\uB098\uB3C4 \uC5C6\uC2B5\uB2C8\uB2E4.",
+      "thinking": "\uC0DD\uAC01 \uC911",
+      "answering": "\uB2F5 \uC4F0\uB294 \uC911",
+      "running": "\uCC98\uB9AC \uC911",
+      "cut off": "\uC798\uB9BC",
       "Recent LLM calls": "\uCD5C\uADFC LLM \uD638\uCD9C",
       "Clear": "\uC9C0\uC6B0\uAE30",
       "Nothing yet. Every call of the crew is listed here with its size and speed.": "\uC544\uC9C1 \uC5C6\uC2B5\uB2C8\uB2E4. \uC791\uC5C5\uD300\uC774 LLM \uC744 \uBD80\uB97C \uB54C\uB9C8\uB2E4 \uC785\uB825\xB7\uCD9C\uB825 \uD06C\uAE30\uC640 \uC18D\uB3C4\uAC00 \uC5EC\uAE30\uC5D0 \uC313\uC785\uB2C8\uB2E4.",
@@ -6970,16 +6974,54 @@ async function buildImageGraph(job) {
 // src/backend/llmLog.ts
 init_esm();
 var estTokens = (chars) => Math.round(chars / 2.5);
+function mapBackend(name) {
+  const n2 = String(name || "").toLowerCase();
+  if (n2.includes("gguf") || n2.includes("llama")) return "local";
+  if (n2.includes("textgenerate") || n2.includes("comfy")) return "comfy";
+  if (n2.includes("open router") || n2.includes("openrouter")) return "openrouter";
+  if (n2.includes("custom")) return "custom";
+  if (n2.includes("ollama")) return "ollama";
+  return String(name || "");
+}
 var seq = 0;
-var useLlmLog = create((set2) => ({
+var newCallId = () => `cv-${Date.now().toString(36)}-${(++seq).toString(36)}`;
+var useLlmLog = create((set2, get) => ({
   entries: [],
+  live: {},
   add: (e) => {
     const entry = { ...e, id: ++seq, at: (/* @__PURE__ */ new Date()).toISOString() };
     set2((s) => ({ entries: [...s.entries, entry].slice(-60) }));
     const tokOut = e.usage?.output ?? estTokens(e.outChars);
-    console.info(`[LLM] ${e.tag || "call"} ${e.backend} ${e.model} in ${e.inChars} chars, out ${e.outChars} chars (~${tokOut} tokens), ${(e.ms / 1e3).toFixed(1)} s${e.ms > 0 ? `, ~${(tokOut / (e.ms / 1e3)).toFixed(1)} tok/s` : ""}${e.ok ? "" : ` FAILED: ${e.error}`}`);
+    const speed = e.usage?.tokPerSec ?? (e.ms > 0 ? tokOut / (e.ms / 1e3) : 0);
+    console.info(`[LLM] ${e.tag || "call"} ${e.backend} ${e.model} in ${e.inChars} chars, out ${e.outChars} chars (~${tokOut} tokens), ${(e.ms / 1e3).toFixed(1)} s${speed ? `, ~${speed.toFixed(1)} tok/s` : ""}${e.ok ? "" : ` FAILED: ${e.error}`}`);
   },
-  clear: () => set2({ entries: [] })
+  clear: () => set2({ entries: [] }),
+  begin: (c) => set2((s) => ({ live: { ...s.live, [c.callId]: { ...c, startedAt: Date.now(), phase: "prompt" } } })),
+  end: (callId) => set2((s) => {
+    if (!s.live[callId]) return s;
+    const { [callId]: _gone, ...rest } = s.live;
+    void _gone;
+    return { live: rest };
+  }),
+  event: (d) => {
+    const id = String(d.call_id ?? "");
+    const cur = get().live[id];
+    if (!cur) return;
+    const num3 = (v) => typeof v === "number" && Number.isFinite(v) ? v : void 0;
+    const phase = ["prompt", "thinking", "answer", "done", "error"].includes(String(d.phase)) ? String(d.phase) : cur.phase;
+    set2((s) => ({ live: { ...s.live, [id]: {
+      ...cur,
+      phase,
+      backend: d.backend ? mapBackend(String(d.backend)) : cur.backend,
+      model: d.model ? String(d.model) : cur.model,
+      inputTokens: num3(d.input_tokens) ?? cur.inputTokens,
+      outputTokens: num3(d.output_tokens) ?? cur.outputTokens,
+      chars: num3(d.chars) ?? cur.chars,
+      tokPerSec: num3(d.tok_per_sec) ?? cur.tokPerSec,
+      estimated: d.estimated === true ? true : cur.estimated,
+      delta: typeof d.delta === "string" && d.delta ? d.delta : cur.delta
+    } } }));
+  }
 }));
 
 // src/backend/llm.ts
@@ -7065,6 +7107,7 @@ async function imageDataUrl(a, maxEdge = 1280) {
 }
 function common(l, req) {
   return {
+    call_id: req.callId,
     backend: l.backend,
     temperature: req.temperature ?? l.temperature,
     max_tokens: req.max_tokens ?? l.max_tokens,
@@ -7095,21 +7138,34 @@ function llmFor(req) {
   const { llm, vision } = useSettings.getState();
   return req.images?.length && !vision.same ? vision.llm : llm;
 }
-var lastUsage;
+var usageOf = /* @__PURE__ */ new Map();
+var listening = false;
+function listenOnce() {
+  if (listening) return;
+  listening = true;
+  onSocket((m) => {
+    if (m?.type === "tj_llm_progress" && m.data) useLlmLog.getState().event(m.data);
+  });
+}
 async function runLlm(req) {
   const l = llmFor(req);
   const release = await acquireLocalLlm(l.backend, req.where);
+  listenOnce();
+  const callId = newCallId();
   const t0 = Date.now();
   const inChars = (req.system?.length ?? 0) + (req.prompt?.length ?? 0) + (req.refine?.length ?? 0);
   const model = l.backend === "local" ? l.gguf_model : l.backend === "comfy" ? l.text_encoder_name : l.backend === "openrouter" ? l.or_model_text : l.custom_model;
   try {
-    const out = await runLlmNow({ ...req, llm: l }, false);
-    useLlmLog.getState().add({ tag: req.tag ?? "", backend: l.backend, model: String(model ?? ""), inChars, outChars: out.length, ms: Date.now() - t0, ok: true, usage: lastUsage });
+    useLlmLog.getState().begin({ callId, tag: req.tag ?? "", backend: l.backend, model: String(model ?? "") });
+    const out = await runLlmNow({ ...req, llm: l, callId }, false);
+    useLlmLog.getState().add({ tag: req.tag ?? "", backend: l.backend, model: String(model ?? ""), inChars, outChars: out.length, ms: Date.now() - t0, ok: true, usage: usageOf.get(callId) });
     return out;
   } catch (e) {
     useLlmLog.getState().add({ tag: req.tag ?? "", backend: l.backend, model: String(model ?? ""), inChars, outChars: 0, ms: Date.now() - t0, ok: false, error: e.message.slice(0, 200) });
     throw e;
   } finally {
+    usageOf.delete(callId);
+    useLlmLog.getState().end(callId);
     release();
   }
 }
@@ -7155,7 +7211,19 @@ async function runLlmNow(req, retried) {
   }
   if (!res.ok) throw new Error(res.error || "LLM request failed");
   const u = res.usage;
-  lastUsage = u ? { input: u.input_tokens ?? u.prompt_tokens, output: u.output_tokens ?? u.completion_tokens } : void 0;
+  if (u && req.callId) {
+    const n2 = (v) => typeof v === "number" && Number.isFinite(v) ? v : void 0;
+    usageOf.set(req.callId, {
+      input: n2(u.input_tokens) ?? n2(u.prompt_tokens),
+      output: n2(u.output_tokens) ?? n2(u.completion_tokens),
+      tokPerSec: n2(u.tok_per_sec),
+      elapsedMs: n2(u.elapsed_ms),
+      finish: typeof u.finish_reason === "string" ? u.finish_reason : void 0,
+      thinkingChars: n2(u.thinking_chars) ?? null,
+      answerChars: n2(u.answer_chars) ?? null,
+      estimated: u.estimated === true
+    });
+  }
   return (res.result ?? "").trim();
 }
 
@@ -10795,7 +10863,7 @@ var send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 async function handle(msg) {
   const { id, method, params } = msg;
   try {
-    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.29.0" } } });
+    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.30.0" } } });
     if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS.map(({ run: _r, ...t2 }) => t2) } });
     if (method === "tools/call") {
       const tool = TOOLS.find((t2) => t2.name === params?.name);

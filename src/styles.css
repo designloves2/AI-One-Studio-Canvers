@@ -768,6 +768,7 @@ button.save-state.dirty { cursor: pointer; } button.save-state.dirty:hover { bac
 .btn.danger { color: #d9534f; }
 .dx-llmlog { width: 100%; border-collapse: collapse; font-size: 11.5px; } .dx-llmlog th, .dx-llmlog td { text-align: left; padding: 3px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; } .dx-llmlog tr.bad td { color: #d9534f; }
 .help-dot { display: inline-flex; align-items: center; justify-content: center; width: 13px; height: 13px; margin-left: 5px; border-radius: 50%; background: var(--line2, #3a3f4b); color: var(--muted); font-size: 9px; font-weight: 700; cursor: help; vertical-align: middle; }
+.dx-livellm { font-size: 11.5px; color: var(--muted); margin-top: 4px; } .dx-livellm b { color: var(--fg, inherit); } .dx-livellm .dx-livetail { display: block; opacity: .7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .field-info { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; }
 .dx-passrow { display: flex; gap: 10px; align-items: center; margin-top: 6px; }
 .dx-hideable { display: contents; } .dx-hideable.hid img { filter: blur(14px) brightness(.8); }

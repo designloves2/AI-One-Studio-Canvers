@@ -4,11 +4,11 @@
 //   openrouter → OpenRouter cloud models
 //   custom     → Connect Custom (any OpenAI-compatible server)
 // All four are served by ComfyUI-TJ_NODE_STUDIO_ONE's /tj_studio_one/llm/* and /tj_shared/* routes.
-import { useLlmLog } from './llmLog';
+import { newCallId, useLlmLog, type LlmUsage } from './llmLog';
 import { acquireLocalLlm, type NoticePlace } from './llmGuard';
 import type { Asset } from '../types';
 import { getJson, postJson } from './http';
-import { fetchBlob } from './comfy';
+import { fetchBlob, onSocket } from './comfy';
 import { notify } from '../ui/dialog';
 import { DEFAULT_LLM, llmDirty, useSettings, type LlmBackend, type LlmSettings } from '../store/settings';
 
@@ -123,6 +123,8 @@ export interface LlmRequest {
   llm?: LlmSettings;
   /** a short name for the call in the LLM log (for example 'director') */
   tag?: string;
+  /** set by runLlm: the number the server echoes in its events and its answer */
+  callId?: string;
 }
 
 const toDataUrl = (b: Blob) => new Promise<string>((res, rej) => {
@@ -148,6 +150,7 @@ async function imageDataUrl(a: Asset, maxEdge = 1280): Promise<string> {
 
 function common(l: LlmSettings, req: LlmRequest) {
   return {
+    call_id: req.callId,
     backend: l.backend,
     temperature: req.temperature ?? l.temperature,
     max_tokens: req.max_tokens ?? l.max_tokens,
@@ -179,22 +182,31 @@ function llmFor(req: LlmRequest): LlmSettings {
   return req.images?.length && !vision.same ? vision.llm : llm;
 }
 
-/** what the server reported for the call that just finished (read right after it) */
-let lastUsage: { input?: number; output?: number } | undefined;
+/** what the server reported for each call (by call id), read right after the call */
+const usageOf = new Map<string, LlmUsage>();
+let listening = false;
+/** the server's `tj_llm_progress` events (start / end for the studio routes, more when the core LLM node streams) */
+function listenOnce() {
+  if (listening) return; listening = true;
+  onSocket((m) => { if (m?.type === 'tj_llm_progress' && m.data) useLlmLog.getState().event(m.data as Record<string, unknown>); });
+}
 
 export async function runLlm(req: LlmRequest): Promise<string> {
   const l = llmFor(req);
   const release = await acquireLocalLlm(l.backend, req.where);
+  listenOnce();
+  const callId = newCallId();
   const t0 = Date.now(); const inChars = (req.system?.length ?? 0) + (req.prompt?.length ?? 0) + (req.refine?.length ?? 0);
   const model = l.backend === 'local' ? l.gguf_model : l.backend === 'comfy' ? l.text_encoder_name : l.backend === 'openrouter' ? l.or_model_text : l.custom_model;
   try {
-    const out = await runLlmNow({ ...req, llm: l }, false);
-    useLlmLog.getState().add({ tag: req.tag ?? '', backend: l.backend, model: String(model ?? ''), inChars, outChars: out.length, ms: Date.now() - t0, ok: true, usage: lastUsage });
+    useLlmLog.getState().begin({ callId, tag: req.tag ?? '', backend: l.backend, model: String(model ?? '') });
+    const out = await runLlmNow({ ...req, llm: l, callId }, false);
+    useLlmLog.getState().add({ tag: req.tag ?? '', backend: l.backend, model: String(model ?? ''), inChars, outChars: out.length, ms: Date.now() - t0, ok: true, usage: usageOf.get(callId) });
     return out;
   } catch (e) {
     useLlmLog.getState().add({ tag: req.tag ?? '', backend: l.backend, model: String(model ?? ''), inChars, outChars: 0, ms: Date.now() - t0, ok: false, error: (e as Error).message.slice(0, 200) });
     throw e;
-  } finally { release(); }
+  } finally { usageOf.delete(callId); useLlmLog.getState().end(callId); release(); }
 }
 
 async function runLlmNow(req: LlmRequest, retried: boolean): Promise<string> {
@@ -240,8 +252,12 @@ async function runLlmNow(req: LlmRequest, retried: boolean): Promise<string> {
   }
   if (!res.ok && !retried && /last_prompt_id/.test(res.error ?? '')) { await warmUpServer(); return runLlmNow(req, true); }
   if (!res.ok) throw new Error(res.error || 'LLM request failed');
-  const u = (res as { usage?: { input_tokens?: number; output_tokens?: number; prompt_tokens?: number; completion_tokens?: number } }).usage;
-  lastUsage = u ? { input: u.input_tokens ?? u.prompt_tokens, output: u.output_tokens ?? u.completion_tokens } : undefined;
+  const u = (res as { usage?: Record<string, unknown> }).usage;
+  if (u && req.callId) {
+    const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
+    usageOf.set(req.callId, { input: n(u.input_tokens) ?? n(u.prompt_tokens), output: n(u.output_tokens) ?? n(u.completion_tokens), tokPerSec: n(u.tok_per_sec), elapsedMs: n(u.elapsed_ms),
+      finish: typeof u.finish_reason === 'string' ? u.finish_reason : undefined, thinkingChars: n(u.thinking_chars) ?? null, answerChars: n(u.answer_chars) ?? null, estimated: u.estimated === true });
+  }
   return (res.result ?? '').trim();
 }
 

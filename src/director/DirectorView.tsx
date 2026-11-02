@@ -213,7 +213,7 @@ function Working({ p }: { p: DirectorProject }) {
   const isEp = (EPISODE_STAGES as StageId[]).includes(view);
   const ep = episodeByNo(p, p.workflow.episode_no);
   const working = isEp ? ep?.stage === view && ep.stage_status === 'working' : p.workflow.status[view] === 'working';
-  return working ? <div className="dirx-working"><span className="dirx-spin" />{T('The crew is working…')}</div> : null;
+  return working ? <div className="dirx-working"><span className="dirx-spin" />{T('The crew is working…')}<LiveLlm /></div> : null;
 }
 
 function EpisodeIdle({ p, ro }: { p: DirectorProject; ro: boolean }) {
@@ -1067,18 +1067,36 @@ function llmLabel(same: boolean, main: LlmSettings, own: LlmSettings, T: (k: str
 
 /** the Director's own model settings (the same four backends as everywhere else), opened right from the chat box */
 /** the recent LLM calls: what went in, what came out, how long it took (the ComfyUI console does not show this) */
+/** the call that is running now: which model, what phase, how long (the studio routes do not stream, so there is no growing text; the core LLM node may send more) */
+function LiveLlm() {
+  const T = useT(); const live = useLlmLog((s) => s.live); const [, tick] = useState(0);
+  const calls = Object.values(live);
+  useEffect(() => { if (!calls.length) return; const t = setInterval(() => tick((n) => n + 1), 1000); return () => clearInterval(t); }, [calls.length]);
+  if (!calls.length) return null;
+  return (
+    <div className="dx-livellm">{calls.map((c) => {
+      const sec = Math.max(0, Math.round((Date.now() - c.startedAt) / 1000));
+      const tilde = c.estimated ? '~' : '';
+      return (<div key={c.callId}><b>{c.backend}</b>{c.model ? ` · ${c.model.split(/[\\/]/).pop()}` : ''} · {T(c.phase === 'thinking' ? 'thinking' : c.phase === 'answer' ? 'answering' : 'running')} · {sec}s
+        {c.inputTokens !== undefined && ` · ${T('In')} ${tilde}${c.inputTokens.toLocaleString()} tok`}{c.outputTokens !== undefined && c.outputTokens > 0 && ` · ${T('Out')} ${tilde}${c.outputTokens.toLocaleString()} tok`}{c.tokPerSec ? ` · ${c.tokPerSec.toFixed(1)} tok/s` : ''}
+        {c.delta && <small className="dx-livetail">…{c.delta.slice(-120)}</small>}</div>);
+    })}</div>
+  );
+}
+
 function LlmLog() {
   const T = useT(); const entries = useLlmLog((s) => s.entries); const clear = useLlmLog((s) => s.clear);
   const rows = [...entries].reverse();
   return (
     <section className="dx-block"><h4><Ico n="list" />{T('Recent LLM calls')} <button className="linkbtn" onClick={clear}>{T('Clear')}</button></h4>
+      <LiveLlm />
       {!rows.length ? <p className="dirx-muted">{T('Nothing yet. Every call of the crew is listed here with its size and speed.')}</p> : (
         <table className="dx-llmlog"><thead><tr><th>{T('Time')}</th><th>{T('Model')}</th><th>{T('In')}</th><th>{T('Out')}</th><th>{T('Seconds')}</th><th>tok/s</th></tr></thead>
           <tbody>{rows.map((r) => { const tin = r.usage?.input ?? estTokens(r.inChars), tout = r.usage?.output ?? estTokens(r.outChars); return (
             <tr key={r.id} className={r.ok ? '' : 'bad'} title={r.error ?? ''}>
               <td>{new Date(r.at).toLocaleTimeString()}</td><td>{r.backend} · {(r.model || '').split(/[\\/]/).pop()}</td>
               <td>{r.inChars.toLocaleString()} {T('chars')} (~{tin.toLocaleString()} tok)</td><td>{r.ok ? `${r.outChars.toLocaleString()} ${T('chars')} (~${tout.toLocaleString()} tok)` : T('failed')}</td>
-              <td>{(r.ms / 1000).toFixed(1)}</td><td>{r.ok && r.ms > 0 ? (tout / (r.ms / 1000)).toFixed(1) : '-'}</td></tr>); })}</tbody></table>)}
+              <td>{(r.ms / 1000).toFixed(1)}{r.usage?.finish === 'length' ? ` · ${T('cut off')}` : ''}</td><td>{r.ok && r.ms > 0 ? (r.usage?.tokPerSec ?? tout / (r.ms / 1000)).toFixed(1) : '-'}</td></tr>); })}</tbody></table>)}
       <p className="dirx-muted">{T('Token numbers are estimates from the characters unless the server reports its own.')}</p>
     </section>
   );
