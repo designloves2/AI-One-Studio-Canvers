@@ -490,7 +490,7 @@ function applyEdit(p: DirectorProject, e: Edit, notes: string[]) {
       if (typeof e.location === 'string') { s.location = findReference(p, e.location)?.name ?? ''; changed = true; }
       if (typeof e.include === 'boolean') s.excluded = e.include ? undefined : true;
       // a changed clip needs a new look-over; its old results stay in the history
-      if (changed) s.passed = undefined;   // a changed clip has to be looked at again
+      if (changed) { s.passed = undefined; s.prompt_user = undefined; }   // a changed clip has to be looked at again; its brief is made again from the new text
       if (changed && ['approved', 'review', 'done', 'ready'].includes(s.status)) { s.status = 'draft'; if (s.results.length) notes.push(`clip ${e.clip}: the old result is kept, generate again to see the change`); }
       return;
     }

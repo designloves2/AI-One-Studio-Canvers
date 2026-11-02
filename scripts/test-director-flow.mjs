@@ -250,8 +250,9 @@ ok(m2.schema_version === 5 && m2.series.format === 'drama' && m2.workflow.stage 
   ok(sh[0].location === '옥상' && sh[1].location === '옥상', 'a clip without a place gets the place of the episode (and then the one before it)');
   ok(M.findReference(q, '한지우') && !M.mentionedRefs(q, 'nothing here').length, 'a text that names nobody adds nobody');
   // a clip changed by the producer has to be passed again, and can be left out
-  const p0 = sh[0]; p0.results.push({ result_id: 'r1', file: { filename: 'a.mp4', subfolder: '', type: 'output' }, kind: 'video', created_at: '', picked: true }); p0.passed = 'r1'; p0.status = 'done';
+  const p0 = sh[0]; p0.results.push({ result_id: 'r1', file: { filename: 'a.mp4', subfolder: '', type: 'output' }, kind: 'video', created_at: '', picked: true }); p0.passed = 'r1'; p0.status = 'done'; p0.prompt_user = 'old brief';
   AI.applyReply(q, { say: '', edits: [{ op: 'set_clip', episode: 2, clip: 1, prompt_en: 'darker', include: false }] });
+  ok(p0.prompt_user === undefined, 'a changed clip loses its old video brief (it is made again)');
   ok(p0.passed === undefined && p0.excluded === true && p0.status === 'draft', 'a changed clip is not passed any more; include:false leaves it out of the joined video');
 }
 // ---- fixes from the real test: a song only for a music video, the numbers the producer said, the music crew only in a music video

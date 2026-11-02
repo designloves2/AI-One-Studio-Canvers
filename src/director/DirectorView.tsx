@@ -812,7 +812,8 @@ function ClipEditor({ p, s, n }: { p: DirectorProject; s: DirectorShot; n: numbe
   const live = p.references.filter((r) => r.status !== 'rejected');
   const change = (fn: (q: DirectorShot) => void) => edit((x) => {
     const q = x.shots.find((z) => z.shot_id === s.shot_id); if (!q) return; fn(q);
-    q.passed = undefined; if (q.results.length && ['approved', 'review', 'done', 'ready'].includes(q.status)) q.status = 'draft';   // a changed clip has to be made / looked at again
+    q.passed = undefined; q.prompt_user = undefined;   // the brief made from the old text is stale: it is made again at the prompt step
+    if (q.results.length && ['approved', 'review', 'done', 'ready'].includes(q.status)) q.status = 'draft';   // a changed clip has to be made / looked at again
     syncShotAssets(x);
   });
   const text = (label: string, key: 'prompt_ko' | 'prompt_en' | 'dialogue' | 'sound' | 'music', rows = 2) => (
