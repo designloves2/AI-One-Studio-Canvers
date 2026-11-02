@@ -1,10 +1,10 @@
-// Series settings helpers: cutting an episode into clips, and turning "1080p + 7+1 Kimchy" into the numbers the H3 Turbo card wants.
+// Series settings helpers: cutting an episode into clips, and turning "1080p + 7+1 Tiled" into the numbers the H3 Turbo card wants.
 // Pure (no DOM, no network).
 import type { DirectorSeries, GenPreset, Resolution } from './types';
 
 export const RESOLUTIONS: Resolution[] = ['720p', '1080p', '1440p', '2160p'];
-export const PRESETS: GenPreset[] = ['h3_7plus1_kimchy', 'h3_7plus1', 'h3_plain'];
-export const PRESET_LABEL: Record<GenPreset, string> = { h3_7plus1_kimchy: '7+1 Kimchy', h3_7plus1: '7+1 (H3 Latent Upscaler)', h3_plain: 'H3 (no 7+1)' };
+export const PRESETS: GenPreset[] = ['h3_7plus1_tiled', 'h3_7plus1', 'h3_plain'];
+export const PRESET_LABEL: Record<GenPreset, string> = { h3_7plus1_tiled: '7+1 Tiled (TJ)', h3_7plus1: '7+1 (H3 Latent Upscaler)', h3_plain: 'H3 (no 7+1)' };
 
 /** the clip length is fixed to what the H3 card accepts (Clip length 5.2 - 15 s) */
 export const MIN_CLIP = 5.2, MAX_CLIP = 15;
@@ -49,15 +49,15 @@ export function turboSettings(s: Pick<DirectorSeries, 'preset' | 'resolution' | 
     if (Math.abs(c - v) > 0.005) warnings.push(`${what}: ${s.resolution} is ${v.toFixed(2)} MP, the card allows ${lo}-${hi} MP, so ${c.toFixed(2)} MP is used`);
     return Math.round(c * 100) / 100;
   };
-  if (s.preset === 'h3_7plus1_kimchy') return { params: { turbo: 'pdd', hires: true, hires_upscaler: 'kimchy', hires_kim_up: 'neural', hires_kim_start_mp: clamp(s.start_mp ?? 0.5, 0.2, 1, 'Kimchy start size'), hires_kim_final_mp: clamp(s.final_mp ?? mp, 1, 8.5, 'Kimchy final size') }, warnings };
+  if (s.preset === 'h3_7plus1_tiled') return { params: { turbo: 'pdd', hires: true, hires_upscaler: 'tiled', hires_tiled_up: 'neural', hires_tiled_start_mp: clamp(s.start_mp ?? 0.5, 0.2, 1, 'Tiled start size'), hires_tiled_final_mp: clamp(s.final_mp ?? mp, 1, 8.5, 'Tiled final size') }, warnings };
   if (s.preset === 'h3_7plus1') return { params: { turbo: 'pdd', hires: true, hires_upscaler: 'h3', hires_start_mp: clamp(s.start_mp ?? 0.7, 0.2, 1, '7+1 start size'), hires_final_mp: clamp(s.final_mp ?? mp, 0.4, 3, '7+1 final size') }, warnings };
   return { params: { turbo: 'none', hires: false }, warnings };
 }
 
-/** the megapixel ranges a mode lets the producer set in the brief (matching the card the value is drawn onto). plain = final only; 7+1 / Kimchy = start + final. */
+/** the megapixel ranges a mode lets the producer set in the brief (matching the card the value is drawn onto). plain = final only; 7+1 / Tiled = start + final. */
 export function mpRanges(preset: GenPreset): { start: [number, number, number] | null; final: [number, number, number] } {
   if (preset === 'h3_plain') return { start: null, final: [0.25, 4, 0.25] };          // Video Generate → Size (MP)
-  if (preset === 'h3_7plus1_kimchy') return { start: [0.2, 1, 0.05], final: [1, 8.5, 0.1] };
+  if (preset === 'h3_7plus1_tiled') return { start: [0.2, 1, 0.05], final: [1, 8.5, 0.1] };
   return { start: [0.2, 1, 0.05], final: [0.4, 3, 0.05] };
 }
 
@@ -65,7 +65,7 @@ export function mpRanges(preset: GenPreset): { start: [number, number, number] |
 export function defaultMps(s: Pick<DirectorSeries, 'preset' | 'resolution' | 'aspect'>): { start?: number; final: number } {
   const mp = resolutionMp(s.resolution, s.aspect);
   if (s.preset === 'h3_plain') return { final: 0.9 };
-  if (s.preset === 'h3_7plus1_kimchy') return { start: 0.5, final: Math.min(8.5, Math.max(1, mp)) };
+  if (s.preset === 'h3_7plus1_tiled') return { start: 0.5, final: Math.min(8.5, Math.max(1, mp)) };
   return { start: 0.7, final: Math.min(3, Math.max(0.4, mp)) };
 }
 

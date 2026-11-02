@@ -2862,19 +2862,19 @@ var init_registry = __esm({
           slider("turbo_strength", "Turbo strength", 0, 2, 0.05, 1, { when: (p) => p.turbo !== "none" }),
           slider("turbo_steps", "Turbo steps", 1, 16, 1, 8, { advanced: true, when: (p) => p.turbo !== "none" }),
           toggle("hires", "Split Sigma", true, { when: (p) => p.turbo === "pdd" || p.turbo === "none", help: "Needs an 8-step turbo: the Turbo LoRA above, or Turbo None with an 8-step checkpoint. Steps are fixed at 8: LOW Sigma steps run small, the HIGH Sigma steps (8 \u2212 LOW) run after the latent upscale (7 LOW is recommended)." }),
-          { id: "hires_upscaler", label: "Upscaler", control: { kind: "select", options: ["h3", "kimchy"], labels: { h3: "H3 Latent Upscaler", kimchy: "H3 Kimchy Up Scaler" } }, default: "h3", when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires },
-          { ...num("hires_split_step", "LOW Sigma step (1~7, 7 recommended)", 7, { when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && p.hires_upscaler !== "kimchy" }, 1, 7, 1), info: { text: "HIGH Sigma: {n} step(s) (8 \u2212 LOW) \u2014 the latent upscale runs here, then these steps at Final MP", calc: (v) => 8 - Math.min(7, Math.max(1, Math.round(Number(v)) || 7)) } },
-          slider("hires_start_mp", "Start size (MP)", 0.2, 1, 0.05, 0.7, { when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && p.hires_upscaler !== "kimchy" }),
-          slider("hires_final_mp", "Final size (MP)", 0.4, 3, 0.05, 1.6, { when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && p.hires_upscaler !== "kimchy" }),
-          { id: "hires_kim_up", label: "Latent upscale", control: { kind: "select", options: ["neural", "bicubic", "trilinear"], labels: { neural: "Neural (Kimchy's trained upscaler)", bicubic: "Bicubic (plain interpolation)", trilinear: "Trilinear (plain interpolation)" } }, default: "neural", when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && p.hires_upscaler === "kimchy" },
-          slider("hires_kim_start_mp", "Start size (MP)", 0.2, 1, 0.05, 0.5, { when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && p.hires_upscaler === "kimchy" }),
-          slider("hires_kim_final_mp", "Final size (MP)", 1, 8.5, 0.1, 2, { when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && p.hires_upscaler === "kimchy" }),
+          { id: "hires_upscaler", label: "Upscaler", control: { kind: "select", options: ["h3", "tiled"], labels: { h3: "H3 Latent Upscaler", tiled: "H3 Latent Upscale Tiled (TJ)" } }, default: "h3", when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires },
+          { ...num("hires_split_step", "LOW Sigma step (1~7, 7 recommended)", 7, { when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && p.hires_upscaler !== "tiled" }, 1, 7, 1), info: { text: "HIGH Sigma: {n} step(s) (8 \u2212 LOW) \u2014 the latent upscale runs here, then these steps at Final MP", calc: (v) => 8 - Math.min(7, Math.max(1, Math.round(Number(v)) || 7)) } },
+          slider("hires_start_mp", "Start size (MP)", 0.2, 1, 0.05, 0.7, { when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && p.hires_upscaler !== "tiled" }),
+          slider("hires_final_mp", "Final size (MP)", 0.4, 3, 0.05, 1.6, { when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && p.hires_upscaler !== "tiled" }),
+          { id: "hires_tiled_up", label: "Latent upscale", control: { kind: "select", options: ["neural", "bicubic", "trilinear"], labels: { neural: "Neural (trained upscaler)", bicubic: "Bicubic (plain interpolation)", trilinear: "Trilinear (plain interpolation)" } }, default: "neural", when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && p.hires_upscaler === "tiled" },
+          slider("hires_tiled_start_mp", "Start size (MP)", 0.2, 1, 0.05, 0.5, { when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && p.hires_upscaler === "tiled" }),
+          slider("hires_tiled_final_mp", "Final size (MP)", 1, 8.5, 0.1, 2, { when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && p.hires_upscaler === "tiled" }),
           { id: "hires_last", label: "Split Sigma last step model", control: { kind: "select", options: ["same", "fixed"], labels: { same: "Same as generation", fixed: "Fixed model" } }, default: "same", when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires },
           dyn("hires_last_model", "Split Sigma last step model (none = One Studio setting)", "h3unets", "none", { when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && p.hires_last === "fixed" }),
           toggle("hires_no_opt", "Bypass H3 Memory Optimization on the last step", false, { advanced: true, when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires }),
           num("hires_chunk_rows", "Last step chunk rows", 2048, { advanced: true, when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && !p.hires_no_opt }, 256, 16384, 256)
         ],
-        description: "H3 speed-up: Turbo LoRA and Split Sigma (run the first steps small, scale the latent up, run the rest at full size). Upscaler A: H3 Latent Upscaler (the usual way, last step on the whole picture; 1.6 MP is its sweet spot on 16 GB). Upscaler B: H3 Kimchy Up Scaler (new; upscale and last step in one node, in tiles; Final MP 1.0 \u2013 8.5; needs the ComfyUI-Kimchy-Minimax-H3-Suite pack). Wire into Video Generate \u2192 H3 option cards."
+        description: "H3 speed-up: Turbo LoRA and Split Sigma (run the first steps small, scale the latent up, run the rest at full size). Upscaler A: H3 Latent Upscaler (the usual way, last step on the whole picture; 1.6 MP is its sweet spot on 16 GB). Upscaler B: H3 Latent Upscale Tiled (TJ) (new; upscale and last step in one node, in tiles; Final MP 1.0 \u2013 8.5; needs the ComfyUI-Tiled-Minimax-H3-Suite pack). Wire into Video Generate \u2192 H3 option cards."
       },
       {
         id: "moss-bboxes",
@@ -2986,11 +2986,11 @@ var init_registry = __esm({
               { id: "h3_kind", label: "Clip type", control: { kind: "select", options: ["fl", "ref"], labels: { fl: "First / Last frame", ref: "Reference" } }, default: "fl" },
               { id: "h3_last", label: "Model", control: { kind: "select", options: ["same", "fixed"], labels: { same: "Same as generation", fixed: "Fixed model" } }, default: "same" },
               dyn("h3_last_model", 'Fixed model (none = One Studio setting "UNET - Split Sigma last step")', "h3unets", "none", { when: (p) => p.h3_last === "fixed" }),
-              { id: "h3_upscaler", label: "Upscaler", control: { kind: "select", options: ["h3", "kimchy"], labels: { h3: "H3 Latent Upscaler", kimchy: "H3 Kimchy Up Scaler" } }, default: "h3" },
-              { id: "h3_kim_up", label: "Latent upscale", control: { kind: "select", options: ["neural", "bicubic", "trilinear"], labels: { neural: "Neural (Kimchy's trained upscaler)", bicubic: "Bicubic (plain interpolation)", trilinear: "Trilinear (plain interpolation)" } }, default: "neural", when: (p) => p.h3_upscaler === "kimchy" },
+              { id: "h3_upscaler", label: "Upscaler", control: { kind: "select", options: ["h3", "tiled"], labels: { h3: "H3 Latent Upscaler", tiled: "H3 Latent Upscale Tiled (TJ)" } }, default: "h3" },
+              { id: "h3_tiled_up", label: "Latent upscale", control: { kind: "select", options: ["neural", "bicubic", "trilinear"], labels: { neural: "Neural (trained upscaler)", bicubic: "Bicubic (plain interpolation)", trilinear: "Trilinear (plain interpolation)" } }, default: "neural", when: (p) => p.h3_upscaler === "tiled" },
               toggle("h3_no_opt", "Bypass H3 Memory Optimization", false),
-              slider("h3_final_mp", "Final MP", 0.4, 3, 0.05, 1.6, { when: (p) => p.h3_upscaler !== "kimchy" }),
-              slider("h3_kim_final_mp", "Final MP", 1, 8.5, 0.1, 2, { when: (p) => p.h3_upscaler === "kimchy" }),
+              slider("h3_final_mp", "Final MP", 0.4, 3, 0.05, 1.6, { when: (p) => p.h3_upscaler !== "tiled" }),
+              slider("h3_tiled_final_mp", "Final MP", 1, 8.5, 0.1, 2, { when: (p) => p.h3_upscaler === "tiled" }),
               num("h3_chunk_rows", "Activation chunk rows", 2048, { advanced: true }, 256, 16384, 256),
               toggle("h3_split", "Split mode (long clips)", false, { note: "cut a long clip into pieces, upscale each on its own queue turn, then join them" }),
               { id: "h3_split_mode", label: "Split mode", control: { kind: "select", options: ["seconds", "count"], labels: { seconds: "By seconds", count: "By count" } }, default: "seconds", when: (p) => !!p.h3_split },
@@ -3490,9 +3490,9 @@ var init_i18n_cards = __esm({
       "Latent Upscale (Use H3)": "\uB798\uD134\uD2B8 \uC5C5\uC2A4\uCF00\uC77C (H3 \uC0AC\uC6A9)",
       "Trilinear (plain interpolation)": "\uD2B8\uB77C\uC774\uB9AC\uB2C8\uC5B4 (\uB2E8\uC21C \uBCF4\uAC04)",
       "Bicubic (plain interpolation)": "\uBC14\uC774\uD050\uBE45 (\uB2E8\uC21C \uBCF4\uAC04)",
-      "Neural (Kimchy's trained upscaler)": "\uC2E0\uACBD\uB9DD (Kimchy \uD559\uC2B5 \uC5C5\uC2A4\uCF00\uC77C\uB7EC)",
+      "Neural (trained upscaler)": "\uC2E0\uACBD\uB9DD (\uD559\uC2B5 \uC5C5\uC2A4\uCF00\uC77C\uB7EC)",
       "Latent upscale": "\uB798\uD134\uD2B8 \uC5C5\uC2A4\uCF00\uC77C",
-      "H3 Kimchy Up Scaler": "H3 \uAE40\uCE58 \uC5C5\uC2A4\uCF00\uC77C\uB7EC",
+      "H3 Latent Upscale Tiled (TJ)": "H3 Latent Upscale Tiled (TJ)",
       "H3 Latent Upscaler": "H3 \uB798\uD134\uD2B8 \uC5C5\uC2A4\uCF00\uC77C\uB7EC",
       "Upscaler": "\uC5C5\uC2A4\uCF00\uC77C\uB7EC",
       "Auto Prompt": "\uC790\uB3D9 \uD504\uB86C\uD504\uD2B8",
@@ -5878,6 +5878,32 @@ var require_jsx_runtime = __commonJS({
   }
 });
 
+// src/backend/tiledMigrate.ts
+function migrateTiledParams(params) {
+  let out = null;
+  const set2 = (k, v, del) => {
+    out = out ?? { ...params };
+    if (v !== void 0) out[k] = v;
+    if (del) delete out[del];
+  };
+  for (const k of ["hires_upscaler", "h3_upscaler"]) if (params[k] === "kimchy") set2(k, "tiled");
+  for (const [from, to] of KEYS) if (from in params) set2(to, params[to] === void 0 ? params[from] : void 0, from);
+  return out ?? params;
+}
+var KEYS;
+var init_tiledMigrate = __esm({
+  "src/backend/tiledMigrate.ts"() {
+    "use strict";
+    KEYS = [
+      ["hires_kim_up", "hires_tiled_up"],
+      ["hires_kim_start_mp", "hires_tiled_start_mp"],
+      ["hires_kim_final_mp", "hires_tiled_final_mp"],
+      ["h3_kim_up", "h3_tiled_up"],
+      ["h3_kim_final_mp", "h3_tiled_final_mp"]
+    ];
+  }
+});
+
 // src/backend/turboMemory.ts
 function saveTurboPick(kind, lora) {
   if (!lora || lora === "none") return;
@@ -5909,7 +5935,13 @@ function measure(n2) {
 function fillTurbo(nodes) {
   const t2 = useSettings.getState().h3Turbo;
   let changed = false;
-  const out = nodes.map((n2) => {
+  const out = nodes.map((n0) => {
+    const mp = migrateTiledParams(n0.params);
+    let n2 = n0;
+    if (mp !== n0.params) {
+      n2 = { ...n0, params: mp };
+      changed = true;
+    }
     if (n2.defId !== "h3-turbo") return n2;
     const patch = {};
     if ((!n2.params.turbo_lora || n2.params.turbo_lora === "none") && t2.fl) patch.turbo_lora = t2.fl;
@@ -5979,6 +6011,7 @@ var MODE_KEY, RUNS_KEY, readMode, readRuns, writeRuns, hostSerializer, setHostSe
 var init_graph = __esm({
   "src/store/graph.ts"() {
     "use strict";
+    init_tiledMigrate();
     init_esm();
     init_registry();
     init_comfy();
@@ -7737,7 +7770,7 @@ async function buildLtxGraph(job) {
 // src/backend/h3.ts
 init_http();
 function splitStepOf(o) {
-  if (o.hiresUpscaler === "kimchy") return 7;
+  if (o.hiresUpscaler === "tiled") return 7;
   const v = Number(o.hiresSplitStep ?? 7);
   return Number.isFinite(v) ? Math.min(7, Math.max(1, Math.round(v))) : 7;
 }
@@ -7929,10 +7962,10 @@ async function buildH3Graph(job) {
   };
   cond("cond", start.width, start.height);
   const imageCond = job.mode === "reference" || job.mode === "firstlast" && (job.first || job.last);
-  const kimchy = hires && o.hiresUpscaler === "kimchy";
-  const kimFl = kimchy && job.mode === "firstlast";
-  const hrCond = hires && (imageCond || kimFl);
-  if (hrCond) cond("hrCond", final.width, final.height, kimFl);
+  const tiled = hires && o.hiresUpscaler === "tiled";
+  const tiledFl = tiled && job.mode === "firstlast";
+  const hrCond = hires && (imageCond || tiledFl);
+  if (hrCond) cond("hrCond", final.width, final.height, tiledFl);
   g.noise = { class_type: "RandomNoise", inputs: { noise_seed: job.seed } };
   g.sel = turbo === "larryvrh" && has("MiniMaxH3TurboSampler") ? { class_type: "MiniMaxH3TurboSampler", inputs: {} } : { class_type: "KSamplerSelect", inputs: { sampler_name: turbo === "pdd" ? "euler" : job.sampler } };
   g.sched = { class_type: "BasicScheduler", inputs: { model, scheduler: job.scheduler, steps, denoise: 1 } };
@@ -7974,10 +8007,10 @@ async function buildH3Graph(job) {
   g.samp = { class_type: "SamplerCustomAdvanced", inputs: { noise: ["noise", 0], guider: ["guider", 0], sampler: ["sel", 0], sigmas, latent_image: latent } };
   if (job.checkpoint && has("TJ_H3_SaveLatentCheckpoint")) g.chkSave = { class_type: "TJ_H3_SaveLatentCheckpoint", inputs: { latent: hires ? ["samp", 1] : ["samp", 0], checkpoint_name: job.checkpoint } };
   let samples = ["samp", 0];
-  if (kimchy) {
-    if (!has("KimchyH3ZeroSplitMP")) throw new Error("Split Sigma H3 Kimchy Up Scaler needs the ComfyUI-Kimchy-Minimax-H3-Suite pack \u2014 install it (github.com/AI-KIMCHY/ComfyUI-Kimchy-Minimax-H3-Suite), or pick H3 Latent Upscaler.");
+  if (tiled) {
+    if (!has("TJLatentUpscaleTiledMP")) throw new Error("Split Sigma H3 Latent Upscale Tiled (TJ) needs the H3-Latent-Upscale-Tiled-TJ- pack \u2014 install it (github.com/designloves2/H3-Latent-Upscale-Tiled-TJ-), or pick H3 Latent Upscaler.");
     if (!o.hiresNoOpt) needNode("H3MemoryOptimization", "Split Sigma");
-    if (!(o.hiresFinalMp >= 1 && o.hiresFinalMp <= 8.5)) throw new Error("H3 Kimchy Up Scaler supports Final MP 1.0 \u2013 8.5.");
+    if (!(o.hiresFinalMp >= 1 && o.hiresFinalMp <= 8.5)) throw new Error("H3 Latent Upscale Tiled (TJ) supports Final MP 1.0 \u2013 8.5.");
     if (o.hiresLastFixed) {
       if (!o.hiresLastModel || o.hiresLastModel === "none") throw new Error("Split Sigma last step is set to a fixed model but none is selected");
       g.hr_unet = o.hiresLastModel.toLowerCase().endsWith(".gguf") ? { class_type: "UnetLoaderGGUF", inputs: { unet_name: o.hiresLastModel } } : { class_type: "UNETLoader", inputs: { unet_name: o.hiresLastModel, weight_dtype: "default" } };
@@ -7999,8 +8032,8 @@ async function buildH3Graph(job) {
       stage = ["hrMem", 0];
     }
     g.hrNeg = { class_type: "ConditioningZeroOut", inputs: { conditioning: hrCondLink } };
-    g.hrKim = { class_type: "KimchyH3ZeroSplitMP", inputs: { model: stage, conditioning: hrCondLink, latent: ["samp", 1], noise: ["noise", 0], sampler: ["sel", 0], sigmas: ["split", 1], negative: ["hrNeg", 0], model_name: o.hiresKimUp === "bicubic" ? "None (Bicubic)" : o.hiresKimUp === "trilinear" ? "None (Trilinear)" : "minimax_h3_latent_upscaler_3d_bf16.safetensors", upscale_by: "megapixels", target_megapixels: o.hiresFinalMp, scale: 2, align: 32, precision: "fp16", cfg: 1, color_match: true } };
-    samples = ["hrKim", 0];
+    g.hrTiled = { class_type: "TJLatentUpscaleTiledMP", inputs: { model: stage, conditioning: hrCondLink, latent: ["samp", 1], noise: ["noise", 0], sampler: ["sel", 0], sigmas: ["split", 1], negative: ["hrNeg", 0], model_name: o.hiresTiledUp === "bicubic" ? "None (Bicubic)" : o.hiresTiledUp === "trilinear" ? "None (Trilinear)" : "minimax_h3_latent_upscaler_3d_bf16.safetensors", upscale_by: "megapixels", target_megapixels: o.hiresFinalMp, scale: 2, align: 32, precision: "fp16", cfg: 1, color_match: true } };
+    samples = ["hrTiled", 0];
   } else if (hires) {
     for (const n2 of ["MinimaxH3LatentUpscaler3D", ...o.hiresNoOpt ? [] : ["H3MemoryOptimization"], "BlockSparseAttention"]) needNode(n2, "Split Sigma");
     g.hrSep = { class_type: "LTXVSeparateAVLatent", inputs: { av_latent: ["samp", 1] } };
@@ -8044,7 +8077,7 @@ async function buildH3Graph(job) {
     g.upApply = { class_type: "ImageUpscaleWithModel", inputs: { upscale_model: ["upModel", 0], image: images } };
     images = ["upApply", 0];
   }
-  const audio = locked && !kimchy ? ["audioLock", 1] : ["decA", 0];
+  const audio = locked && !tiled ? ["audioLock", 1] : ["decA", 0];
   const tag = String(job.clipIndex + 1).padStart(3, "0");
   const prefix = `${job.saveSubfolder}/${job.stem}_clip${tag}`;
   if (has("VHS_VideoCombine")) g.save = { class_type: "VHS_VideoCombine", inputs: { images, audio, frame_rate: FPS, loop_count: 0, filename_prefix: prefix, format: "video/nvenc_h264-mp4", pingpong: false, save_output: true } };
@@ -8103,6 +8136,7 @@ function need(v, what) {
 }
 
 // src/engine/more.ts
+init_tiledMigrate();
 init_comfy();
 init_http();
 
@@ -8907,7 +8941,7 @@ init_http();
 // src/backend/h3Lat.ts
 var h3LatFrames = (total) => total >= 22 ? Math.floor((total - 5) / 17) * 17 + 5 : 0;
 async function buildH3LatGraph(j) {
-  const kim = j.upscaler === "kimchy";
+  const tiled = j.upscaler === "tiled";
   const m = await resolveH3Models(j.models, j.kind === "ref" ? "reference" : "firstlast");
   const avail = await h3Availability();
   const has = (n2) => !!avail[n2];
@@ -8917,13 +8951,13 @@ async function buildH3LatGraph(j) {
   if (j.turbo === "pdd" && (!j.pddFile || j.pddFile === "none")) throw new Error("Latent Upscale (Use H3) needs an 8-step model: pick the Turbo LoRA, or set Turbo to None with an 8-step checkpoint.");
   if (!j.prompt.trim()) throw new Error("Latent Upscale (Use H3): the prompt is empty.");
   if (!j.frames) throw new Error("Latent Upscale (Use H3): the clip is too short (H3 needs at least 22 frames).");
-  if (kim && !has("KimchyH3ZeroSplitMP")) throw new Error("H3 Kimchy Up Scaler needs the ComfyUI-Kimchy-Minimax-H3-Suite pack \u2014 install it (github.com/AI-KIMCHY/ComfyUI-Kimchy-Minimax-H3-Suite), or pick H3 Latent Upscaler.");
-  if (!kim && !has("MinimaxH3LatentUpscaler3D")) throw new Error("Latent Upscale (Use H3) needs MinimaxH3LatentUpscaler3D \u2014 install it.");
+  if (tiled && !has("TJLatentUpscaleTiledMP")) throw new Error("H3 Latent Upscale Tiled (TJ) needs the H3-Latent-Upscale-Tiled-TJ- pack \u2014 install it (github.com/designloves2/H3-Latent-Upscale-Tiled-TJ-), or pick H3 Latent Upscaler.");
+  if (!tiled && !has("MinimaxH3LatentUpscaler3D")) throw new Error("Latent Upscale (Use H3) needs MinimaxH3LatentUpscaler3D \u2014 install it.");
   if (!has("BlockSparseAttention")) throw new Error("Latent Upscale (Use H3) needs BlockSparseAttention \u2014 install it.");
   if (!j.noOpt && !has("H3MemoryOptimization")) throw new Error('Latent Upscale (Use H3) needs H3MemoryOptimization \u2014 install it, or tick "Bypass H3 Memory Optimization".');
   if (j.hasAudio && !has("TJ_H3_AudioLock")) throw new Error("Latent Upscale (Use H3) needs the TJ_H3_AudioLock node (TJ_NODE pack) to carry the clip's audio.");
-  if (kim && (j.srcW % 32 || j.srcH % 32)) throw new Error(`H3 Kimchy Up Scaler needs the clip's width and height to be multiples of 32 (this clip is ${j.srcW}\xD7${j.srcH}).`);
-  if (kim && !(j.finalMp >= 1 && j.finalMp <= 8.5)) throw new Error("H3 Kimchy Up Scaler supports Final MP 1.0 \u2013 8.5.");
+  if (tiled && (j.srcW % 32 || j.srcH % 32)) throw new Error(`H3 Latent Upscale Tiled (TJ) needs the clip's width and height to be multiples of 32 (this clip is ${j.srcW}\xD7${j.srcH}).`);
+  if (tiled && !(j.finalMp >= 1 && j.finalMp <= 8.5)) throw new Error("H3 Latent Upscale Tiled (TJ) supports Final MP 1.0 \u2013 8.5.");
   const snap = (v) => Math.max(32, Math.round(v / 32) * 32);
   const ratio = j.srcW / j.srcH, fh = Math.sqrt(j.finalMp * 1e6 / ratio);
   const final = { width: snap(fh * ratio), height: snap(fh) }, src = { width: j.srcW, height: j.srcH };
@@ -8943,7 +8977,7 @@ async function buildH3LatGraph(j) {
   };
   g.hrFirst = { class_type: "ImageFromBatch", inputs: { image: images, batch_index: 0, length: 1 } };
   g.hrLast = { class_type: "ImageFromBatch", inputs: { image: images, batch_index: 4095, length: 1 } };
-  cond("hrCond", kim ? src : final, true);
+  cond("hrCond", tiled ? src : final, true);
   g.hrEnc = { class_type: "VAEEncode", inputs: { pixels: images, vae: ["vaeV", 0] } };
   let avSource = ["hrCond", 1];
   const lockInputs = { audio, audio_vae: ["vaeA", 0], mode: "lock", strength: 0.5, fit: "pad_silence", get_name_av_latent: "(none)", get_name_audio: "(none)", get_name_audio_vae: "(none)", auto_set: false };
@@ -8976,7 +9010,7 @@ async function buildH3LatGraph(j) {
     return [key, 0];
   };
   let samples;
-  if (!kim) {
+  if (!tiled) {
     g.hrSep = { class_type: "LTXVSeparateAVLatent", inputs: { av_latent: ["hrAv0", 0] } };
     g.hrUp = { class_type: "MinimaxH3LatentUpscaler3D", inputs: { latent: ["hrSep", 0], model_name: "minimax_h3_latent_upscaler_3d_bf16.safetensors", mode: "target dimensions", "mode.width": final.width, "mode.height": final.height, align: 32, enable_temporal_chunking: true, force_unload: true, device: "cuda", precision: "fp16" } };
     g.hrCat = { class_type: "LTXVConcatAVLatent", inputs: { video_latent: ["hrUp", 0], audio_latent: ["hrSep", 1] } };
@@ -8990,8 +9024,8 @@ async function buildH3LatGraph(j) {
     const s1 = step("hrSamp1", ["hrCond", 0], ["hrAv0", 0]);
     cond("hrCond2", final, false);
     g.hrNeg = { class_type: "ConditioningZeroOut", inputs: { conditioning: ["hrCond2", 0] } };
-    g.hrKim = { class_type: "KimchyH3ZeroSplitMP", inputs: { model: memModel, conditioning: ["hrCond2", 0], latent: s1, noise: ["noise", 0], sampler: ["sel", 0], sigmas: ["split", 1], negative: ["hrNeg", 0], model_name: j.kimUp === "neural" ? "minimax_h3_latent_upscaler_3d_bf16.safetensors" : j.kimUp === "bicubic" ? "None (Bicubic)" : "None (Trilinear)", upscale_by: "megapixels", target_megapixels: j.finalMp, scale: 2, align: 32, precision: "fp16", cfg: 1, color_match: true } };
-    samples = ["hrKim", 0];
+    g.hrTiled = { class_type: "TJLatentUpscaleTiledMP", inputs: { model: memModel, conditioning: ["hrCond2", 0], latent: s1, noise: ["noise", 0], sampler: ["sel", 0], sigmas: ["split", 1], negative: ["hrNeg", 0], model_name: j.tiledUp === "neural" ? "minimax_h3_latent_upscaler_3d_bf16.safetensors" : j.tiledUp === "bicubic" ? "None (Bicubic)" : "None (Trilinear)", upscale_by: "megapixels", target_megapixels: j.finalMp, scale: 2, align: 32, precision: "fp16", cfg: 1, color_match: true } };
+    samples = ["hrTiled", 0];
   }
   g.hrDecode = { class_type: "VAEDecode", inputs: { samples, vae: ["vaeV", 0] } };
   const save = await addVideoSave(g, ["hrDecode", 0], j.hasAudio ? audio : void 0, j.fps || FPS, `${j.saveSubfolder}/${j.stem}_h3lat`, "U");
@@ -9019,6 +9053,7 @@ function h3SegmentPlan(mode, seconds, count, total, fps) {
 
 // src/engine/ppLat.ts
 init_settings();
+init_tiledMigrate();
 function videoDuration(url2) {
   return new Promise((resolve) => {
     const v = document.createElement("video");
@@ -9058,7 +9093,7 @@ async function runH3Lat(c) {
 }
 async function runH3LatCore(c) {
   const resume = takeResume(c.node.id);
-  const p = c.p;
+  const p = migrateTiledParams(c.p);
   const s = useSettings.getState();
   const v = need(c.inputs("video")[0], "Video");
   const metaPrompt = String(v.meta?.prompt ?? "");
@@ -9074,13 +9109,13 @@ async function runH3LatCore(c) {
   const pddFile = own !== "none" ? own : s.h3Turbo[kind] || String((kind === "ref" ? cfg.pdd_file_reference || cfg.pdd_file : cfg.pdd_file) ?? "");
   const lastFixed = str(p.h3_last, "same") === "fixed";
   const lastModel = str(p.h3_last_model, "none") !== "none" ? str(p.h3_last_model) : String(cfg.hires_last_model ?? "");
-  const upscaler = str(p.h3_upscaler, "h3") === "kimchy" ? "kimchy" : "h3";
-  const finalMp = upscaler === "kimchy" ? num2(p.h3_kim_final_mp, 2) : num2(p.h3_final_mp, 1.6);
+  const upscaler = str(p.h3_upscaler, "h3") === "tiled" ? "tiled" : "h3";
+  const finalMp = upscaler === "tiled" ? num2(p.h3_tiled_final_mp, 2) : num2(p.h3_final_mp, 1.6);
   const sv = num2(p.seed, -1);
   const seed2 = typeof resume?.seed === "number" ? resume.seed : sv < 0 ? Math.floor(Math.random() * 2 ** 40) : sv;
   const ratio = Math.sqrt(finalMp * 1e6 / (info.w * info.h));
-  if (ratio < 1.3 && (upscaler === "h3" || str(p.h3_kim_up, "neural") === "neural")) c.progress(3, `This is a \xD7${ratio.toFixed(2)} upscale. The neural upscaler is made for about \xD72 and leaves a diagonal grid on fine textures (hair, fabric) near \xD71. Raise Final MP, or use the Kimchy upscaler with Bicubic for a small ratio.`);
-  if (upscaler === "h3" && finalMp > 1.6) c.progress(3, "On a 16 GB VRAM card, above 1.6 MP the H3 Latent Upscaler can run out of VRAM and spill to the CPU (an hour or more). 1.6 is its sweet spot; the Kimchy upscaler handles 2.0.");
+  if (ratio < 1.3 && (upscaler === "h3" || str(p.h3_tiled_up, "neural") === "neural")) c.progress(3, `This is a \xD7${ratio.toFixed(2)} upscale. The neural upscaler is made for about \xD72 and leaves a diagonal grid on fine textures (hair, fabric) near \xD71. Raise Final MP, or use the Tiled upscaler with Bicubic for a small ratio.`);
+  if (upscaler === "h3" && finalMp > 1.6) c.progress(3, "On a 16 GB VRAM card, above 1.6 MP the H3 Latent Upscaler can run out of VRAM and spill to the CPU (an hour or more). 1.6 is its sweet spot; the Tiled upscaler handles 2.0.");
   const job = {
     file,
     fps: info.fps,
@@ -9097,7 +9132,7 @@ async function runH3LatCore(c) {
     lastFixed,
     lastModel,
     upscaler,
-    kimUp: ["neural", "bicubic", "trilinear"].includes(str(p.h3_kim_up)) ? str(p.h3_kim_up) : "neural",
+    tiledUp: ["neural", "bicubic", "trilinear"].includes(str(p.h3_tiled_up)) ? str(p.h3_tiled_up) : "neural",
     noOpt: !!p.h3_no_opt,
     chunkRows: num2(p.h3_chunk_rows, 2048),
     models: s.video,
@@ -9256,11 +9291,11 @@ function h3Cards(c) {
   return out;
 }
 function optFromCards(cards) {
-  const t2 = cards.turbo, s = cards.speed;
+  const t2 = cards.turbo ? migrateTiledParams(cards.turbo) : cards.turbo, s = cards.speed;
   return {
     ...DEFAULT_OPT,
     ...s ? { attnBackend: s.attn_backend, attnForward: s.attn_forward, optimizer: s.optimizer, blockCache: s.block_cache, spectrum: !!s.spectrum, fusedModulation: !!s.fused_mod, shiftVideo: s.shift_video, shiftAudio: s.shift_audio } : {},
-    ...t2 ? { turbo: t2.turbo, turboLora: t2.turbo_lora, turboStrength: t2.turbo_strength, turboSteps: t2.turbo_steps, hires: !!t2.hires, hiresUpscaler: t2.hires_upscaler === "kimchy" ? "kimchy" : "h3", hiresKimUp: t2.hires_kim_up === "bicubic" || t2.hires_kim_up === "trilinear" ? t2.hires_kim_up : "neural", hiresStartMp: t2.hires_upscaler === "kimchy" ? t2.hires_kim_start_mp : t2.hires_start_mp, hiresFinalMp: t2.hires_upscaler === "kimchy" ? t2.hires_kim_final_mp : t2.hires_final_mp, hiresLastFixed: t2.hires_last === "fixed", hiresLastModel: t2.hires_last_model, hiresNoOpt: !!t2.hires_no_opt, hiresChunkRows: t2.hires_chunk_rows, hiresSplitStep: t2.hires_split_step } : {}
+    ...t2 ? { turbo: t2.turbo, turboLora: t2.turbo_lora, turboStrength: t2.turbo_strength, turboSteps: t2.turbo_steps, hires: !!t2.hires, hiresUpscaler: t2.hires_upscaler === "tiled" ? "tiled" : "h3", hiresTiledUp: t2.hires_tiled_up === "bicubic" || t2.hires_tiled_up === "trilinear" ? t2.hires_tiled_up : "neural", hiresStartMp: t2.hires_upscaler === "tiled" ? t2.hires_tiled_start_mp : t2.hires_start_mp, hiresFinalMp: t2.hires_upscaler === "tiled" ? t2.hires_tiled_final_mp : t2.hires_final_mp, hiresLastFixed: t2.hires_last === "fixed", hiresLastModel: t2.hires_last_model, hiresNoOpt: !!t2.hires_no_opt, hiresChunkRows: t2.hires_chunk_rows, hiresSplitStep: t2.hires_split_step } : {}
   };
 }
 async function h3Opt(cards, ref = false) {
@@ -10760,7 +10795,7 @@ var send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 async function handle(msg) {
   const { id, method, params } = msg;
   try {
-    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.28.2" } } });
+    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.29.0" } } });
     if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS.map(({ run: _r, ...t2 }) => t2) } });
     if (method === "tools/call") {
       const tool = TOOLS.find((t2) => t2.name === params?.name);

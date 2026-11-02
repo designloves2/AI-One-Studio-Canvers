@@ -37,7 +37,7 @@ const STEPS: { id: StageId; label: string }[] = [
 const NEXT_LABEL: Partial<Record<StageId, string>> = { brief: 'Casting', references: 'Scenario', music: 'Scenario', series: 'Episode', episode: 'Prompts & check', canvas: 'Generate & check', execute: 'Final review', review: 'Next episode' };
 const STATUS_TEXT: Record<string, string> = { idle: 'waiting', working: 'the crew is working…', review_required: 'waiting for your approval', approved: 'approved', failed: 'failed', completed: 'finished', blocked: 'blocked' };
 const EXAMPLES = [
-  '막장 드라마 하나 만들자. 장편이고 30부작, 편당 1분 30초 구성으로 16:9 비율이며 7+1 Kimchy 모드로 생성하고 싶어.',
+  '막장 드라마 하나 만들자. 장편이고 30부작, 편당 1분 30초 구성으로 16:9 비율이며 7+1 Tiled 모드로 생성하고 싶어.',
   '프리미엄 아웃도어 브랜드의 30초 광고를 만들어 줘. 제품을 고급스럽게 보여주고 16:9, 9:16 두 버전으로 필요해.',
   '이 노래로 뮤직비디오를 만들자. 3분 길이, 아티스트가 도시 야경에서 노래하는 분위기로.',
   '제주도 2박 3일 여행 브이로그를 2분 길이로 만들어 줘. 내레이션은 편안한 말투로.',

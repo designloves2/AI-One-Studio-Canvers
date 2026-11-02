@@ -1,3 +1,4 @@
+import { migrateTiledParams } from '../backend/tiledMigrate';
 import { create } from 'zustand';
 import type { Asset, GraphEdge, GraphNode, NodeRuntime, Primitive, Project } from '../types';
 import { byId, compatible, defaultParams, engineFor } from '../registry';
@@ -304,7 +305,10 @@ export const useGraph = create<State>((set, get) => ({
 /** Turbo cards whose LoRA is still empty show (and use) the remembered one; the array is returned untouched when nothing needs filling. */
 function fillTurbo(nodes: GraphNode[]): GraphNode[] {
   const t = useSettings.getState().h3Turbo; let changed = false;
-  const out = nodes.map((n) => {
+  const out = nodes.map((n0) => {
+    // saved canvases from before the Kimchy upscaler became the Tiled (TJ) one: old value / keys are converted on load
+    const mp = migrateTiledParams(n0.params); let n = n0;
+    if (mp !== n0.params) { n = { ...n0, params: mp }; changed = true; }
     if (n.defId !== 'h3-turbo') return n;
     const patch: Record<string, string> = {};
     if ((!n.params.turbo_lora || n.params.turbo_lora === 'none') && t.fl) patch.turbo_lora = t.fl;

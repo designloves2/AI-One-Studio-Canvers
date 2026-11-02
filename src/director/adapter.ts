@@ -30,7 +30,7 @@ export interface AdapterOptions {
   generator?: Generator; canvasId?: string; now?: () => string;
   /** build only this episode's clips (one canvas per episode) */
   episodeId?: string;
-  /** values for the shared `h3-turbo` card (7+1 / Kimchy / resolution); only used with video-generate */
+  /** values for the shared `h3-turbo` card (7+1 / Tiled / resolution); only used with video-generate */
   turbo?: Record<string, Primitive>;
   /** the finished episode: join the clips in order (`stitch`) and lay the song on top (`audio`, a music video) */
   finish?: { stitch?: boolean; audio?: Asset };
@@ -112,7 +112,7 @@ export function buildCanvasFromDirector(p: DirectorProject, reg: RegistryLike, e
   const sceneOrder = new Map(p.scenes.map((s) => [s.scene_id, s.order]));
   const shots = opt.episodeId ? shotsOfEpisode(p, opt.episodeId) : [...p.shots].sort((a, b) => (sceneOrder.get(a.scene_id) ?? 0) - (sceneOrder.get(b.scene_id) ?? 0) || a.order - b.order);
   const turboDef = kind === 'video-generate' && opt.turbo ? reg.get('h3-turbo') : undefined;
-  if (kind === 'video-generate' && opt.turbo && !turboDef) report.warnings.push('card "h3-turbo" is not in the registry: the clips are made without the 7+1 / Kimchy settings');
+  if (kind === 'video-generate' && opt.turbo && !turboDef) report.warnings.push('card "h3-turbo" is not in the registry: the clips are made without the 7+1 / Tiled settings');
   const turboOut = turboDef?.outputs.find((o) => o.type === 'pipe');
   const turboIn = turboDef && genDef ? genDef.inputs.find((i) => i.multi && reg.compatible('pipe', i.type) && i.type === 'pipe') : undefined;
   if (turboDef && (!turboOut || !turboIn)) report.warnings.push('the 7+1 card cannot be connected to this generator: the clips are made without it');
@@ -190,7 +190,7 @@ export function buildCanvasFromDirector(p: DirectorProject, reg: RegistryLike, e
       if (!edges.some((e) => e.id === reid)) edges.push({ id: reid, source: rid, sourceHandle: importOut!.id, target: gid, targetHandle: refIn!.id });
       report.refsWired++;
     }
-    // --- the shared 7+1 / Kimchy card of the episode, wired to every clip (made once, the user's changes to it are kept)
+    // --- the shared 7+1 / Tiled card of the episode, wired to every clip (made once, the user's changes to it are kept)
     if (turboDef && turboOut && turboIn && opt.episodeId) {
       turboId = turboNodeId(opt.episodeId);
       if (!byNode.get(turboId)) {

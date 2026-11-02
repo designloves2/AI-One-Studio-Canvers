@@ -10,6 +10,7 @@ import { buildPostGraph, type RtxSize } from '../backend/post';
 import { useSettings } from '../store/settings';
 import { need, num, str } from './util';
 import { cardLoras } from './more';
+import { migrateTiledParams } from '../backend/tiledMigrate';
 
 /** duration (s) of a video, from the browser; 0 when it cannot be told */
 function videoDuration(url: string): Promise<number> {
@@ -37,7 +38,7 @@ export async function runH3Lat(c: Ctx): Promise<Asset[]> {
 
 async function runH3LatCore(c: Ctx): Promise<Asset[]> {
   const resume = takeResume(c.node.id) as Record<string, any> | undefined;   // set when the page was reloaded in the middle of this run
-  const p = c.p; const s = useSettings.getState();
+  const p = migrateTiledParams(c.p); const s = useSettings.getState();
   const v = need(c.inputs('video')[0], 'Video');
   const metaPrompt = String((v.meta as { prompt?: string } | undefined)?.prompt ?? '');
   const prompt = resume ? String(resume.prompt) : c.text('prompt').trim() || (isBaseBrief(metaPrompt) ? metaPrompt : '');
@@ -53,17 +54,17 @@ async function runH3LatCore(c: Ctx): Promise<Asset[]> {
   const pddFile = own !== 'none' ? own : (s.h3Turbo[kind] || String((kind === 'ref' ? cfg.pdd_file_reference || cfg.pdd_file : cfg.pdd_file) ?? ''));
   const lastFixed = str(p.h3_last, 'same') === 'fixed';
   const lastModel = str(p.h3_last_model, 'none') !== 'none' ? str(p.h3_last_model) : String(cfg.hires_last_model ?? '');
-  const upscaler = str(p.h3_upscaler, 'h3') === 'kimchy' ? 'kimchy' : 'h3';
-  const finalMp = upscaler === 'kimchy' ? num(p.h3_kim_final_mp, 2) : num(p.h3_final_mp, 1.6);
+  const upscaler = str(p.h3_upscaler, 'h3') === 'tiled' ? 'tiled' : 'h3';
+  const finalMp = upscaler === 'tiled' ? num(p.h3_tiled_final_mp, 2) : num(p.h3_final_mp, 1.6);
   const sv = num(p.seed, -1);
   const seed = typeof resume?.seed === 'number' ? resume.seed : sv < 0 ? Math.floor(Math.random() * 2 ** 40) : sv;
   // non-blocking notices (the run goes on): they prevent runs that can take over an hour
   const ratio = Math.sqrt((finalMp * 1e6) / (info.w * info.h));
-  if (ratio < 1.3 && (upscaler === 'h3' || str(p.h3_kim_up, 'neural') === 'neural')) c.progress(3, `This is a ×${ratio.toFixed(2)} upscale. The neural upscaler is made for about ×2 and leaves a diagonal grid on fine textures (hair, fabric) near ×1. Raise Final MP, or use the Kimchy upscaler with Bicubic for a small ratio.`);
-  if (upscaler === 'h3' && finalMp > 1.6) c.progress(3, 'On a 16 GB VRAM card, above 1.6 MP the H3 Latent Upscaler can run out of VRAM and spill to the CPU (an hour or more). 1.6 is its sweet spot; the Kimchy upscaler handles 2.0.');
+  if (ratio < 1.3 && (upscaler === 'h3' || str(p.h3_tiled_up, 'neural') === 'neural')) c.progress(3, `This is a ×${ratio.toFixed(2)} upscale. The neural upscaler is made for about ×2 and leaves a diagonal grid on fine textures (hair, fabric) near ×1. Raise Final MP, or use the Tiled upscaler with Bicubic for a small ratio.`);
+  if (upscaler === 'h3' && finalMp > 1.6) c.progress(3, 'On a 16 GB VRAM card, above 1.6 MP the H3 Latent Upscaler can run out of VRAM and spill to the CPU (an hour or more). 1.6 is its sweet spot; the Tiled upscaler handles 2.0.');
   const job = {
     file, fps: info.fps, srcW: info.w, srcH: info.h, finalMp, prompt, kind, hasAudio: p.h3_audio !== false, seed,
-    turbo, pddFile, pddStrength: num(p.h3_pdd_strength, 1), lastFixed, lastModel, upscaler, kimUp: (['neural', 'bicubic', 'trilinear'].includes(str(p.h3_kim_up)) ? str(p.h3_kim_up) : 'neural') as 'neural',
+    turbo, pddFile, pddStrength: num(p.h3_pdd_strength, 1), lastFixed, lastModel, upscaler, tiledUp: (['neural', 'bicubic', 'trilinear'].includes(str(p.h3_tiled_up)) ? str(p.h3_tiled_up) : 'neural') as 'neural',
     noOpt: !!p.h3_no_opt, chunkRows: num(p.h3_chunk_rows, 2048), models: s.video, saveSubfolder: s.saveSubfolder,
   } as const;
   const plan = p.h3_split && info.total > 0 ? h3SegmentPlan(str(p.h3_split_mode, 'seconds') === 'count' ? 'count' : 'seconds', num(p.h3_split_sec, 5), num(p.h3_split_cnt, 2), info.total, info.fps) : { passes: [], overlap: 0 };

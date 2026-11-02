@@ -2,6 +2,15 @@
 
 형식: 버전 · 날짜 / 추가 · 변경 · 수정. 버전은 `package.json`, `mcp/server.ts`와 같습니다.
 
+## 2.29.0 — 2026-11-03
+
+### 변경 (노드 연동: Kimchy 업스케일러 → "H3 Latent Upscale Tiled (TJ)", 명세 SPEC_RELAY_TILED_UPSCALER, 노드 커밋 26a1b6f·59f0607·7ca8240)
+- H3 Kimchy 업스케일러를 우리 포크 **H3 Latent Upscale Tiled (TJ)** 로 교체했습니다. 서버에 새 팩이 필요합니다: https://github.com/designloves2/H3-Latent-Upscale-Tiled-TJ- (예전 Kimchy 팩 대신. 2.5MP 이상에서 나던 "mat1 is on cpu" 오류를 고친 판). 노드 이름 `KimchyH3ZeroSplitMP` → `TJLatentUpscaleTiledMP`.
+- 화면 문구·오류·힌트의 Kimchy 표기를 모두 바꿨습니다("Neural (trained upscaler)" 포함). 팩이 없을 때 안내 문구도 새 팩 주소로 바뀝니다.
+- 내부 이름 변경: 값 `kimchy` → `tiled`, 카드 설정 `hires_kim_*`/`h3_kim_*` → `hires_tiled_*`/`h3_tiled_*`, Director 프리셋 `h3_7plus1_kimchy` → `h3_7plus1_tiled`(화면 이름 "7+1 Tiled (TJ)").
+- **예전 저장 데이터는 열 때 자동 변환**됩니다(저장된 캔버스의 카드, 후처리 카드, Director 프로젝트의 프리셋, 작업팀이 보낸 옛 프리셋 이름). 변환 코드는 `src/backend/tiledMigrate.ts` 한 곳에만 있습니다.
+- 해당 없음: 노드 쪽 타일 수(`kimchyTileCount`)·진행 노드 id(`MM:hr_kimchy_upscale`)·클립 메타데이터/Reuse·프리셋 RECIPE_KEYS·설치 REPOS 목록(Canvers 에는 없음).
+
 ## 2.28.2 — 2026-11-03
 
 ### 추가 (노드 연동: Split Sigma 후속)

@@ -3,6 +3,7 @@
 //
 // Why JSON: the LLM backends here are plain text-in / text-out (same protocol as the Live Canvas). The app checks the reply
 // (clip count, numbers) BEFORE touching the project, asks the model once or twice to fix it, and only then applies it.
+import { migrateTiledPreset } from '../backend/tiledMigrate';
 import { addChat, episodeByNo, findReference, mentionedRefs, newEpisode, newReference, newScene, newShot, shotsOfEpisode, syncShotAssets } from './model';
 import { PRESETS, RESOLUTIONS, splitSeconds, usableClipSeconds } from './series';
 import { allFormatsGuide, detectFormat, formatOf, isFormat, vocabOf } from './formats';
@@ -163,7 +164,7 @@ ${stateText(p)}`;
 /** The instruction for an automatic step (the producer did not type it). */
 export function kickoffInstruction(p: DirectorProject, k: Exclude<Kickoff, 'canvas' | null>, part?: Part): string {
   const s = p.series;
-  if (k === 'brief') return `Write the brief from the producer's request above. FIRST decide the kind of work (series.format) from what the producer asked for; the kinds are:\n${allFormatsGuide()}\nWhen the producer does not give numbers, use that kind's usual numbers. Fill "series" completely (format, title, genre, tone, logline, language, total_episodes, episode_seconds, clip_seconds, aspect, resolution, preset, sound_direction, music_direction) and "brief". Defaults when not said: clip_seconds 10, aspect 16:9, resolution 1080p, preset h3_7plus1_kimchy, language ko (when earlier work is given, its settings are the defaults). Series length and episode length must follow what the producer said exactly.`;
+  if (k === 'brief') return `Write the brief from the producer's request above. FIRST decide the kind of work (series.format) from what the producer asked for; the kinds are:\n${allFormatsGuide()}\nWhen the producer does not give numbers, use that kind's usual numbers. Fill "series" completely (format, title, genre, tone, logline, language, total_episodes, episode_seconds, clip_seconds, aspect, resolution, preset, sound_direction, music_direction) and "brief". Defaults when not said: clip_seconds 10, aspect 16:9, resolution 1080p, preset h3_7plus1_tiled, language ko (when earlier work is given, its settings are the defaults). Series length and episode length must follow what the producer said exactly.`;
   const f = formatOf(s.format);
   if (k === 'music') {
     const m = p.music;
@@ -365,7 +366,7 @@ function applySeries(p: DirectorProject, patch: Partial<DirectorSeries>, notes: 
   if (patch.clip_seconds !== undefined && num(patch.clip_seconds) > 0) { const u = usableClipSeconds(num(patch.clip_seconds)); s.clip_seconds = u.value; if (u.note) notes.push(u.note); }
   if (patch.aspect && ASPECTS.includes(patch.aspect)) s.aspect = patch.aspect;
   if (patch.resolution && (RESOLUTIONS as string[]).includes(patch.resolution)) s.resolution = patch.resolution;
-  if (patch.preset && (PRESETS as string[]).includes(patch.preset)) s.preset = patch.preset;
+  if (patch.preset && (PRESETS as string[]).includes(migrateTiledPreset(patch.preset))) s.preset = migrateTiledPreset(patch.preset) as typeof s.preset;   // an older name from the crew or a saved reply still works
   if (patch.start_mp !== undefined && num(patch.start_mp) > 0) s.start_mp = Math.round(num(patch.start_mp) * 100) / 100;
   if (patch.final_mp !== undefined && num(patch.final_mp) > 0) s.final_mp = Math.round(num(patch.final_mp) * 100) / 100;
 }

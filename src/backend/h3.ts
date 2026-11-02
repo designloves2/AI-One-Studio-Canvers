@@ -19,11 +19,11 @@ export interface H3Options {
   turbo: 'none' | 'larryvrh' | 'pdd' | 'lightx2v';
   turboLora: string; turboStrength: number; turboSteps: number;
   hires: boolean; hiresStartMp: number; hiresFinalMp: number;
-  /** 7+1 upscaler: the H3 Latent Upscaler (A) or the Kimchy up scaler (one node, tiles); hiresStartMp / hiresFinalMp already hold the selected upscaler's pair */
-  hiresUpscaler?: 'h3' | 'kimchy'; hiresKimUp?: 'neural' | 'bicubic' | 'trilinear';
+  /** 7+1 upscaler: the H3 Latent Upscaler (A) or the Tiled up scaler (one node, tiles); hiresStartMp / hiresFinalMp already hold the selected upscaler's pair */
+  hiresUpscaler?: 'h3' | 'tiled'; hiresTiledUp?: 'neural' | 'bicubic' | 'trilinear';
   /** 7+1 last step: its own UNET (hiresLastFixed + hiresLastModel), and bypass of H3 Memory Optimization on that step */
   hiresLastFixed?: boolean; hiresLastModel?: string; hiresNoOpt?: boolean; hiresChunkRows?: number;
-  /** Split Sigma: how many of the 8 steps run small before the latent upscale (H3 Latent Upscaler only, 1–7, 7 recommended; Kimchy is fixed at 7) */
+  /** Split Sigma: how many of the 8 steps run small before the latent upscale (H3 Latent Upscaler only, 1–7, 7 recommended; Tiled is fixed at 7) */
   hiresSplitStep?: number;
   shiftVideo: number; shiftAudio: number;
   audioLock?: { file: string; startSec: number; mode: string; strength: number; fit: string };
@@ -49,9 +49,9 @@ export interface H3Job {
   preview?: PreviewCfg;
 }
 
-/** Split Sigma: the step the 8 steps are split at. Kimchy is fixed at 7; the H3 Latent Upscaler takes 1–7 (not a number → 7). The postprocess Latent Upscale keeps its own 7. */
+/** Split Sigma: the step the 8 steps are split at. Tiled is fixed at 7; the H3 Latent Upscaler takes 1–7 (not a number → 7). The postprocess Latent Upscale keeps its own 7. */
 export function splitStepOf(o: Pick<H3Options, 'hiresUpscaler' | 'hiresSplitStep'>): number {
-  if (o.hiresUpscaler === 'kimchy') return 7;
+  if (o.hiresUpscaler === 'tiled') return 7;
   const v = Number(o.hiresSplitStep ?? 7);
   return Number.isFinite(v) ? Math.min(7, Math.max(1, Math.round(v))) : 7;
 }
@@ -212,11 +212,11 @@ export async function buildH3Graph(job: H3Job): Promise<H3Graph> {
   };
   cond('cond', start.width, start.height);
   const imageCond = job.mode === 'reference' || (job.mode === 'firstlast' && (job.first || job.last));
-  // Kimchy samples in tiles and a first/last keyframe block cannot be cut into tiles: stage 2 of a First/Last clip gets the prompt alone (references stay)
-  const kimchy = hires && o.hiresUpscaler === 'kimchy';
-  const kimFl = kimchy && job.mode === 'firstlast';
-  const hrCond = hires && (imageCond || kimFl);
-  if (hrCond) cond('hrCond', final.width, final.height, kimFl);
+  // Tiled samples in tiles and a first/last keyframe block cannot be cut into tiles: stage 2 of a First/Last clip gets the prompt alone (references stay)
+  const tiled = hires && o.hiresUpscaler === 'tiled';
+  const tiledFl = tiled && job.mode === 'firstlast';
+  const hrCond = hires && (imageCond || tiledFl);
+  if (hrCond) cond('hrCond', final.width, final.height, tiledFl);
 
   g.noise = { class_type: 'RandomNoise', inputs: { noise_seed: job.seed } };
   g.sel = turbo === 'larryvrh' && has('MiniMaxH3TurboSampler') ? { class_type: 'MiniMaxH3TurboSampler', inputs: {} }
@@ -257,10 +257,10 @@ export async function buildH3Graph(job: H3Job): Promise<H3Graph> {
   if (job.checkpoint && has('TJ_H3_SaveLatentCheckpoint')) g.chkSave = { class_type: 'TJ_H3_SaveLatentCheckpoint', inputs: { latent: hires ? ['samp', 1] : ['samp', 0], checkpoint_name: job.checkpoint } };
 
   let samples: L = ['samp', 0];
-  if (kimchy) {
-    if (!has('KimchyH3ZeroSplitMP')) throw new Error('Split Sigma H3 Kimchy Up Scaler needs the ComfyUI-Kimchy-Minimax-H3-Suite pack — install it (github.com/AI-KIMCHY/ComfyUI-Kimchy-Minimax-H3-Suite), or pick H3 Latent Upscaler.');
+  if (tiled) {
+    if (!has('TJLatentUpscaleTiledMP')) throw new Error('Split Sigma H3 Latent Upscale Tiled (TJ) needs the H3-Latent-Upscale-Tiled-TJ- pack — install it (github.com/designloves2/H3-Latent-Upscale-Tiled-TJ-), or pick H3 Latent Upscaler.');
     if (!o.hiresNoOpt) needNode('H3MemoryOptimization', 'Split Sigma');
-    if (!(o.hiresFinalMp >= 1 && o.hiresFinalMp <= 8.5)) throw new Error('H3 Kimchy Up Scaler supports Final MP 1.0 – 8.5.');
+    if (!(o.hiresFinalMp >= 1 && o.hiresFinalMp <= 8.5)) throw new Error('H3 Latent Upscale Tiled (TJ) supports Final MP 1.0 – 8.5.');
     if (o.hiresLastFixed) {
       if (!o.hiresLastModel || o.hiresLastModel === 'none') throw new Error('Split Sigma last step is set to a fixed model but none is selected');
       g.hr_unet = o.hiresLastModel.toLowerCase().endsWith('.gguf') ? { class_type: 'UnetLoaderGGUF', inputs: { unet_name: o.hiresLastModel } } : { class_type: 'UNETLoader', inputs: { unet_name: o.hiresLastModel, weight_dtype: 'default' } };
@@ -270,14 +270,14 @@ export async function buildH3Graph(job: H3Job): Promise<H3Graph> {
     if (turbo === 'pdd') { g.hrPdd = { class_type: 'LoraLoaderModelOnly', inputs: { model: hm, lora_name: o.turboLora, strength_model: o.turboStrength } }; hm = ['hrPdd', 0]; }
     g.hrShift = { class_type: 'MiniMaxH3SigmaShift', inputs: { model: hm, shift_video: turbo === 'pdd' ? 12 : o.shiftVideo, shift_audio: turbo === 'pdd' ? 3 : o.shiftAudio } };
     let stage: L = ['hrShift', 0];
-    // no Separate / Upscale / Concat / Audio Lock / BlockSparseAttention: the Kimchy node upscales and samples the whole stage-1 AV latent itself
+    // no Separate / Upscale / Concat / Audio Lock / BlockSparseAttention: the Tiled node upscales and samples the whole stage-1 AV latent itself
     if (!o.hiresNoOpt) {
       g.hrMem = { class_type: 'H3MemoryOptimization', inputs: { model: stage, fused_qkv: 'auto', preserve_precision: true, embedding_memory_mode: 'Auto', mlp_memory: 'auto', chunk_rows: Math.round(o.hiresChunkRows ?? 2048), precision_mode: 'Preserve native', qkv_streaming_mode: 'Forced', kitchen_v_memory_mode: 'Lower VRAM (slower)' } };
       stage = ['hrMem', 0];
     }
     g.hrNeg = { class_type: 'ConditioningZeroOut', inputs: { conditioning: hrCondLink } };
-    g.hrKim = { class_type: 'KimchyH3ZeroSplitMP', inputs: { model: stage, conditioning: hrCondLink, latent: ['samp', 1], noise: ['noise', 0], sampler: ['sel', 0], sigmas: ['split', 1], negative: ['hrNeg', 0], model_name: o.hiresKimUp === 'bicubic' ? 'None (Bicubic)' : o.hiresKimUp === 'trilinear' ? 'None (Trilinear)' : 'minimax_h3_latent_upscaler_3d_bf16.safetensors', upscale_by: 'megapixels', target_megapixels: o.hiresFinalMp, scale: 2, align: 32, precision: 'fp16', cfg: 1, color_match: true } };
-    samples = ['hrKim', 0];
+    g.hrTiled = { class_type: 'TJLatentUpscaleTiledMP', inputs: { model: stage, conditioning: hrCondLink, latent: ['samp', 1], noise: ['noise', 0], sampler: ['sel', 0], sigmas: ['split', 1], negative: ['hrNeg', 0], model_name: o.hiresTiledUp === 'bicubic' ? 'None (Bicubic)' : o.hiresTiledUp === 'trilinear' ? 'None (Trilinear)' : 'minimax_h3_latent_upscaler_3d_bf16.safetensors', upscale_by: 'megapixels', target_megapixels: o.hiresFinalMp, scale: 2, align: 32, precision: 'fp16', cfg: 1, color_match: true } };
+    samples = ['hrTiled', 0];
   } else if (hires) {
     for (const n of ['MinimaxH3LatentUpscaler3D', ...(o.hiresNoOpt ? [] : ['H3MemoryOptimization']), 'BlockSparseAttention']) needNode(n, 'Split Sigma');
     g.hrSep = { class_type: 'LTXVSeparateAVLatent', inputs: { av_latent: ['samp', 1] } };
@@ -312,7 +312,7 @@ export async function buildH3Graph(job: H3Job): Promise<H3Graph> {
     g.upModel = { class_type: 'UpscaleModelLoader', inputs: { model_name: job.upscaleModel } };
     g.upApply = { class_type: 'ImageUpscaleWithModel', inputs: { upscale_model: ['upModel', 0], image: images } }; images = ['upApply', 0];
   }
-  const audio: L = locked && !kimchy ? ['audioLock', 1] : ['decA', 0];
+  const audio: L = locked && !tiled ? ['audioLock', 1] : ['decA', 0];
   const tag = String(job.clipIndex + 1).padStart(3, '0');
   const prefix = `${job.saveSubfolder}/${job.stem}_clip${tag}`;
   if (has('VHS_VideoCombine')) g.save = { class_type: 'VHS_VideoCombine', inputs: { images, audio, frame_rate: FPS, loop_count: 0, filename_prefix: prefix, format: 'video/nvenc_h264-mp4', pingpong: false, save_output: true } };

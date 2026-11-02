@@ -1,4 +1,5 @@
 // Director Mode: ids, new project, validation and migration. Pure functions (no DOM, no network) so scripts/test-director*.mjs can run them.
+import { migrateTiledPreset } from '../backend/tiledMigrate';
 import type { ShotSubject } from './compose';
 import {
   DIRECTOR_SCHEMA_VERSION, type ChatMsg, type DirectorAsset, type DirectorEpisode, type DirectorProject, type DirectorReference, type DirectorScene, type DirectorShot,
@@ -25,7 +26,7 @@ export function newDirectorProject(name: string): DirectorProject {
   return {
     app: 'ai-one-studio-canvers', kind: 'director-project', schema_version: DIRECTOR_SCHEMA_VERSION,
     project_id: newId('dp'), name: name.trim() || 'untitled', created_at: t, updated_at: t,
-    series: { format: 'drama', title: '', genre: '', tone: '', logline: '', synopsis: '', language: 'ko', total_episodes: 1, episode_seconds: 90, clip_seconds: 10, aspect: '16:9', resolution: '1080p', preset: 'h3_7plus1_kimchy', sound_direction: '', music_direction: '' },
+    series: { format: 'drama', title: '', genre: '', tone: '', logline: '', synopsis: '', language: 'ko', total_episodes: 1, episode_seconds: 90, clip_seconds: 10, aspect: '16:9', resolution: '1080p', preset: 'h3_7plus1_tiled', sound_direction: '', music_direction: '' },
     brief: { text: '', assumptions: [], status: 'draft' },
     episodes: [], references: [], scenes: [], shots: [], assets: [], canvas_links: [],
     workflow: { stage: 'intake', status: { ...freshStatus(), intake: 'review_required' }, episode_no: 1 },
@@ -204,7 +205,7 @@ export const MIGRATIONS: Record<number, Migration> = {
     return {
       ...rest,
       series: { title: String(b.title ?? ''), genre: '', tone: String(b.tone ?? ''), logline: String(st.logline ?? ''), synopsis: String(st.synopsis ?? ''), language: String(b.language ?? 'ko'), total_episodes: 1,
-        episode_seconds: Number(b.duration_sec) || 90, clip_seconds: 10, aspect: String(b.aspect ?? '16:9'), resolution: '1080p', preset: 'h3_7plus1_kimchy', sound_direction: '', music_direction: '' },
+        episode_seconds: Number(b.duration_sec) || 90, clip_seconds: 10, aspect: String(b.aspect ?? '16:9'), resolution: '1080p', preset: 'h3_7plus1_tiled', sound_direction: '', music_direction: '' },
       brief: { text, assumptions: [], status: b.status === 'approved' ? 'approved' : 'draft' },
       episodes: [{ episode_id: ep, no: 1, title: String(o.name ?? ''), logline: '', status: o.shots.length ? 'drafted' : 'planned' }],
       references: [],
@@ -257,6 +258,8 @@ export function loadDirectorProject(raw: unknown): LoadResult {
     if (!m) throw new Error(`No migration from schema ${v}`);
     p = m(p); v += 1; p.schema_version = v;
   }
+  // the Kimchy upscaler preset became the Tiled (TJ) one
+  const ser = p.series as { preset?: string } | undefined; if (ser?.preset) ser.preset = migrateTiledPreset(ser.preset);
   const again = validateDirectorProject(p);
   if (again.errors.length) throw new Error(`Migration produced an invalid project: ${again.errors[0]}`);
   return { project: p as unknown as DirectorProject, readOnly: false, migratedFrom: from < DIRECTOR_SCHEMA_VERSION ? from : undefined, errors: [], warnings: again.warnings };

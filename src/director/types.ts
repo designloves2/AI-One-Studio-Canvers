@@ -21,7 +21,7 @@ export type CrewRole = 'producer_desk' | 'writer' | 'director' | 'cinematographe
 
 export type Resolution = '720p' | '1080p' | '1440p' | '2160p';
 /** how a clip is rendered: which cards the Canvas gets */
-export type GenPreset = 'h3_7plus1_kimchy' | 'h3_7plus1' | 'h3_plain';
+export type GenPreset = 'h3_7plus1_tiled' | 'h3_7plus1' | 'h3_plain';
 
 export type AssetSource =
   | { kind: 'library'; id: number }
@@ -41,7 +41,7 @@ export interface DirectorSeries {
   /** the length one clip is made at (the sweet spot is 10 s); an episode is cut into clips of this length */
   clip_seconds: number;
   aspect: string; resolution: Resolution; preset: GenPreset;
-  /** picture size overrides in megapixels. plain H3: only `final_mp` (the size each clip is rendered at). 7+1 / Kimchy: `start_mp` (the small first pass) + `final_mp` (the finished size). Unset = the preset + resolution default. */
+  /** picture size overrides in megapixels. plain H3: only `final_mp` (the size each clip is rendered at). 7+1 / Tiled: `start_mp` (the small first pass) + `final_mp` (the finished size). Unset = the preset + resolution default. */
   start_mp?: number; final_mp?: number;
   /** the sound director's overall direction (ambience, dialogue style, mixing) and the music director's theme / style for the whole series */
   sound_direction: string; music_direction: string;

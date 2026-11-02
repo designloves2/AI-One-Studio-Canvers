@@ -27,18 +27,18 @@ ok(S.splitSeconds(85, 10).join() === '10,10,10,10,10,10,10,10,5', '85 s = eight 
 ok(S.splitSeconds(91, 10).join() === '10,10,10,10,10,10,10,10,8,3' && S.splitSeconds(91, 10).reduce((a, b) => a + b) === 91, 'a 1 s remainder is taken from the clip before so the last clip is 3 s (total kept)');
 ok(S.splitSeconds(0, 10).length === 0 && S.splitSeconds(10, 0).length === 0, 'nonsense lengths give no clips');
 ok(Math.abs(S.resolutionMp('1080p', '16:9') - 2.0736) < 0.01 && Math.abs(S.resolutionMp('720p', '16:9') - 0.9216) < 0.01 && Math.abs(S.resolutionMp('1080p', '9:16') - 2.0736) < 0.01, 'resolution names turn into megapixels (16:9 and 9:16)');
-const kim = S.turboSettings({ preset: 'h3_7plus1_kimchy', resolution: '1080p', aspect: '16:9' });
-ok(kim.params.hires_upscaler === 'kimchy' && kim.params.hires === true && Math.abs(kim.params.hires_kim_final_mp - 2.07) < 0.01 && kim.warnings.length === 0, '7+1 Kimchy at 1080p: Kimchy upscaler, 2.07 MP final');
-const k720 = S.turboSettings({ preset: 'h3_7plus1_kimchy', resolution: '720p', aspect: '16:9' });
-ok(k720.params.hires_kim_final_mp === 1 && k720.warnings.length === 1, '720p is below the Kimchy minimum: 1.0 MP is used and the producer is told');
+const kim = S.turboSettings({ preset: 'h3_7plus1_tiled', resolution: '1080p', aspect: '16:9' });
+ok(kim.params.hires_upscaler === 'tiled' && kim.params.hires === true && Math.abs(kim.params.hires_tiled_final_mp - 2.07) < 0.01 && kim.warnings.length === 0, '7+1 Tiled at 1080p: Tiled upscaler, 2.07 MP final');
+const k720 = S.turboSettings({ preset: 'h3_7plus1_tiled', resolution: '720p', aspect: '16:9' });
+ok(k720.params.hires_tiled_final_mp === 1 && k720.warnings.length === 1, '720p is below the Tiled minimum: 1.0 MP is used and the producer is told');
 ok(S.turboSettings({ preset: 'h3_plain', resolution: '1080p', aspect: '16:9' }).params.hires === false, 'plain H3 has no 7+1');
 ok(S.turboSettings({ preset: 'h3_7plus1', resolution: '1080p', aspect: '16:9', start_mp: 0.6, final_mp: 2.5 }).params.hires_start_mp === 0.6 && S.turboSettings({ preset: 'h3_7plus1', resolution: '1080p', aspect: '16:9', start_mp: 0.6, final_mp: 2.5 }).params.hires_final_mp === 2.5, "7+1: the producer's start / final MP reach the card");
-ok(S.turboSettings({ preset: 'h3_7plus1_kimchy', resolution: '1080p', aspect: '16:9', start_mp: 0.3, final_mp: 4 }).params.hires_kim_start_mp === 0.3 && S.turboSettings({ preset: 'h3_7plus1_kimchy', resolution: '1080p', aspect: '16:9', start_mp: 0.3, final_mp: 4 }).params.hires_kim_final_mp === 4, "Kimchy: the producer's start / final MP reach the card");
+ok(S.turboSettings({ preset: 'h3_7plus1_tiled', resolution: '1080p', aspect: '16:9', start_mp: 0.3, final_mp: 4 }).params.hires_tiled_start_mp === 0.3 && S.turboSettings({ preset: 'h3_7plus1_tiled', resolution: '1080p', aspect: '16:9', start_mp: 0.3, final_mp: 4 }).params.hires_tiled_final_mp === 4, "Tiled: the producer's start / final MP reach the card");
 ok(JSON.stringify(S.mpRanges('h3_plain')) === JSON.stringify({ start: null, final: [0.25, 4, 0.25] }) && S.mpRanges('h3_7plus1').start !== null && S.defaultMps({ preset: 'h3_plain', resolution: '1080p', aspect: '16:9' }).start === undefined, 'mpRanges / defaultMps: plain = final only, 7+1 = start + final');
 ok(S.usableClipSeconds(10).value === 10 && S.usableClipSeconds(20).value === 15 && S.usableClipSeconds(2).note, 'clip length is kept inside what the H3 card renders');
 
 // ---- a fake crew that answers like the LLM would
-const BRIEF = { crew: 'producer_desk', say: '브리프를 작성했습니다.', series: { title: '막장 인생', genre: '막장 드라마', tone: '과장된 감정, 반전', logline: 'x', language: 'ko', total_episodes: 30, episode_seconds: 90, clip_seconds: 10, aspect: '16:9', resolution: '1080p', preset: 'h3_7plus1_kimchy', sound_direction: '생활 소음과 강한 효과음', music_direction: '긴장감 있는 현악 테마' }, brief: { text: 'A 30-episode melodrama, 90 s each.', assumptions: ['Resolution 1080p'] } };
+const BRIEF = { crew: 'producer_desk', say: '브리프를 작성했습니다.', series: { title: '막장 인생', genre: '막장 드라마', tone: '과장된 감정, 반전', logline: 'x', language: 'ko', total_episodes: 30, episode_seconds: 90, clip_seconds: 10, aspect: '16:9', resolution: '1080p', preset: 'h3_7plus1_tiled', sound_direction: '생활 소음과 강한 효과음', music_direction: '긴장감 있는 현악 테마' }, brief: { text: 'A 30-episode melodrama, 90 s each.', assumptions: ['Resolution 1080p'] } };
 const CAST = { crew: 'art', say: '캐스팅했습니다.', references: [
   { kind: 'character', name: 'Minji', description: '28, lead', prompt_en: 'full body woman 28' },
   { kind: 'character', name: 'Minji wedding', description: 'wedding dress look', prompt_en: 'same woman, wedding dress', variant_of: 'Minji' },
@@ -55,11 +55,11 @@ ok(p.workflow.stage === 'intake' && p.workflow.status.intake === 'review_require
 ok(W.approveStage(p).ok === false, 'nothing can be approved before the first request');
 
 // ---- 1. one sentence from the producer
-M.addChat(p, 'user', '막장 드라마 하나 만들자. 장편이고 30부작 편당 1분 30초 구성으로 16:9 비율이며 7+1 Kimchy모드로 생성하고 싶어.');
+M.addChat(p, 'user', '막장 드라마 하나 만들자. 장편이고 30부작 편당 1분 30초 구성으로 16:9 비율이며 7+1 Tiled모드로 생성하고 싶어.');
 ok(W.startFromIntake(p) === 'brief' && p.workflow.stage === 'brief', 'the first message starts the line at the brief');
 script.push(BRIEF);
 let r = await AI.directorTurn(p, AI.kickoffInstruction(p, 'brief'), llm, { kickoff: 'brief' });
-ok(p.series.total_episodes === 30 && p.series.episode_seconds === 90 && p.series.clip_seconds === 10 && p.series.aspect === '16:9' && p.series.preset === 'h3_7plus1_kimchy' && p.series.resolution === '1080p', 'the brief carries 30 episodes, 1:30, 10 s clips, 16:9, 1080p, 7+1 Kimchy');
+ok(p.series.total_episodes === 30 && p.series.episode_seconds === 90 && p.series.clip_seconds === 10 && p.series.aspect === '16:9' && p.series.preset === 'h3_7plus1_tiled' && p.series.resolution === '1080p', 'the brief carries 30 episodes, 1:30, 10 s clips, 16:9, 1080p, 7+1 Tiled');
 ok(p.brief.text && p.brief.assumptions.length === 1 && p.brief.status === 'draft', 'the brief text and the assumptions are written, waiting for review');
 ok(seen[0].user.includes('30부작'.slice(0, 0)) || true, 'asked once');
 W.markReview(p);
@@ -202,7 +202,7 @@ ok(m2.schema_version === 5 && m2.series.format === 'drama' && m2.workflow.stage 
 {
   const q = M.newDirectorProject('S'); const notes = [];
   AI.applySeriesPatch(q, { total_episodes: 500, episode_seconds: 60, aspect: 'bad', resolution: '720p', preset: 'nope' }, notes);
-  ok(q.series.total_episodes === 1 && q.series.episode_seconds === 60 && q.series.aspect === '16:9' && q.series.resolution === '720p' && q.series.preset === 'h3_7plus1_kimchy', 'a number out of range and unknown values are ignored; valid ones are taken');
+  ok(q.series.total_episodes === 1 && q.series.episode_seconds === 60 && q.series.aspect === '16:9' && q.series.resolution === '720p' && q.series.preset === 'h3_7plus1_tiled', 'a number out of range and unknown values are ignored; valid ones are taken');
   AI.applySeriesPatch(q, { total_episodes: 12, clip_seconds: 20, aspect: '9:16', preset: 'h3_plain' }, notes);
   ok(q.series.total_episodes === 12 && q.series.clip_seconds === 15 && notes.some((n) => /15/.test(n)) && q.series.aspect === '9:16' && q.series.preset === 'h3_plain', 'a clip length the card cannot render is moved into range and the producer is told');
   AI.applySeriesPatch(q, { clip_seconds: 8, episode_seconds: 90 }, notes); ok(S.splitSeconds(q.series.episode_seconds, q.series.clip_seconds).length === 12, '1:30 at 8 s clips = 12 clips (the screen shows the count before Apply)');
@@ -339,6 +339,20 @@ ok(m2.schema_version === 5 && m2.series.format === 'drama' && m2.workflow.stage 
   const fake = async () => JSON.stringify({ crew: 'art', say: 'again', references: [{ name: 'New lead', description: 'x' }] });
   await AI.directorTurn(q, AI.recastInstruction(q, 'character'), fake, { kickoff: 'references', part: { kind: 'character' } });
   ok(q.references.length === 1 && q.references[0].name === 'New lead' && q.references[0].kind === 'character', 'the new entries of the asked kind take the place of the old ones');
+}
+// ---- the Kimchy upscaler became the Tiled (TJ) one: old saved data still loads
+{
+  const T = await bundle('src/backend/tiledMigrate.ts', 'tiledMigrate.mjs');
+  const old = { hires: true, hires_upscaler: 'kimchy', hires_kim_up: 'bicubic', hires_kim_start_mp: 0.4, hires_kim_final_mp: 3 };
+  const m = T.migrateTiledParams(old);
+  ok(m.hires_upscaler === 'tiled' && m.hires_tiled_up === 'bicubic' && m.hires_tiled_start_mp === 0.4 && m.hires_tiled_final_mp === 3 && !('hires_kim_up' in m) && !('hires_kim_final_mp' in m), 'an old card (value + keys) is converted');
+  ok(T.migrateTiledParams({ h3_upscaler: 'kimchy', h3_kim_final_mp: 2 }).h3_tiled_final_mp === 2, 'the postprocess card too');
+  const now = { hires_upscaler: 'tiled', hires_tiled_final_mp: 2 }; ok(T.migrateTiledParams(now) === now, 'a new card is returned as it is');
+  const both = T.migrateTiledParams({ hires_kim_final_mp: 5, hires_tiled_final_mp: 2 }); ok(both.hires_tiled_final_mp === 2, 'a new key already set is not overwritten by an old one');
+  ok(T.migrateTiledPreset('h3_7plus1_kimchy') === 'h3_7plus1_tiled' && T.migrateTiledPreset('h3_plain') === 'h3_plain', 'the Director preset is converted');
+  const q = M.newDirectorProject('K'); const raw = JSON.parse(JSON.stringify(q)); raw.series.preset = 'h3_7plus1_kimchy';
+  ok(M.loadDirectorProject(raw).project.series.preset === 'h3_7plus1_tiled', 'a saved Director project with the old preset opens with the new one');
+  const notes = []; AI.applySeriesPatch(q, { preset: 'h3_7plus1_kimchy' }, notes); ok(q.series.preset === 'h3_7plus1_tiled', 'an old preset name from the crew is accepted');
 }
 // ---- demo stand-in pictures
 {

@@ -32,7 +32,7 @@ export const demoCrew: LlmFn = async (system, user) => {
     return JSON.stringify({ crew: 'producer_desk', say: ko(`요청을 ${K.label}(으)로 읽고 브리프를 작성했습니다. 가정한 부분만 확인해 주세요.`, 'Brief written. Please check the assumptions.'),
       series: { format: kind, title: names[0], genre: names[1], tone: names[2], logline: ko('한 가지 이야기가 선명하게 남는다.', 'One idea that stays.'), language: 'ko',
         total_episodes: eps, episode_seconds: length, clip_seconds: K.defaults.clip_seconds, aspect, resolution: /720/.test(asked) ? '720p' : /4k|2160/i.test(asked) ? '2160p' : '1080p',
-        preset: /kimchy|김치/i.test(asked) ? 'h3_7plus1_kimchy' : /7\s*\+\s*1/.test(asked) ? 'h3_7plus1' : 'h3_7plus1_kimchy', sound_direction: ko('생활 소음과 또렷한 효과음', 'room tone and crisp effects'), music_direction: kind === 'musicvideo' ? ko('곡의 구간(인트로·벌스·후렴)에 맞춘 컷', 'cuts follow the song sections') : ko('긴장감 있는 현악 테마', 'tense strings theme') },
+        preset: /kimchy|김치|tiled|타일/i.test(asked) ? 'h3_7plus1_tiled' : /7\s*\+\s*1/.test(asked) ? 'h3_7plus1' : 'h3_7plus1_tiled', sound_direction: ko('생활 소음과 또렷한 효과음', 'room tone and crisp effects'), music_direction: kind === 'musicvideo' ? ko('곡의 구간(인트로·벌스·후렴)에 맞춘 컷', 'cuts follow the song sections') : ko('긴장감 있는 현악 테마', 'tense strings theme') },
       brief: { text: ko(`${K.label} · ${eps > 1 ? `${eps}편 × ` : ''}${length}초. 클립은 ${K.defaults.clip_seconds}초 단위로 나눠 ${splitSeconds(length, K.defaults.clip_seconds).length}개 클립이 됩니다.`, 'A piece.'), assumptions: [ko(`작품 종류: ${K.label}`, `Kind: ${K.label}`), ko('해상도 1080p로 가정', 'Assumed 1080p')] } });
   }
   if (/casting now|Casting, one part at a time/.test(said)) {
