@@ -45,7 +45,7 @@ export function optFromCards(cards: H3Cards): H3Options {
   return {
     ...DEFAULT_OPT,
     ...(s ? { attnBackend: s.attn_backend, attnForward: s.attn_forward, optimizer: s.optimizer, blockCache: s.block_cache, spectrum: !!s.spectrum, fusedModulation: !!s.fused_mod, shiftVideo: s.shift_video, shiftAudio: s.shift_audio } : {}),
-    ...(t ? { turbo: t.turbo, turboLora: t.turbo_lora, turboStrength: t.turbo_strength, turboSteps: t.turbo_steps, hires: !!t.hires, hiresUpscaler: t.hires_upscaler === 'kimchy' ? 'kimchy' : 'h3', hiresKimUp: t.hires_kim_up === 'bicubic' || t.hires_kim_up === 'trilinear' ? t.hires_kim_up : 'neural', hiresStartMp: t.hires_upscaler === 'kimchy' ? t.hires_kim_start_mp : t.hires_start_mp, hiresFinalMp: t.hires_upscaler === 'kimchy' ? t.hires_kim_final_mp : t.hires_final_mp, hiresLastFixed: t.hires_last === 'fixed', hiresLastModel: t.hires_last_model, hiresNoOpt: !!t.hires_no_opt, hiresChunkRows: t.hires_chunk_rows } : {}),
+    ...(t ? { turbo: t.turbo, turboLora: t.turbo_lora, turboStrength: t.turbo_strength, turboSteps: t.turbo_steps, hires: !!t.hires, hiresUpscaler: t.hires_upscaler === 'kimchy' ? 'kimchy' : 'h3', hiresKimUp: t.hires_kim_up === 'bicubic' || t.hires_kim_up === 'trilinear' ? t.hires_kim_up : 'neural', hiresStartMp: t.hires_upscaler === 'kimchy' ? t.hires_kim_start_mp : t.hires_start_mp, hiresFinalMp: t.hires_upscaler === 'kimchy' ? t.hires_kim_final_mp : t.hires_final_mp, hiresLastFixed: t.hires_last === 'fixed', hiresLastModel: t.hires_last_model, hiresNoOpt: !!t.hires_no_opt, hiresChunkRows: t.hires_chunk_rows, hiresSplitStep: t.hires_split_step } : {}),
   };
 }
 

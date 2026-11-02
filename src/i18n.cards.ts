@@ -54,7 +54,7 @@ export const KO_CARDS: Record<string, string> = {
   'Add Audio to Video': '영상에 오디오 넣기', 'Start the audio at (s)': '오디오 시작 위치 (초)',
   'Scene Detect': '장면 감지', 'Beat Detect': '비트 감지', 'Sensitivity (lower = more cuts)': '민감도 (낮을수록 더 많이 자름)', 'Audio / video': '오디오 / 영상',
   Disconnect: '연결 끊기', 'Card colour': '카드 색상',
-  'Describe your video…': '만들고 싶은 영상을 설명하세요…', 'Turbo (faster)': '터보 (빠르게)', '7+1 hi-res finish': '7+1 하이레즈 마무리',
+  'Describe your video…': '만들고 싶은 영상을 설명하세요…', 'Turbo (faster)': '터보 (빠르게)', 'Split Sigma': 'Split Sigma', 'Split Sigma step (1~7, 7 recommended)': 'Split Sigma 스텝 (1~7, 7 권장)', 'Split Sigma last step model': 'Split Sigma 마지막 스텝 모델', 'Split Sigma last step model (none = One Studio setting)': 'Split Sigma 마지막 스텝 모델 (없음 = One Studio 설정)', 'Needs an 8-step turbo: the Turbo LoRA above, or Turbo None with an 8-step checkpoint. Steps are fixed at 8: the Split Sigma step runs small, the rest at full size (7 is recommended).': '8스텝 터보가 필요합니다: 위의 터보 LoRA, 또는 8스텝 체크포인트와 터보 없음. 스텝은 8로 고정: Split Sigma 스텝까지는 작게, 나머지는 원래 크기로 돌립니다 (7 권장).',
   'Source frame rate (fps, 0 = detect)': '원본 프레임레이트 (fps, 0 = 자동)',
   'Transition Bridge': '전환 브릿지', 'Clip A (before)': '클립 A (앞)', 'Clip B (after)': '클립 B (뒤)', 'Bridge clip': '브릿지 클립', Transition: '전환 방식', 'Length (frames)': '길이 (프레임)',
   'Test on the first N frames (0 = whole video)': '처음 N프레임만 테스트 (0 = 전체)',
@@ -66,7 +66,6 @@ export const KO_CARDS: Record<string, string> = {
   Sheet: '시트', 'Turnaround video': '턴어라운드 영상', '@names': '@이름', 'For H3': 'H3용', Images: '이미지', 'Lock audio': '잠금 오디오',
   // params
   Strength: '강도', Turbo: '터보', 'Turbo LoRA': '터보 LoRA', 'Turbo strength': '터보 강도', 'Turbo steps': '터보 스텝', 'Start size (MP)': '시작 크기 (MP)', 'Final size (MP)': '최종 크기 (MP)',
-  '7+1 hi-res finish (7 steps small → upscale → 1 step big)': '7+1 하이레즈 마무리 (작게 7스텝 → 업스케일 → 크게 1스텝)',
   'Attention backend': '어텐션 백엔드', 'Attention forward patch': '어텐션 포워드 패치', 'H3 optimizer': 'H3 옵티마이저', 'Block cache': '블록 캐시', 'Fused modulation': '퓨즈드 모듈레이션',
   'Shift (video)': '시프트 (영상)', 'Shift (audio)': '시프트 (오디오)', Mode: '모드', 'Strength (remix)': '강도 (리믹스)', 'If the audio is shorter': '오디오가 짧을 때',
   'Project id': '프로젝트 ID', 'Asset ids': '에셋 ID', 'Choose from library…': '라이브러리에서 선택…', 'nothing chosen yet': '아직 선택 안 함', assets: '개', Project: '프로젝트', project: '프로젝트',

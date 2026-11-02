@@ -2290,9 +2290,9 @@ var init_settings = __esm({
     useSettings = create((set2, get) => {
       const saved = load();
       const persist = () => {
-        const { comfyUrl, llm, live, vision, models, saveSubfolder, music, video, hostPanels, h3Turbo, lastParams } = get();
+        const { comfyUrl, llm, live, vision, director, models, saveSubfolder, music, video, hostPanels, h3Turbo, lastParams } = get();
         try {
-          localStorage.setItem(KEY, JSON.stringify({ comfyUrl, llm, live, vision, models, saveSubfolder, music, video, hostPanels, h3Turbo, lastParams }));
+          localStorage.setItem(KEY, JSON.stringify({ comfyUrl, llm, live, vision, director, models, saveSubfolder, music, video, hostPanels, h3Turbo, lastParams }));
         } catch {
         }
       };
@@ -2301,6 +2301,7 @@ var init_settings = __esm({
         llm: { ...DEFAULT_LLM, ...saved.llm ?? {} },
         vision: { same: saved.vision?.same ?? true, llm: { ...DEFAULT_LLM, ...saved.vision?.llm ?? {} } },
         live: { same: saved.live?.same ?? true, llm: { ...DEFAULT_LLM, temperature: 0.5, max_tokens: 3500, ...saved.live?.llm ?? {} } },
+        director: { same: saved.director?.same ?? false, llm: { ...DEFAULT_LLM, ...saved.llm ?? {}, temperature: 0.6, max_tokens: 7e3, ...saved.director?.llm ?? {} } },
         keys: { custom: "", openrouter: "" },
         models: saved.models ?? {},
         saveSubfolder: saved.saveSubfolder ?? "ai-one-canvers",
@@ -2342,6 +2343,14 @@ var init_settings = __esm({
         setVisionLlm: (patch) => {
           for (const k of Object.keys(patch)) llmDirty.vision.add(k);
           set2({ vision: { ...get().vision, llm: { ...get().vision.llm, ...patch } } });
+          persist();
+        },
+        setDirector: (patch) => {
+          set2({ director: { ...get().director, ...patch } });
+          persist();
+        },
+        setDirectorLlm: (patch) => {
+          set2({ director: { ...get().director, llm: { ...get().director.llm, ...patch } } });
           persist();
         },
         setLive: (patch) => {
@@ -2852,19 +2861,20 @@ var init_registry = __esm({
           dyn("turbo_lora_ref", "Turbo LoRA (reference)", "loras:h3", "none", { when: (p) => p.turbo !== "none" }),
           slider("turbo_strength", "Turbo strength", 0, 2, 0.05, 1, { when: (p) => p.turbo !== "none" }),
           slider("turbo_steps", "Turbo steps", 1, 16, 1, 8, { advanced: true, when: (p) => p.turbo !== "none" }),
-          toggle("hires", "7+1 hi-res finish", true, { when: (p) => p.turbo === "pdd" || p.turbo === "none", note: "7 steps small \u2192 upscale \u2192 1 step big" }),
+          toggle("hires", "Split Sigma", true, { when: (p) => p.turbo === "pdd" || p.turbo === "none", note: "Needs an 8-step turbo: the Turbo LoRA above, or Turbo None with an 8-step checkpoint. Steps are fixed at 8: the Split Sigma step runs small, the rest at full size (7 is recommended)." }),
           { id: "hires_upscaler", label: "Upscaler", control: { kind: "select", options: ["h3", "kimchy"], labels: { h3: "H3 Latent Upscaler", kimchy: "H3 Kimchy Up Scaler" } }, default: "h3", when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires },
+          num("hires_split_step", "Split Sigma step (7\u20131, 7 recommended)", 7, { when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && p.hires_upscaler !== "kimchy" }, 1, 7, 1),
           slider("hires_start_mp", "Start size (MP)", 0.2, 1, 0.05, 0.7, { when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && p.hires_upscaler !== "kimchy" }),
           slider("hires_final_mp", "Final size (MP)", 0.4, 3, 0.05, 1.6, { when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && p.hires_upscaler !== "kimchy" }),
           { id: "hires_kim_up", label: "Latent upscale", control: { kind: "select", options: ["neural", "bicubic", "trilinear"], labels: { neural: "Neural (Kimchy's trained upscaler)", bicubic: "Bicubic (plain interpolation)", trilinear: "Trilinear (plain interpolation)" } }, default: "neural", when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && p.hires_upscaler === "kimchy" },
           slider("hires_kim_start_mp", "Start size (MP)", 0.2, 1, 0.05, 0.5, { when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && p.hires_upscaler === "kimchy" }),
           slider("hires_kim_final_mp", "Final size (MP)", 1, 8.5, 0.1, 2, { when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && p.hires_upscaler === "kimchy" }),
-          { id: "hires_last", label: "7+1 last step model", control: { kind: "select", options: ["same", "fixed"], labels: { same: "Same as generation", fixed: "Fixed model" } }, default: "same", when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires },
-          dyn("hires_last_model", "7+1 last step model (none = One Studio setting)", "h3unets", "none", { when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && p.hires_last === "fixed" }),
+          { id: "hires_last", label: "Split Sigma last step model", control: { kind: "select", options: ["same", "fixed"], labels: { same: "Same as generation", fixed: "Fixed model" } }, default: "same", when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires },
+          dyn("hires_last_model", "Split Sigma last step model (none = One Studio setting)", "h3unets", "none", { when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && p.hires_last === "fixed" }),
           toggle("hires_no_opt", "Bypass H3 Memory Optimization on the last step", false, { advanced: true, when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires }),
           num("hires_chunk_rows", "Last step chunk rows", 2048, { advanced: true, when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && !p.hires_no_opt }, 256, 16384, 256)
         ],
-        description: "H3 speed-up: Turbo LoRA and the 7+1 hi-res finish. Upscaler A: H3 Latent Upscaler (the usual way, last step on the whole picture; 1.6 MP is its sweet spot on 16 GB). Upscaler B: H3 Kimchy Up Scaler (new; upscale and last step in one node, in tiles; Final MP 1.0 \u2013 8.5; needs the ComfyUI-Kimchy-Minimax-H3-Suite pack). Wire into Video Generate \u2192 H3 option cards."
+        description: "H3 speed-up: Turbo LoRA and Split Sigma (run the first steps small, scale the latent up, run the rest at full size). Upscaler A: H3 Latent Upscaler (the usual way, last step on the whole picture; 1.6 MP is its sweet spot on 16 GB). Upscaler B: H3 Kimchy Up Scaler (new; upscale and last step in one node, in tiles; Final MP 1.0 \u2013 8.5; needs the ComfyUI-Kimchy-Minimax-H3-Suite pack). Wire into Video Generate \u2192 H3 option cards."
       },
       {
         id: "moss-bboxes",
@@ -2975,7 +2985,7 @@ var init_registry = __esm({
               slider("h3_pdd_strength", "lora strength", 0, 2, 0.05, 1, { when: (p) => p.h3_turbo !== "none" }),
               { id: "h3_kind", label: "Clip type", control: { kind: "select", options: ["fl", "ref"], labels: { fl: "First / Last frame", ref: "Reference" } }, default: "fl" },
               { id: "h3_last", label: "Model", control: { kind: "select", options: ["same", "fixed"], labels: { same: "Same as generation", fixed: "Fixed model" } }, default: "same" },
-              dyn("h3_last_model", 'Fixed model (none = One Studio setting "UNET - 7+1 last step")', "h3unets", "none", { when: (p) => p.h3_last === "fixed" }),
+              dyn("h3_last_model", 'Fixed model (none = One Studio setting "UNET - Split Sigma last step")', "h3unets", "none", { when: (p) => p.h3_last === "fixed" }),
               { id: "h3_upscaler", label: "Upscaler", control: { kind: "select", options: ["h3", "kimchy"], labels: { h3: "H3 Latent Upscaler", kimchy: "H3 Kimchy Up Scaler" } }, default: "h3" },
               { id: "h3_kim_up", label: "Latent upscale", control: { kind: "select", options: ["neural", "bicubic", "trilinear"], labels: { neural: "Neural (Kimchy's trained upscaler)", bicubic: "Bicubic (plain interpolation)", trilinear: "Trilinear (plain interpolation)" } }, default: "neural", when: (p) => p.h3_upscaler === "kimchy" },
               toggle("h3_no_opt", "Bypass H3 Memory Optimization", false),
@@ -3575,7 +3585,11 @@ var init_i18n_cards = __esm({
       "Card colour": "\uCE74\uB4DC \uC0C9\uC0C1",
       "Describe your video\u2026": "\uB9CC\uB4E4\uACE0 \uC2F6\uC740 \uC601\uC0C1\uC744 \uC124\uBA85\uD558\uC138\uC694\u2026",
       "Turbo (faster)": "\uD130\uBCF4 (\uBE60\uB974\uAC8C)",
-      "7+1 hi-res finish": "7+1 \uD558\uC774\uB808\uC988 \uB9C8\uBB34\uB9AC",
+      "Split Sigma": "Split Sigma",
+      "Split Sigma step (7\u20131, 7 recommended)": "Split Sigma \uC2A4\uD15D (7\u20131, 7 \uAD8C\uC7A5)",
+      "Split Sigma last step model": "Split Sigma \uB9C8\uC9C0\uB9C9 \uC2A4\uD15D \uBAA8\uB378",
+      "Split Sigma last step model (none = One Studio setting)": "Split Sigma \uB9C8\uC9C0\uB9C9 \uC2A4\uD15D \uBAA8\uB378 (\uC5C6\uC74C = One Studio \uC124\uC815)",
+      "Needs an 8-step turbo: the Turbo LoRA above, or Turbo None with an 8-step checkpoint. Steps are fixed at 8: the Split Sigma step runs small, the rest at full size (7 is recommended).": "8\uC2A4\uD15D \uD130\uBCF4\uAC00 \uD544\uC694\uD569\uB2C8\uB2E4: \uC704\uC758 \uD130\uBCF4 LoRA, \uB610\uB294 8\uC2A4\uD15D \uCCB4\uD06C\uD3EC\uC778\uD2B8\uC640 \uD130\uBCF4 \uC5C6\uC74C. \uC2A4\uD15D\uC740 8\uB85C \uACE0\uC815: Split Sigma \uC2A4\uD15D\uAE4C\uC9C0\uB294 \uC791\uAC8C, \uB098\uBA38\uC9C0\uB294 \uC6D0\uB798 \uD06C\uAE30\uB85C \uB3CC\uB9BD\uB2C8\uB2E4 (7 \uAD8C\uC7A5).",
       "Source frame rate (fps, 0 = detect)": "\uC6D0\uBCF8 \uD504\uB808\uC784\uB808\uC774\uD2B8 (fps, 0 = \uC790\uB3D9)",
       "Transition Bridge": "\uC804\uD658 \uBE0C\uB9BF\uC9C0",
       "Clip A (before)": "\uD074\uB9BD A (\uC55E)",
@@ -3619,7 +3633,6 @@ var init_i18n_cards = __esm({
       "Turbo steps": "\uD130\uBCF4 \uC2A4\uD15D",
       "Start size (MP)": "\uC2DC\uC791 \uD06C\uAE30 (MP)",
       "Final size (MP)": "\uCD5C\uC885 \uD06C\uAE30 (MP)",
-      "7+1 hi-res finish (7 steps small \u2192 upscale \u2192 1 step big)": "7+1 \uD558\uC774\uB808\uC988 \uB9C8\uBB34\uB9AC (\uC791\uAC8C 7\uC2A4\uD15D \u2192 \uC5C5\uC2A4\uCF00\uC77C \u2192 \uD06C\uAC8C 1\uC2A4\uD15D)",
       "Attention backend": "\uC5B4\uD150\uC158 \uBC31\uC5D4\uB4DC",
       "Attention forward patch": "\uC5B4\uD150\uC158 \uD3EC\uC6CC\uB4DC \uD328\uCE58",
       "H3 optimizer": "H3 \uC635\uD2F0\uB9C8\uC774\uC800",
@@ -3746,6 +3759,408 @@ var init_i18n_cards = __esm({
   }
 });
 
+// src/i18n.director.ts
+var KO_DIRECTOR;
+var init_i18n_director = __esm({
+  "src/i18n.director.ts"() {
+    "use strict";
+    KO_DIRECTOR = {
+      // the staff
+      "Producer desk": "\uC81C\uC791 \uB370\uC2A4\uD06C",
+      Writer: "\uC791\uAC00",
+      Director: "\uB514\uB809\uD130",
+      Cinematographer: "\uCD2C\uC601 \uAC10\uB3C5",
+      "Art department": "\uBBF8\uC220\xB7\uCE90\uC2A4\uD305",
+      "Sound director": "\uC74C\uD5A5 \uAC10\uB3C5",
+      "Music director": "\uC74C\uC545 \uAC10\uB3C5",
+      // steps
+      Brief: "\uBE0C\uB9AC\uD504",
+      Casting: "\uCE90\uC2A4\uD305",
+      Scenario: "\uC2DC\uB098\uB9AC\uC624",
+      Episode: "\uD3B8 \uC791\uC131",
+      Generate: "\uC0DD\uC131",
+      Review: "\uAC80\uD1A0",
+      "Next episode": "\uB2E4\uC74C \uD3B8",
+      episodes: "\uD3B8",
+      clips: "\uD074\uB9BD",
+      Episodes: "\uD3B8\uC218",
+      Clips: "\uD074\uB9BD",
+      "per episode": "/ \uD3B8",
+      waiting: "\uB300\uAE30 \uC911",
+      "the crew is working\u2026": "\uC791\uC5C5\uD300\uC774 \uC791\uC5C5 \uC911\u2026",
+      "waiting for your approval": "\uC2B9\uC778\uC744 \uAE30\uB2E4\uB9AC\uB294 \uC911",
+      approved: "\uC2B9\uC778\uB428",
+      failed: "\uC2E4\uD328",
+      finished: "\uC644\uB8CC",
+      blocked: "\uB9C9\uD798",
+      // welcome / chat
+      "You are the producer. Say what you want to make in the chat below; the crew (writer, director, art, sound, music) does the work and asks for your approval at each step.": "\uB2F9\uC2E0\uC740 \uC81C\uC791\uC790\uC785\uB2C8\uB2E4. \uC544\uB798 \uCC44\uD305\uCC3D\uC5D0 \uB9CC\uB4E4\uACE0 \uC2F6\uC740 \uAC83\uC744 \uB9D0\uD558\uBA74 \uC791\uC5C5\uD300(\uC791\uAC00\xB7\uAC10\uB3C5\xB7\uBBF8\uC220\xB7\uC74C\uD5A5\xB7\uC74C\uC545)\uC774 \uC791\uC5C5\uD558\uACE0, \uB2E8\uACC4\uB9C8\uB2E4 \uC2B9\uC778\uC744 \uBC1B\uC2B5\uB2C8\uB2E4.",
+      "Try it without an LLM (scripted demo crew)": "LLM \uC5C6\uC774 \uCCB4\uD5D8\uD574 \uBCF4\uAE30 (\uB370\uBAA8 \uC791\uC5C5\uD300)",
+      "The crew is working\u2026": "\uC791\uC5C5\uD300\uC774 \uC791\uC5C5 \uC911\u2026",
+      "The crew is working. Wait until it is done.": "\uC791\uC5C5\uD300\uC774 \uC791\uC5C5 \uC911\uC785\uB2C8\uB2E4. \uB05D\uB0A0 \uB54C\uAE4C\uC9C0 \uAE30\uB2E4\uB824 \uC8FC\uC138\uC694.",
+      "Enter to send, Shift+Enter for a new line": "Enter \uC804\uC1A1, Shift+Enter \uC904\uBC14\uAFC8",
+      Approve: "\uC2B9\uC778",
+      "Try again": "\uB2E4\uC2DC \uC2DC\uB3C4",
+      "Not yet": "\uC544\uC9C1 \uC548 \uB428",
+      "To change something, tell the crew below.": "\uACE0\uCE60 \uAC83\uC774 \uC788\uC73C\uBA74 \uC544\uB798\uC5D0 \uB9D0\uB85C \uC9C0\uC2DC\uD558\uC138\uC694.",
+      "Tell the crew what to do, or what to change\u2026": "\uC791\uC5C5\uD300\uC5D0\uAC8C \uD560 \uC77C\uC774\uB098 \uACE0\uCE60 \uC810\uC744 \uB9D0\uD558\uC138\uC694\u2026",
+      "Say what you want to make\u2026": "\uB9CC\uB4E4\uACE0 \uC2F6\uC740 \uAC83\uC744 \uB9D0\uD558\uC138\uC694\u2026",
+      Send: "\uBCF4\uB0B4\uAE30",
+      // clip status, casting groups, meters
+      draft: "\uCD08\uC548",
+      ready: "\uC900\uBE44\uB428",
+      queued: "\uB300\uAE30",
+      generating: "\uC0DD\uC131 \uC911",
+      review: "\uAC80\uD1A0",
+      done: "\uC644\uB8CC",
+      Actors: "\uBC30\uC6B0",
+      Locations: "\uC7A5\uC18C",
+      Props: "\uC18C\uD488",
+      "images ready": "\uC774\uBBF8\uC9C0 \uC644\uB8CC",
+      "clips generated": "\uD074\uB9BD \uC0DD\uC131\uB428",
+      // kinds of work
+      "Kind of work": "\uC791\uD488 \uC885\uB958",
+      "Drama series": "\uB4DC\uB77C\uB9C8 \uC2DC\uB9AC\uC988",
+      "Short film": "\uB2E8\uD3B8 \uC601\uD654",
+      "Ad / commercial": "\uAD11\uACE0",
+      "Music video": "\uBBA4\uC9C1\uBE44\uB514\uC624",
+      Vlog: "\uBE0C\uC774\uB85C\uADF8",
+      "Short-form video": "\uC20F\uD3FC \uC601\uC0C1",
+      "Models & product": "\uBAA8\uB378 \xB7 \uC81C\uD488",
+      Storyboard: "\uC2A4\uD1A0\uB9AC\uBCF4\uB4DC",
+      Ad: "\uAD11\uACE0",
+      Model: "\uBAA8\uB378",
+      Product: "\uC81C\uD488",
+      Models: "\uBAA8\uB378",
+      "Products & props": "\uC81C\uD488 \xB7 \uC18C\uD488",
+      "Artists & looks": "\uC544\uD2F0\uC2A4\uD2B8 \xB7 \uC758\uC0C1",
+      Artist: "\uC544\uD2F0\uC2A4\uD2B8",
+      Artists: "\uC544\uD2F0\uC2A4\uD2B8",
+      "Prop / outfit": "\uC18C\uD488 \xB7 \uC758\uC0C1",
+      "Props & outfits": "\uC18C\uD488 \xB7 \uC758\uC0C1",
+      "Host & places": "\uC9C4\uD589\uC790 \xB7 \uC7A5\uC18C",
+      Outline: "\uAD6C\uC131\uC548",
+      Host: "\uC9C4\uD589\uC790",
+      Hosts: "\uC9C4\uD589\uC790",
+      Place: "\uC7A5\uC18C",
+      Places: "\uC7A5\uC18C",
+      Person: "\uC778\uBB3C",
+      People: "\uC778\uBB3C",
+      Short: "\uC20F\uD3FC",
+      Film: "\uC601\uD654",
+      // brief settings you can change, prompt view, demo
+      "You changed the settings.": "\uC124\uC815\uC744 \uBC14\uAFE8\uC2B5\uB2C8\uB2E4.",
+      Apply: "\uC801\uC6A9",
+      Undo: "\uB418\uB3CC\uB9AC\uAE30",
+      Prompt: "\uD504\uB86C\uD504\uD2B8",
+      "Scenario and clips that are already written are not changed: ask the crew in the chat to rewrite them if needed.": "\uC774\uBBF8 \uC4F4 \uC2DC\uB098\uB9AC\uC624\uC640 \uD074\uB9BD\uC740 \uBC14\uB00C\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4. \uD544\uC694\uD558\uBA74 \uCC44\uD305\uC73C\uB85C \uB2E4\uC2DC \uC4F0\uB3C4\uB85D \uC9C0\uC2DC\uD558\uC138\uC694.",
+      "English is what the image model receives.": "\uC601\uC5B4\uAC00 \uC774\uBBF8\uC9C0 \uBAA8\uB378\uC5D0 \uB4E4\uC5B4\uAC00\uB294 \uAC12\uC785\uB2C8\uB2E4.",
+      "Korean is for reading and for asking for changes (the model gets the English prompt).": "\uD55C\uAD6D\uC5B4\uB294 \uBCF4\uAE30\uC640 \uC218\uC815 \uC694\uCCAD\uC6A9\uC785\uB2C8\uB2E4 (\uBAA8\uB378\uC5D0\uB294 \uC601\uC5B4 \uD504\uB86C\uD504\uD2B8\uAC00 \uB4E4\uC5B4\uAC11\uB2C8\uB2E4).",
+      "Demo: nothing is generated, stand-in pictures are used": "\uB370\uBAA8: \uC544\uBB34\uAC83\uB3C4 \uC0DD\uC131\uD558\uC9C0 \uC54A\uACE0 \uB300\uCCB4 \uC774\uBBF8\uC9C0\uB97C \uC501\uB2C8\uB2E4",
+      "Demo: go through every step without an LLM or a GPU (stand-in pictures)": "\uB370\uBAA8: LLM\uB3C4 GPU\uB3C4 \uC5C6\uC774 \uBAA8\uB4E0 \uB2E8\uACC4\uB97C \uC9C4\uD589 (\uB300\uCCB4 \uC774\uBBF8\uC9C0)",
+      "The demo does not make canvas files. Turn the demo off to build the real canvas.": "\uB370\uBAA8\uC5D0\uC11C\uB294 \uCE94\uBC84\uC2A4 \uD30C\uC77C\uC744 \uB9CC\uB4E4\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4. \uC2E4\uC81C \uCE94\uBC84\uC2A4\uB294 \uB370\uBAA8\uB97C \uB044\uACE0 \uB9CC\uB4DC\uC138\uC694.",
+      // casting: model, generate all / one, register
+      "Image model": "\uC774\uBBF8\uC9C0 \uBAA8\uB378",
+      "Generate all": "\uC804\uCCB4 \uC77C\uAD04 \uC0DD\uC131",
+      "Make this one": "\uC774 \uD56D\uBAA9 \uC0DD\uC131",
+      "Register as assets": "\uC5D0\uC14B \uB4F1\uB85D",
+      "Register all now": "\uC9C0\uAE08 \uC804\uCCB4 \uB4F1\uB85D",
+      "Nothing to register.": "\uB4F1\uB85D\uD560 \uC774\uBBF8\uC9C0\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.",
+      "Automatic: all of them when the casting is approved": "\uC790\uB3D9: \uCE90\uC2A4\uD305\uC744 \uC2B9\uC778\uD560 \uB54C \uC804\uBD80 \uB4F1\uB85D",
+      "Manual: only the ones I register": "\uC218\uB3D9: \uB0B4\uAC00 \uB4F1\uB85D\uD55C \uAC83\uB9CC",
+      "Or make one entry at a time on its card, choose an image from the Asset Library or the Gallery, or make one again for a different take.": "\uB610\uB294 \uCE74\uB4DC\uC5D0\uC11C \uD56D\uBAA9\uC744 \uD558\uB098\uC529 \uC0DD\uC131\uD558\uAC70\uB098, \uC5D0\uC14B \uB77C\uC774\uBE0C\uB7EC\uB9AC/\uAC24\uB7EC\uB9AC\uC5D0\uC11C \uC774\uBBF8\uC9C0\uB97C \uACE0\uB974\uAC70\uB098, \uB2E4\uB978 \uACB0\uACFC\uAC00 \uD544\uC694\uD558\uBA74 \uB2E4\uC2DC \uC0DD\uC131\uD558\uC138\uC694.",
+      "Other takes: click one to use it": "\uB2E4\uB978 \uACB0\uACFC: \uB20C\uB7EC\uC11C \uC0AC\uC6A9",
+      // register a result as an asset (right-click)
+      "Register as asset": "\uC5D0\uC14B\uC73C\uB85C \uB4F1\uB85D",
+      "Asset name": "\uC5D0\uC14B \uC774\uB984",
+      "Write it in a prompt as": "\uD504\uB86C\uD504\uD2B8\uC5D0\uB294 \uC774\uB807\uAC8C \uC501\uB2C8\uB2E4",
+      "Use letters, numbers, _ and Korean": "\uAE00\uC790, \uC22B\uC790, _ \uC640 \uD55C\uAE00\uC744 \uC4F8 \uC218 \uC788\uC2B5\uB2C8\uB2E4",
+      "Characters that cannot be used were replaced with _": "\uC4F8 \uC218 \uC5C6\uB294 \uBB38\uC790\uB294 _ \uB85C \uBC14\uAFE8\uC2B5\uB2C8\uB2E4",
+      "This image was already registered as": "\uAC19\uC740 \uC774\uBBF8\uC9C0\uAC00 \uC774\uBBF8 \uB4F1\uB85D\uB418\uC5B4 \uC788\uC2B5\uB2C8\uB2E4:",
+      Category: "\uCE74\uD14C\uACE0\uB9AC",
+      Register: "\uB4F1\uB85D",
+      Registered: "\uB4F1\uB85D\uD588\uC2B5\uB2C8\uB2E4",
+      // model settings of the Director
+      "Model settings": "\uBAA8\uB378 \uC124\uC815",
+      "Used by the Director crew only": "\uB514\uB809\uD130 \uC791\uC5C5\uD300 \uC804\uC6A9",
+      "Director LLM": "\uB514\uB809\uD130 LLM",
+      "Main LLM": "\uBA54\uC778 LLM",
+      "no model chosen": "\uBAA8\uB378 \uBBF8\uC120\uD0DD",
+      "The Director crew follows the main LLM. Untick to give it its own backend / model (a stronger model writes better scenarios).": "\uB514\uB809\uD130 \uC791\uC5C5\uD300\uC774 \uBA54\uC778 LLM\uC744 \uB530\uB985\uB2C8\uB2E4. \uCCB4\uD06C\uB97C \uD480\uBA74 \uB514\uB809\uD130 \uC804\uC6A9 \uBC31\uC5D4\uB4DC/\uBAA8\uB378\uC744 \uC4F8 \uC218 \uC788\uC2B5\uB2C8\uB2E4 (\uB354 \uAC15\uD55C \uBAA8\uB378\uC774 \uC2DC\uB098\uB9AC\uC624\uB97C \uB354 \uC798 \uC501\uB2C8\uB2E4).",
+      // steps you can click, episode strip, batches, seeds
+      "not started": "\uC2DC\uC791 \uC804",
+      writing: "\uC791\uC131 \uC911",
+      "waiting for approval": "\uC2B9\uC778 \uB300\uAE30",
+      canvas: "\uCE94\uBC84\uC2A4",
+      "Opens when the scenario is approved": "\uC2DC\uB098\uB9AC\uC624\uB97C \uC2B9\uC778\uD558\uBA74 \uC5F4\uB9BD\uB2C8\uB2E4",
+      "Look at this step": "\uC774 \uB2E8\uACC4 \uBCF4\uAE30",
+      "Several episodes together": "\uC5EC\uB7EC \uD3B8 \uD568\uAED8",
+      All: "\uC804\uCCB4",
+      "Not started": "\uC2DC\uC791 \uC804\uC778 \uD3B8",
+      "At this step": "\uC774 \uB2E8\uACC4\uC778 \uD3B8",
+      None: "\uD574\uC81C",
+      "Tick episodes above": "\uC704\uC5D0\uC11C \uD3B8\uC744 \uCCB4\uD06C\uD558\uC138\uC694",
+      "Start writing": "\uC791\uC131 \uC2DC\uC791",
+      "This episode has not been started": "\uC774 \uD3B8\uC740 \uC544\uC9C1 \uC2DC\uC791\uD558\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4",
+      "Start writing this episode": "\uC774 \uD3B8 \uC791\uC131 \uC2DC\uC791",
+      "The crew writes its clips from the scenario and the cast. Episodes are written one at a time: an episode starts after the one before it is finished.": "\uC791\uC5C5\uD300\uC774 \uC2DC\uB098\uB9AC\uC624\uC640 \uCD9C\uC5F0\uC9C4\uC73C\uB85C \uC774 \uD3B8\uC758 \uD074\uB9BD\uC744 \uC501\uB2C8\uB2E4. \uD3B8\uC740 \uD55C \uD3B8\uC529 \uC501\uB2C8\uB2E4. \uC774\uC804 \uD3B8\uC774 \uB05D\uB098\uC57C \uC774 \uD3B8\uC744 \uC2DC\uC791\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.",
+      "Select this clip": "\uC774 \uD074\uB9BD \uC120\uD0DD",
+      Seed: "\uC2DC\uB4DC",
+      random: "\uBB34\uC791\uC704",
+      "A new random seed": "\uC0C8 \uBB34\uC791\uC704 \uC2DC\uB4DC",
+      "Make this clip again with a new seed": "\uC0C8 \uC2DC\uB4DC\uB85C \uC774 \uD074\uB9BD\uB9CC \uB2E4\uC2DC \uC0DD\uC131",
+      "Make again": "\uB2E4\uC2DC \uC0DD\uC131",
+      "Which episodes": "\uB300\uC0C1 \uD3B8",
+      "This episode": "\uC774 \uD3B8",
+      "Ticked episodes": "\uCCB4\uD06C\uD55C \uD3B8",
+      "Every episode at this step": "\uC774 \uB2E8\uACC4\uC758 \uBAA8\uB4E0 \uD3B8",
+      "If an episode fails": "\uD3B8\uC774 \uC2E4\uD328\uD558\uBA74",
+      "Stop at the first failure": "\uCC98\uC74C \uC2E4\uD328\uC5D0\uC11C \uBA48\uCDA4",
+      "Skip the failed episode and go on": "\uC2E4\uD328\uD55C \uD3B8\uC740 \uAC74\uB108\uB6F0\uACE0 \uACC4\uC18D",
+      "Generate the ticked clips": "\uCCB4\uD06C\uD55C \uD074\uB9BD \uC0DD\uC131",
+      "with new seeds": "\uC0C8 \uC2DC\uB4DC\uB85C",
+      "Tick all clips": "\uD074\uB9BD \uC804\uCCB4 \uC120\uD0DD",
+      "Clips without a result": "\uACB0\uACFC \uC5C6\uB294 \uD074\uB9BD",
+      Batch: "\uBC30\uCE58",
+      skipped: "\uAC74\uB108\uB700",
+      cancelled: "\uCDE8\uC18C\uB428",
+      "Go back to this step": "\uC774 \uB2E8\uACC4\uB85C \uB418\uB3CC\uB9AC\uAE30",
+      "You are looking at a step that is not the current one. Tell the crew below what to change, or go back to it.": "\uC9C0\uAE08 \uC9C4\uD589 \uC911\uC778 \uB2E8\uACC4\uAC00 \uC544\uB2CC \uACF3\uC744 \uBCF4\uACE0 \uC788\uC2B5\uB2C8\uB2E4. \uACE0\uCE60 \uAC83\uC740 \uC544\uB798\uC5D0 \uB9D0\uB85C \uC9C0\uC2DC\uD558\uAC70\uB098, \uC774 \uB2E8\uACC4\uB85C \uB418\uB3CC\uB9AC\uC138\uC694.",
+      "Generate these now? Generating uses the GPU and takes time.": "\uC774\uAC83\uB4E4\uC744 \uC9C0\uAE08 \uC0DD\uC131\uD560\uAE4C\uC694? \uC0DD\uC131\uC740 GPU\uB97C \uC4F0\uACE0 \uC2DC\uAC04\uC774 \uAC78\uB9BD\uB2C8\uB2E4.",
+      " ep": "\uD654",
+      "This episode is not at the generate step.": "\uC774 \uD3B8\uC740 \uC0DD\uC131 \uB2E8\uACC4\uAC00 \uC544\uB2D9\uB2C8\uB2E4.",
+      // cast follows, choosing images, generating
+      Cast: "\uCD9C\uC5F0\uC9C4",
+      "Choose the image": "\uC774\uBBF8\uC9C0 \uACE0\uB974\uAE30",
+      Gallery: "\uAC24\uB7EC\uB9AC",
+      "The Gallery is empty.": "\uAC24\uB7EC\uB9AC\uAC00 \uBE44\uC5B4 \uC788\uC2B5\uB2C8\uB2E4.",
+      "Change image": "\uC774\uBBF8\uC9C0 \uBC14\uAFB8\uAE30",
+      "Choose from Library / Gallery": "\uB77C\uC774\uBE0C\uB7EC\uB9AC / \uAC24\uB7EC\uB9AC\uC5D0\uC11C \uACE0\uB974\uAE30",
+      "Reference images connected": "\uC5F0\uACB0\uD55C \uCC38\uC870 \uC774\uBBF8\uC9C0",
+      files: "\uAC1C \uD30C\uC77C",
+      "Not included": "\uD3EC\uD568\uD558\uC9C0 \uBABB\uD55C \uAC83",
+      "How do you want to make this episode?": "\uC774 \uD3B8\uC744 \uC5B4\uB5BB\uAC8C \uB9CC\uB4E4\uAE4C\uC694?",
+      Automatic: "\uC790\uB3D9",
+      Manual: "\uC218\uB3D9",
+      "The crew connects the cast images, generates every approved clip one after another, and shows the results here.": "\uC791\uC5C5\uD300\uC774 \uCD9C\uC5F0\uC9C4 \uC774\uBBF8\uC9C0\uB97C \uC54C\uC544\uC11C \uC5F0\uACB0\uD558\uACE0, \uC2B9\uC778\uB41C \uD074\uB9BD\uC744 \uCC28\uB840\uB85C \uC0DD\uC131\uD55C \uB4A4 \uACB0\uACFC\uB97C \uC5EC\uAE30\uC5D0 \uBCF4\uC5EC \uB4DC\uB9BD\uB2C8\uB2E4.",
+      "You decide: open the episode in the Canvas, or take it as a file (ZIP) and make it yourself.": "\uC9C1\uC811 \uC815\uD569\uB2C8\uB2E4: \uC774 \uD3B8\uC744 \uCE94\uBC84\uC2A4\uC5D0\uC11C \uC5F4\uAC70\uB098, \uD30C\uC77C(ZIP)\uB85C \uBC1B\uC544\uC11C \uC9C1\uC811 \uC9C4\uD589\uD569\uB2C8\uB2E4.",
+      "Switch to manual": "\uC218\uB3D9\uC73C\uB85C \uBC14\uAFB8\uAE30",
+      "Switch to automatic": "\uC790\uB3D9\uC73C\uB85C \uBC14\uAFB8\uAE30",
+      "Start generating": "\uC0DD\uC131 \uC2DC\uC791",
+      "Take it as a file (ZIP)": "\uD30C\uC77C(ZIP)\uB85C \uBC1B\uAE30",
+      "Before it starts you will be asked once. Generating uses the GPU and takes time; it stops at the first failure.": "\uC2DC\uC791\uD558\uAE30 \uC804\uC5D0 \uD55C \uBC88 \uBB3C\uC5B4\uBD05\uB2C8\uB2E4. \uC0DD\uC131\uC740 GPU\uB97C \uC4F0\uACE0 \uC2DC\uAC04\uC774 \uAC78\uB9AC\uBA70, \uCC98\uC74C \uC2E4\uD328\uD558\uBA74 \uBA48\uCDA5\uB2C8\uB2E4.",
+      'Open the episode in the Canvas to run it there, or take it as a file. When you have results, press "Sync results".': '\uCE94\uBC84\uC2A4\uC5D0\uC11C \uC5F4\uC5B4 \uAC70\uAE30\uC11C \uC2E4\uD589\uD558\uAC70\uB098 \uD30C\uC77C\uB85C \uBC1B\uC73C\uC138\uC694. \uACB0\uACFC\uAC00 \uC0DD\uAE30\uBA74 "\uACB0\uACFC \uAC00\uC838\uC624\uAE30"\uB97C \uB204\uB974\uC138\uC694.',
+      // brief
+      "Per episode": "\uD3B8\uB2F9 \uAE38\uC774",
+      "Total length": "\uC804\uCCB4 \uBD84\uB7C9",
+      "Clips per episode": "\uD3B8\uB2F9 \uD074\uB9BD",
+      "Aspect \xB7 resolution": "\uD654\uBA74 \uBE44\uC728 \xB7 \uD574\uC0C1\uB3C4",
+      Rendering: "\uC0DD\uC131 \uBC29\uC2DD",
+      "Picture size (MP)": "\uADF8\uB9BC \uD06C\uAE30 (MP)",
+      Concept: "\uCEE8\uC149",
+      "How one episode is cut": "\uD55C \uD3B8\uC740 \uC774\uB807\uAC8C \uB098\uB215\uB2C8\uB2E4",
+      "Every episode is written as clips of this length, so each clip renders at the length the model handles best.": "\uBAA8\uB4E0 \uD3B8\uC740 \uC774 \uAE38\uC774\uC758 \uD074\uB9BD\uC73C\uB85C \uC501\uB2C8\uB2E4. \uD074\uB9BD\uB9C8\uB2E4 \uBAA8\uB378\uC774 \uAC00\uC7A5 \uC548\uC815\uC801\uC73C\uB85C \uB9CC\uB4DC\uB294 \uAE38\uC774\uAC00 \uB429\uB2C8\uB2E4.",
+      "I decided these for you": "\uC81C\uAC00 \uC774\uB807\uAC8C \uC815\uD588\uC2B5\uB2C8\uB2E4",
+      "Tell me in the chat if any of them is wrong.": "\uD2C0\uB9B0 \uAC83\uC774 \uC788\uC73C\uBA74 \uCC44\uD305\uC73C\uB85C \uB9D0\uC500\uD574 \uC8FC\uC138\uC694.",
+      Title: "\uC81C\uBAA9",
+      Genre: "\uC7A5\uB974",
+      Tone: "\uBD84\uC704\uAE30",
+      Picture: "\uD654\uBA74",
+      Sound: "\uC74C\uD5A5",
+      Music: "\uC74C\uC545",
+      Dialogue: "\uB300\uC0AC",
+      "Assumptions (tell me if wrong)": "\uAC00\uC815\uD55C \uAC83 (\uD2C0\uB9AC\uBA74 \uB9D0\uD574 \uC8FC\uC138\uC694)",
+      Continues: "\uC774\uC5B4\uC11C \uB9CC\uB4DC\uB294 \uC791\uD488",
+      // casting
+      "Actors, locations and props are cast first; the story is written with them.": "\uBC30\uC6B0\xB7\uC7A5\uC18C\xB7\uC18C\uD488\uC744 \uBA3C\uC800 \uC12D\uC678\uD558\uACE0, \uADF8 \uC704\uC5D0\uC11C \uC774\uC57C\uAE30\uB97C \uC501\uB2C8\uB2E4.",
+      "Make the cast images": "\uC12D\uC678 \uC774\uBBF8\uC9C0 \uB9CC\uB4E4\uAE30",
+      "No image yet": "\uC544\uC9C1 \uC774\uBBF8\uC9C0 \uC5C6\uC74C",
+      Actor: "\uBC30\uC6B0",
+      Location: "\uC7A5\uC18C",
+      Prop: "\uC18C\uD488",
+      "look of": "\uC758\uC0C1/\uBAA8\uC2B5:",
+      Asset: "\uC5D0\uC14B",
+      Failed: "\uC2E4\uD328",
+      "Every cast entry already has an image.": "\uBAA8\uB4E0 \uC12D\uC678 \uD56D\uBAA9\uC5D0 \uC774\uBBF8\uC9C0\uAC00 \uC774\uBBF8 \uC788\uC2B5\uB2C8\uB2E4.",
+      "Make the cast images now? Generating uses the GPU and takes time.": "\uC12D\uC678 \uC774\uBBF8\uC9C0\uB97C \uC9C0\uAE08 \uB9CC\uB4E4\uAE4C\uC694? \uC0DD\uC131\uC740 GPU\uB97C \uC4F0\uACE0 \uC2DC\uAC04\uC774 \uAC78\uB9BD\uB2C8\uB2E4.",
+      "Cancelled.": "\uCDE8\uC18C\uD588\uC2B5\uB2C8\uB2E4.",
+      // canvas
+      "The episode is set up as a canvas": "\uC774 \uD3B8\uC744 \uCE94\uBC84\uC2A4\uB85C \uAD6C\uC131\uD588\uC2B5\uB2C8\uB2E4",
+      "with the shared 7+1 card": "\uACF5\uC6A9 7+1 \uCE74\uB4DC \uD3EC\uD568",
+      "The canvas is being built\u2026": "\uCE94\uBC84\uC2A4\uB97C \uAD6C\uC131\uD558\uB294 \uC911\u2026",
+      // side menu
+      "Director projects": "\uB514\uB809\uD130 \uD504\uB85C\uC81D\uD2B8",
+      'Start a new project by writing in the chat. To continue an earlier one, name it: "\u20261\uD3B8\uC5D0 \uC774\uC5B4\uC11C 2\uD3B8\uC744 \uB9CC\uB4E4\uC790".': '\uC0C8 \uD504\uB85C\uC81D\uD2B8\uB294 \uCC44\uD305\uCC3D\uC5D0 \uC4F0\uBA74 \uC2DC\uC791\uB429\uB2C8\uB2E4. \uC774\uC804 \uC791\uD488\uC5D0 \uC774\uC5B4 \uB9CC\uB4E4\uB824\uBA74 \uC774\uB984\uC744 \uB9D0\uD558\uC138\uC694: "\u20261\uD3B8\uC5D0 \uC774\uC5B4\uC11C 2\uD3B8\uC744 \uB9CC\uB4E4\uC790".',
+      // casting is one description, the scenario names the cast and places of every episode, per-clip check, final review
+      "Edit description": "\uC124\uBA85 \uACE0\uCE58\uAE30",
+      "This text is the source. A prompt for the chosen image model is written from it; check that prompt before the image is made.": "\uC774 \uAE00\uC774 \uC6D0\uBCF8\uC785\uB2C8\uB2E4. \uACE0\uB978 \uC774\uBBF8\uC9C0 \uBAA8\uB378\uC5D0 \uB9DE\uB294 \uD504\uB86C\uD504\uD2B8\uB97C \uC774 \uAE00\uC5D0\uC11C \uB9CC\uB4E4\uACE0, \uD655\uC778\uD55C \uB4A4 \uC774\uBBF8\uC9C0\uB97C \uB9CC\uB4ED\uB2C8\uB2E4.",
+      // casting: the prompt is written (in the model's format) and checked BEFORE any image is made
+      "Image prompt": "\uC774\uBBF8\uC9C0 \uD504\uB86C\uD504\uD2B8",
+      "No prompt yet": "\uD504\uB86C\uD504\uD2B8 \uC5C6\uC74C",
+      "Check this prompt": "\uC774 \uD504\uB86C\uD504\uD2B8 \uD655\uC778",
+      Checked: "\uD655\uC778\uB428",
+      Writing: "\uC791\uC131 \uC911",
+      "Write the image prompt": "\uC774\uBBF8\uC9C0 \uD504\uB86C\uD504\uD2B8 \uB9CC\uB4E4\uAE30",
+      "Write the prompt again": "\uD504\uB86C\uD504\uD2B8 \uB2E4\uC2DC \uB9CC\uB4E4\uAE30",
+      "Write all prompts": "\uD504\uB86C\uD504\uD2B8 \uC804\uCCB4 \uB9CC\uB4E4\uAE30",
+      "Prompt format": "\uD504\uB86C\uD504\uD2B8 \uD615\uC2DD",
+      "Prompts checked": "\uD504\uB86C\uD504\uD2B8 \uD655\uC778",
+      "written for another model": "\uB2E4\uB978 \uBAA8\uB378\uC6A9\uC73C\uB85C \uC791\uC131\uB428",
+      "Write the prompt for this image model first. The image is made only from a prompt you have checked.": "\uBA3C\uC800 \uC774 \uC774\uBBF8\uC9C0 \uBAA8\uB378\uC5D0 \uB9DE\uB294 \uD504\uB86C\uD504\uD2B8\uB97C \uB9CC\uB4DC\uC138\uC694. \uD655\uC778\uD55C \uD504\uB86C\uD504\uD2B8\uB85C\uB9CC \uC774\uBBF8\uC9C0\uB97C \uB9CC\uB4ED\uB2C8\uB2E4.",
+      "Use the description as it is": "\uC124\uBA85 \uADF8\uB300\uB85C \uC4F0\uAE30",
+      "Send the description to the image model as it is, without the LLM step": "LLM \uB2E8\uACC4 \uC5C6\uC774 \uC124\uBA85\uC744 \uADF8\uB300\uB85C \uC774\uBBF8\uC9C0 \uBAA8\uB378\uC5D0 \uBCF4\uB0C5\uB2C8\uB2E4",
+      "Make and check the image prompt first": "\uC774\uBBF8\uC9C0 \uD504\uB86C\uD504\uD2B8\uB97C \uBA3C\uC800 \uB9CC\uB4E4\uACE0 \uD655\uC778\uD558\uC138\uC694",
+      "Check every prompt first: the image is made only from a checked prompt.": "\uBAA8\uB4E0 \uD504\uB86C\uD504\uD2B8\uB97C \uBA3C\uC800 \uD655\uC778\uD558\uC138\uC694. \uD655\uC778\uD55C \uD504\uB86C\uD504\uD2B8\uB85C\uB9CC \uC774\uBBF8\uC9C0\uB97C \uB9CC\uB4ED\uB2C8\uB2E4.",
+      "The order is: check the card, write the prompt for this image model, check the prompt, then make the image. A checked prompt is sent to the model as it is (no second rewrite).": "\uC21C\uC11C: \uCE74\uB4DC \uB0B4\uC6A9 \uD655\uC778 \u2192 \uC774\uBBF8\uC9C0 \uBAA8\uB378\uC6A9 \uD504\uB86C\uD504\uD2B8 \uB9CC\uB4E4\uAE30 \u2192 \uD504\uB86C\uD504\uD2B8 \uD655\uC778 \u2192 \uC774\uBBF8\uC9C0 \uB9CC\uB4E4\uAE30. \uD655\uC778\uD55C \uD504\uB86C\uD504\uD2B8\uB294 \uB2E4\uC2DC \uACE0\uCE58\uC9C0 \uC54A\uACE0 \uADF8\uB300\uB85C \uBAA8\uB378\uC5D0 \uBCF4\uB0C5\uB2C8\uB2E4.",
+      "Write the prompts for all of them? The LLM writes one prompt per entry.": "\uD504\uB86C\uD504\uD2B8\uB97C \uBAA8\uB450 \uB9CC\uB4E4\uAE4C\uC694? \uD56D\uBAA9\uB9C8\uB2E4 LLM\uC774 \uD504\uB86C\uD504\uD2B8\uB97C \uD558\uB098\uC529 \uC501\uB2C8\uB2E4.",
+      "Every prompt is written.": "\uBAA8\uB4E0 \uD504\uB86C\uD504\uD2B8\uAC00 \uC791\uC131\uB418\uC5B4 \uC788\uC2B5\uB2C8\uB2E4.",
+      "Open the casting canvas": "\uCE90\uC2A4\uD305 \uCE94\uBC84\uC2A4 \uC5F4\uAE30",
+      "Look at the cast cards in the Canvas, change a card's model and run it there. The canvas is temporary: it goes away when the casting is approved.": "\uCE94\uBC84\uC2A4\uC5D0\uC11C \uC12D\uC678 \uCE74\uB4DC\uB97C \uBCF4\uACE0, \uCE74\uB4DC\uB9C8\uB2E4 \uBAA8\uB378\uC744 \uBC14\uAFD4 \uC2E4\uD589\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4. \uC784\uC2DC \uCE94\uBC84\uC2A4\uB77C \uCE90\uC2A4\uD305\uC744 \uC2B9\uC778\uD558\uBA74 \uC5C6\uC5B4\uC9D1\uB2C8\uB2E4.",
+      "No cast yet": "\uC778\uBB3C\xB7\uC18C\uD488 \uC5C6\uC74C",
+      "No place yet": "\uC7A5\uC18C \uC5C6\uC74C",
+      "Generate & check": "\uC0DD\uC131\xB7\uD655\uC778",
+      "Final review": "\uCD5C\uC885 \uAC80\uD1A0",
+      "Passed": "\uD569\uACA9",
+      "Pass": "\uD569\uACA9",
+      "Left out": "\uC81C\uC678",
+      "In the joined video": "\uD569\uCE5C \uC601\uC0C1\uC5D0 \uB123\uAE30",
+      "The clip is good: it can be joined": "\uC774 \uD074\uB9BD\uC774 \uC88B\uC2B5\uB2C8\uB2E4: \uD569\uCE60 \uC218 \uC788\uC2B5\uB2C8\uB2E4",
+      "Every clip that stays in the video must be passed first.": "\uC601\uC0C1\uC5D0 \uB0A8\uB294 \uD074\uB9BD\uC740 \uBAA8\uB450 \uBA3C\uC800 \uD569\uACA9\uC774\uC5B4\uC57C \uD569\uB2C8\uB2E4.",
+      "clips are left out of the joined video.": "\uAC1C \uD074\uB9BD\uC740 \uD569\uCE5C \uC601\uC0C1\uC5D0\uC11C \uBE60\uC9D1\uB2C8\uB2E4.",
+      "Make each clip, look at it and pass it (or make it again). Clips you do not want can be left out. Then join the passed clips; the joined video is checked in the next step.": "\uD074\uB9BD\uC744 \uB9CC\uB4E4\uACE0, \uD558\uB098\uC529 \uBCF4\uACE0 \uD569\uACA9\uC2DC\uD0A4\uAC70\uB098 \uB2E4\uC2DC \uB9CC\uB4DC\uC138\uC694. \uD544\uC694 \uC5C6\uB294 \uD074\uB9BD\uC740 \uBE84 \uC218 \uC788\uC2B5\uB2C8\uB2E4. \uADF8\uB2E4\uC74C \uD569\uACA9\uD55C \uD074\uB9BD\uC744 \uD569\uCE58\uBA74, \uD569\uCE5C \uC601\uC0C1\uC740 \uB2E4\uC74C \uB2E8\uACC4\uC5D0\uC11C \uAC80\uD1A0\uD569\uB2C8\uB2E4.",
+      "Pass all clips that have a result": "\uACB0\uACFC \uC788\uB294 \uD074\uB9BD \uBAA8\uB450 \uD569\uACA9",
+      "Your verdict on the joined video": "\uD569\uCE5C \uC601\uC0C1 \uD310\uC815",
+      'Watch the whole video. If something must change, tell the crew in the chat (for example: "make clip 3 darker", "leave out clip 5", "change the ending"): the clips that change go back to be generated again. If it is good, approve to finish this episode.': '\uC601\uC0C1 \uC804\uCCB4\uB97C \uBCF4\uC138\uC694. \uACE0\uCE60 \uACF3\uC774 \uC788\uC73C\uBA74 \uCC44\uD305\uC73C\uB85C \uC791\uC5C5\uD300\uC5D0\uAC8C \uB9D0\uD558\uC138\uC694(\uC608: "3\uBC88 \uD074\uB9BD\uC744 \uB354 \uC5B4\uB461\uAC8C", "5\uBC88 \uD074\uB9BD \uBE7C\uC918", "\uC5D4\uB529 \uBC14\uAFD4\uC918"). \uBC14\uB010 \uD074\uB9BD\uC740 \uB2E4\uC2DC \uC0DD\uC131\uD558\uB7EC \uB3CC\uC544\uAC11\uB2C8\uB2E4. \uC88B\uC73C\uBA74 \uC2B9\uC778\uD574\uC11C \uC774 \uD3B8\uC744 \uB05D\uB0C5\uB2C8\uB2E4.',
+      "Back to the clips": "\uD074\uB9BD\uC73C\uB85C \uB3CC\uC544\uAC00\uAE30",
+      "Clips in this video": "\uC774 \uC601\uC0C1\uC758 \uD074\uB9BD",
+      "Leave at least one clip in the video.": "\uC601\uC0C1\uC5D0 \uB123\uC744 \uD074\uB9BD\uC774 \uD558\uB098\uB3C4 \uC5C6\uC2B5\uB2C8\uB2E4.",
+      "Recent LLM calls": "\uCD5C\uADFC LLM \uD638\uCD9C",
+      "Clear": "\uC9C0\uC6B0\uAE30",
+      "Nothing yet. Every call of the crew is listed here with its size and speed.": "\uC544\uC9C1 \uC5C6\uC2B5\uB2C8\uB2E4. \uC791\uC5C5\uD300\uC774 LLM \uC744 \uBD80\uB97C \uB54C\uB9C8\uB2E4 \uC785\uB825\xB7\uCD9C\uB825 \uD06C\uAE30\uC640 \uC18D\uB3C4\uAC00 \uC5EC\uAE30\uC5D0 \uC313\uC785\uB2C8\uB2E4.",
+      "Seconds": "\uCD08",
+      "chars": "\uC790",
+      "Token numbers are estimates from the characters unless the server reports its own.": "\uD1A0\uD070 \uC218\uB294 \uC11C\uBC84\uAC00 \uC54C\uB824 \uC8FC\uC9C0 \uC54A\uC73C\uBA74 \uAE00\uC790 \uC218\uB85C \uC5B4\uB9BC\uD55C \uAC12\uC785\uB2C8\uB2E4.",
+      // the producer's own changes (cast / scenario / clips)
+      "Name": "\uC774\uB984",
+      "Remove this entry": "\uC774 \uD56D\uBAA9 \uBE7C\uAE30",
+      "Remove this entry?": "\uC774 \uD56D\uBAA9\uC744 \uBE84\uAE4C\uC694? (\uD074\uB9BD\uACFC \uD3B8\uC5D0\uC11C\uB3C4 \uBE60\uC9D1\uB2C8\uB2E4)",
+      "That name already exists.": "\uAC19\uC740 \uC774\uB984\uC774 \uC774\uBBF8 \uC788\uC2B5\uB2C8\uB2E4.",
+      "Add a cast entry yourself": "\uC9C1\uC811 \uCD94\uAC00\uD558\uAE30",
+      "Add a cast entry": "\uCE90\uC2A4\uD305 \uD56D\uBAA9 \uCD94\uAC00",
+      "Describe how it looks": "\uBAA8\uC2B5\uC744 \uC124\uBA85\uD558\uC138\uC694",
+      "Add": "\uCD94\uAC00",
+      "Cancel": "\uCDE8\uC18C",
+      "Story line": "\uC904\uAC70\uB9AC",
+      "Take out": "\uBE7C\uAE30",
+      "Add cast / place": "\uCD9C\uC5F0\uC790\xB7\uC7A5\uC18C \uCD94\uAC00",
+      "Add a clip": "\uD074\uB9BD \uCD94\uAC00",
+      "Delete this clip": "\uC774 \uD074\uB9BD \uC0AD\uC81C",
+      "Delete this clip?": "\uC774 \uD074\uB9BD\uC744 \uC0AD\uC81C\uD560\uAE4C\uC694?",
+      "Picture (for reading)": "\uD654\uBA74 (\uBCF4\uAE30\uC6A9)",
+      "Picture (the model gets this, English)": "\uD654\uBA74 (\uBAA8\uB378 \uC785\uB825, \uC601\uC5B4)",
+      // song step / finished video
+      "New look": "\uC0C8 \uBAA8\uC2B5",
+      "The same one with another costume, hair or look (a new entry)": "\uAC19\uC740 \uC778\uBB3C\xB7\uC7A5\uC18C\uC758 \uB2E4\uB978 \uC758\uC0C1\xB7\uBA38\uB9AC\xB7\uBD84\uC704\uAE30 (\uC0C8 \uD56D\uBAA9)",
+      "Describe the new look (costume, hair, age, season \u2026)": "\uC0C8 \uBAA8\uC2B5\uC744 \uC124\uBA85\uD558\uC138\uC694 (\uC758\uC0C1, \uBA38\uB9AC, \uB098\uC774, \uACC4\uC808 \u2026)",
+      "Other screen ratios": "\uB2E4\uB978 \uD654\uBA74\uBE44",
+      "Make the same piece in more ratios (for example an ad as 16:9, 9:16 and 1:1). Each ratio gets its own canvas with the same prompts, cast images and seeds; you generate them in the Canvas.": "\uAC19\uC740 \uC791\uD488\uC744 \uB2E4\uB978 \uD654\uBA74\uBE44\uB85C\uB3C4 \uB9CC\uB4ED\uB2C8\uB2E4(\uC608: \uAD11\uACE0\uB97C 16:9, 9:16, 1:1\uB85C). \uD654\uBA74\uBE44\uB9C8\uB2E4 \uAC19\uC740 \uD504\uB86C\uD504\uD2B8\xB7\uCE90\uC2A4\uD2B8 \uC774\uBBF8\uC9C0\xB7\uC2DC\uB4DC\uC758 \uCE94\uBC84\uC2A4\uAC00 \uB530\uB85C \uB9CC\uB4E4\uC5B4\uC9C0\uACE0, \uC0DD\uC131\uC740 \uCE94\uBC84\uC2A4\uC5D0\uC11C \uD569\uB2C8\uB2E4.",
+      "Make the canvases for the other ratios": "\uB2E4\uB978 \uD654\uBA74\uBE44 \uCE94\uBC84\uC2A4 \uB9CC\uB4E4\uAE30",
+      "Canvases made": "\uB9CC\uB4E0 \uCE94\uBC84\uC2A4",
+      "Narration": "\uB0B4\uB808\uC774\uC158",
+      "Registered as an asset": "\uC5D0\uC14B\uC73C\uB85C \uB4F1\uB85D\uB428",
+      "Register the song as an asset": "\uB178\uB798\uB97C \uC5D0\uC14B\uC73C\uB85C \uB4F1\uB85D",
+      "Song": "\uB178\uB798",
+      "Where does the song come from?": "\uB178\uB798\uB294 \uC5B4\uB514\uC11C \uAC00\uC838\uC62C\uAE4C\uC694?",
+      "The music video is cut to the song: use your own song, or let the AI make one.": "\uBBA4\uC9C1\uBE44\uB514\uC624\uB294 \uB178\uB798\uC5D0 \uB9DE\uCDB0 \uB098\uB215\uB2C8\uB2E4. \uB0B4 \uB178\uB798\uB97C \uC4F0\uAC70\uB098 AI\uAC00 \uB9CC\uB4E4\uAC8C \uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.",
+      "My own song": "\uB0B4 \uB178\uB798",
+      "Upload a music file. The crew proposes its structure (intro, verse, chorus \u2026).": "\uC74C\uC545 \uD30C\uC77C\uC744 \uC62C\uB9AC\uBA74 \uC791\uC5C5\uD300\uC774 \uAD6C\uC870(\uC778\uD2B8\uB85C\xB7\uBC8C\uC2A4\xB7\uCF54\uB7EC\uC2A4\u2026)\uB97C \uC81C\uC548\uD569\uB2C8\uB2E4.",
+      "Make with the AI": "AI\uB85C \uB9CC\uB4E4\uAE30",
+      "The crew writes the style and lyrics, the music model makes the song.": "\uC791\uC5C5\uD300\uC774 \uC2A4\uD0C0\uC77C\uACFC \uAC00\uC0AC\uB97C \uC4F0\uACE0, \uC74C\uC545 \uBAA8\uB378\uC774 \uB178\uB798\uB97C \uB9CC\uB4ED\uB2C8\uB2E4.",
+      'You can also say it in the chat: "use my own song" or "make the song with the AI".': '\uCC44\uD305\uC73C\uB85C \uB9D0\uD574\uB3C4 \uB429\uB2C8\uB2E4: "\uB0B4 \uB178\uB798\uB85C \uD560\uAC8C", "AI\uB85C \uB178\uB798 \uB9CC\uB4E4\uC5B4\uC918".',
+      "Your song file": "\uB0B4 \uB178\uB798 \uD30C\uC77C",
+      "Choose another file": "\uB2E4\uB978 \uD30C\uC77C \uACE0\uB974\uAE30",
+      "Choose the song file": "\uB178\uB798 \uD30C\uC77C \uACE0\uB974\uAE30",
+      "Ask the crew to propose the structure": "\uC791\uC5C5\uD300\uC5D0\uAC8C \uAD6C\uC870 \uC81C\uC548 \uBC1B\uAE30",
+      "Make the song": "\uB178\uB798 \uB9CC\uB4E4\uAE30",
+      "Music model": "\uC74C\uC545 \uBAA8\uB378",
+      "Ask the crew to write the song": "\uC791\uC5C5\uD300\uC5D0\uAC8C \uB178\uB798 \uC4F0\uAC8C \uD558\uAE30",
+      "Make another take": "\uB2E4\uB978 \uD14C\uC774\uD06C \uB9CC\uB4E4\uAE30",
+      "No song came back.": "\uB178\uB798\uAC00 \uB3CC\uC544\uC624\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4.",
+      "Style": "\uC2A4\uD0C0\uC77C",
+      "Lyrics": "\uAC00\uC0AC",
+      "The song": "\uB178\uB798",
+      "Length (s)": "\uAE38\uC774(\uCD08)",
+      "Language": "\uC5B8\uC5B4",
+      "Uploaded": "\uC5C5\uB85C\uB4DC",
+      "Take": "\uD14C\uC774\uD06C",
+      "Use this take": "\uC774 \uD14C\uC774\uD06C \uC4F0\uAE30",
+      "Sections of the song": "\uB178\uB798\uC758 \uAD6C\uAC04",
+      "Which part of the song each clip covers": "\uD074\uB9BD\uC774 \uB9E1\uB294 \uB178\uB798 \uBD80\uBD84",
+      "Clip": "\uD074\uB9BD",
+      "Reset the sections to a typical song": "\uAD6C\uAC04\uC744 \uC77C\uBC18\uC801\uC778 \uB178\uB798 \uAD6C\uC870\uB85C \uB418\uB3CC\uB9AC\uAE30",
+      "Choose an audio file (mp3, wav, flac, m4a, ogg).": "\uC624\uB514\uC624 \uD30C\uC77C(mp3, wav, flac, m4a, ogg)\uC744 \uACE0\uB974\uC138\uC694.",
+      "The song could not be uploaded.": "\uB178\uB798\uB97C \uC62C\uB9AC\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.",
+      'Choose "Make with the AI" first.': '\uBA3C\uC800 "AI\uB85C \uB9CC\uB4E4\uAE30"\uB97C \uACE0\uB974\uC138\uC694.',
+      "The song needs a style and lyrics first. Ask the crew to write them, or type them.": "\uBA3C\uC800 \uC2A4\uD0C0\uC77C\uACFC \uAC00\uC0AC\uAC00 \uD544\uC694\uD569\uB2C8\uB2E4. \uC791\uC5C5\uD300\uC5D0\uAC8C \uC4F0\uAC8C \uD558\uAC70\uB098 \uC9C1\uC811 \uC785\uB825\uD558\uC138\uC694.",
+      "Make the song now? Generating uses the GPU and takes time.": "\uC9C0\uAE08 \uB178\uB798\uB97C \uB9CC\uB4E4\uAE4C\uC694? \uC0DD\uC131\uC740 GPU\uB97C \uC4F0\uACE0 \uC2DC\uAC04\uC774 \uAC78\uB9BD\uB2C8\uB2E4.",
+      "Every clip needs a result before the clips can be joined.": "\uD074\uB9BD\uC744 \uD569\uCE58\uB824\uBA74 \uBAA8\uB4E0 \uD074\uB9BD\uC5D0 \uACB0\uACFC\uAC00 \uC788\uC5B4\uC57C \uD569\uB2C8\uB2E4.",
+      'The canvas has no card for the finished episode (Video Stitch). Press "Update Canvers canvas".': '\uCE94\uBC84\uC2A4\uC5D0 \uC644\uC131\uBCF8 \uCE74\uB4DC(\uC601\uC0C1 \uC2A4\uD2F0\uCE58)\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4. "Canvers \uCE94\uBC84\uC2A4 \uAC31\uC2E0"\uC744 \uB204\uB974\uC138\uC694.',
+      "Join the clips into one video now?": "\uC9C0\uAE08 \uD074\uB9BD\uC744 \uD55C \uC601\uC0C1\uC73C\uB85C \uD569\uCE60\uAE4C\uC694?",
+      "Finished video (clips joined + the song)": "\uC644\uC131 \uC601\uC0C1 (\uD074\uB9BD \uD569\uCE58\uAE30 + \uB178\uB798)",
+      "Finished video (clips joined)": "\uC644\uC131 \uC601\uC0C1 (\uD074\uB9BD \uD569\uCE58\uAE30)",
+      "Join the clips again": "\uD074\uB9BD \uB2E4\uC2DC \uD569\uCE58\uAE30",
+      "Join the clips and add the song": "\uD074\uB9BD\uC744 \uD569\uCE58\uACE0 \uB178\uB798 \uB123\uAE30",
+      "Join the clips": "\uD074\uB9BD \uD569\uCE58\uAE30",
+      "No finished video came back.": "\uC644\uC131 \uC601\uC0C1\uC774 \uB3CC\uC544\uC624\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4.",
+      "There is no song yet: the clips are joined without it.": "\uC544\uC9C1 \uB178\uB798\uAC00 \uC5C6\uC5B4 \uB178\uB798 \uC5C6\uC774 \uD569\uCCD0\uC9D1\uB2C8\uB2E4.",
+      // cast image viewer
+      "Click to enlarge": "\uD074\uB9AD\uD558\uBA74 \uD06C\uAC8C \uBCF4\uAE30",
+      "Previous cast": "\uC774\uC804 \uCE90\uC2A4\uD305",
+      "Next cast": "\uB2E4\uC74C \uCE90\uC2A4\uD305",
+      "Close viewer": "\uB2EB\uAE30",
+      // cast again, deleting a card, the chat width
+      Delete: "\uC0AD\uC81C",
+      "Delete this cast entry": "\uC774 \uCE90\uC2A4\uD305 \uD56D\uBAA9 \uC0AD\uC81C",
+      "Cast again": "\uB2E4\uC2DC \uCE90\uC2A4\uD305",
+      "What to cast again": "\uB2E4\uC2DC \uCE90\uC2A4\uD305\uD560 \uB300\uC0C1",
+      "All of them": "\uC804\uCCB4",
+      "There is nothing to cast again.": "\uB2E4\uC2DC \uCE90\uC2A4\uD305\uD560 \uD56D\uBAA9\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.",
+      "Cast these again? The entries and their images are replaced, and the casting has to be approved again.": "\uC774 \uD56D\uBAA9\uB4E4\uC744 \uB2E4\uC2DC \uCE90\uC2A4\uD305\uD560\uAE4C\uC694? \uAE30\uC874 \uD56D\uBAA9\uACFC \uC774\uBBF8\uC9C0\uAC00 \uBC14\uB00C\uACE0, \uCE90\uC2A4\uD305\uC744 \uB2E4\uC2DC \uC2B9\uC778\uD574\uC57C \uD569\uB2C8\uB2E4.",
+      "images will be replaced": "\uAC1C\uC758 \uC774\uBBF8\uC9C0\uAC00 \uBC14\uB01D\uB2C8\uB2E4",
+      "The old entries of that kind and their images are replaced. The casting has to be approved again, and the story continues from the new cast.": "\uADF8 \uC885\uB958\uC758 \uAE30\uC874 \uD56D\uBAA9\uACFC \uC774\uBBF8\uC9C0\uAC00 \uC0C8\uAC83\uC73C\uB85C \uBC14\uB01D\uB2C8\uB2E4. \uCE90\uC2A4\uD305\uC744 \uB2E4\uC2DC \uC2B9\uC778\uD574\uC57C \uD558\uBA70, \uC774\uD6C4 \uC774\uC57C\uAE30\uB294 \uC0C8 \uCE90\uC2A4\uD305\uC73C\uB85C \uC774\uC5B4\uC9D1\uB2C8\uB2E4.",
+      "Drag to change the width of the chat": "\uB04C\uC5B4\uC11C \uCC44\uD305\uCC3D \uD3ED \uC870\uC808",
+      "Double-click to reset": "\uB450 \uBC88 \uD074\uB9AD\uD558\uBA74 \uAE30\uBCF8 \uD3ED",
+      // canvas step: the per-clip video prompts the producer reviews and edits
+      "Video prompts": "\uC601\uC0C1 \uD504\uB86C\uD3EC\uD2B8",
+      "Video prompt of clip": "\uD074\uB9BD\uC758 \uC601\uC0C1 \uD504\uB86C\uD3EC\uD2B8",
+      edited: "\uC218\uC815\uB428",
+      Original: "\uC6D0\uBCF8",
+      "Restore the original": "\uC6D0\uB798 \uAE00\uC790\uB85C \uB418\uB3CC\uB9AC\uAE30",
+      "Reset all prompts": "\uD504\uB86C\uD3EC\uD2B8 \uC804\uCCB4 \uB418\uB3CC\uB9AC\uAE30",
+      "Reset the edited prompts back to the original?": "\uC218\uC815\uD55C \uD504\uB86C\uD3EC\uD2B8\uB97C \uC6D0\uB798 \uAE00\uC790\uB85C \uB418\uB3CC\uB9B4\uAE4C\uC694?",
+      'This is the text each video generator card gets. Review and fix the clips below; "Open in Canvas" puts them all on the canvas prompt cards, and your settings in the canvas are kept.': '\uAC01 \uC601\uC0C1 \uC0DD\uC131 \uCE74\uB4DC\uAC00 \uBC1B\uB294 \uD14D\uC2A4\uD2B8\uC785\uB2C8\uB2E4. \uC544\uB798 \uD074\uB9BD\uB4E4\uC744 \uAC80\uD1A0\uD558\uACE0 \uACE0\uCE5C \uB4A4 "\uCE94\uBC84\uC2A4\uC5D0\uC11C \uC5F4\uAE30"\uB97C \uB204\uB974\uBA74 \uC804\uBD80 \uCE94\uBC84\uC2A4 \uD504\uB86C\uD3EC\uD2B8 \uCE74\uB4DC\uC5D0 \uC801\uC6A9\uB429\uB2C8\uB2E4(\uCE94\uBC84\uC2A4\uC5D0\uC11C \uBC14\uAFBC \uC124\uC815\uC740 \uC720\uC9C0\uB429\uB2C8\uB2E4).',
+      'Review and fix the prompts below; "Verify the generation canvas" puts them all on the canvas prompt cards, and your settings in the canvas are kept.': '\uC544\uB798 \uD504\uB86C\uD3EC\uD2B8\uB97C \uAC80\uD1A0\uD558\uACE0 \uACE0\uCE5C \uB4A4 "\uC0DD\uC131\uC6A9 \uCE94\uBC84\uC2A4 \uD655\uC778"\uC744 \uB204\uB974\uBA74 \uC804\uBD80 \uCE94\uBC84\uC2A4 \uD504\uB86C\uD3EC\uD2B8 \uCE74\uB4DC\uC5D0 \uC801\uC6A9\uB429\uB2C8\uB2E4(\uCE94\uBC84\uC2A4\uC5D0\uC11C \uBC14\uAFBC \uC124\uC815\uC740 \uC720\uC9C0\uB429\uB2C8\uB2E4).',
+      "Verify the generation canvas": "\uC0DD\uC131\uC6A9 \uCE94\uBC84\uC2A4 \uD655\uC778",
+      "Prompts & check": "\uD504\uB86C\uD3EC\uD2B8 \uC0DD\uC131 \uBC0F \uD655\uC778",
+      "Put the edited prompts on the canvas prompt cards and open the canvas. Your settings in the canvas are kept, and nothing runs by itself.": "\uC218\uC815\uD55C \uD504\uB86C\uD3EC\uD2B8\uB97C \uCE94\uBC84\uC2A4 \uD504\uB86C\uD3EC\uD2B8 \uCE74\uB4DC\uC5D0 \uC801\uC6A9\uD558\uACE0 \uCE94\uBC84\uC2A4\uB97C \uC5FD\uB2C8\uB2E4. \uCE94\uBC84\uC2A4\uC5D0\uC11C \uBC14\uAFBC \uC124\uC815\uC740 \uC720\uC9C0\uB429\uB2C8\uB2E4. \uC790\uB3D9 \uC2E4\uD589\uC740 \uD558\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4.",
+      "Apply to the canvas prompt cards": "\uCE94\uBC84\uC2A4 \uD504\uB86C\uD3EC\uD2B8 \uCE74\uB4DC\uC5D0 \uC801\uC6A9",
+      "Put the prompts on the canvas prompt cards so the next generation uses them.": "\uD504\uB86C\uD3EC\uD2B8\uB97C \uCE94\uBC84\uC2A4 \uD504\uB86C\uD3EC\uD2B8 \uCE74\uB4DC\uC5D0 \uBC18\uC601\uD574 \uB2E4\uC74C \uC0DD\uC131\uC5D0\uC11C \uC774 \uAE00\uC744 \uC4F0\uAC8C \uD569\uB2C8\uB2E4.",
+      "Applied to the canvas prompt cards: the next generation uses these texts.": "\uCE94\uBC84\uC2A4 \uD504\uB86C\uD3EC\uD2B8 \uCE74\uB4DC\uC5D0 \uBC18\uC601\uD588\uC2B5\uB2C8\uB2E4. \uB2E4\uC74C \uC0DD\uC131\uC740 \uC218\uC815\uB41C \uAE00\uC744 \uC0AC\uC6A9\uD569\uB2C8\uB2E4.",
+      // the crew failed: the model's original answer, shown and downloadable
+      "The model's original answer": "\uBAA8\uB378\uC774 \uBCF4\uB0B8 \uC6D0\uBB38 \uB2F5\uBCC0",
+      "Download the answer": "\uB2F5\uBCC0 \uB2E4\uC6B4\uB85C\uB4DC",
+      "Add the missing episodes": "\uBE60\uC9C4 \uD3B8 \uCD94\uAC00",
+      "The crew did not write these; add a blank row and fill it yourself": "\uC791\uC5C5\uD300\uC774 \uC4F0\uC9C0 \uC54A\uC740 \uD3B8\uC785\uB2C8\uB2E4. \uBE48 \uC904\uC744 \uCD94\uAC00\uD574 \uC9C1\uC811 \uCC44\uC6CC \uBCF4\uC138\uC694",
+      "Clip description": "\uD074\uB9BD \uC124\uBA85",
+      "Shot description": "\uC0F7 \uC124\uBA85",
+      "Generating prompt": "\uD504\uB86C\uD3EC\uD2B8 \uC0DD\uC131\uC911",
+      Waiting: "\uB300\uAE30 \uC911",
+      generated: "\uC0DD\uC131\uB428",
+      "Generating the official H3 prompt of each clip one by one\u2026": "\uD074\uB9BD\uBCC4 \uACF5\uC2DD H3 \uD504\uB86C\uD3EC\uD2B8\uB97C \uD558\uB098\uC529 \uC0DD\uC131 \uC911\uC785\uB2C8\uB2E4\u2026"
+    };
+  }
+});
+
 // src/i18n.ts
 function t(key) {
   return useLang.getState().lang === "ko" ? KO[key] ?? key : key;
@@ -3756,8 +4171,93 @@ var init_i18n = __esm({
     "use strict";
     init_esm();
     init_i18n_cards();
+    init_i18n_director();
     KO = {
       // chrome
+      // Director mode
+      "How generation is started": "\uC0DD\uC131\uC744 \uC2DC\uC791\uD558\uB294 \uBC29\uC2DD",
+      Manual: "\uC218\uB3D9",
+      "Approval required": "\uC2B9\uC778 \uD6C4 \uC2E4\uD589",
+      "Step by step": "\uD55C \uB2E8\uACC4\uC529",
+      Hybrid: "\uD63C\uD569",
+      "Run next": "\uB2E4\uC74C \uC0F7 \uC2E4\uD589",
+      "Run all approved": "\uC2B9\uC778\uB41C \uC0F7 \uBAA8\uB450 \uC2E4\uD589",
+      "Sync results": "\uACB0\uACFC \uAC00\uC838\uC624\uAE30",
+      "Results added": "\uCD94\uAC00\uB41C \uACB0\uACFC",
+      "No new results.": "\uC0C8 \uACB0\uACFC\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.",
+      "Manual: nothing is generated from this screen. Generate in Canvas mode.": "\uC218\uB3D9: \uC774 \uD654\uBA74\uC5D0\uC11C\uB294 \uC544\uBB34\uAC83\uB3C4 \uC0DD\uC131\uD558\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4. \uCE94\uBC84\uC2A4 \uBAA8\uB4DC\uC5D0\uC11C \uC0DD\uC131\uD558\uC138\uC694.",
+      "Approval required: each approved shot has a Run button and asks before it starts.": "\uC2B9\uC778 \uD6C4 \uC2E4\uD589: \uC2B9\uC778\uB41C \uC0F7\uB9C8\uB2E4 \uC2E4\uD589 \uBC84\uD2BC\uC774 \uC788\uACE0, \uC2DC\uC791 \uC804\uC5D0 \uBB3C\uC5B4\uBD05\uB2C8\uB2E4.",
+      'Step by step: "Run next" runs the next approved shot, one at a time, and asks every time.': '\uD55C \uB2E8\uACC4\uC529: "\uB2E4\uC74C \uC0F7 \uC2E4\uD589"\uC774 \uC2B9\uC778\uB41C \uB2E4\uC74C \uC0F7 \uD558\uB098\uB9CC \uC2E4\uD589\uD558\uACE0, \uB9E4\uBC88 \uBB3C\uC5B4\uBD05\uB2C8\uB2E4.',
+      'Hybrid: "Run all approved" asks once, then runs the approved shots one after another and stops at the first failure.': '\uD63C\uD569: "\uC2B9\uC778\uB41C \uC0F7 \uBAA8\uB450 \uC2E4\uD589"\uC740 \uD55C \uBC88 \uBB3B\uACE0 \uC2B9\uC778\uB41C \uC0F7\uC744 \uCC28\uB840\uB85C \uC2E4\uD589\uD558\uBA70, \uCC98\uC74C \uC2E4\uD328\uC5D0\uC11C \uBA48\uCDA5\uB2C8\uB2E4.',
+      "Manual mode: nothing is run from this screen.": "\uC218\uB3D9 \uBAA8\uB4DC: \uC774 \uD654\uBA74\uC5D0\uC11C\uB294 \uC544\uBB34\uAC83\uB3C4 \uC2E4\uD589\uD558\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4.",
+      "Only approved shots can be run.": "\uC2B9\uC778\uB41C \uC0F7\uB9CC \uC2E4\uD589\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.",
+      "No approved shot is waiting to run.": "\uC2E4\uD589\uC744 \uAE30\uB2E4\uB9AC\uB294 \uC2B9\uC778\uB41C \uC0F7\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.",
+      'In step-by-step mode use "Run next".': '\uD55C \uB2E8\uACC4\uC529 \uBAA8\uB4DC\uC5D0\uC11C\uB294 "\uB2E4\uC74C \uC0F7 \uC2E4\uD589"\uC744 \uC4F0\uC138\uC694.',
+      "Use the Run button of a shot.": "\uC0F7\uC758 \uC2E4\uD589 \uBC84\uD2BC\uC744 \uC4F0\uC138\uC694.",
+      'This shot has no cards in the canvas yet. Press "Update Canvers canvas".': '\uC774 \uC0F7\uC740 \uCE94\uBC84\uC2A4\uC5D0 \uCE74\uB4DC\uAC00 \uC544\uC9C1 \uC5C6\uC2B5\uB2C8\uB2E4. "Canvers \uCE94\uBC84\uC2A4 \uAC31\uC2E0"\uC744 \uB204\uB974\uC138\uC694.',
+      "Unknown shot.": "\uC54C \uC218 \uC5C6\uB294 \uC0F7\uC785\uB2C8\uB2E4.",
+      "Make the Canvers canvas first.": "\uBA3C\uC800 Canvers \uCE94\uBC84\uC2A4\uB97C \uB9CC\uB4DC\uC138\uC694.",
+      'The prompts changed after the canvas was made. Press "Update Canvers canvas" first.': '\uCE94\uBC84\uC2A4\uB97C \uB9CC\uB4E0 \uB4A4 \uD504\uB86C\uD504\uD2B8\uAC00 \uBC14\uB00C\uC5C8\uC2B5\uB2C8\uB2E4. \uBA3C\uC800 "Canvers \uCE94\uBC84\uC2A4 \uAC31\uC2E0"\uC744 \uB204\uB974\uC138\uC694.',
+      "The linked canvas is not open.": "\uC5F0\uACB0\uB41C \uCE94\uBC84\uC2A4\uB97C \uC5F4\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.",
+      'A card of this shot is missing in the canvas. Press "Update Canvers canvas".': '\uC774 \uC0F7\uC758 \uCE74\uB4DC\uAC00 \uCE94\uBC84\uC2A4\uC5D0 \uC5C6\uC2B5\uB2C8\uB2E4. "Canvers \uCE94\uBC84\uC2A4 \uAC31\uC2E0"\uC744 \uB204\uB974\uC138\uC694.',
+      "This shot is already running.": "\uC774 \uC0F7\uC740 \uC774\uBBF8 \uC2E4\uD589 \uC911\uC785\uB2C8\uB2E4.",
+      "Run these shots now? Generating uses the GPU and takes time.": "\uC774 \uC0F7\uB4E4\uC744 \uC9C0\uAE08 \uC2E4\uD589\uD560\uAE4C\uC694? \uC0DD\uC131\uC740 GPU\uB97C \uC4F0\uACE0 \uC2DC\uAC04\uC774 \uAC78\uB9BD\uB2C8\uB2E4.",
+      "A shot failed. The rest were not started.": "\uC0F7 \uD558\uB098\uAC00 \uC2E4\uD328\uD588\uC2B5\uB2C8\uB2E4. \uB098\uBA38\uC9C0\uB294 \uC2DC\uC791\uD558\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4.",
+      "Cancelled. The rest were not started.": "\uCDE8\uC18C\uD588\uC2B5\uB2C8\uB2E4. \uB098\uBA38\uC9C0\uB294 \uC2DC\uC791\uD558\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4.",
+      Picked: "\uC120\uD0DD\uB428",
+      "Pick this result": "\uC774 \uACB0\uACFC \uC120\uD0DD",
+      "Card made for each shot": "\uC0F7\uB9C8\uB2E4 \uB9CC\uB4E4 \uCE74\uB4DC",
+      "Make Canvers canvas": "Canvers \uCE94\uBC84\uC2A4 \uB9CC\uB4E4\uAE30",
+      "Update Canvers canvas": "Canvers \uCE94\uBC84\uC2A4 \uAC31\uC2E0",
+      "Open in Canvas": "\uCE94\uBC84\uC2A4\uC5D0\uC11C \uC5F4\uAE30",
+      "Save the project to keep the link to this canvas.": "\uC774 \uCE94\uBC84\uC2A4\uC640\uC758 \uC5F0\uACB0\uC744 \uB0A8\uAE30\uB824\uBA74 \uD504\uB85C\uC81D\uD2B8\uB97C \uC800\uC7A5\uD558\uC138\uC694.",
+      "Add at least one shot first.": "\uBA3C\uC800 \uC0F7\uC744 \uD558\uB098 \uC774\uC0C1 \uCD94\uAC00\uD558\uC138\uC694.",
+      "Cards made": "\uB9CC\uB4E0 \uCE74\uB4DC",
+      "Cards updated": "\uAC31\uC2E0\uD55C \uCE74\uB4DC",
+      "Cards made again (deleted in the canvas)": "\uB2E4\uC2DC \uB9CC\uB4E0 \uCE74\uB4DC (\uCE94\uBC84\uC2A4\uC5D0\uC11C \uC9C0\uC6CC\uC838 \uC788\uC5C8\uC74C)",
+      "Prompts you changed in the canvas were kept (shots)": "\uCE94\uBC84\uC2A4\uC5D0\uC11C \uC9C1\uC811 \uACE0\uCE5C \uD504\uB86C\uD504\uD2B8\uB294 \uADF8\uB300\uB85C \uB460 (\uC0F7)",
+      "Shots that are no longer in the project (their cards were left alone)": "\uD504\uB85C\uC81D\uD2B8\uC5D0\uC11C \uBE60\uC9C4 \uC0F7 (\uCE74\uB4DC\uB294 \uADF8\uB300\uB85C \uB460)",
+      "Shots with an empty prompt": "\uD504\uB86C\uD504\uD2B8\uAC00 \uBE48 \uC0F7",
+      "Shots with assets (assets are not connected to cards yet)": "\uC5D0\uC14B\uC774 \uC788\uB294 \uC0F7 (\uC5D0\uC14B\uC740 \uC544\uC9C1 \uCE74\uB4DC\uC5D0 \uC5F0\uACB0\uB418\uC9C0 \uC54A\uC74C)",
+      "Not built": "\uB9CC\uB4E4\uC9C0 \uBABB\uD568",
+      "Nothing to change.": "\uBC14\uAFC0 \uAC83\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.",
+      "Director projects": "\uB514\uB809\uD130 \uD504\uB85C\uC81D\uD2B8",
+      "No Director projects yet.": "\uC544\uC9C1 \uB514\uB809\uD130 \uD504\uB85C\uC81D\uD2B8\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.",
+      scenes: "\uC52C",
+      shots: "\uC0F7",
+      "Plan the film here: brief, story, scenes and shots. Nothing is generated from this screen.": "\uC5EC\uAE30\uC11C \uC601\uC0C1\uC744 \uAE30\uD68D\uD569\uB2C8\uB2E4: \uBE0C\uB9AC\uD504, \uC2A4\uD1A0\uB9AC, \uC52C, \uC0F7. \uC774 \uD654\uBA74\uC5D0\uC11C\uB294 \uC544\uBB34\uAC83\uB3C4 \uC0DD\uC131\uD558\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4.",
+      "New project": "\uC0C8 \uD504\uB85C\uC81D\uD2B8",
+      "Project name": "\uD504\uB85C\uC81D\uD2B8 \uC774\uB984",
+      "That name cannot be used as a file name.": "\uC774 \uC774\uB984\uC740 \uD30C\uC77C \uC774\uB984\uC73C\uB85C \uC4F8 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.",
+      "This project has unsaved changes. Continue?": "\uC800\uC7A5\uD558\uC9C0 \uC54A\uC740 \uBCC0\uACBD\uC774 \uC788\uC2B5\uB2C8\uB2E4. \uACC4\uC18D\uD560\uAE4C\uC694?",
+      "Read-only (saved by a newer version)": "\uC77D\uAE30 \uC804\uC6A9 (\uB354 \uC0C8 \uBC84\uC804\uC5D0\uC11C \uC800\uC7A5\uB428)",
+      "Not saved": "\uC800\uC7A5 \uC548 \uB428",
+      Brief: "\uBE0C\uB9AC\uD504",
+      Story: "\uC2A4\uD1A0\uB9AC",
+      "Scenes & shots": "\uC52C / \uC0F7",
+      Title: "\uC81C\uBAA9",
+      Purpose: "\uBAA9\uC801",
+      Audience: "\uB300\uC0C1",
+      Tone: "\uBD84\uC704\uAE30",
+      Notes: "\uBA54\uBAA8",
+      "Brief approved": "\uBE0C\uB9AC\uD504 \uC2B9\uC778",
+      Logline: "\uD55C \uC904 \uC694\uC57D",
+      Synopsis: "\uC2DC\uB189\uC2DC\uC2A4",
+      Draft: "\uCD08\uC548",
+      Approved: "\uC2B9\uC778\uBCF8",
+      "Replace the approved story with this draft?": "\uC2B9\uC778\uB41C \uC2A4\uD1A0\uB9AC\uB97C \uC774 \uCD08\uC548\uC73C\uB85C \uBC14\uAFC0\uAE4C\uC694?",
+      "Approve draft": "\uCD08\uC548 \uC2B9\uC778",
+      "Nothing approved yet. Approving copies the draft here; a new draft never overwrites it.": "\uC544\uC9C1 \uC2B9\uC778\uB41C \uAC83\uC774 \uC5C6\uC2B5\uB2C8\uB2E4. \uC2B9\uC778\uD558\uBA74 \uCD08\uC548\uC774 \uC5EC\uAE30\uB85C \uBCF5\uC0AC\uB418\uACE0, \uC0C8 \uCD08\uC548\uC774 \uC774\uAC83\uC744 \uB36E\uC5B4\uC4F0\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4.",
+      "Scene title": "\uC52C \uC81C\uBAA9",
+      "Scene summary": "\uC52C \uC694\uC57D",
+      Shot: "\uC0F7",
+      Scene: "\uC52C",
+      Camera: "\uCE74\uBA54\uB77C",
+      "In this project": "\uC774 \uD504\uB85C\uC81D\uD2B8\uC758 \uC5D0\uC14B",
+      "No assets yet. Add some from the Asset Library below.": "\uC544\uC9C1 \uC5D0\uC14B\uC774 \uC5C6\uC2B5\uB2C8\uB2E4. \uC544\uB798 \uC5D0\uC14B \uB77C\uC774\uBE0C\uB7EC\uB9AC\uC5D0\uC11C \uCD94\uAC00\uD558\uC138\uC694.",
+      "The Asset Library is not available": "\uC5D0\uC14B \uB77C\uC774\uBE0C\uB7EC\uB9AC\uB97C \uC4F8 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4",
+      "The Asset Library is empty.": "\uC5D0\uC14B \uB77C\uC774\uBE0C\uB7EC\uB9AC\uAC00 \uBE44\uC5B4 \uC788\uC2B5\uB2C8\uB2E4.",
+      Director: "\uB514\uB809\uD130",
       Canvas: "\uCE94\uBC84\uC2A4",
       Simple: "\uC2EC\uD50C",
       Settings: "\uC124\uC815",
@@ -3996,6 +4496,7 @@ var init_i18n = __esm({
       "Connect an input first.": "\uBA3C\uC800 \uC785\uB825\uC744 \uC5F0\uACB0\uD558\uC138\uC694."
     };
     for (const [k, v] of Object.entries(KO_CARDS)) if (!(k in KO)) KO[k] = v;
+    for (const [k, v] of Object.entries(KO_DIRECTOR)) if (!(k in KO)) KO[k] = v;
     read = () => {
       try {
         return localStorage.getItem("canvers.lang") === "en" ? "en" : "ko";
@@ -5486,7 +5987,8 @@ var init_graph = __esm({
     RUNS_KEY = "canvers.runs.v1";
     readMode = () => {
       try {
-        return localStorage.getItem(MODE_KEY) === "simple" ? "simple" : "canvas";
+        const m = localStorage.getItem(MODE_KEY);
+        return m === "simple" || m === "director" ? m : "canvas";
       } catch {
         return "canvas";
       }
@@ -5536,7 +6038,7 @@ var init_graph = __esm({
           localStorage.setItem(MODE_KEY, mode);
         } catch {
         }
-        set2({ mode, ...mode === "simple" && (get().panel === "decks" || get().panel === "nodes") ? { panel: null } : {} });
+        set2({ mode, ...mode !== "canvas" && (get().panel === "decks" || get().panel === "nodes") ? { panel: null } : {} });
       },
       setPanel: (panel) => set2({ panel }),
       setName: (projectName) => set2({ projectName }),
@@ -6431,6 +6933,21 @@ async function buildImageGraph(job) {
   return buildZImage(withDefaults, m);
 }
 
+// src/backend/llmLog.ts
+init_esm();
+var estTokens = (chars) => Math.round(chars / 2.5);
+var seq = 0;
+var useLlmLog = create((set2) => ({
+  entries: [],
+  add: (e) => {
+    const entry = { ...e, id: ++seq, at: (/* @__PURE__ */ new Date()).toISOString() };
+    set2((s) => ({ entries: [...s.entries, entry].slice(-60) }));
+    const tokOut = e.usage?.output ?? estTokens(e.outChars);
+    console.info(`[LLM] ${e.tag || "call"} ${e.backend} ${e.model} in ${e.inChars} chars, out ${e.outChars} chars (~${tokOut} tokens), ${(e.ms / 1e3).toFixed(1)} s${e.ms > 0 ? `, ~${(tokOut / (e.ms / 1e3)).toFixed(1)} tok/s` : ""}${e.ok ? "" : ` FAILED: ${e.error}`}`);
+  },
+  clear: () => set2({ entries: [] })
+}));
+
 // src/backend/llm.ts
 init_llmGuard();
 init_http();
@@ -6544,11 +7061,20 @@ function llmFor(req) {
   const { llm, vision } = useSettings.getState();
   return req.images?.length && !vision.same ? vision.llm : llm;
 }
+var lastUsage;
 async function runLlm(req) {
   const l = llmFor(req);
   const release = await acquireLocalLlm(l.backend, req.where);
+  const t0 = Date.now();
+  const inChars = (req.system?.length ?? 0) + (req.prompt?.length ?? 0) + (req.refine?.length ?? 0);
+  const model = l.backend === "local" ? l.gguf_model : l.backend === "comfy" ? l.text_encoder_name : l.backend === "openrouter" ? l.or_model_text : l.custom_model;
   try {
-    return await runLlmNow({ ...req, llm: l }, false);
+    const out = await runLlmNow({ ...req, llm: l }, false);
+    useLlmLog.getState().add({ tag: req.tag ?? "", backend: l.backend, model: String(model ?? ""), inChars, outChars: out.length, ms: Date.now() - t0, ok: true, usage: lastUsage });
+    return out;
+  } catch (e) {
+    useLlmLog.getState().add({ tag: req.tag ?? "", backend: l.backend, model: String(model ?? ""), inChars, outChars: 0, ms: Date.now() - t0, ok: false, error: e.message.slice(0, 200) });
+    throw e;
   } finally {
     release();
   }
@@ -6594,6 +7120,8 @@ async function runLlmNow(req, retried) {
     return runLlmNow(req, true);
   }
   if (!res.ok) throw new Error(res.error || "LLM request failed");
+  const u = res.usage;
+  lastUsage = u ? { input: u.input_tokens ?? u.prompt_tokens, output: u.output_tokens ?? u.completion_tokens } : void 0;
   return (res.result ?? "").trim();
 }
 
@@ -7207,6 +7735,11 @@ async function buildLtxGraph(job) {
 
 // src/backend/h3.ts
 init_http();
+function splitStepOf(o) {
+  if (o.hiresUpscaler === "kimchy") return 7;
+  const v = Number(o.hiresSplitStep ?? 7);
+  return Number.isFinite(v) ? Math.min(7, Math.max(1, Math.round(v))) : 7;
+}
 var DEFAULT_OPT = {
   attnBackend: "none",
   attnForward: "none",
@@ -7434,18 +7967,18 @@ async function buildH3Graph(job) {
   }
   let sigmas = ["sched", 0];
   if (hires) {
-    g.split = { class_type: "SplitSigmas", inputs: { sigmas, step: 7 } };
+    g.split = { class_type: "SplitSigmas", inputs: { sigmas, step: splitStepOf(o) } };
     sigmas = ["split", 0];
   }
   g.samp = { class_type: "SamplerCustomAdvanced", inputs: { noise: ["noise", 0], guider: ["guider", 0], sampler: ["sel", 0], sigmas, latent_image: latent } };
   if (job.checkpoint && has("TJ_H3_SaveLatentCheckpoint")) g.chkSave = { class_type: "TJ_H3_SaveLatentCheckpoint", inputs: { latent: hires ? ["samp", 1] : ["samp", 0], checkpoint_name: job.checkpoint } };
   let samples = ["samp", 0];
   if (kimchy) {
-    if (!has("KimchyH3ZeroSplitMP")) throw new Error("7+1 H3 Kimchy Up Scaler needs the ComfyUI-Kimchy-Minimax-H3-Suite pack \u2014 install it (github.com/AI-KIMCHY/ComfyUI-Kimchy-Minimax-H3-Suite), or pick H3 Latent Upscaler.");
-    if (!o.hiresNoOpt) needNode("H3MemoryOptimization", "7+1 hi-res finish");
+    if (!has("KimchyH3ZeroSplitMP")) throw new Error("Split Sigma H3 Kimchy Up Scaler needs the ComfyUI-Kimchy-Minimax-H3-Suite pack \u2014 install it (github.com/AI-KIMCHY/ComfyUI-Kimchy-Minimax-H3-Suite), or pick H3 Latent Upscaler.");
+    if (!o.hiresNoOpt) needNode("H3MemoryOptimization", "Split Sigma");
     if (!(o.hiresFinalMp >= 1 && o.hiresFinalMp <= 8.5)) throw new Error("H3 Kimchy Up Scaler supports Final MP 1.0 \u2013 8.5.");
     if (o.hiresLastFixed) {
-      if (!o.hiresLastModel || o.hiresLastModel === "none") throw new Error("7+1 last step is set to a fixed model but none is selected");
+      if (!o.hiresLastModel || o.hiresLastModel === "none") throw new Error("Split Sigma last step is set to a fixed model but none is selected");
       g.hr_unet = o.hiresLastModel.toLowerCase().endsWith(".gguf") ? { class_type: "UnetLoaderGGUF", inputs: { unet_name: o.hiresLastModel } } : { class_type: "UNETLoader", inputs: { unet_name: o.hiresLastModel, weight_dtype: "default" } };
     }
     let hm = [o.hiresLastFixed ? "hr_unet" : "unet", 0];
@@ -7468,7 +8001,7 @@ async function buildH3Graph(job) {
     g.hrKim = { class_type: "KimchyH3ZeroSplitMP", inputs: { model: stage, conditioning: hrCondLink, latent: ["samp", 1], noise: ["noise", 0], sampler: ["sel", 0], sigmas: ["split", 1], negative: ["hrNeg", 0], model_name: o.hiresKimUp === "bicubic" ? "None (Bicubic)" : o.hiresKimUp === "trilinear" ? "None (Trilinear)" : "minimax_h3_latent_upscaler_3d_bf16.safetensors", upscale_by: "megapixels", target_megapixels: o.hiresFinalMp, scale: 2, align: 32, precision: "fp16", cfg: 1, color_match: true } };
     samples = ["hrKim", 0];
   } else if (hires) {
-    for (const n2 of ["MinimaxH3LatentUpscaler3D", ...o.hiresNoOpt ? [] : ["H3MemoryOptimization"], "BlockSparseAttention"]) needNode(n2, "7+1 hi-res finish");
+    for (const n2 of ["MinimaxH3LatentUpscaler3D", ...o.hiresNoOpt ? [] : ["H3MemoryOptimization"], "BlockSparseAttention"]) needNode(n2, "Split Sigma");
     g.hrSep = { class_type: "LTXVSeparateAVLatent", inputs: { av_latent: ["samp", 1] } };
     g.hrUp = { class_type: "MinimaxH3LatentUpscaler3D", inputs: { latent: ["hrSep", 0], model_name: "minimax_h3_latent_upscaler_3d_bf16.safetensors", mode: "target dimensions", "mode.width": final.width, "mode.height": final.height, align: 32, enable_temporal_chunking: true, force_unload: true, device: "cuda", precision: "fp16" } };
     g.hrCat = { class_type: "LTXVConcatAVLatent", inputs: { video_latent: ["hrUp", 0], audio_latent: ["hrSep", 1] } };
@@ -7478,7 +8011,7 @@ async function buildH3Graph(job) {
       hl = ["hrLock", 0];
     }
     if (o.hiresLastFixed) {
-      if (!o.hiresLastModel || o.hiresLastModel === "none") throw new Error("7+1 last step is set to a fixed model but none is selected");
+      if (!o.hiresLastModel || o.hiresLastModel === "none") throw new Error("Split Sigma last step is set to a fixed model but none is selected");
       g.hr_unet = o.hiresLastModel.toLowerCase().endsWith(".gguf") ? { class_type: "UnetLoaderGGUF", inputs: { unet_name: o.hiresLastModel } } : { class_type: "UNETLoader", inputs: { unet_name: o.hiresLastModel, weight_dtype: "default" } };
     }
     let hm = [o.hiresLastFixed ? "hr_unet" : "unet", 0];
@@ -8726,7 +9259,7 @@ function optFromCards(cards) {
   return {
     ...DEFAULT_OPT,
     ...s ? { attnBackend: s.attn_backend, attnForward: s.attn_forward, optimizer: s.optimizer, blockCache: s.block_cache, spectrum: !!s.spectrum, fusedModulation: !!s.fused_mod, shiftVideo: s.shift_video, shiftAudio: s.shift_audio } : {},
-    ...t2 ? { turbo: t2.turbo, turboLora: t2.turbo_lora, turboStrength: t2.turbo_strength, turboSteps: t2.turbo_steps, hires: !!t2.hires, hiresUpscaler: t2.hires_upscaler === "kimchy" ? "kimchy" : "h3", hiresKimUp: t2.hires_kim_up === "bicubic" || t2.hires_kim_up === "trilinear" ? t2.hires_kim_up : "neural", hiresStartMp: t2.hires_upscaler === "kimchy" ? t2.hires_kim_start_mp : t2.hires_start_mp, hiresFinalMp: t2.hires_upscaler === "kimchy" ? t2.hires_kim_final_mp : t2.hires_final_mp, hiresLastFixed: t2.hires_last === "fixed", hiresLastModel: t2.hires_last_model, hiresNoOpt: !!t2.hires_no_opt, hiresChunkRows: t2.hires_chunk_rows } : {}
+    ...t2 ? { turbo: t2.turbo, turboLora: t2.turbo_lora, turboStrength: t2.turbo_strength, turboSteps: t2.turbo_steps, hires: !!t2.hires, hiresUpscaler: t2.hires_upscaler === "kimchy" ? "kimchy" : "h3", hiresKimUp: t2.hires_kim_up === "bicubic" || t2.hires_kim_up === "trilinear" ? t2.hires_kim_up : "neural", hiresStartMp: t2.hires_upscaler === "kimchy" ? t2.hires_kim_start_mp : t2.hires_start_mp, hiresFinalMp: t2.hires_upscaler === "kimchy" ? t2.hires_kim_final_mp : t2.hires_final_mp, hiresLastFixed: t2.hires_last === "fixed", hiresLastModel: t2.hires_last_model, hiresNoOpt: !!t2.hires_no_opt, hiresChunkRows: t2.hires_chunk_rows, hiresSplitStep: t2.hires_split_step } : {}
   };
 }
 async function h3Opt(cards, ref = false) {
@@ -9528,7 +10061,7 @@ function imageRunner(mode) {
     if ((m === "t2i" || m === "edit" || m === "i2i" || m === "inpaint" || m === "outpaint") && !job.prompt && m !== "outpaint") throw new Error("Prompt is empty");
     if (p.auto_enhance && job.prompt && m !== "outpaint" && m !== "removebg") {
       c.progress(1, "enhancing prompt\u2026");
-      const style = { ...formatFor(c.def.id, c.engineId), aesthetic: NO_AESTHETIC, extra_instructions: "" };
+      const style = { ...formatFor(c.def.id, c.engineId), aesthetic: NO_AESTHETIC, extra_instructions: "Dialogue: sentences wrapped in <d> </d> are spoken lines in their original language (a Korean line stays Korean, a Japanese line stays Japanese). Use the text inside <d> </d> exactly as it is - never translate, never rewrite, never remove the <d> </d> markers." };
       job.prompt = await runLlm({ system: "", prompt: job.prompt, style, where: "bottom" }) || job.prompt;
     }
     const built = await buildImageGraph(job);
@@ -9747,7 +10280,7 @@ async function runH3Core(c, temp) {
     const res = await runPrompt(built.graph, { onProgress: (pct, label) => c.progress(Math.round((base2 + pct / 100 / prompts.length) * 100), `clip ${i + 1}/${prompts.length} ${label ?? ""}`), signal: c.signal, previewKey: pvCfg?.key, onPreview: c.preview, attach, onQueued: (pid) => plan(i, pid) }).catch((e) => {
       const msg = e instanceof Error ? e.message : String(e);
       throw /doesn't match the broadcast shape/.test(msg) && opt.hires ? new Error(`${msg}
-If this happened on the last step of 7+1, H3 Memory Optimization does not work with this model: tick "Bypass H3 Memory Optimization on the last step" on the H3 Turbo card and run again.`) : e;
+If this happened on the last step of Split Sigma, H3 Memory Optimization does not work with this model: tick "Bypass H3 Memory Optimization on the last step" on the H3 Turbo card and run again.`) : e;
     });
     const vout = res.raw[built.videoNode];
     const vf = (vout?.gifs ?? vout?.images ?? vout?.videos ?? [])[0];
@@ -10226,7 +10759,7 @@ var send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 async function handle(msg) {
   const { id, method, params } = msg;
   try {
-    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.27.4" } } });
+    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.28.0" } } });
     if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS.map(({ run: _r, ...t2 }) => t2) } });
     if (method === "tools/call") {
       const tool = TOOLS.find((t2) => t2.name === params?.name);

@@ -102,7 +102,7 @@ export function SimpleView() {
           <div className="composer-opts turbo-opts">
             <label className="field"><span className="field-label">{T('Turbo (faster)')}</span><input type="checkbox" checked={turbo.on} onChange={(e) => setTurbo({ ...turbo, on: e.target.checked })} /></label>
             {turbo.on && <label className="field"><span className="field-label">{T('Turbo LoRA')}</span><select className="nodrag" value={turbo.lora} onChange={(e) => setTurbo({ ...turbo, lora: e.target.value })}>{loras.map((o) => <option key={o}>{o}</option>)}</select></label>}
-            {turbo.on && <label className="field"><span className="field-label">{T('7+1 hi-res finish')}</span><input type="checkbox" checked={turbo.hires} onChange={(e) => setTurbo({ ...turbo, hires: e.target.checked })} /></label>}
+            {turbo.on && <label className="field"><span className="field-label">{T('Split Sigma')}</span><input type="checkbox" checked={turbo.hires} onChange={(e) => setTurbo({ ...turbo, hires: e.target.checked })} /></label>}
           </div>
         )}
         {open && <div className="composer-opts">{shown.map((p) => <Field key={p.id} def={p} value={params[p.id] ?? p.default} onChange={(v) => setParams({ ...params, [p.id]: v })} />)}</div>}

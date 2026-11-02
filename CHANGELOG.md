@@ -2,7 +2,14 @@
 
 형식: 버전 · 날짜 / 추가 · 변경 · 수정. 버전은 `package.json`, `mcp/server.ts`와 같습니다.
 
-## 미릴리즈 — Director Mode (개발 중)
+## 2.28.0 — 2026-11-03
+
+### 노드 연동 (Split Sigma, 스튜디오 명세 SPEC_RELAY_SPLIT_SIGMA)
+- **이름 변경**: H3 "7+1 hi-res finish" → **Split Sigma** (카드 설정 라벨·설명·오류 문구, 한글 사전 포함). 저장된 캔버스는 그대로 동작합니다.
+- **분할 스텝 수정**: H3 Latent Upscaler 방식에서 "Split Sigma step (1~7, 7 recommended)" 칸으로 1~7 사이 지정(기본 7, Kimchy 는 7 고정, 범위 밖은 보정). 그래프의 SplitSigmas 에 반영됩니다. 후처리 Latent Upscale 은 기존대로 7.
+- 해당 없음: "Upscaling in progress..." 덮개(Canvers 에는 이 진행 표시가 없음), 클립 메타/Reuse 의 hiresSplitStep(Canvers 에는 H3 hires 메타·Reuse 가 없음), 프리셋 RECIPE_KEYS(없음).
+
+### Director Mode (이번 릴리즈에 함께 들어감)
 
 ### 편작성 클립 카드를 시스템 언어 기반으로 (공식 H3 박스 제거) (2026-11-01, 단위 시험 통과)
 - **4단계 편작성에서 공식 H3(Ref2VA) 표시 박스를 제거**했습니다. 편작성은 입력 필드만 보고, 실제 공식 프롬포트는 5단계(프롬포트 생성 및 확인)에서 생성됩니다.

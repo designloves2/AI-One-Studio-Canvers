@@ -388,7 +388,7 @@ async function runH3Core(c: Ctx, temp: number[]): Promise<Asset[]> {
     const res = await runPrompt(built.graph, { onProgress: (pct, label) => c.progress(Math.round((base + pct / 100 / prompts.length) * 100), `clip ${i + 1}/${prompts.length} ${label ?? ''}`), signal: c.signal, previewKey: pvCfg?.key, onPreview: c.preview, attach, onQueued: (pid) => plan(i, pid) }).catch((e) => {
       const msg = e instanceof Error ? e.message : String(e);
       throw /doesn't match the broadcast shape/.test(msg) && opt.hires ? new Error(`${msg}
-If this happened on the last step of 7+1, H3 Memory Optimization does not work with this model: tick "Bypass H3 Memory Optimization on the last step" on the H3 Turbo card and run again.`) : e;
+If this happened on the last step of Split Sigma, H3 Memory Optimization does not work with this model: tick "Bypass H3 Memory Optimization on the last step" on the H3 Turbo card and run again.`) : e;
     });
     const vout = res.raw[built.videoNode]; const vf = (vout?.gifs ?? vout?.images ?? vout?.videos ?? [])[0];
     if (!vf) throw new Error(`clip ${i + 1}: ComfyUI returned no video`);

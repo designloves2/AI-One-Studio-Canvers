@@ -23,6 +23,8 @@ export interface H3Options {
   hiresUpscaler?: 'h3' | 'kimchy'; hiresKimUp?: 'neural' | 'bicubic' | 'trilinear';
   /** 7+1 last step: its own UNET (hiresLastFixed + hiresLastModel), and bypass of H3 Memory Optimization on that step */
   hiresLastFixed?: boolean; hiresLastModel?: string; hiresNoOpt?: boolean; hiresChunkRows?: number;
+  /** Split Sigma: how many of the 8 steps run small before the latent upscale (H3 Latent Upscaler only, 1–7, 7 recommended; Kimchy is fixed at 7) */
+  hiresSplitStep?: number;
   shiftVideo: number; shiftAudio: number;
   audioLock?: { file: string; startSec: number; mode: string; strength: number; fit: string };
 }
@@ -45,6 +47,13 @@ export interface H3Job {
   saveLastFrame: boolean;
   stem: string;
   preview?: PreviewCfg;
+}
+
+/** Split Sigma: the step the 8 steps are split at. Kimchy is fixed at 7; the H3 Latent Upscaler takes 1–7 (not a number → 7). The postprocess Latent Upscale keeps its own 7. */
+export function splitStepOf(o: Pick<H3Options, 'hiresUpscaler' | 'hiresSplitStep'>): number {
+  if (o.hiresUpscaler === 'kimchy') return 7;
+  const v = Number(o.hiresSplitStep ?? 7);
+  return Number.isFinite(v) ? Math.min(7, Math.max(1, Math.round(v))) : 7;
 }
 
 export const DEFAULT_OPT: H3Options = {
@@ -162,7 +171,7 @@ export async function buildH3Graph(job: H3Job): Promise<H3Graph> {
 
   const frames = h3Frames(job.seconds);
   const turbo = effectiveTurbo(o, has);
-  // 7+1 also works with Turbo None (an 8-step checkpoint with the turbo baked in); larryvrh / lightx2v keep it off
+  // Split Sigma also works with Turbo None (an 8-step checkpoint with the turbo baked in); larryvrh / lightx2v keep it off
   const hires = o.hires && (turbo === 'pdd' || o.turbo === 'none');
   const final = job.size ?? h3Size(job.aspect, hires ? o.hiresFinalMp : job.megapixels);
   const start = hires ? h3Size(job.aspect, o.hiresStartMp) : final;
@@ -243,17 +252,17 @@ export async function buildH3Graph(job: H3Job): Promise<H3Graph> {
   }
 
   let sigmas: L = ['sched', 0];
-  if (hires) { g.split = { class_type: 'SplitSigmas', inputs: { sigmas, step: 7 } }; sigmas = ['split', 0]; }
+  if (hires) { g.split = { class_type: 'SplitSigmas', inputs: { sigmas, step: splitStepOf(o) } }; sigmas = ['split', 0]; }
   g.samp = { class_type: 'SamplerCustomAdvanced', inputs: { noise: ['noise', 0], guider: ['guider', 0], sampler: ['sel', 0], sigmas, latent_image: latent } };
   if (job.checkpoint && has('TJ_H3_SaveLatentCheckpoint')) g.chkSave = { class_type: 'TJ_H3_SaveLatentCheckpoint', inputs: { latent: hires ? ['samp', 1] : ['samp', 0], checkpoint_name: job.checkpoint } };
 
   let samples: L = ['samp', 0];
   if (kimchy) {
-    if (!has('KimchyH3ZeroSplitMP')) throw new Error('7+1 H3 Kimchy Up Scaler needs the ComfyUI-Kimchy-Minimax-H3-Suite pack — install it (github.com/AI-KIMCHY/ComfyUI-Kimchy-Minimax-H3-Suite), or pick H3 Latent Upscaler.');
-    if (!o.hiresNoOpt) needNode('H3MemoryOptimization', '7+1 hi-res finish');
+    if (!has('KimchyH3ZeroSplitMP')) throw new Error('Split Sigma H3 Kimchy Up Scaler needs the ComfyUI-Kimchy-Minimax-H3-Suite pack — install it (github.com/AI-KIMCHY/ComfyUI-Kimchy-Minimax-H3-Suite), or pick H3 Latent Upscaler.');
+    if (!o.hiresNoOpt) needNode('H3MemoryOptimization', 'Split Sigma');
     if (!(o.hiresFinalMp >= 1 && o.hiresFinalMp <= 8.5)) throw new Error('H3 Kimchy Up Scaler supports Final MP 1.0 – 8.5.');
     if (o.hiresLastFixed) {
-      if (!o.hiresLastModel || o.hiresLastModel === 'none') throw new Error('7+1 last step is set to a fixed model but none is selected');
+      if (!o.hiresLastModel || o.hiresLastModel === 'none') throw new Error('Split Sigma last step is set to a fixed model but none is selected');
       g.hr_unet = o.hiresLastModel.toLowerCase().endsWith('.gguf') ? { class_type: 'UnetLoaderGGUF', inputs: { unet_name: o.hiresLastModel } } : { class_type: 'UNETLoader', inputs: { unet_name: o.hiresLastModel, weight_dtype: 'default' } };
     }
     let hm: L = [o.hiresLastFixed ? 'hr_unet' : 'unet', 0];
@@ -270,14 +279,14 @@ export async function buildH3Graph(job: H3Job): Promise<H3Graph> {
     g.hrKim = { class_type: 'KimchyH3ZeroSplitMP', inputs: { model: stage, conditioning: hrCondLink, latent: ['samp', 1], noise: ['noise', 0], sampler: ['sel', 0], sigmas: ['split', 1], negative: ['hrNeg', 0], model_name: o.hiresKimUp === 'bicubic' ? 'None (Bicubic)' : o.hiresKimUp === 'trilinear' ? 'None (Trilinear)' : 'minimax_h3_latent_upscaler_3d_bf16.safetensors', upscale_by: 'megapixels', target_megapixels: o.hiresFinalMp, scale: 2, align: 32, precision: 'fp16', cfg: 1, color_match: true } };
     samples = ['hrKim', 0];
   } else if (hires) {
-    for (const n of ['MinimaxH3LatentUpscaler3D', ...(o.hiresNoOpt ? [] : ['H3MemoryOptimization']), 'BlockSparseAttention']) needNode(n, '7+1 hi-res finish');
+    for (const n of ['MinimaxH3LatentUpscaler3D', ...(o.hiresNoOpt ? [] : ['H3MemoryOptimization']), 'BlockSparseAttention']) needNode(n, 'Split Sigma');
     g.hrSep = { class_type: 'LTXVSeparateAVLatent', inputs: { av_latent: ['samp', 1] } };
     g.hrUp = { class_type: 'MinimaxH3LatentUpscaler3D', inputs: { latent: ['hrSep', 0], model_name: 'minimax_h3_latent_upscaler_3d_bf16.safetensors', mode: 'target dimensions', 'mode.width': final.width, 'mode.height': final.height, align: 32, enable_temporal_chunking: true, force_unload: true, device: 'cuda', precision: 'fp16' } };
     g.hrCat = { class_type: 'LTXVConcatAVLatent', inputs: { video_latent: ['hrUp', 0], audio_latent: ['hrSep', 1] } };
     let hl: L = ['hrCat', 0];
     if (locked) { g.hrLock = { class_type: 'TJ_H3_AudioLock', inputs: { ...g.audioLock.inputs, av_latent: hl } }; hl = ['hrLock', 0]; }
     if (o.hiresLastFixed) {
-      if (!o.hiresLastModel || o.hiresLastModel === 'none') throw new Error('7+1 last step is set to a fixed model but none is selected');
+      if (!o.hiresLastModel || o.hiresLastModel === 'none') throw new Error('Split Sigma last step is set to a fixed model but none is selected');
       g.hr_unet = o.hiresLastModel.toLowerCase().endsWith('.gguf') ? { class_type: 'UnetLoaderGGUF', inputs: { unet_name: o.hiresLastModel } } : { class_type: 'UNETLoader', inputs: { unet_name: o.hiresLastModel, weight_dtype: 'default' } };
     }
     let hm: L = [o.hiresLastFixed ? 'hr_unet' : 'unet', 0];
