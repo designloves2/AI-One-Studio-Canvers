@@ -67,6 +67,8 @@ export const useLlmLog = create<LlmLogState>((set, get) => ({
     const phase = ['prompt', 'thinking', 'answer', 'done', 'error'].includes(String(d.phase)) ? (String(d.phase) as LiveCall['phase']) : cur.phase;
     set((s) => ({ live: { ...s.live, [id]: { ...cur, phase, backend: d.backend ? mapBackend(String(d.backend)) : cur.backend, model: d.model ? String(d.model) : cur.model,
       inputTokens: num(d.input_tokens) ?? cur.inputTokens, outputTokens: num(d.output_tokens) ?? cur.outputTokens, chars: num(d.chars) ?? cur.chars, tokPerSec: num(d.tok_per_sec) ?? cur.tokPerSec,
-      estimated: d.estimated === true ? true : cur.estimated, delta: typeof d.delta === 'string' && d.delta ? d.delta : cur.delta } } }));
+      estimated: typeof d.estimated === 'boolean' ? d.estimated : cur.estimated,
+      // each event carries only the new piece of text: keep the last part of what has come so far
+      delta: typeof d.delta === 'string' && d.delta ? `${cur.delta ?? ''}${d.delta}`.slice(-400) : cur.delta } } }));
   },
 }));

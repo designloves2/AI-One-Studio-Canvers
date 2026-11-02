@@ -1077,9 +1077,11 @@ function LiveLlm() {
     <div className="dx-livellm">{calls.map((c) => {
       const sec = Math.max(0, Math.round((Date.now() - c.startedAt) / 1000));
       const tilde = c.estimated ? '~' : '';
-      return (<div key={c.callId}><b>{c.backend}</b>{c.model ? ` · ${c.model.split(/[\\/]/).pop()}` : ''} · {T(c.phase === 'thinking' ? 'thinking' : c.phase === 'answer' ? 'answering' : 'running')} · {sec}s
-        {c.inputTokens !== undefined && ` · ${T('In')} ${tilde}${c.inputTokens.toLocaleString()} tok`}{c.outputTokens !== undefined && c.outputTokens > 0 && ` · ${T('Out')} ${tilde}${c.outputTokens.toLocaleString()} tok`}{c.tokPerSec ? ` · ${c.tokPerSec.toFixed(1)} tok/s` : ''}
-        {c.delta && <small className="dx-livetail">…{c.delta.slice(-120)}</small>}</div>);
+      const tps = c.tokPerSec ?? (c.outputTokens && sec > 0 ? c.outputTokens / sec : 0);
+      return (<div key={c.callId}><b>{T(c.phase === 'thinking' ? 'thinking' : c.phase === 'answer' ? 'answering' : 'running')}</b>
+        {c.outputTokens !== undefined && c.outputTokens > 0 && ` · ${tilde}${c.outputTokens.toLocaleString()} tok`}{tps ? ` · ${tilde}${tps.toFixed(1)} tok/s` : ''} · {sec}{T('s')}
+        {` · ${c.backend}`}{c.model ? ` · ${c.model.split(/[\\/]/).pop()}` : ''}{c.inputTokens != null && ` · ${T('In')} ${tilde}${c.inputTokens.toLocaleString()} tok`}
+        {c.delta && <small className="dx-livetail">…{c.delta.slice(-200)}</small>}</div>);
     })}</div>
   );
 }

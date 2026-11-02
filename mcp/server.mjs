@@ -4035,6 +4035,7 @@ var init_i18n_director = __esm({
       "Back to the clips": "\uD074\uB9BD\uC73C\uB85C \uB3CC\uC544\uAC00\uAE30",
       "Clips in this video": "\uC774 \uC601\uC0C1\uC758 \uD074\uB9BD",
       "Leave at least one clip in the video.": "\uC601\uC0C1\uC5D0 \uB123\uC744 \uD074\uB9BD\uC774 \uD558\uB098\uB3C4 \uC5C6\uC2B5\uB2C8\uB2E4.",
+      "s": "\uCD08",
       "thinking": "\uC0DD\uAC01 \uC911",
       "answering": "\uB2F5 \uC4F0\uB294 \uC911",
       "running": "\uCC98\uB9AC \uC911",
@@ -7018,8 +7019,9 @@ var useLlmLog = create((set2, get) => ({
       outputTokens: num3(d.output_tokens) ?? cur.outputTokens,
       chars: num3(d.chars) ?? cur.chars,
       tokPerSec: num3(d.tok_per_sec) ?? cur.tokPerSec,
-      estimated: d.estimated === true ? true : cur.estimated,
-      delta: typeof d.delta === "string" && d.delta ? d.delta : cur.delta
+      estimated: typeof d.estimated === "boolean" ? d.estimated : cur.estimated,
+      // each event carries only the new piece of text: keep the last part of what has come so far
+      delta: typeof d.delta === "string" && d.delta ? `${cur.delta ?? ""}${d.delta}`.slice(-400) : cur.delta
     } } }));
   }
 }));
@@ -10863,7 +10865,7 @@ var send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 async function handle(msg) {
   const { id, method, params } = msg;
   try {
-    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.30.0" } } });
+    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.31.0" } } });
     if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS.map(({ run: _r, ...t2 }) => t2) } });
     if (method === "tools/call") {
       const tool = TOOLS.find((t2) => t2.name === params?.name);
