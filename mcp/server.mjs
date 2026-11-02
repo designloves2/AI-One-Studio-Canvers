@@ -2861,9 +2861,9 @@ var init_registry = __esm({
           dyn("turbo_lora_ref", "Turbo LoRA (reference)", "loras:h3", "none", { when: (p) => p.turbo !== "none" }),
           slider("turbo_strength", "Turbo strength", 0, 2, 0.05, 1, { when: (p) => p.turbo !== "none" }),
           slider("turbo_steps", "Turbo steps", 1, 16, 1, 8, { advanced: true, when: (p) => p.turbo !== "none" }),
-          toggle("hires", "Split Sigma", true, { when: (p) => p.turbo === "pdd" || p.turbo === "none", note: "Needs an 8-step turbo: the Turbo LoRA above, or Turbo None with an 8-step checkpoint. Steps are fixed at 8: the Split Sigma step runs small, the rest at full size (7 is recommended)." }),
+          toggle("hires", "Split Sigma", true, { when: (p) => p.turbo === "pdd" || p.turbo === "none", note: "Needs an 8-step turbo: the Turbo LoRA above, or Turbo None with an 8-step checkpoint. Steps are fixed at 8: LOW Sigma steps run small, the HIGH Sigma steps (8 \u2212 LOW) run after the latent upscale (7 LOW is recommended)." }),
           { id: "hires_upscaler", label: "Upscaler", control: { kind: "select", options: ["h3", "kimchy"], labels: { h3: "H3 Latent Upscaler", kimchy: "H3 Kimchy Up Scaler" } }, default: "h3", when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires },
-          num("hires_split_step", "Split Sigma step (7\u20131, 7 recommended)", 7, { when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && p.hires_upscaler !== "kimchy" }, 1, 7, 1),
+          { ...num("hires_split_step", "LOW Sigma step (1~7, 7 recommended)", 7, { when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && p.hires_upscaler !== "kimchy" }, 1, 7, 1), info: { text: "HIGH Sigma: {n} step(s) (8 \u2212 LOW) \u2014 the latent upscale runs here, then these steps at Final MP", calc: (v) => 8 - Math.min(7, Math.max(1, Math.round(Number(v)) || 7)) } },
           slider("hires_start_mp", "Start size (MP)", 0.2, 1, 0.05, 0.7, { when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && p.hires_upscaler !== "kimchy" }),
           slider("hires_final_mp", "Final size (MP)", 0.4, 3, 0.05, 1.6, { when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && p.hires_upscaler !== "kimchy" }),
           { id: "hires_kim_up", label: "Latent upscale", control: { kind: "select", options: ["neural", "bicubic", "trilinear"], labels: { neural: "Neural (Kimchy's trained upscaler)", bicubic: "Bicubic (plain interpolation)", trilinear: "Trilinear (plain interpolation)" } }, default: "neural", when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && p.hires_upscaler === "kimchy" },
@@ -3586,10 +3586,11 @@ var init_i18n_cards = __esm({
       "Describe your video\u2026": "\uB9CC\uB4E4\uACE0 \uC2F6\uC740 \uC601\uC0C1\uC744 \uC124\uBA85\uD558\uC138\uC694\u2026",
       "Turbo (faster)": "\uD130\uBCF4 (\uBE60\uB974\uAC8C)",
       "Split Sigma": "Split Sigma",
-      "Split Sigma step (7\u20131, 7 recommended)": "Split Sigma \uC2A4\uD15D (7\u20131, 7 \uAD8C\uC7A5)",
+      "LOW Sigma step (1~7, 7 recommended)": "LOW Sigma \uC2A4\uD15D (1~7, 7 \uAD8C\uC7A5)",
+      "HIGH Sigma: {n} step(s) (8 \u2212 LOW) \u2014 the latent upscale runs here, then these steps at Final MP": "HIGH Sigma: {n}\uC2A4\uD15D (8 \u2212 LOW) \u2014 \uC5EC\uAE30\uC11C latent \uC5C5\uC2A4\uCF00\uC77C\uC744 \uD558\uACE0, \uC774 \uC2A4\uD15D\uB4E4\uC744 Final MP \uD06C\uAE30\uB85C \uB3CC\uB9BD\uB2C8\uB2E4",
       "Split Sigma last step model": "Split Sigma \uB9C8\uC9C0\uB9C9 \uC2A4\uD15D \uBAA8\uB378",
       "Split Sigma last step model (none = One Studio setting)": "Split Sigma \uB9C8\uC9C0\uB9C9 \uC2A4\uD15D \uBAA8\uB378 (\uC5C6\uC74C = One Studio \uC124\uC815)",
-      "Needs an 8-step turbo: the Turbo LoRA above, or Turbo None with an 8-step checkpoint. Steps are fixed at 8: the Split Sigma step runs small, the rest at full size (7 is recommended).": "8\uC2A4\uD15D \uD130\uBCF4\uAC00 \uD544\uC694\uD569\uB2C8\uB2E4: \uC704\uC758 \uD130\uBCF4 LoRA, \uB610\uB294 8\uC2A4\uD15D \uCCB4\uD06C\uD3EC\uC778\uD2B8\uC640 \uD130\uBCF4 \uC5C6\uC74C. \uC2A4\uD15D\uC740 8\uB85C \uACE0\uC815: Split Sigma \uC2A4\uD15D\uAE4C\uC9C0\uB294 \uC791\uAC8C, \uB098\uBA38\uC9C0\uB294 \uC6D0\uB798 \uD06C\uAE30\uB85C \uB3CC\uB9BD\uB2C8\uB2E4 (7 \uAD8C\uC7A5).",
+      "Needs an 8-step turbo: the Turbo LoRA above, or Turbo None with an 8-step checkpoint. Steps are fixed at 8: LOW Sigma steps run small, the HIGH Sigma steps (8 \u2212 LOW) run after the latent upscale (7 LOW is recommended).": "8\uC2A4\uD15D \uD130\uBCF4\uAC00 \uD544\uC694\uD569\uB2C8\uB2E4: \uC704\uC758 \uD130\uBCF4 LoRA, \uB610\uB294 8\uC2A4\uD15D \uCCB4\uD06C\uD3EC\uC778\uD2B8\uC640 \uD130\uBCF4 \uC5C6\uC74C. \uC2A4\uD15D\uC740 8\uB85C \uACE0\uC815: LOW Sigma \uC2A4\uD15D\uC740 \uC791\uAC8C \uB3CC\uB9AC\uACE0, HIGH Sigma \uC2A4\uD15D(8 \u2212 LOW)\uC740 latent \uC5C5\uC2A4\uCF00\uC77C \uB4A4\uC5D0 \uB3CC\uB9BD\uB2C8\uB2E4 (LOW 7 \uAD8C\uC7A5).",
       "Source frame rate (fps, 0 = detect)": "\uC6D0\uBCF8 \uD504\uB808\uC784\uB808\uC774\uD2B8 (fps, 0 = \uC790\uB3D9)",
       "Transition Bridge": "\uC804\uD658 \uBE0C\uB9BF\uC9C0",
       "Clip A (before)": "\uD074\uB9BD A (\uC55E)",
@@ -10759,7 +10760,7 @@ var send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 async function handle(msg) {
   const { id, method, params } = msg;
   try {
-    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.28.0" } } });
+    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.28.1" } } });
     if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS.map(({ run: _r, ...t2 }) => t2) } });
     if (method === "tools/call") {
       const tool = TOOLS.find((t2) => t2.name === params?.name);

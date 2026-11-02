@@ -30,6 +30,8 @@ export interface ParamDef {
   advanced?: boolean;
   /** small grey text to the right of a switch */
   note?: string;
+  /** a read-only line under the field; `{n}` in the text becomes calc(value) (kept up to date as the value changes) */
+  info?: { text: string; calc: (v: Primitive) => number };
   /** only show when predicate on the node's params is true */
   when?: (p: Record<string, Primitive>) => boolean;
 }

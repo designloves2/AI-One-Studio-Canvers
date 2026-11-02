@@ -74,7 +74,7 @@
 - 웹 쌍둥이 `AI-ONE-STUDIO` 와 기능이 같아야 하는 것(번역 KO/EN, H3 업스케일 분할, 연속성)은 같은 명세를 받아 각자 이식한다. 한쪽을 고치면 다른 쪽도 확인 필요.
 - 터널: `canvers.tjtj.cloud` → 8765. 허용 호스트는 `vite.config.ts` / `CANVERS_ALLOWED_HOSTS`. ComfyUI 는 `--enable-cors-header` 로 켜져 있음(주소를 바꾸면 `COMFY_URL` 또는 설정에서 입력 → `/canvers/target`).
 
-## 8. 현재 진행 상황 (2026-11-03 기준, v2.28.0 — Director Mode 와 Split Sigma 포함)
+## 8. 현재 진행 상황 (2026-11-03 기준, v2.28.1 — Director Mode 와 Split Sigma 포함)
 - 최근 릴리즈: 2.23.x 프록시·갤러리·라이트박스 → 2.24 클립 이어서 생성 카드 → 2.25 노드 v1.47.0(Kimchy 업스케일, LTX 업스케일 분할)·새로고침 뒤 여러 클립 복구 → 2.26.0 H3 업스케일 분할 모드(노드 v1.48.0) → 2.27.x 번역(KO/EN, 번역 LLM, 노드 v1.49.0~1.49.2), OpenRouter 기본 모델 제거.
 - 실기 미검증으로 남은 것: 새 Latent Upscale 그래프(H3/Kimchy/LTX) 전체, 분할 모드 실렌더·복구, H3 여러 클립 복구, 번역 켠 상태의 OpenRouter/GGUF/Custom 백엔드, 설정 "번역 LLM" 화면, Face Refine 다인 체인, Anima inpaint.
 - 이식하지 않기로 한 것(관제 합의): frames→vision 프롬프트 대체, H3→LTX 프롬프트 재작성, Merge clips/Write 메뉴/Long Shot(대응 카드 없음), hires 테두리, 툴팁 텍스트 필드.

@@ -2,6 +2,11 @@
 
 형식: 버전 · 날짜 / 추가 · 변경 · 수정. 버전은 `package.json`, `mcp/server.ts`와 같습니다.
 
+## 2.28.1 — 2026-11-03
+
+### 수정 (노드 연동: Split Sigma 후속, 노드 커밋 885bf51)
+- 사용자가 넣는 값은 **LOW Sigma 스텝**입니다: 필드 이름이 "LOW Sigma step (1~7, 7 recommended)" 로 바뀌었고(동작·범위·기본 7·Kimchy 7 고정은 그대로), 필드 아래에 읽기 전용 안내 "HIGH Sigma: N step(s) (8 − LOW) — the latent upscale runs here, then these steps at Final MP" 가 값에 따라 바뀝니다(HIGH = 8 − LOW, 입력 불가). 토글 설명도 LOW/HIGH Sigma 용어로 바뀌었습니다. 크기 줄은 Canvers 에 없어 해당 없음.
+
 ## 2.28.0 — 2026-11-03
 
 ### 노드 연동 (Split Sigma, 스튜디오 명세 SPEC_RELAY_SPLIT_SIGMA)

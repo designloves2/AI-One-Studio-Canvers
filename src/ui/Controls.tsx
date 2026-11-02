@@ -185,6 +185,7 @@ export function Field({ def, value, onChange, bil }: Props) {
     <label className={`field ${wide ? 'wide' : ''}`}>
       <span className="field-label">{t(def.label)}</span>
       <ParamControl def={def} value={value} onChange={onChange} bil={bil} />
+      {def.info && <small className="field-info">{t(def.info.text).replace('{n}', String(def.info.calc(value)))}</small>}
     </label>
   );
 }
