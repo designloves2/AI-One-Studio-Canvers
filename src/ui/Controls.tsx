@@ -183,7 +183,7 @@ export function Field({ def, value, onChange, bil }: Props) {
   const wide = def.control.kind === 'text' && def.control.multiline;
   return (
     <label className={`field ${wide ? 'wide' : ''}`}>
-      <span className="field-label">{t(def.label)}</span>
+      <span className="field-label">{t(def.label)}{def.help && <span className="help-dot" title={t(def.help)}>?</span>}</span>
       <ParamControl def={def} value={value} onChange={onChange} bil={bil} />
       {def.info && <small className="field-info">{t(def.info.text).replace('{n}', String(def.info.calc(value)))}</small>}
     </label>
