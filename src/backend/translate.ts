@@ -64,7 +64,8 @@ export async function ensureGraphEnglish(report?: (text: string) => void): Promi
   const todo: { id: string; key: string }[] = [];
   for (const n of useGraph.getState().nodes) {
     const def = byId.get(n.defId); if (!def) continue;
-    for (const p of def.params) if (p.control.kind === 'text' && p.control.multiline && fieldNeedsEnglish(n.params, p.id)) todo.push({ id: n.id, key: p.id });
+    // spoken lines in <d>..</d> stay in their own language (a Director prompt has Korean dialogue inside an English text): they are no reason to translate
+    for (const p of def.params) if (p.control.kind === 'text' && p.control.multiline && fieldNeedsEnglish({ ...n.params, [p.id]: String(n.params[p.id] ?? '').replace(/<d>[\s\S]*?<\/d>/g, '') }, p.id)) todo.push({ id: n.id, key: p.id });
   }
   if (!todo.length) return;
   const llm = translateLlm(); const protect = await protectWords();
