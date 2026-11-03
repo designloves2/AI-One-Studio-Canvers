@@ -101,7 +101,7 @@ function Rail() {
   const setPanel = useGraph((s) => s.setPanel);
   const items: [Exclude<PanelId, null>, string, string][] = [['director', 'Director projects', ICONS.director], ['canvases', 'Canvases', ICONS.canvases], ['live', 'Live Canvas', ICONS.live], ['decks', 'Decks', ICONS.nodes], ['nodes', 'Nodes', ICONS.nodes], ['assets', 'Gallery', ICONS.assets], ['library', 'Asset Library', ICONS.library], ['models', 'Models', ICONS.status], ['settings', 'Settings', ICONS.settings]];
   // decks / nodes only make sense on the canvas, so the simple mode hides them
-  const visible = mode === 'simple' ? items.filter(([id]) => id !== 'director' && id !== 'decks' && id !== 'nodes' && id !== 'live' && id !== 'canvases') : mode === 'director' ? items.filter(([id]) => id !== 'decks' && id !== 'nodes' && id !== 'live') : items.filter(([id]) => id !== 'director');
+  const visible = mode === 'simple' ? items.filter(([id]) => id !== 'director' && id !== 'decks' && id !== 'nodes' && id !== 'live' && id !== 'canvases') : mode === 'director' ? items.filter(([id]) => id !== 'decks' && id !== 'nodes' && id !== 'live' && id !== 'canvases') : items.filter(([id]) => id !== 'director');
   return (
     <div className="rail">
       {visible.map(([id, label, d]) => (
@@ -224,7 +224,7 @@ export function App() {
       <TopBar />
       <div className="body">
         <Rail />
-        {panel && (mode === 'canvas' || (mode === 'director' && (panel === 'canvases' || panel === 'director')) || panel === 'assets' || panel === 'library' || panel === 'settings' || panel === 'models') ? (
+        {panel && (mode === 'canvas' || (mode === 'director' && panel === 'director') || panel === 'assets' || panel === 'library' || panel === 'settings' || panel === 'models') ? (
           <aside className="panel" style={{ width: panelW }}>
             <header><b>{T(({ director: 'Director projects', canvases: 'Canvases', decks: 'Decks', nodes: 'Nodes', assets: 'Gallery', settings: 'Settings', models: 'Models', library: 'Asset Library', live: 'Live Canvas' } as const)[panel!])}</b><button onClick={() => useGraph.getState().setPanel(null)}>✕</button></header>
             {panel === 'director' && <DirectorPanel />}
