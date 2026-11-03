@@ -6,7 +6,7 @@ import type { BatchItemState } from '../store/director';
 import { askConfirm, notify } from '../ui/dialog';
 import { t as tr } from '../i18n';
 import { canvasFileName, deleteCanvas, listCanvases, loadCanvas, saveCanvas } from '../backend/canvases';
-import { download, openSavedCanvas, runNode } from '../engine/actions';
+import { download, openSavedCanvas, runNode, stopAll } from '../engine/actions';
 import { registerAsset } from '../backend/assetlib';
 import { assetOfResult, resultUrl } from './media';
 import { buildEpisodePackage, type PackageResult } from './exportPackage';
@@ -37,6 +37,9 @@ export const isDemo = () => useDirector.getState().demo;
 export const DEMO_FILE = '(demo) ';
 const isDemoLink = (l: CanvasLink) => l.canvas_file.startsWith(DEMO_FILE);
 export const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+/** the Stop button of the generate step: the running clip is cancelled (the card's own Stop + the queue interrupt) and no further clip / episode starts */
+let stopRequested = false;
+export function stopDirectorGeneration(): void { stopRequested = true; stopAll(); }
 export const linkOfEpisode = (p: DirectorProject, no = p.workflow.episode_no): CanvasLink | null => { const e = episodeByNo(p, no); return (e && p.canvas_links.find((l) => l.episode_id === e.episode_id && !l.aspect)) || null; };
 export const linkOfCasting = (p: DirectorProject): CanvasLink | null => p.canvas_links.find((l) => l.purpose === 'casting') ?? null;
 
@@ -130,6 +133,7 @@ export async function runFromDirector(plan: RunPlan, no?: number, opt: { skipCon
     shots: plan.shots,
     confirm: (shots) => (opt.skipConfirm ? Promise.resolve(true) : askConfirm(`${tr('Run these shots now? Generating uses the GPU and takes time.')}\n\n${shots.map(label).join(', ')} (${shots.length})`)),
     run: async (s) => {
+      if (stopRequested) return 'cancelled';   // Stop was pressed: the clips that have not started stay as they were
       await runNode(genOf(s.shot_id));
       const rt = useGraph.getState().runtime[genOf(s.shot_id)];
       return rt?.status === 'error' ? (rt.error === 'cancelled' ? 'cancelled' : 'error') : 'ok';
@@ -424,6 +428,7 @@ export async function generateBatch(opt: { nos: number[]; clipIds?: string[]; ne
   const lines = first.batches.map((b) => `${b.no}${tr(' ep')}: ${b.shots.length} ${tr('clips')}`);
   const demo = isDemo();
   if (!demo && !(await askConfirm(`${tr('Generate these now? Generating uses the GPU and takes time.')}\n\n${lines.join('\n')}\n(${first.clips} ${tr('clips')}${opt.newSeeds ? `, ${tr('with new seeds')}` : ''})`))) return { items: [], cancelled: true };
+  stopRequested = false;
   d.edit((x) => { for (const b of first.batches) requeueClips(x, b.requeue); if (opt.newSeeds && opt.clipIds) reseed(x, ids); });
   const items: BatchResult['items'] = [...first.batches.map((b) => ({ no: b.no, clips: b.shots.length, state: 'waiting' as BatchItemState })), ...first.skipped.map((s) => ({ no: s.no, clips: 0, state: 'skipped' as BatchItemState, note: s.reason }))];
   const show = (running: boolean) => useDirector.getState().setBatch({ running, items: items.map((i) => ({ ...i })), finishedAt: running ? undefined : new Date().toISOString() });
@@ -431,6 +436,7 @@ export async function generateBatch(opt: { nos: number[]; clipIds?: string[]; ne
   let cancelled = false;
   for (const b of first.batches) {
     const it = items.find((i) => i.no === b.no)!;
+    if (stopRequested) { cancelled = true; for (const r of items) if (r.state === 'waiting') { r.state = 'skipped'; r.note = 'not started'; } break; }
     it.state = 'running'; show(true);
     if (demo) {   // stand-in results, one clip after another, so the progress and the review screens can be tried
       try {

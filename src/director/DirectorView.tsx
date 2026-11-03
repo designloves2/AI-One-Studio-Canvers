@@ -26,7 +26,7 @@ import { FORMAT_IDS, FORMATS, vocabOf } from './formats';
 import { blockers, hasMusicStep, EPISODE_STAGES, epStageIndex, episodeBlockers, episodeState, GLOBAL_STAGES, productionOpen, stageIndex } from './workflow';
 import { localizeMsg } from './localize';
 import { attachPanZoom } from '../ui/panZoom';
-import { castEngineOf, castEngines, confirmCastPrompt, extraAspects, makeEpisodeCanvas, makeVersionCanvases, versionLinks, downloadEpisodePackages, generateBatch, generateCast, linkOfCasting, linkOfEpisode, openCastingCanvas, openLinkedCanvas, registerCast, syncCastFromCanvas, syncResultsFromCanvas, writeCastPrompts } from './canvasAction';
+import { castEngineOf, castEngines, confirmCastPrompt, extraAspects, makeEpisodeCanvas, makeVersionCanvases, versionLinks, downloadEpisodePackages, generateBatch, stopDirectorGeneration, generateCast, linkOfCasting, linkOfEpisode, openCastingCanvas, openLinkedCanvas, registerCast, syncCastFromCanvas, syncResultsFromCanvas, writeCastPrompts } from './canvasAction';
 import { castPromptText, hasCastPrompt } from './adapter';
 import { formatFor } from '../backend/promptStyle';
 import type { DirectorProject, DirectorReference, DirectorShot, ReferenceKind, ResultRef, StageId } from './types';
@@ -759,7 +759,9 @@ function ClipCard({ s, n, big, gen, sel, onSel, onAgain, ro }: { s: DirectorShot
         <div className="dx-seedrow">
           <label>{T('Seed')}<input type="number" min={0} disabled={ro} placeholder={T('random')} value={s.seed ?? ''} onChange={(e) => setSeed(e.target.value === '' ? undefined : Math.max(0, Math.floor(Number(e.target.value))))} /></label>
           <button className="btn small" disabled={ro} title={T('A new random seed')} onClick={() => setSeed(newSeed())}>🎲</button>
-          {onAgain && <button className="btn small" disabled={ro} title={T('Make this clip again with a new seed')} onClick={onAgain}>↻ {T('Make again')}</button>}
+          {s.status === 'generating' || s.status === 'queued'
+            ? <button className="btn small miss" title={T('Cancel the clip that is being made and do not start the next ones.')} onClick={() => stopDirectorGeneration()}>■ {T('Stop')}</button>
+            : onAgain && <button className="btn small" disabled={ro} title={T('Make this clip again with a new seed')} onClick={onAgain}>↻ {T('Make again')}</button>}
         </div>)}
       {gen && (
         <div className="dx-passrow">
@@ -998,10 +1000,12 @@ function GenerateCard({ p, ro, review }: { p: DirectorProject; ro: boolean; revi
   // the edited prompts of this episode go onto the canvas prompt cards now (the next generation uses exactly this text)
   const applyPrompts = () => guard(async () => { await makeEpisodeCanvas(no); await notify(T('Applied to the canvas prompt cards: the next generation uses these texts.')); });
   const ticked = shots.filter((s) => d.selClips.includes(s.shot_id)).map((s) => s.shot_id);
+  const generating = !!d.batch?.running || shots.some((s) => s.status === 'generating' || s.status === 'queued');
   return (
     <div className="dx-page"><Working p={p} /><EpisodeHead p={p} icon={review ? 'check' : 'play'} />
       <CastStrip p={p} names={refsUsed} />
       <Meter done={have} total={shots.length} label={`${have} / ${shots.length} ${T('clips generated')}`} />
+      {generating && <div className="dx-btns"><button className="btn miss" title={T('Cancel the clip that is being made and do not start the next ones.')} onClick={() => stopDirectorGeneration()}>■ {T('Stop generating')}</button></div>}
       <PromptGrid p={p} ro={ro} apply={() => void applyPrompts()} />
       {!review && !mode && (
         <section className="dx-choose"><h3>{T('How do you want to make this episode?')}</h3>
