@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Asset } from '../types';
 import { useT } from '../i18n';
 import { openAssetMenu } from '../ui/RegisterAsset';
@@ -18,11 +18,18 @@ export function AssetView({ asset, className, controls = true, onBroken }: { ass
   const [ready, setReady] = useState(false);
   const [playing, setPlaying] = useState(false);      // video: the user pressed play, so the file is being fetched
   const [tries, setTries] = useState(0);
+  const current = useRef(asset.url);
+  current.current = asset.url;
+  // another file was put in this place: the verdict about the old one must not stay (or be applied) for the new one
+  useEffect(() => { setState('ok'); setReady(false); setPlaying(false); setTries(0); }, [asset.url]);
   const failed = async () => {
+    const checked = asset.url;   // the file this check is about
     try {
-      const r = await fetch(asset.url, { method: 'HEAD' });
+      const r = await fetch(checked, { method: 'HEAD' });
+      if (current.current !== checked) return;   // replaced while the check ran: the old answer would blank the new file and clear what was saved
       if (r.status === 404) { setState('gone'); onBroken?.(); return; }
     } catch { /* network error → treat as failed */ }
+    if (current.current !== checked) return;
     setState('failed');
   };
   // A video that never gets a first byte (ComfyUI's /view can hang with a 0-byte body) would spin forever: say so after a while.
