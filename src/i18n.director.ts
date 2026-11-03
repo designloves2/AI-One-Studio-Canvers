@@ -190,6 +190,8 @@ export const KO_DIRECTOR: Record<string, string> = {
   generated: '생성됨',
   'Generating the official H3 prompt of each clip one by one…': '클립별 공식 H3 프롬포트를 하나씩 생성 중입니다…',
   // Director <-> canvas pairs
+  'Different from the Director': '디렉터와 다름',
+  'Apply to the Director': '디렉터에 적용',
   'The generation canvas is missing': '생성용 캔버스가 없습니다',
   'Make the generation canvas': '생성용 캔버스 생성',
   'There is no canvas paired with this episode. Make the generation canvas to continue.': '이 편과 짝이 되는 캔버스가 없습니다. 계속하려면 생성용 캔버스를 만들어 주세요.',

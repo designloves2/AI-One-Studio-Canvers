@@ -779,3 +779,6 @@ button.save-state.dirty { cursor: pointer; } button.save-state.dirty:hover { bac
 .pairbar .btn { padding: 3px 10px; font-size: 12px; }
 .pairbar.free { border-color: var(--line); color: var(--mut, #888); padding: 4px 12px; }
 .btn.miss { background: #d9534f; border-color: #d9534f; color: #fff; } .btn.miss:hover:not(:disabled) { background: #c9302c; border-color: #c9302c; }
+
+.pair-apply { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 6px; padding: 5px 8px; border: 1px solid var(--acc); border-radius: 8px; font-size: 11px; background: var(--bg3); }
+.dx-shotprompt.draft { border-color: var(--acc); } .dx-shotprompt header i.warn { color: #e0a030; font-style: normal; }

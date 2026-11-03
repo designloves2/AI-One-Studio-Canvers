@@ -125,80 +125,63 @@ export async function adoptIntoEmptyCanvas(file: string): Promise<void> {
   await openSavedCanvas(file);
 }
 
-// ---- live prompt sync: the clip prompt is the same text in three places (the "prompt" step grid, the "generate" step grid, the canvas Prompt card).
-// The grids read `shot.prompt_user`, the card holds `params.text`. While a Director project and its episode canvas are open together, a change on either
-// side is copied to the other at once (last edit wins). Nothing is copied while the two sides were never edited (a difference that already existed stays).
+// ---- prompt sync between the Director and the paired canvas. The clip prompt is the same text in three places (the "prompt" step grid, the "generate" step grid,
+// the canvas Prompt card). The grids read `shot.prompt_user`, the card holds `params.text`.
+//  - Director -> card: when a prompt is SAVED in a grid (or made by the crew) the card follows at once.
+//  - card -> Director: only by the card's "Apply to the Director" button (a half-typed card text is never copied by itself).
 let syncStarted = false;
+
+/** the open Director project + its episode canvas, when both are open together (else null) */
+function pairContext() {
+  const d = useDirector.getState(); const g = useGraph.getState(); const p = d.project;
+  if (!p || d.readOnly || d.demo || !g.canvasFile) return null;
+  const link = p.canvas_links.find((l) => l.canvas_file === g.canvasFile && l.shots.length && !l.aspect && l.purpose !== 'casting' && l.purpose !== 'music');
+  return link ? { d, g, p, link } : null;
+}
+const effectiveOf = (p: DirectorProject, s: DirectorProject['shots'][number]) => clipPromptOf(s, p.series.language, shotSubjects(p, s));
+const cardTextOf = (g: ReturnType<typeof useGraph.getState>, id: string) => { const n = g.nodes.find((x) => x.id === id); return n ? String(n.params.text ?? '') : undefined; };
+
+/** the prompt card of a clip of the paired canvas: does its text differ from what the Director holds? (null = not a paired clip card) */
+export function promptCardState(nodeId: string): { shotId: string; differs: boolean } | null {
+  const c = pairContext(); if (!c) return null;
+  const sh = c.link.shots.find((x) => x.node_ids[0] === nodeId); const s = sh && c.p.shots.find((x) => x.shot_id === sh.shot_id); if (!sh || !s) return null;
+  const text = (cardTextOf(c.g, nodeId) ?? '').trim();
+  return { shotId: sh.shot_id, differs: !!text && text !== effectiveOf(c.p, s).trim() };
+}
+
+/** the card's "Apply to the Director" button: the card text becomes the clip's prompt in the Director */
+export function applyCardToDirector(nodeId: string): boolean {
+  const c = pairContext(); if (!c) return false;
+  const sh = c.link.shots.find((x) => x.node_ids[0] === nodeId); const s = sh && c.p.shots.find((x) => x.shot_id === sh.shot_id); if (!sh || !s) return false;
+  const text = (cardTextOf(c.g, nodeId) ?? '').trim(); if (!text) return false;
+  c.d.edit((x) => {
+    const q = x.shots.find((z) => z.shot_id === sh.shot_id); if (q) q.prompt_user = text === composeClipPrompt(q, x.series.language, shotSubjects(x, q)) ? undefined : text;
+    const l = x.canvas_links.find((z) => z.canvas_id === c.link.canvas_id); if (l) l.prompt_sent = { ...(l.prompt_sent ?? {}), [sh.shot_id]: text };
+  });
+  return true;
+}
+
 export function startPairSync(): void {
   if (syncStarted) return; syncStarted = true;
   let key = '';
   const dirSnap = new Map<string, string>();   // shot -> the Director's prompt as last seen
-  const cvSnap = new Map<string, string>();    // text card -> the card's text as last seen
-  const pending = new Set<string>();           // shots whose card text changed
-  let timer: ReturnType<typeof setTimeout> | undefined;
-
-  const ctx = () => {
-    const d = useDirector.getState(); const g = useGraph.getState(); const p = d.project;
-    if (!p || d.readOnly || d.demo || !g.canvasFile) return null;
-    const link = p.canvas_links.find((l) => l.canvas_file === g.canvasFile && l.shots.length && !l.aspect && l.purpose !== 'casting' && l.purpose !== 'music');
-    return link ? { d, g, p, link } : null;
+  const sameKey = (c: NonNullable<ReturnType<typeof pairContext>>) => {
+    const k = `${c.p.project_id}|${c.g.canvasFile}`; if (k === key) return true;
+    key = k; dirSnap.clear(); for (const sh of c.link.shots) { const s = c.p.shots.find((x) => x.shot_id === sh.shot_id); if (s) dirSnap.set(s.shot_id, effectiveOf(c.p, s)); }
+    return false;
   };
-  const effective = (p: DirectorProject, s: DirectorProject['shots'][number]) => clipPromptOf(s, p.series.language, shotSubjects(p, s));
-  const cardText = (g: ReturnType<typeof useGraph.getState>, id: string) => { const n = g.nodes.find((x) => x.id === id); return n ? String(n.params.text ?? '') : undefined; };
-  const snapshot = (c: NonNullable<ReturnType<typeof ctx>>) => {
-    dirSnap.clear(); cvSnap.clear(); pending.clear();
-    for (const sh of c.link.shots) {
-      const s = c.p.shots.find((x) => x.shot_id === sh.shot_id); if (s) dirSnap.set(s.shot_id, effective(c.p, s));
-      const t = cardText(c.g, sh.node_ids[0]); if (t !== undefined) cvSnap.set(sh.node_ids[0], t);
-    }
-  };
-  const sameKey = (c: NonNullable<ReturnType<typeof ctx>>) => { const k = `${c.p.project_id}|${c.g.canvasFile}`; if (k === key) return true; key = k; snapshot(c); return false; };
-
-  /** the adapter's record of what the card was given: kept equal, so "the prompts changed after the canvas was made" does not show for a synced edit */
-  const markSent = (shotId: string, text: string) => {
-    const d = useDirector.getState(); const c = ctx(); if (!c) return;
-    if (c.link.prompt_sent?.[shotId] === text) return;
-    d.edit((x) => { const l = x.canvas_links.find((z) => z.canvas_id === c.link.canvas_id); if (l) l.prompt_sent = { ...(l.prompt_sent ?? {}), [shotId]: text }; });
-  };
-
-  // Director -> canvas card
   useDirector.subscribe(() => {
-    const c = ctx(); if (!c) { key = ''; return; }
+    const c = pairContext(); if (!c) { key = ''; return; }
     if (!sameKey(c)) return;
     for (const sh of c.link.shots) {
       const s = c.p.shots.find((x) => x.shot_id === sh.shot_id); if (!s) continue;
-      const now = effective(c.p, s);
+      const now = effectiveOf(c.p, s);
       if (dirSnap.get(s.shot_id) === now) continue;
       dirSnap.set(s.shot_id, now);
-      const id = sh.node_ids[0]; const cur = cardText(c.g, id);
+      const id = sh.node_ids[0]; const cur = cardTextOf(c.g, id);
       if (cur === undefined || cur === now) continue;
-      cvSnap.set(id, now);
       c.g.setParam(id, 'text', now);
-      markSent(s.shot_id, now);
+      if (c.link.prompt_sent?.[s.shot_id] !== now) c.d.edit((x) => { const l = x.canvas_links.find((z) => z.canvas_id === c.link.canvas_id); if (l) l.prompt_sent = { ...(l.prompt_sent ?? {}), [s.shot_id]: now }; });   // not "stale"
     }
-  });
-
-  // canvas card -> Director
-  const flush = () => {
-    const c = ctx(); if (!c) { pending.clear(); return; }
-    for (const shotId of [...pending]) {
-      pending.delete(shotId);
-      const sh = c.link.shots.find((x) => x.shot_id === shotId); const s = c.p.shots.find((x) => x.shot_id === shotId); if (!sh || !s) continue;
-      const text = (cvSnap.get(sh.node_ids[0]) ?? '').trim();
-      if (!text || effective(c.p, s) === text) continue;   // an emptied card is not a prompt
-      c.d.edit((x) => { const q = x.shots.find((z) => z.shot_id === shotId); if (q) q.prompt_user = text === composeClipPrompt(q, x.series.language, shotSubjects(x, q)) ? undefined : text; });
-      dirSnap.set(shotId, text);
-      markSent(shotId, text);
-    }
-  };
-  useGraph.subscribe(() => {
-    const c = ctx(); if (!c) { key = ''; return; }
-    if (!sameKey(c)) return;
-    for (const sh of c.link.shots) {
-      const id = sh.node_ids[0]; const t = cardText(c.g, id);
-      if (t === undefined || cvSnap.get(id) === t) continue;
-      cvSnap.set(id, t); pending.add(sh.shot_id);
-    }
-    if (pending.size) { clearTimeout(timer); timer = setTimeout(flush, 350); }
   });
 }

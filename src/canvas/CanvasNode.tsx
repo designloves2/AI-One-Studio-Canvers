@@ -12,6 +12,7 @@ import { runNode, stopNode, addImports, download } from '../engine/actions';
 import { importFile, enhanceInstruction } from '../engine/run';
 import { runLlm } from '../backend/llm';
 import { PromptTools, NoteTools } from './PromptTools';
+import { PairApply } from '../director/PairApply';
 import { useSensitive } from '../backend/sensitive';
 import { useSettings } from '../store/settings';
 import { t, useT } from '../i18n';
@@ -410,6 +411,7 @@ const PlainNode = memo(function PlainNode({ id, selected }: NodeProps) {
       )}
       {def.id === 'prompt' && <MentionBar id={id} />}
       {def.id === 'prompt' && <PromptTools id={id} />}
+      {def.id === 'prompt' && <PairApply id={id} />}
       {hasAdv && <button className="adv-toggle nodrag" onClick={() => setAdv((v) => !v)}>{adv ? '▾' : '▸'} {T('Advanced')}</button>}
 
       {def.id === 'melody-editor' && <MelodyBody id={id} />}

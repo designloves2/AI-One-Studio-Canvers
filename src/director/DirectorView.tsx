@@ -872,25 +872,29 @@ function PromptGrid({ p, ro, apply }: { p: DirectorProject; ro: boolean; apply?:
 function ShotPrompt({ p, s, n, ro }: { p: DirectorProject; s: DirectorShot; n: number; ro: boolean }) {
   const T = useT(); const edit = useDirector((x) => x.edit);
   const scene = p.scenes.find((z) => z.scene_id === s.scene_id);
-  const composed = composeClipPrompt(s, p.series.language, shotSubjects(p, s));
-  const [text, setText] = useState(s.prompt_user ?? '');
-  const typing = useRef(false);
-  // an edit made elsewhere (the canvas Prompt card, the other grid) shows here at once, unless this box is being typed in
-  useEffect(() => { if (!typing.current) setText(s.prompt_user ?? ''); }, [s.prompt_user]);
-  const edited = !!s.prompt_user?.trim();
+  const saved = s.prompt_user ?? '';
+  const [text, setText] = useState(saved);
+  const base = useRef(saved);   // the saved text this box started from
+  // a save made elsewhere (the canvas "Apply to the Director", the crew) shows here, unless this box holds an unsaved edit
+  useEffect(() => { setText((cur) => (cur === base.current ? saved : cur)); base.current = saved; }, [saved]);
+  const draft = text.trim() !== saved.trim();   // typed but not saved yet
+  const edited = !!saved.trim();
   const busy = !!s.prompt_busy;   // the official H3 prompt of this clip is being generated right now
-  const commit = () => {
-    const t = text.trim();
-    edit((x) => { const q = x.shots.find((z) => z.shot_id === s.shot_id); if (!q) return; q.prompt_user = t === composeClipPrompt(q, x.series.language, shotSubjects(x, q)) ? undefined : t; });
+  // saving is a button, never "click outside": the text goes to the project and to the paired canvas card only then
+  const save = () => {
+    const t = text.trim(); let stored = t;
+    edit((x) => { const q = x.shots.find((z) => z.shot_id === s.shot_id); if (!q) return; const same = t === composeClipPrompt(q, x.series.language, shotSubjects(x, q)); stored = same ? '' : t; q.prompt_user = same ? undefined : t; });
+    base.current = stored; setText(stored);
   };
-  const restore = () => { edit((x) => { const q = x.shots.find((z) => z.shot_id === s.shot_id); if (q) q.prompt_user = undefined; }); setText(''); };
+  const cancel = () => setText(saved);
+  const restore = () => { edit((x) => { const q = x.shots.find((z) => z.shot_id === s.shot_id); if (q) q.prompt_user = undefined; }); base.current = ''; setText(''); };
   return (
-    <article className={`dx-shotprompt${edited ? ' edited' : ''}`}>
+    <article className={`dx-shotprompt${edited ? ' edited' : ''}${draft ? ' draft' : ''}`}>
       <header><span className="num">{n}</span>{scene && <span className="pill">{scene.order}.{s.order}</span>}<span className="pill">{s.duration_sec}s</span>
-        {busy ? <i className="ok"><span className="dirx-spin" />{T('Generating prompt')}</i> : edited ? <i className="ok">✓ {T('Edited')}</i> : <i>{T('Waiting')}</i>}</header>
-      {edited ? <textarea rows={5} disabled={ro || busy} value={text} onChange={(ev) => setText(ev.target.value)} onFocus={() => { typing.current = true; }} onBlur={() => { typing.current = false; commit(); }} aria-label={`${T('Video prompt of clip')} ${n}`} />
-        : <textarea rows={5} disabled={ro || busy} value={text} onChange={(ev) => setText(ev.target.value)} onFocus={() => { typing.current = true; }} onBlur={() => { typing.current = false; commit(); }} aria-label={`${T('Video prompt of clip')} ${n}`} placeholder={T('No prompt yet')} />}
-      {edited && <div className="dx-btns"><button className="btn small" disabled={ro || busy} onClick={restore}>{T('Restore the original')}</button></div>}
+        {busy ? <i className="ok"><span className="dirx-spin" />{T('Generating prompt')}</i> : draft ? <i className="warn">● {T('Not saved')}</i> : edited ? <i className="ok">✓ {T('Edited')}</i> : <i>{T('Waiting')}</i>}</header>
+      <textarea rows={5} disabled={ro || busy} value={text} onChange={(ev) => setText(ev.target.value)} aria-label={`${T('Video prompt of clip')} ${n}`} placeholder={edited ? undefined : T('No prompt yet')} />
+      {draft ? <div className="dx-btns"><button className="btn small primary" disabled={ro || busy} onClick={save}>{T('Save')}</button><button className="btn small" onClick={cancel}>{T('Cancel')}</button></div>
+        : edited && <div className="dx-btns"><button className="btn small" disabled={ro || busy} onClick={restore}>{T('Restore the original')}</button></div>}
     </article>
   );
 }
