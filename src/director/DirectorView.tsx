@@ -968,9 +968,10 @@ function FinalBlock({ p, ro, shots }: { p: DirectorProject; ro: boolean; shots: 
     <section className="dx-block"><h4><Ico n="film" />{T(mv ? 'Finished video (clips joined + the song)' : 'Finished video (clips joined)')}</h4>
       {e.final && <div className="dx-preview">{e.final.kind === 'video' ? <video src={resultUrl(e.final)} controls preload="metadata" /> : <img src={resultUrl(e.final)} alt="" />}</div>}
       <div className="dx-btns">
-        <button className="btn primary" disabled={ro || busy || !ready} onClick={() => void guard(async () => { const r = await finishEpisode(e.no); if (!r.made && !r.cancelled) await notify(T('No finished video came back.')); })}>{e.final ? T('Join the clips again') : T(mv ? 'Join the clips and add the song' : 'Join the clips')}</button>
+        <button className="btn primary" disabled={ro || busy || !ready} onClick={() => void guard(async () => { const r = await finishEpisode(e.no); if (!r.made && !r.cancelled) await notify(T('No finished video came back.')); })}>{busy ? `${T('Joining…')}` : e.final ? T('Join the clips again') : T(mv ? 'Join the clips and add the song' : 'Join the clips')}</button>
         <button className="btn" disabled={ro || busy || !link} onClick={() => void guard(async () => { const n = await syncFinalFromCanvas(e.no); await notify(n ? `${T('Results added')}: ${n}` : T('No new results.')); })}>{T('Sync results')}</button>
       </div>
+      {busy && <p className="dirx-muted"><span className="dirx-spin" /> {T(mv ? 'Joining the clips and adding the song… this can take a few minutes. Please wait.' : 'Joining the clips… this can take a few minutes. Please wait.')}</p>}
       {!ready && <p className="dirx-muted">{T('Every clip that stays in the video must be passed first.')}</p>}
       {inc.length < shots.length && <p className="dirx-muted">{shots.length - inc.length} {T('clips are left out of the joined video.')}</p>}
       {mv && !pickedAudio(p.music) && <p className="dirx-muted">{T('There is no song yet: the clips are joined without it.')}</p>}
