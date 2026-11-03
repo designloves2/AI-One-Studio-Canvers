@@ -16,6 +16,7 @@ import { StatusPanel } from './panels/StatusPanel';
 import { SimpleView } from './simple/SimpleView';
 import { DirectorView } from './director/DirectorView';
 import { PairBar } from './director/PairBar';
+import { startPairSync } from './director/pairing';
 import { DirectorPanel } from './director/DirectorPanel';
 import { addImports, resumeInflight, runAll, saveCanvasToList, stopAll } from './engine/actions';
 import { clearInflight } from './backend/comfy';
@@ -170,6 +171,8 @@ export function App() {
     const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); document.body.classList.remove('resizing'); try { localStorage.setItem('canvers_panel_w', String(w)); } catch { /* ignore */ } };
     document.body.classList.add('resizing'); window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
   };
+
+  useEffect(() => { startPairSync(); }, []);   // a Director project and its canvas keep the clip prompts equal while both are open
 
   useEffect(() => {
     setHostSerializer(serializeHost); wireHostStore();

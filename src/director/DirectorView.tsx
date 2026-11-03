@@ -872,6 +872,9 @@ function ShotPrompt({ p, s, n, ro }: { p: DirectorProject; s: DirectorShot; n: n
   const scene = p.scenes.find((z) => z.scene_id === s.scene_id);
   const composed = composeClipPrompt(s, p.series.language, shotSubjects(p, s));
   const [text, setText] = useState(s.prompt_user ?? '');
+  const typing = useRef(false);
+  // an edit made elsewhere (the canvas Prompt card, the other grid) shows here at once, unless this box is being typed in
+  useEffect(() => { if (!typing.current) setText(s.prompt_user ?? ''); }, [s.prompt_user]);
   const edited = !!s.prompt_user?.trim();
   const busy = !!s.prompt_busy;   // the official H3 prompt of this clip is being generated right now
   const commit = () => {
@@ -883,8 +886,8 @@ function ShotPrompt({ p, s, n, ro }: { p: DirectorProject; s: DirectorShot; n: n
     <article className={`dx-shotprompt${edited ? ' edited' : ''}`}>
       <header><span className="num">{n}</span>{scene && <span className="pill">{scene.order}.{s.order}</span>}<span className="pill">{s.duration_sec}s</span>
         {busy ? <i className="ok"><span className="dirx-spin" />{T('Generating prompt')}</i> : edited ? <i className="ok">✓ {T('Edited')}</i> : <i>{T('Waiting')}</i>}</header>
-      {edited ? <textarea rows={5} disabled={ro || busy} value={text} onChange={(ev) => setText(ev.target.value)} onBlur={commit} aria-label={`${T('Video prompt of clip')} ${n}`} />
-        : <textarea rows={5} disabled={ro || busy} value={text} onChange={(ev) => setText(ev.target.value)} onBlur={commit} aria-label={`${T('Video prompt of clip')} ${n}`} placeholder={T('No prompt yet')} />}
+      {edited ? <textarea rows={5} disabled={ro || busy} value={text} onChange={(ev) => setText(ev.target.value)} onFocus={() => { typing.current = true; }} onBlur={() => { typing.current = false; commit(); }} aria-label={`${T('Video prompt of clip')} ${n}`} />
+        : <textarea rows={5} disabled={ro || busy} value={text} onChange={(ev) => setText(ev.target.value)} onFocus={() => { typing.current = true; }} onBlur={() => { typing.current = false; commit(); }} aria-label={`${T('Video prompt of clip')} ${n}`} placeholder={T('No prompt yet')} />}
       {edited && <div className="dx-btns"><button className="btn small" disabled={ro || busy} onClick={restore}>{T('Restore the original')}</button></div>}
     </article>
   );
