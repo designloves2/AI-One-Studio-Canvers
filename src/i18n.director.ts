@@ -189,4 +189,12 @@ export const KO_DIRECTOR: Record<string, string> = {
   Waiting: '대기 중',
   generated: '생성됨',
   'Generating the official H3 prompt of each clip one by one…': '클립별 공식 H3 프롬포트를 하나씩 생성 중입니다…',
+  // Director <-> canvas pairs
+  'Open in Director': '디렉터에서 열기',
+  'No Director project': '디렉터 짝 없음',
+  'This canvas has no Director project. A new Director project replaces it with a new canvas made for the Director (you are asked to save first).': '이 캔버스에는 짝이 되는 디렉터 프로젝트가 없습니다. 디렉터에서 새 프로젝트를 만들면 이 캔버스는 디렉터용 새 캔버스로 바뀝니다(먼저 저장할지 물어봅니다).',
+  'The open canvas has no Director project. A new Director project replaces it with a new canvas made for the Director.': '열려 있는 캔버스에는 짝이 되는 디렉터 프로젝트가 없습니다. 새 디렉터 프로젝트를 만들면 이 캔버스는 디렉터용 새 캔버스로 바뀝니다.',
+  'Save this canvas first, then continue?': '이 캔버스를 먼저 저장하고 계속할까요?',
+  'This canvas belongs to a Director project that was replaced or renamed.': '이 캔버스의 디렉터 프로젝트가 바뀌었거나 이름이 달라졌습니다.',
+  'The Director project of this canvas could not be opened.': '이 캔버스의 디렉터 프로젝트를 열 수 없습니다.',
 };

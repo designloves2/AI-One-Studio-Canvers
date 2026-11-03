@@ -115,9 +115,20 @@ export interface GraphEdge {
   targetHandle: string;
 }
 
+/** The Director project (and episode) a canvas belongs to: written into the canvas file by the Director, so each side can open the other. */
+export interface DirectorPair {
+  /** the saved Director project (its file name in director/) and its stable id */
+  file: string; project_id: string; name: string;
+  /** the episode this canvas holds (not set for the casting / music helper canvases) */
+  episode_id?: string; no?: number;
+  purpose?: 'episode' | 'casting' | 'music';
+}
+
 export interface Project {
   id: string;
   name: string;
+  /** set when this canvas was made by the Director */
+  director?: DirectorPair;
   nodes: GraphNode[];
   edges: GraphEdge[];
   updatedAt: string;

@@ -81,6 +81,11 @@
 - 알려진 제한: 소리 없는 mp4 는 VHS 로더가 실패, 소스 프레임 수를 길이×24 로 추정(±1프레임).
 - 다음 할 일은 스튜디오 세션(`TJ_STUDIO_ONE-10월`)이 `SPEC_RELAY_*` 로 보낸다. 상세 이력은 `CHANGELOG.md`, 방향·메모는 `docs/HANDOFF.md`.
 
+### Director ↔ 캔버스 짝 묶기 (2026-11-03, 코드 완료 · 미릴리즈 · 화면 검증 전)
+- 규칙: **Director 프로젝트가 주인, 캔버스는 짝**. `Project.director`(`DirectorPair`: file·project_id·name·episode_id·no·purpose)를 캔버스 파일에 기록. 코드: `src/director/pairing.ts`(`stampPair` 저장 때 기록, `backfillPairs` 옛 캔버스에 짝 추가, `openCanvasOfProject` Director 열면 캔버스 열기, `openDirectorOfCanvas` 캔버스에서 Director 열기, `prepareCanvasForNewDirector` 짝 없는 캔버스 + 새 프로젝트면 경고→저장→빈 캔버스, `adoptIntoEmptyCanvas` 빈 자리에 편 캔버스 열기), `PairBar.tsx`(캔버스 위 띠), `store/graph.ts`(`directorPair`, toProject/loadProject에 포함), `server-lib/canvases.mjs` 목록에 `director` 요약, `CanvasesPanel` 🎬 표시. 훅: `canvasAction`·`musicAction` 저장 4곳(`stampPair`), `DirectorPanel.open`, `store/director.send`(첫 문장).
+- 한계: 편(focus)을 바꿀 때마다 캔버스가 따라 바뀌지는 않음(프로젝트를 열 때만). 짝 없는 캔버스와 새 프로젝트의 경고는 첫 문장을 보낼 때(프로젝트가 만들어지는 순간).
+- 막장드라마 프로젝트: 클립 9 글은 `director/…json` 의 `prompt_user` 에 수정본이 있고, 캔버스 `- ep01` 카드는 "생성용 캔버스 확인"을 눌러야 반영된다.
+
 ### ★ 통합 정리 (2026-11-03) — 아래 여러 절을 합친 "지금 기준" (충돌하면 이 줄이 이김)
 - 흐름: 브리프 → 캐스팅(카드 확인 → **이미지 프롬프트 만들기·확인 → 이미지 생성**, `prompt_ok`; 아래 7건 절의 "설명 하나 + auto_enhance" 는 이것으로 대체) → 시나리오 → 편별 [편 작성(한 편씩 순차, **직접 수정 `ClipEditor`**) → **프롬포트 생성 및 확인**(공식 H3 브리프 클립별 순차 생성, `prompt_user`) → 생성·확인(클립별 합격·제외, 합치기) → 최종 검토(시사회 화면)].
 - 합쳐진 규칙: 클립을 고치면(직접 또는 채팅) 합격과 `prompt_user`(옛 글로 만든 브리프)가 지워지고 프롬포트 단계에서 다시 만들어진다. "여러 편 함께"는 없다. 5단계 이름은 '프롬포트 생성 및 확인'.

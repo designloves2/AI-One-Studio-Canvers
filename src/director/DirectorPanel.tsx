@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useDirector } from '../store/director';
 import { useT } from '../i18n';
 import { askConfirm, notify } from '../ui/dialog';
+import { openCanvasOfProject } from './pairing';
 
 /** Side menu of the Director mode: the saved Director projects. Only shown in Director mode (the rail item is hidden elsewhere). */
 export function DirectorPanel() {
@@ -13,6 +14,7 @@ export function DirectorPanel() {
     if (d.busy) { void notify(T('The crew is working. Wait until it is done.')); return; }
     if (d.dirty && d.project && !d.file && !(await askConfirm(T('This project has unsaved changes. Continue?')))) return;
     await d.open(name);
+    await openCanvasOfProject();   // the Director project and its canvas open as a pair
   };
   return (
     <div className="dirp">

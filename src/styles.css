@@ -772,3 +772,9 @@ button.save-state.dirty { cursor: pointer; } button.save-state.dirty:hover { bac
 .field-info { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; }
 .dx-passrow { display: flex; gap: 10px; align-items: center; margin-top: 6px; }
 .dx-hideable { display: contents; } .dx-hideable.hid img { filter: blur(14px) brightness(.8); }
+
+/* Director <-> canvas pair bar (top middle of the canvas) */
+.pairbar { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 6; display: flex; align-items: center; gap: 10px; padding: 5px 6px 5px 12px; border: 1px solid var(--acc); border-radius: 999px; background: var(--bg2); font-size: 12px; max-width: calc(100% - 340px); white-space: nowrap; }
+.pairbar span { overflow: hidden; text-overflow: ellipsis; }
+.pairbar .btn { padding: 3px 10px; font-size: 12px; }
+.pairbar.free { border-color: var(--line); color: var(--mut, #888); padding: 4px 12px; }

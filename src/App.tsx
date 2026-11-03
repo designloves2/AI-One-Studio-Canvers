@@ -15,6 +15,7 @@ import { SettingsPanel } from './panels/SettingsPanel';
 import { StatusPanel } from './panels/StatusPanel';
 import { SimpleView } from './simple/SimpleView';
 import { DirectorView } from './director/DirectorView';
+import { PairBar } from './director/PairBar';
 import { DirectorPanel } from './director/DirectorPanel';
 import { addImports, resumeInflight, runAll, saveCanvasToList, stopAll } from './engine/actions';
 import { clearInflight } from './backend/comfy';
@@ -244,6 +245,7 @@ export function App() {
               <Flow tool={tool} onMenu={setMenu} />
               <Toolbar tool={tool} setTool={setTool} onAdd={() => setMenu({ x: window.innerWidth / 2 - 130, y: window.innerHeight / 3, flow: screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 }) })} />
               <SelectionBar />
+              <PairBar />
             </>
           ) : mode === 'director' ? <DirectorView /> : <SimpleView />}
           <LlmNotice mode={mode} />

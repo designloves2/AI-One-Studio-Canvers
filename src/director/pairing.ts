@@ -1,0 +1,104 @@
+// Director <-> canvas pairs. The Director project is the master: every canvas it builds carries `director` (project file, episode) in the canvas file,
+// so a canvas can open its Director project and a Director project opens its canvas. A canvas without a pair is a free canvas.
+import { useDirector } from '../store/director';
+import { useGraph } from '../store/graph';
+import { askConfirm, notify } from '../ui/dialog';
+import { t as tr } from '../i18n';
+import { listCanvases, loadCanvas, saveCanvas } from '../backend/canvases';
+import { openSavedCanvas, saveCanvasToList } from '../engine/actions';
+import { episodeByNo, safeProjectName } from './model';
+import type { CanvasLink, DirectorProject } from './types';
+import type { DirectorPair, Project } from '../types';
+
+const DEMO_FILE = '(demo) ';
+export const isDemoFile = (file: string) => file.startsWith(DEMO_FILE);
+
+/** the pair a link of the open Director project stands for (null while the project has no usable file name) */
+export function pairOf(p: DirectorProject, file: string | null, link: CanvasLink): DirectorPair | null {
+  const dfile = file ?? safeProjectName(p.name); if (!dfile) return null;
+  const ep = link.episode_id ? p.episodes.find((e) => e.episode_id === link.episode_id) : undefined;
+  return { file: dfile, project_id: p.project_id, name: p.name, ...(ep ? { episode_id: ep.episode_id, no: ep.no } : {}), purpose: link.purpose ?? 'episode' };
+}
+
+/** write the pair into a canvas that is about to be saved by the Director (and into the open canvas when it is that same file) */
+export function stampPair(project: Project, link: CanvasLink, file: string): Project {
+  const d = useDirector.getState(); if (!d.project || isDemoFile(file)) return project;
+  const pair = pairOf(d.project, d.file, link); if (!pair) return project;
+  project.director = pair;
+  const g = useGraph.getState(); if (g.canvasFile === file) g.setDirectorPair(pair);
+  return project;
+}
+
+/**
+ * Old canvases (made before pairs existed) get their pair when their Director project is opened. A saved canvas file is rewritten with the pair only;
+ * the open canvas just remembers it (it is saved with the next save), so nothing the producer typed is touched.
+ */
+export async function backfillPairs(): Promise<void> {
+  const d = useDirector.getState(); const p = d.project; if (!p || d.readOnly) return;
+  let saved: string[] = [];
+  try { saved = (await listCanvases()).map((c) => c.name); } catch { return; }
+  for (const link of p.canvas_links) {
+    if (isDemoFile(link.canvas_file) || !saved.includes(link.canvas_file)) continue;
+    const pair = pairOf(p, d.file, link); if (!pair) continue;
+    const g = useGraph.getState();
+    if (g.canvasFile === link.canvas_file) { if (JSON.stringify(g.directorPair) !== JSON.stringify(pair)) g.setDirectorPair(pair); continue; }
+    try {
+      const c = await loadCanvas(link.canvas_file);
+      if (JSON.stringify(c.director) === JSON.stringify(pair)) continue;
+      await saveCanvas(link.canvas_file, { ...c, director: pair });
+    } catch { /* an unreadable canvas keeps no pair */ }
+  }
+}
+
+/** the canvas of the episode the Director screen is on (a main episode canvas; the cast / song canvases are helpers) */
+export function canvasOfFocus(p: DirectorProject, no: number): CanvasLink | null {
+  const e = episodeByNo(p, no);
+  return (e && p.canvas_links.find((l) => l.episode_id === e.episode_id && !l.aspect && !isDemoFile(l.canvas_file))) || null;
+}
+
+/** Director project opened -> its canvas opens too (no mode change; asks first when the open canvas has unsaved changes) */
+export async function openCanvasOfProject(): Promise<void> {
+  const d = useDirector.getState(); const p = d.project; if (!p || d.demo) return;
+  await backfillPairs();
+  const link = canvasOfFocus(p, d.focus); if (!link) return;
+  try { if (!(await listCanvases()).some((c) => c.name === link.canvas_file)) return; } catch { return; }
+  if (useGraph.getState().canvasFile !== link.canvas_file) await openSavedCanvas(link.canvas_file);
+}
+
+/** canvas -> its Director project (and episode) */
+export async function openDirectorOfCanvas(): Promise<void> {
+  const g = useGraph.getState(); const pair = g.directorPair; if (!pair) return;
+  const d = useDirector.getState();
+  if (d.busy) { void notify(tr('The crew is working. Wait until it is done.')); return; }
+  try {
+    if (d.file !== pair.file || d.project?.project_id !== pair.project_id) {
+      if (d.dirty && d.project && !d.file && !(await askConfirm(tr('This project has unsaved changes. Continue?')))) return;
+      await d.open(pair.file);
+      if (useDirector.getState().project?.project_id !== pair.project_id) { void notify(`${tr('This canvas belongs to a Director project that was replaced or renamed.')}\n${pair.name}`); }
+    }
+    if (pair.no) useDirector.getState().setFocus(pair.no);
+    g.setMode('director');
+  } catch (e) { void notify(`${tr('The Director project of this canvas could not be opened.')}\n${pair.name}\n${(e as Error).message}`); }
+}
+
+/**
+ * A new Director project starts while a canvas without a Director pair is open: that canvas will be replaced by a new canvas for the Director.
+ * Warn, let the producer save it first, then clear the canvas. Returns false when the producer cancels (nothing changes).
+ */
+export async function prepareCanvasForNewDirector(): Promise<boolean> {
+  const g = useGraph.getState();
+  if (useDirector.getState().demo || g.directorPair || !g.nodes.length) return true;   // empty, or already a Director canvas of some project: leave it
+  if (!(await askConfirm(`${tr('The open canvas has no Director project. A new Director project replaces it with a new canvas made for the Director.')}\n\n${tr('Save this canvas first, then continue?')}`))) return false;
+  if (g.dirty || !g.canvasFile) {
+    if (!(await saveCanvasToList())) return false;   // not saved: do not throw the canvas away
+  }
+  useGraph.getState().newProject();
+  return true;
+}
+
+/** the new Director canvas takes the place of the empty canvas that was left for it */
+export async function adoptIntoEmptyCanvas(file: string): Promise<void> {
+  const g = useGraph.getState();
+  if (g.nodes.length || g.canvasFile || g.directorPair) return;
+  await openSavedCanvas(file);
+}

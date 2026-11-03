@@ -58,7 +58,7 @@ export function CanvasesPanel() {
       <div className="cv-list">
         {list.map((c) => (
           <div key={c.name} className={`cv-item${c.name === file ? ' current' : ''}`} onClick={() => void openSavedCanvas(c.name)} title={c.name}>
-            <div className="cv-main"><b>{c.name}{c.name === file && dirty ? ' ●' : ''}</b><span className="muted">{c.nodes} {T('nodes')} · {fmt(c.mtime)}</span></div>
+            <div className="cv-main"><b>{c.name}{c.name === file && dirty ? ' ●' : ''}</b><span className="muted">{c.nodes} {T('nodes')} · {fmt(c.mtime)}</span>{c.director && <span className="muted" title={c.director.file}>🎬 {c.director.name}{c.director.no ? ` · ${c.director.no}` : ''}</span>}</div>
             <button className="mini-link" title={T('Export this canvas')} onClick={(e) => { e.stopPropagation(); void exportOne(c); }}>⤓</button>
             <button className="mini-link" title={T('Delete')} onClick={(e) => { e.stopPropagation(); void remove(c); }}>✕</button>
           </div>

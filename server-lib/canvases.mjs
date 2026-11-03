@@ -22,9 +22,12 @@ function list() {
   try { names = fs.readdirSync(dir()).filter((f) => f.endsWith('.json')); } catch { return []; }
   return names.map((f) => {
     const full = path.join(dir(), f); const st = fs.statSync(full);
-    let nodes = 0;
-    try { const p = JSON.parse(fs.readFileSync(full, 'utf8')); nodes = Array.isArray(p.nodes) ? p.nodes.length : 0; } catch { /* unreadable */ }
-    return { name: f.slice(0, -5), mtime: st.mtimeMs, size: st.size, nodes };
+    let nodes = 0; let director;
+    try {
+      const p = JSON.parse(fs.readFileSync(full, 'utf8')); nodes = Array.isArray(p.nodes) ? p.nodes.length : 0;
+      if (p.director && typeof p.director.file === 'string') director = { file: p.director.file, name: String(p.director.name || ''), no: p.director.no, purpose: p.director.purpose };
+    } catch { /* unreadable */ }
+    return { name: f.slice(0, -5), mtime: st.mtimeMs, size: st.size, nodes, ...(director ? { director } : {}) };
   }).sort((a, b) => b.mtime - a.mtime);
 }
 

@@ -16,6 +16,7 @@ import { stripThinking } from './ai';
 import { runLlm } from '../backend/llm';
 import { formatFor, NO_AESTHETIC } from '../backend/promptStyle';
 import { pickedAudio } from './music';
+import { adoptIntoEmptyCanvas, stampPair } from './pairing';
 import { assetFromFile } from '../backend/comfy';
 import { appRegistry } from './adapterRegistry';
 import { applyCanvasResults, applyReferenceResults, planBatch, requeueClips, reseed, reseedRefs, runShots, staleShots, type RunPlan, type RunSummary } from './execution';
@@ -79,8 +80,9 @@ export async function makeEpisodeCanvas(no?: number): Promise<{ file: string; re
   const finish = { stitch: true, audio: song && !song.data_url ? assetFromFile(song.file, 'audio', 'audio') : undefined };   // every kind: the passed clips are joined (a music video also gets the song)
   const res = buildCanvasFromDirector(p, appRegistry, existing, prev, file, { generator: 'video-generate', episodeId: ep.episode_id, turbo: turbo.params, refAssets, finish });
   res.report.warnings.push(...turbo.warnings);
-  if (!demo) await saveCanvas(file, res.project);
+  if (!demo) await saveCanvas(file, stampPair(res.project, res.link, file));
   setLink(res.link);
+  if (!demo) await adoptIntoEmptyCanvas(file);   // an empty canvas left for the Director becomes this episode's canvas
   return { file, report: res.report };
 }
 
@@ -271,7 +273,7 @@ export async function openCastingCanvas(opt: { engine?: string } = {}): Promise<
   const existing = await existingCanvas(file, !!prev);
   const res = buildCastingCanvas(p, appRegistry, existing, prev, file, { engineId: opt.engine, baseAssets: pickedCastAssets(p) });
   if (res.report.missing.length) throw new Error(`${tr('Not built')}: ${res.report.missing[0].reason}`);
-  await saveCanvas(file, res.project);
+  await saveCanvas(file, stampPair(res.project, res.link, file));
   setLink(res.link);
   await openLinkedCanvas(file);
   return file;
@@ -330,7 +332,7 @@ export async function generateCast(opt: { refIds?: string[]; engine?: string; ne
   // a new look is edited from the picked image of the entry it is a look of (the same face)
   const res = buildCastingCanvas(p, appRegistry, existing, prev, file, { engineId: opt.engine, baseAssets: pickedCastAssets(p) });
   if (res.report.missing.length) throw new Error(`${tr('Not built')}: ${res.report.missing[0].reason}`);
-  await saveCanvas(file, res.project);
+  await saveCanvas(file, stampPair(res.project, res.link, file));
   setLink(res.link);
   if (useGraph.getState().canvasFile !== file) await openSavedCanvas(file); else await refreshOpenCanvas(file);
   if (useGraph.getState().canvasFile !== file) throw new Error(tr('The linked canvas is not open.'));
@@ -520,7 +522,7 @@ export async function makeVersionCanvases(no?: number): Promise<{ files: string[
     const refAssets: Record<string, Asset> = {};
     for (const s of shotsOfEpisode(clone, ep.episode_id)) for (const r of castOf(clone, s)) { const pick = r.results.find((x) => x.picked); if (pick && !refAssets[r.ref_id]) refAssets[r.ref_id] = assetOfResult(pick, `ra_${r.ref_id}`); }
     const res = buildCanvasFromDirector(clone, appRegistry, existing, prev, file, { generator: 'video-generate', episodeId: ep.episode_id, turbo: turbo.params, refAssets });
-    await saveCanvas(file, res.project);
+    await saveCanvas(file, stampPair(res.project, { ...res.link, aspect: asp }, file));
     setLink({ ...res.link, aspect: asp });
     files.push(file);
   }

@@ -1,7 +1,7 @@
 import type { Project } from '../types';
 
 /** Saved canvases live as JSON files in the project's canvases/ folder, served by the dev server (server-lib/canvases.mjs). */
-export interface CanvasEntry { name: string; mtime: number; size: number; nodes: number }
+export interface CanvasEntry { name: string; mtime: number; size: number; nodes: number; /** the Director project this canvas belongs to */ director?: { file: string; name: string; no?: number; purpose?: string } }
 
 const BASE = '/canvers/canvases';
 const path = (name: string) => `${BASE}/${encodeURIComponent(name)}`;

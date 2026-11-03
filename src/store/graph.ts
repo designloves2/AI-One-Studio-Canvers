@@ -1,6 +1,6 @@
 import { migrateTiledParams } from '../backend/tiledMigrate';
 import { create } from 'zustand';
-import type { Asset, GraphEdge, GraphNode, NodeRuntime, Primitive, Project } from '../types';
+import type { Asset, DirectorPair, GraphEdge, GraphNode, NodeRuntime, Primitive, Project } from '../types';
 import { byId, compatible, defaultParams, engineFor } from '../registry';
 import { uid } from '../backend/comfy';
 import { useSettings } from './settings';
@@ -35,6 +35,9 @@ interface State {
   /** edited since it was last saved / opened */
   dirty: boolean;
   markSaved(file: string): void;
+  /** the Director project / episode this canvas was made for (null = a free canvas) */
+  directorPair: DirectorPair | null;
+  setDirectorPair(p: DirectorPair | null): void;
   nodes: GraphNode[];
   edges: GraphEdge[];
   runtime: Record<string, NodeRuntime>;
@@ -126,6 +129,7 @@ export const setHostSerializer = (f: (n: GraphNode) => GraphNode) => { hostSeria
 export const useGraph = create<State>((set, get) => ({
   projectId: uid('p'),
   projectName: 'untitled',
+  directorPair: null,
   canvasFile: null,
   dirty: false,
   nodes: [], edges: [], runtime: {}, selected: [], past: [], future: [],
@@ -290,10 +294,11 @@ export const useGraph = create<State>((set, get) => ({
   openAssetPicker: (nodeId) => set({ assetPicker: nodeId }),
   openFacePicker: (nodeId) => set({ facePicker: nodeId }),
 
-  toProject: () => ({ app: 'ai-one-studio-canvers', version: 1, id: get().projectId, name: get().projectName, nodes: hostSerializer ? get().nodes.map(hostSerializer) : get().nodes, edges: get().edges, updatedAt: new Date().toISOString() }),
+  toProject: () => ({ app: 'ai-one-studio-canvers', version: 1, id: get().projectId, name: get().projectName, nodes: hostSerializer ? get().nodes.map(hostSerializer) : get().nodes, edges: get().edges, updatedAt: new Date().toISOString(), ...(get().directorPair ? { director: get().directorPair! } : {}) }),
   markSaved: (file) => set({ canvasFile: file, dirty: false }),
-  loadProject: (p, file = null, dirty = false) => quietly(() => set({ canvasFile: file, dirty, projectId: p.id ?? uid('p'), projectName: p.name || 'untitled', nodes: fillTurbo(p.nodes ?? []), edges: p.edges ?? [], runtime: {}, selected: [], past: [], future: [], fitTick: get().fitTick + 1 })),
-  newProject: () => quietly(() => set({ canvasFile: null, dirty: false, projectId: uid('p'), projectName: 'untitled', nodes: [], edges: [], runtime: {}, selected: [], past: [], future: [] })),
+  setDirectorPair: (directorPair) => set({ directorPair }),
+  loadProject: (p, file = null, dirty = false) => quietly(() => set({ canvasFile: file, dirty, directorPair: p.director ?? null, projectId: p.id ?? uid('p'), projectName: p.name || 'untitled', nodes: fillTurbo(p.nodes ?? []), edges: p.edges ?? [], runtime: {}, selected: [], past: [], future: [], fitTick: get().fitTick + 1 })),
+  newProject: () => quietly(() => set({ canvasFile: null, dirty: false, directorPair: null, projectId: uid('p'), projectName: 'untitled', nodes: [], edges: [], runtime: {}, selected: [], past: [], future: [] })),
   requestFit: () => set({ fitTick: get().fitTick + 1 }),
   focusNode: (id) => set({ selected: [id], focusId: id, focusTick: get().focusTick + 1 }),
 

@@ -6,6 +6,7 @@ import { useGraph } from '../store/graph';
 import { askConfirm } from '../ui/dialog';
 import { t as tr } from '../i18n';
 import { canvasFileName, loadCanvas, saveCanvas } from '../backend/canvases';
+import { stampPair } from './pairing';
 import { openSavedCanvas, runNode } from '../engine/actions';
 import { importFile } from '../engine/run';
 import { viewUrl } from '../backend/comfy';
@@ -79,7 +80,7 @@ export async function generateSong(opt: { newSeedNow?: boolean } = {}): Promise<
   const existing = await existingCanvas(file, !!prev);
   const res = buildMusicCanvas(p, appRegistry, existing, prev, file);
   if (res.report.missing.length) throw new Error(`${tr('Not built')}: ${res.report.missing[0]}`);
-  await saveCanvas(file, res.project);
+  await saveCanvas(file, stampPair(res.project, res.link, file));
   setLink(res.link);
   if (useGraph.getState().canvasFile !== file) await openSavedCanvas(file); else await refreshOpenCanvas(file);
   if (useGraph.getState().canvasFile !== file) throw new Error(tr('The linked canvas is not open.'));
