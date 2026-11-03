@@ -190,6 +190,11 @@ export const KO_DIRECTOR: Record<string, string> = {
   generated: '생성됨',
   'Generating the official H3 prompt of each clip one by one…': '클립별 공식 H3 프롬포트를 하나씩 생성 중입니다…',
   // Director <-> canvas pairs
+  'The generation canvas is missing': '생성용 캔버스가 없습니다',
+  'Make the generation canvas': '생성용 캔버스 생성',
+  'There is no canvas paired with this episode. Make the generation canvas to continue.': '이 편과 짝이 되는 캔버스가 없습니다. 계속하려면 생성용 캔버스를 만들어 주세요.',
+  'The paired canvas of these episodes is missing (never made, or deleted in the Canvas):': '다음 편의 짝 캔버스가 없습니다(만든 적이 없거나 캔버스에서 삭제됨):',
+  'Make the generation canvas now?': '지금 생성용 캔버스를 만들까요?',
   'Open in Director': '디렉터에서 열기',
   'No Director project': '디렉터 짝 없음',
   'This canvas has no Director project. A new Director project replaces it with a new canvas made for the Director (you are asked to save first).': '이 캔버스에는 짝이 되는 디렉터 프로젝트가 없습니다. 디렉터에서 새 프로젝트를 만들면 이 캔버스는 디렉터용 새 캔버스로 바뀝니다(먼저 저장할지 물어봅니다).',

@@ -17,6 +17,7 @@ import { runLlm } from '../backend/llm';
 import { formatFor, NO_AESTHETIC } from '../backend/promptStyle';
 import { pickedAudio } from './music';
 import { adoptIntoEmptyCanvas, stampPair } from './pairing';
+import { canvasListChanged } from './useCanvasMissing';
 import { assetFromFile } from '../backend/comfy';
 import { appRegistry } from './adapterRegistry';
 import { applyCanvasResults, applyReferenceResults, planBatch, requeueClips, reseed, reseedRefs, runShots, staleShots, type RunPlan, type RunSummary } from './execution';
@@ -82,7 +83,7 @@ export async function makeEpisodeCanvas(no?: number): Promise<{ file: string; re
   res.report.warnings.push(...turbo.warnings);
   if (!demo) await saveCanvas(file, stampPair(res.project, res.link, file));
   setLink(res.link);
-  if (!demo) await adoptIntoEmptyCanvas(file);   // an empty canvas left for the Director becomes this episode's canvas
+  if (!demo) { await adoptIntoEmptyCanvas(file); canvasListChanged(); }   // an empty canvas left for the Director becomes this episode's canvas; the red buttons update
   return { file, report: res.report };
 }
 

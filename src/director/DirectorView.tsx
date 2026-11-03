@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useCanvasMissing } from './useCanvasMissing';
 import { useDirector } from '../store/director';
 import { useT } from '../i18n';
 import { askConfirm, askText, notify } from '../ui/dialog';
@@ -846,6 +847,7 @@ function ClipEditor({ p, s, n }: { p: DirectorProject; s: DirectorShot; n: numbe
 function PromptGrid({ p, ro, apply }: { p: DirectorProject; ro: boolean; apply?: () => void }) {
   const T = useT(); const edit = useDirector((x) => x.edit);
   const e = episodeByNo(p, p.workflow.episode_no);
+  const missing = useCanvasMissing(p, p.workflow.episode_no);
   if (!e) return null;
   const shots = shotsOfEpisode(p, e.episode_id);
   if (!shots.length) return null;
@@ -859,7 +861,7 @@ function PromptGrid({ p, ro, apply }: { p: DirectorProject; ro: boolean; apply?:
     <section className="dx-block"><h4><Ico n="edit" />{T('Video prompts')} <small>{done} / {shots.length} {T(generating ? 'generated' : 'edited')}{generating ? ' …' : ''}</small></h4>
       <p className="dirx-muted">{generating ? T('Generating the official H3 prompt of each clip one by one…') : T('Review and fix the prompts below; "Verify the generation canvas" puts them all on the canvas prompt cards, and your settings in the canvas are kept.')}</p>
       <div className="dx-btns">
-        {apply && <button className="btn small primary" disabled={ro || generating} title={T('Put the prompts on the canvas prompt cards so the next generation uses them.')} onClick={() => void apply()}>{T('Apply to the canvas prompt cards')}</button>}
+        {apply && <button className={`btn small ${missing ? 'miss' : 'primary'}`} disabled={ro || generating} title={T(missing ? 'There is no canvas paired with this episode. Make the generation canvas to continue.' : 'Put the prompts on the canvas prompt cards so the next generation uses them.')} onClick={() => void apply()}>{T(missing ? 'Make the generation canvas' : 'Apply to the canvas prompt cards')}</button>}
         {done > 0 && <button className="btn small" disabled={ro || generating} onClick={() => void resetAll()}>{T('Reset all prompts')}</button>}
       </div>
       <div className="dx-canvasgrid">{shots.map((s, i) => <ShotPrompt key={`${s.shot_id}:${(s.prompt_user ?? '').trim() ? 'e' : 'o'}`} p={p} s={s} n={i + 1} ro={ro} />)}</div>
@@ -897,6 +899,7 @@ function CanvasCard({ p, ro }: { p: DirectorProject; ro: boolean }) {
   const T = useT(); const link = linkOfEpisode(p, p.workflow.episode_no); const e = episodeByNo(p, p.workflow.episode_no);
   const shots = e ? shotsOfEpisode(p, e.episode_id) : [];
   const [busy, setBusy] = useState(false);
+  const missing = useCanvasMissing(p, p.workflow.episode_no);   // the paired canvas file is gone: the button turns red until it is made again
   // "open": the edited prompts are put on the canvas prompt cards first (the user's own settings in the canvas are kept); nothing runs by itself
   const applyAndOpen = async () => {
     if (!e) return;
@@ -912,13 +915,14 @@ function CanvasCard({ p, ro }: { p: DirectorProject; ro: boolean }) {
   return (
     <div className="dx-page"><Working p={p} /><EpisodeHead p={p} icon="clip" />
       {shots.length > 0 && <PromptGrid p={p} ro={ro} />}
-      {link ? (
-        <section className="dx-block"><h4><Ico n="film" />{T('The episode is set up as a canvas')}</h4>
-          <p className="dx-prose"><b>{link.canvas_file}</b></p>
+      {link || missing ? (
+        <section className="dx-block"><h4><Ico n="film" />{T(link && !missing ? 'The episode is set up as a canvas' : 'The generation canvas is missing')}</h4>
+          {missing && <p className="dirx-muted">{T('There is no canvas paired with this episode. Make the generation canvas to continue.')}</p>}
+          {link && <p className="dx-prose"><b>{link.canvas_file}</b></p>}
           <div className="dx-tiles two"><Tile icon="clip" value={String(shots.length)} label={T('Clips')} tone="b" /><Tile icon="bolt" value={PRESET_LABEL[p.series.preset]} label={`${T('with the shared 7+1 card')} · ${p.series.resolution}`} tone="a" /></div>
-          <div className="dx-btns"><button className="btn primary" disabled={ro || busy} title={T('Put the edited prompts on the canvas prompt cards and open the canvas. Your settings in the canvas are kept, and nothing runs by itself.')} onClick={() => void applyAndOpen()}>{T('Verify the generation canvas')}</button></div>
+          <div className="dx-btns"><button className={`btn ${missing ? 'miss' : 'primary'}`} disabled={ro || busy} title={T('Put the edited prompts on the canvas prompt cards and open the canvas. Your settings in the canvas are kept, and nothing runs by itself.')} onClick={() => void applyAndOpen()}>{T(missing ? 'Make the generation canvas' : 'Verify the generation canvas')}</button></div>
         </section>) : <p className="dirx-muted">{T('The canvas is being built…')}</p>}
-      {link && <VersionsBlock p={p} />}
+      {link && !missing && <VersionsBlock p={p} />}
     </div>
   );
 }

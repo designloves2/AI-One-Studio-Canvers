@@ -8,6 +8,7 @@ import { listCanvases, loadCanvas, saveCanvas } from '../backend/canvases';
 import { openSavedCanvas, saveCanvasToList } from '../engine/actions';
 import { episodeByNo, safeProjectName, shotSubjects } from './model';
 import { clipPromptOf, composeClipPrompt } from './compose';
+import { epStageIndex } from './workflow';
 import type { CanvasLink, DirectorProject } from './types';
 import type { DirectorPair, Project } from '../types';
 
@@ -57,12 +58,32 @@ export function canvasOfFocus(p: DirectorProject, no: number): CanvasLink | null
   return (e && p.canvas_links.find((l) => l.episode_id === e.episode_id && !l.aspect && !isDemoFile(l.canvas_file))) || null;
 }
 
-/** Director project opened -> its canvas opens too (no mode change; asks first when the open canvas has unsaved changes) */
+/** episodes whose canvas step is approved (generate stage or later, not finished) but whose paired canvas file does not exist (never made, or deleted in the Canvas) */
+export function episodesWithoutCanvas(p: DirectorProject, saved: string[]): number[] {
+  return p.episodes
+    .filter((e) => epStageIndex(e.stage) >= epStageIndex('execute') && e.stage !== 'done')
+    .filter((e) => { const l = canvasOfFocus(p, e.no); return !l || !saved.includes(l.canvas_file); })
+    .map((e) => e.no);
+}
+
+/**
+ * Director project opened -> its canvas opens too (no mode change; asks first when the open canvas has unsaved changes).
+ * An episode that is past the canvas step but has no canvas any more: the producer is warned and can make it right away.
+ */
 export async function openCanvasOfProject(): Promise<void> {
   const d = useDirector.getState(); const p = d.project; if (!p || d.demo) return;
   await backfillPairs();
-  const link = canvasOfFocus(p, d.focus); if (!link) return;
-  try { if (!(await listCanvases()).some((c) => c.name === link.canvas_file)) return; } catch { return; }
+  let saved: string[] = [];
+  try { saved = (await listCanvases()).map((c) => c.name); } catch { return; }
+  const lost = d.readOnly ? [] : episodesWithoutCanvas(p, saved);
+  if (lost.length && await askConfirm(`${tr('The paired canvas of these episodes is missing (never made, or deleted in the Canvas):')} ${lost.join(', ')}
+
+${tr('Make the generation canvas now?')}`)) {
+    const { makeEpisodeCanvas } = await import('./canvasAction');
+    for (const no of lost) { try { await makeEpisodeCanvas(no); } catch (e) { void notify(`${no}: ${(e as Error).message}`); } }
+    try { saved = (await listCanvases()).map((c) => c.name); } catch { /* keep the old list */ }
+  }
+  const link = canvasOfFocus(useDirector.getState().project ?? p, d.focus); if (!link || !saved.includes(link.canvas_file)) return;
   if (useGraph.getState().canvasFile !== link.canvas_file) await openSavedCanvas(link.canvas_file);
 }
 

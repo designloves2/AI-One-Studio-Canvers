@@ -778,3 +778,4 @@ button.save-state.dirty { cursor: pointer; } button.save-state.dirty:hover { bac
 .pairbar span { overflow: hidden; text-overflow: ellipsis; }
 .pairbar .btn { padding: 3px 10px; font-size: 12px; }
 .pairbar.free { border-color: var(--line); color: var(--mut, #888); padding: 4px 12px; }
+.btn.miss { background: #d9534f; border-color: #d9534f; color: #fff; } .btn.miss:hover:not(:disabled) { background: #c9302c; border-color: #c9302c; }
