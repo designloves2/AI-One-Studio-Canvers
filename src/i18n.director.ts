@@ -191,6 +191,7 @@ export const KO_DIRECTOR: Record<string, string> = {
   'Generating the official H3 prompt of each clip one by one…': '클립별 공식 H3 프롬포트를 하나씩 생성 중입니다…',
   // Director <-> canvas pairs
   'Stop generating': '생성 정지',
+  'This clip is being made. Save after it finishes.': '이 클립을 만드는 중입니다. 끝난 뒤에 저장하세요.',
   'Cancel the clip that is being made and do not start the next ones.': '만들고 있는 클립을 취소하고 다음 클립은 시작하지 않습니다.',
   'Different from the Director': '디렉터와 다름',
   'Apply to the Director': '디렉터에 적용',

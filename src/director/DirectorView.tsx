@@ -882,6 +882,7 @@ function ShotPrompt({ p, s, n, ro }: { p: DirectorProject; s: DirectorShot; n: n
   const draft = text.trim() !== saved.trim();   // typed but not saved yet
   const edited = !!saved.trim();
   const busy = !!s.prompt_busy;   // the official H3 prompt of this clip is being generated right now
+  const rendering = s.status === 'generating' || s.status === 'queued';   // saving now would touch the card of a running clip: wait until it is done
   // saving is a button, never "click outside": the text goes to the project and to the paired canvas card only then
   const save = () => {
     const t = text.trim(); let stored = t;
@@ -895,8 +896,8 @@ function ShotPrompt({ p, s, n, ro }: { p: DirectorProject; s: DirectorShot; n: n
       <header><span className="num">{n}</span>{scene && <span className="pill">{scene.order}.{s.order}</span>}<span className="pill">{s.duration_sec}s</span>
         {busy ? <i className="ok"><span className="dirx-spin" />{T('Generating prompt')}</i> : draft ? <i className="warn">● {T('Not saved')}</i> : edited ? <i className="ok">✓ {T('Edited')}</i> : <i>{T('Waiting')}</i>}</header>
       <textarea rows={5} disabled={ro || busy} value={text} onChange={(ev) => setText(ev.target.value)} aria-label={`${T('Video prompt of clip')} ${n}`} placeholder={edited ? undefined : T('No prompt yet')} />
-      {draft ? <div className="dx-btns"><button className="btn small primary" disabled={ro || busy} onClick={save}>{T('Save')}</button><button className="btn small" onClick={cancel}>{T('Cancel')}</button></div>
-        : edited && <div className="dx-btns"><button className="btn small" disabled={ro || busy} onClick={restore}>{T('Restore the original')}</button></div>}
+      {draft ? <div className="dx-btns"><button className="btn small primary" disabled={ro || busy || rendering} title={rendering ? T('This clip is being made. Save after it finishes.') : undefined} onClick={save}>{T('Save')}</button><button className="btn small" onClick={cancel}>{T('Cancel')}</button></div>
+        : edited && <div className="dx-btns"><button className="btn small" disabled={ro || busy || rendering} onClick={restore}>{T('Restore the original')}</button></div>}
     </article>
   );
 }
