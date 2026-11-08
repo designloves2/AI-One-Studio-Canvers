@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 
 export type LlmBackend = 'local' | 'comfy' | 'openrouter' | 'custom';
+/** the four LLM slots of the settings; a slot can follow (use the same settings as) any other slot */
+export type LlmKind = 'main' | 'vision' | 'live' | 'director';
 
 export interface LlmSettings {
   backend: LlmBackend;
@@ -43,11 +45,11 @@ export interface Settings {
   comfyUrl: string;
   llm: LlmSettings;
   /** Live Canvas chat LLM: same = follow the main LLM above, otherwise use `llm` here */
-  live: { same: boolean; llm: LlmSettings };
+  live: { same: boolean; follow: LlmKind; llm: LlmSettings };
   /** Director mode crew: its own LLM (the same four backends). same = follow the main LLM above. A copy of the main LLM is the starting point the first time. */
-  director: { same: boolean; llm: LlmSettings };
+  director: { same: boolean; follow: LlmKind; llm: LlmSettings };
   /** LLM (Vision): describes images; same = follow the Brief LLM. Canvers' own setting, separate from the ONE STUDIO nodes. */
-  vision: { same: boolean; llm: LlmSettings };
+  vision: { same: boolean; follow: LlmKind; llm: LlmSettings };
   /** API keys live in memory only; they are sent to the backend once (never persisted here). */
   keys: { custom: string; openrouter: string };
   /** per image family overrides picked in Settings → Image models (blank = backend default) */
@@ -69,11 +71,11 @@ export interface Settings {
   setMusic: (k: string, v: string) => void;
   set: (patch: Partial<Pick<Settings, 'comfyUrl' | 'saveSubfolder' | 'hostPanels'>>) => void;
   setLlm: (patch: Partial<LlmSettings>) => void;
-  setVision: (patch: Partial<{ same: boolean }>) => void;
+  setVision: (patch: Partial<{ same: boolean; follow: LlmKind }>) => void;
   setVisionLlm: (patch: Partial<LlmSettings>) => void;
-  setDirector: (patch: Partial<{ same: boolean }>) => void;
+  setDirector: (patch: Partial<{ same: boolean; follow: LlmKind }>) => void;
   setDirectorLlm: (patch: Partial<LlmSettings>) => void;
-  setLive: (patch: Partial<{ same: boolean }>) => void;
+  setLive: (patch: Partial<{ same: boolean; follow: LlmKind }>) => void;
   setLiveLlm: (patch: Partial<LlmSettings>) => void;
   setKey: (which: 'custom' | 'openrouter', v: string) => void;
   setModel: (family: string, patch: Partial<ModelChoice>) => void;
@@ -94,9 +96,9 @@ export const useSettings = create<Settings>((set, get) => {
   return {
     comfyUrl: saved.comfyUrl ?? '',
     llm: { ...DEFAULT_LLM, ...(saved.llm ?? {}) },
-    vision: { same: saved.vision?.same ?? true, llm: { ...DEFAULT_LLM, ...(saved.vision?.llm ?? {}) } },
-    live: { same: saved.live?.same ?? true, llm: { ...DEFAULT_LLM, temperature: 0.5, max_tokens: 3500, ...(saved.live?.llm ?? {}) } },
-    director: { same: saved.director?.same ?? false, llm: { ...DEFAULT_LLM, ...(saved.llm ?? {}), temperature: 0.6, max_tokens: 7000, ...(saved.director?.llm ?? {}) } },
+    vision: { same: saved.vision?.same ?? true, follow: (saved.vision?.follow as LlmKind) ?? 'main', llm: { ...DEFAULT_LLM, ...(saved.vision?.llm ?? {}) } },
+    live: { same: saved.live?.same ?? true, follow: (saved.live?.follow as LlmKind) ?? 'main', llm: { ...DEFAULT_LLM, temperature: 0.5, max_tokens: 3500, ...(saved.live?.llm ?? {}) } },
+    director: { same: saved.director?.same ?? false, follow: (saved.director?.follow as LlmKind) ?? 'main', llm: { ...DEFAULT_LLM, ...(saved.llm ?? {}), temperature: 0.6, max_tokens: 7000, ...(saved.director?.llm ?? {}) } },
     keys: { custom: '', openrouter: '' },
     models: saved.models ?? {},
     saveSubfolder: saved.saveSubfolder ?? 'ai-one-canvers',
@@ -125,3 +127,26 @@ export const useSettings = create<Settings>((set, get) => {
     },
   };
 });
+
+/** the slot whose own settings a slot really uses: follow the chain until a slot that has its own (a loop falls back to the main LLM) */
+export function resolveLlmKind(st: Pick<Settings, 'live' | 'director' | 'vision'>, kind: LlmKind): LlmKind {
+  const seen = new Set<LlmKind>();
+  let k = kind;
+  while (k !== 'main') {
+    if (seen.has(k)) return 'main';
+    seen.add(k);
+    const s = st[k];
+    if (!s.same) return k;
+    k = s.follow ?? 'main';
+  }
+  return 'main';
+}
+export const llmOfKind = (st: Pick<Settings, 'llm' | 'live' | 'director' | 'vision'>, kind: LlmKind): LlmSettings => (kind === 'main' ? st.llm : st[kind].llm);
+/** the settings a slot actually runs with */
+export const effectiveLlm = (kind: LlmKind): LlmSettings => { const st = useSettings.getState(); return llmOfKind(st, resolveLlmKind(st, kind)); };
+/** true when `kind` would end up using `other` (so `other` must not be allowed to follow `kind`: that would be a loop) */
+export function followsKind(st: Pick<Settings, 'live' | 'director' | 'vision'>, other: LlmKind, kind: LlmKind): boolean {
+  const seen = new Set<LlmKind>(); let k = other;
+  while (k !== 'main' && !seen.has(k)) { if (k === kind) return true; seen.add(k); const s = st[k]; if (!s.same) return false; k = s.follow ?? 'main'; }
+  return false;
+}

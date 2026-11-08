@@ -10,7 +10,7 @@ import type { Asset } from '../types';
 import { getJson, postJson } from './http';
 import { fetchBlob, onSocket } from './comfy';
 import { notify } from '../ui/dialog';
-import { DEFAULT_LLM, llmDirty, useSettings, type LlmBackend, type LlmSettings } from '../store/settings';
+import { DEFAULT_LLM, effectiveLlm, llmDirty, llmOfKind, resolveLlmKind, useSettings, type LlmBackend, type LlmSettings } from '../store/settings';
 
 export const BACKENDS: { id: LlmBackend; label: string; hint: string }[] = [
   { id: 'local', label: 'Local GGUF (llama.cpp)', hint: 'Runs a .gguf model inside ComfyUI (needs ComfyUI-TJ_NODE + llama-cpp-python).' },
@@ -178,8 +178,8 @@ async function warmUpServer(): Promise<void> {
 /** the settings a request runs with: a request with images uses the LLM (Vision) when it is set apart from the Brief LLM */
 function llmFor(req: LlmRequest): LlmSettings {
   if (req.llm) return req.llm;
-  const { llm, vision } = useSettings.getState();
-  return req.images?.length && !vision.same ? vision.llm : llm;
+  const { llm } = useSettings.getState();
+  return req.images?.length ? effectiveLlm('vision') : llm;
 }
 
 /** what the server reported for each call (by call id), read right after the call */
@@ -269,5 +269,5 @@ export async function connectOpenRouterKey(key: string) {
 
 /** LLM settings for the Live Canvas chat: its own when chosen in Settings, otherwise undefined (= the main LLM). */
 /** the LLM settings of the Director crew (undefined = follow the main LLM) */
-export const directorLlmSettings = (): LlmSettings | undefined => { const { director } = useSettings.getState(); return director.same ? undefined : director.llm; };
-export const liveLlmSettings = (): LlmSettings | undefined => { const { live } = useSettings.getState(); return live.same ? undefined : live.llm; };
+export const directorLlmSettings = (): LlmSettings | undefined => { const st = useSettings.getState(); const k = resolveLlmKind(st, 'director'); return k === 'main' ? undefined : llmOfKind(st, k); };
+export const liveLlmSettings = (): LlmSettings | undefined => { const st = useSettings.getState(); const k = resolveLlmKind(st, 'live'); return k === 'main' ? undefined : llmOfKind(st, k); };

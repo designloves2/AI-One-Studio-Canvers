@@ -6,7 +6,7 @@ import { liveTurn, type LiveMsg } from '../backend/liveCanvas';
 import { liveLlmSettings, runLlm } from '../backend/llm';
 import { importFile } from '../engine/run';
 import { useGraph } from '../store/graph';
-import { useSettings } from '../store/settings';
+import { llmOfKind, resolveLlmKind, useSettings } from '../store/settings';
 import { useT } from '../i18n';
 import { takePendingLive } from '../simple/route';
 
@@ -39,8 +39,8 @@ export function LivePanel() {
   const [showTpl, setShowTpl] = useState(false);
   const [attached, setAttached] = useState<{ cardId: string; name: string; caption: string }[]>([]);
   const undoers = useRef(new Map<number, () => void>());     // per answer, in memory only
-  const backend = useSettings((s) => (s.live.same ? s.llm.backend : s.live.llm.backend));
-  const own = useSettings((s) => !s.live.same);
+  const backend = useSettings((s) => llmOfKind(s, resolveLlmKind(s, 'live')).backend);
+  const own = useSettings((s) => resolveLlmKind(s, 'live') !== 'main');
   const end = useRef<HTMLDivElement>(null);
   const file = useRef<HTMLInputElement>(null);
   useEffect(() => { try { localStorage.setItem(KEY, JSON.stringify(msgs.slice(-60))); } catch { /* full */ } end.current?.scrollIntoView({ block: 'end' }); }, [msgs, busy]);

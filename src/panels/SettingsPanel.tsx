@@ -1,6 +1,6 @@
 import { postJson } from '../backend/http';
 import { useEffect, useState } from 'react';
-import { useSettings, type LlmBackend } from '../store/settings';
+import { followsKind, useSettings, type LlmBackend, type LlmKind } from '../store/settings';
 import { useLang } from '../i18n';
 import { BACKENDS, connectCustom, fetchCatalog, loadServerSettings, runLlm, saveOpenRouter, saveServerSettings, type LlmCatalog } from '../backend/llm';
 import { systemStats } from '../backend/comfy';
@@ -18,6 +18,29 @@ function Select({ value, onChange, options, blank }: { value: string; onChange(v
   const list = [...(blank !== undefined ? [''] : []), ...options.filter((o) => o && o !== 'none')];
   const withCur = value && !list.includes(value) ? [value, ...list] : list;
   return <select value={value} onChange={(e) => onChange(e.target.value)}>{withCur.map((o) => <option key={o} value={o}>{o === '' ? blank : o}</option>)}</select>;
+}
+
+const KIND_LABEL: Record<LlmKind, string> = { main: 'Brief LLM', vision: 'Vision LLM', live: 'Live Canvas LLM', director: 'Director LLM' };
+
+/** "Use the same settings as ..." dropdown of a slot: its own settings, or any other slot (never itself, never a loop) */
+function FollowSelect({ kind }: { kind: Exclude<LlmKind, 'main'> }) {
+  const T = useT();
+  const st = useSettings();
+  const cur = st[kind];
+  const set = kind === 'director' ? st.setDirector : kind === 'live' ? st.setLive : st.setVision;
+  const options = (['main', 'vision', 'live', 'director'] as LlmKind[]).filter((k) => k !== kind && !followsKind(st, k, kind));
+  const value = cur.same && options.includes(cur.follow) ? cur.follow : cur.same ? 'main' : 'own';
+  return (
+    <>
+      <Row label={T('Settings')}>
+        <select value={value} onChange={(e) => { const v = e.target.value; if (v === 'own') set({ same: false }); else set({ same: true, follow: v as LlmKind }); }}>
+          <option value="own">{T('Set separately')}</option>
+          {options.map((k) => <option key={k} value={k}>{T('Same as')} {T(KIND_LABEL[k])}</option>)}
+        </select>
+      </Row>
+      {cur.same && <p className="muted">{T('Uses the same settings as the chosen LLM. Choose "Set separately" to give this one its own backend / model.')}</p>}
+    </>
+  );
 }
 
 /** an accordion inside an accordion: one model group open at a time */
@@ -163,17 +186,9 @@ export function Llm({ target = 'main' }: { target?: 'main' | 'live' | 'vision' |
   return (
     <section>
       <h3>{T(dir ? 'Director LLM' : live ? 'Live Canvas LLM' : vis ? 'LLM (Vision) backend' : 'LLM (Brief) backend')}</h3>
-      {dir && <label className="srow"><span className="field-label">{T('Use the main LLM')}</span><input type="checkbox" checked={dirSet.same} onChange={(e) => useSettings.getState().setDirector({ same: e.target.checked })} /></label>}
-      {dir && dirSet.same && <p className="muted">{T('The Director crew follows the main LLM. Untick to give it its own backend / model (a stronger model writes better scenarios).')}</p>}
-      {vis && (
-        <label className="srow"><span className="field-label">{T('Use the Brief LLM')}</span><input type="checkbox" checked={visSet.same} onChange={(e) => useSettings.getState().setVision({ same: e.target.checked })} /></label>
-      )}
-      {vis && visSet.same ? <p className="muted">{T('Image descriptions follow the Brief LLM above. Untick to pick another backend / model for them (for example a local vision model).')}</p> : null}
+      {alt && <FollowSelect kind={target as Exclude<LlmKind, 'main'>} />}
       {live && !liveSet.same && llm.backend === 'local' && llm.n_ctx < 8192 && <p className="status bad">{T('Live Canvas needs a context of 8192 or more for a local model.')}</p>}
-      {live && (
-        <label className="srow"><span className="field-label">{T('Use the main LLM')}</span><input type="checkbox" checked={liveSet.same} onChange={(e) => useSettings.getState().setLive({ same: e.target.checked })} /></label>
-      )}
-      {(dir && dirSet.same) || (vis && visSet.same) ? null : live && liveSet.same ? <p className="muted">{T('Live Canvas follows the LLM above. Untick to pick another backend / model for it (a stronger model writes better plans).')}</p> : <>
+      {alt && (dir ? dirSet.same : live ? liveSet.same : visSet.same) ? null : <>
       <div className="backends">
         {BACKENDS.map((b) => (
           <button key={b.id} className={`bk ${llm.backend === b.id ? 'on' : ''}`} onClick={() => setLlm({ backend: b.id as LlmBackend })} title={b.hint}>

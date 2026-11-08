@@ -6,7 +6,7 @@ import { askConfirm, askText, notify } from '../ui/dialog';
 import { viewUrl } from '../backend/comfy';
 import { getGallery, type GalleryItem } from '../backend/studio';
 import { listAssets, libThumb, type LibAsset } from '../backend/assetlib';
-import { useSettings, type LlmSettings } from '../store/settings';
+import { llmOfKind, resolveLlmKind, useSettings, type LlmSettings } from '../store/settings';
 import { useGraph } from '../store/graph';
 import { assetKey, mediaKey, useIsBlurred, useSensitive } from '../backend/sensitive';
 import { BACKENDS } from '../backend/llm';
@@ -1074,12 +1074,12 @@ function ReviewCard({ p, ro }: { p: DirectorProject; ro: boolean }) {
 
 // ------------------------------------------------------------------ bottom: the chat
 /** one short line that says which model the crew is using (shown on the button next to the chat box) */
-function llmLabel(same: boolean, main: LlmSettings, own: LlmSettings, T: (k: string) => string): string {
-  const l = same ? main : own;
+function llmLabel(same: boolean, main: LlmSettings, own: LlmSettings, T: (k: string) => string, via = 'Main LLM'): string {
+  const l = same ? main : own;   // `main` is whatever LLM the slot follows
   const b = BACKENDS.find((x) => x.id === l.backend);
   const model = l.backend === 'local' ? l.gguf_model : l.backend === 'comfy' ? l.text_encoder_name : l.backend === 'openrouter' ? l.or_model_text : l.custom_model;
   const tail = (model || '').split(/[\\/]/).pop() || T('no model chosen');
-  return `${same ? `${T('Main LLM')} · ` : ''}${b ? T(b.label) : l.backend} · ${tail.length > 28 ? `${tail.slice(0, 27)}…` : tail}`;
+  return `${same ? `${T(via)} · ` : ''}${b ? T(b.label) : l.backend} · ${tail.length > 28 ? `${tail.slice(0, 27)}…` : tail}`;
 }
 
 /** the Director's own model settings (the same four backends as everywhere else), opened right from the chat box */
@@ -1139,7 +1139,7 @@ function ChatDock({ p, T }: { p: DirectorProject | null; T: (k: string) => strin
   const d = useDirector();
   const [text, setText] = useState('');
   const [showModel, setShowModel] = useState(false);
-  const dirSet = useSettings((x) => x.director); const mainLlm = useSettings((x) => x.llm);
+  const dirSet = useSettings((x) => x.director); const mainLlm = useSettings((x) => llmOfKind(x, resolveLlmKind(x, 'director')));   // what the crew really uses (it may follow another slot)
   const end = useRef<HTMLDivElement>(null);
   const view = d.view;
   const isEp = (EPISODE_STAGES as StageId[]).includes(view);
@@ -1179,7 +1179,7 @@ function ChatDock({ p, T }: { p: DirectorProject | null; T: (k: string) => strin
         <textarea rows={4} value={text} disabled={d.readOnly} placeholder={p ? T('Tell the crew what to do, or what to change…') : T('Say what you want to make…')}
           onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(); } }} />
         <div className="dirx-input-bar">
-          <button className="dirx-model" title={T('Model settings')} onClick={() => setShowModel(true)}>⚙ <span>{llmLabel(dirSet.same, mainLlm, dirSet.llm, T)}</span></button>
+          <button className="dirx-model" title={T('Model settings')} onClick={() => setShowModel(true)}>⚙ <span>{llmLabel(dirSet.same, mainLlm, dirSet.llm, T, ({ main: 'Main LLM', vision: 'Vision LLM', live: 'Live Canvas LLM', director: 'Director LLM' } as const)[dirSet.follow ?? 'main'])}</span></button>
           <span className="dirx-hint">{T('Enter to send, Shift+Enter for a new line')}</span><button className="btn primary" disabled={d.busy || !text.trim() || d.readOnly} onClick={send}>{T('Send')}</button></div>
       </div>
       {showModel && <ModelDialog onClose={() => setShowModel(false)} />}
