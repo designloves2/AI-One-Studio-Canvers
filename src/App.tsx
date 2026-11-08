@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { tidyCanvas } from './backend/liveCanvas';
 import { useReactFlow, useViewport } from '@xyflow/react';
 import { useGraph, restoreAutosave, hasUnsavedAutosave, startAutosave, type PanelId } from './store/graph';
 import { Flow } from './canvas/Flow';
@@ -63,7 +64,9 @@ function TopBar() {
   // a tab's name is edited right in the tab (double-click): Enter keeps it, Esc leaves it as it was
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
-  const startEdit = async (id: string, name: string) => { if (id !== useWorkspace.getState().activeId && !(await switchTab(id))) return; setDraft(name); setEditing(id); };
+  const [editingFrom, setEditingFrom] = useState<'tab' | 'sub'>('tab');
+  const startEdit = async (id: string, name: string, from: 'tab' | 'sub' = 'tab') => { if (id !== useWorkspace.getState().activeId && !(await switchTab(id))) return; setDraft(name); setEditingFrom(from); setEditing(id); };
+  const onEditKey = (e: React.KeyboardEvent<HTMLInputElement>) => { if (e.key === 'Enter') e.currentTarget.blur(); else if (e.key === 'Escape') { setDraft(''); setEditing(null); } };
   const commitEdit = () => { const v = draft.trim(); setEditing(null); if (v) void renameProject(v); };
   // a filled dot = that tab has something in it
   const hasDirector = useDirector((s) => !!s.project);
@@ -94,8 +97,8 @@ function TopBar() {
         <div className="ptabs" role="tablist">
           {tabs.map((t) => (
             <div key={t.id} role="tab" aria-selected={t.id === activeId} className={`ptab${t.id === activeId ? ' active' : ''}`} title={`${t.name || T('New project')} — ${T('Double-click to rename')}`} onClick={() => void switchTab(t.id)} onDoubleClick={() => void startEdit(t.id, t.name)} onAuxClick={(e) => { if (e.button === 1) void closeTab(t.id); }}>
-              {editing === t.id
-                ? <input className="ptab-edit" autoFocus value={draft} placeholder={T('Project name')} onChange={(e) => setDraft(e.target.value)} onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()} onBlur={commitEdit} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); else if (e.key === 'Escape') { setDraft(''); setEditing(null); } }} onFocus={(e) => e.currentTarget.select()} />
+              {editing === t.id && editingFrom === 'tab'
+                ? <input className="ptab-edit" autoFocus value={draft} placeholder={T('Project name')} onChange={(e) => setDraft(e.target.value)} onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()} onBlur={commitEdit} onKeyDown={onEditKey} onFocus={(e) => e.currentTarget.select()} />
                 : <span className="ptab-name">{t.name || T('New project')}</span>}
               {t.id === activeId && unsaved && <i className="ptab-dirty" title={T('Not saved')} />}
               <button className="ptab-x" title={T('Close')} onClick={(e) => { e.stopPropagation(); void closeTab(t.id); }}>✕</button>
@@ -107,7 +110,9 @@ function TopBar() {
       </div>
       <div className="subbar">
         <div className="left">
-          <button className="project-btn" title={T('Rename')} onClick={() => void renameProject()}>📁 <b>{project?.name ?? T('New project')}</b></button>
+          <span className="project-btn" title={T('Double-click to rename')} onDoubleClick={() => void startEdit(activeId, project?.name ?? '', 'sub')}>📁 {editing === activeId && editingFrom === 'sub'
+            ? <input className="ptab-edit" autoFocus value={draft} placeholder={T('Project name')} onChange={(e) => setDraft(e.target.value)} onBlur={commitEdit} onKeyDown={onEditKey} onFocus={(e) => e.currentTarget.select()} />
+            : <b>{project?.name ?? T('New project')}</b>}</span>
           <button className={`save-state ${unsaved ? 'dirty' : 'clean'}`} title={unsaved ? `${T('Not saved')} — ${T('Click to save')} (Ctrl+S)` : T('Saved')} onClick={() => { if (unsaved) void saveAll(); }}>{unsaved ? '●' : '✓'} {unsaved ? T('Not saved') : T('Saved')}</button>
         </div>
         <div className="mode-toggle">
@@ -154,6 +159,7 @@ function Toolbar({ tool, setTool, onAdd }: { tool: 'select' | 'hand'; setTool(t:
       <i className="sep" />
       <button onClick={() => zoomOut()}>−</button><span className="zoom">{Math.round(zoom * 100)}%</span><button onClick={() => zoomIn()}>＋</button>
       <button title={T('Zoom to fit')} onClick={() => fitView({ padding: 0.2, duration: 200 })}>⛶</button>
+      <button className="tidy" title={T('Tidy up the cards so none overlap (the selected cards, or all of them)')} onClick={() => { const g = useGraph.getState(); tidyCanvas(g.selected.length > 1 ? g.selected : undefined); }}>▦ {T('Tidy up')}</button>
       <i className="sep" />
       {running ? <button className="stop-all" onClick={stopAll}>■ {T('Stop')}</button> : <button className="run-all" onClick={() => void runAll()}>▶ {T('Run all')}</button>}
     </div>
@@ -227,20 +233,24 @@ export function App() {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') { e.preventDefault(); g.setPanel('projects'); return; }
       if (typing || g.mode !== 'canvas') return;
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? g.redo() : g.undo(); return; }
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c' && !window.getSelection()?.toString()) { if (g.selected.length && g.copyNodes(g.selected)) e.preventDefault(); return; }
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'x' && !window.getSelection()?.toString()) { if (g.selected.length && g.copyNodes(g.selected)) { e.preventDefault(); g.removeNodes(g.selected); } return; }
+      const copied = () => { void navigator.clipboard?.writeText('canvers-cards').catch(() => undefined); };   // the system clipboard says "cards", so an older copied text does not win
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c' && !window.getSelection()?.toString()) { if (g.selected.length && g.copyNodes(g.selected)) { e.preventDefault(); copied(); } return; }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'x' && !window.getSelection()?.toString()) { if (g.selected.length && g.copyNodes(g.selected)) { e.preventDefault(); copied(); g.removeNodes(g.selected); } return; }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') { pasteSeen = false; setTimeout(() => { if (!pasteSeen && useGraph.getState().mode === 'canvas') useGraph.getState().pasteNodes(); }, 150); return; }   // a real paste event follows at once; without one (no clipboard access) the copied cards are pasted anyway
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') { e.preventDefault(); if (g.selected.length) g.duplicateNodes(g.selected); return; }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'g') { e.preventDefault(); if (g.selected.length) g.group(g.selected); return; }
       if (e.key === 'Tab') { e.preventDefault(); const p = { x: window.innerWidth / 2 - 130, y: window.innerHeight / 3 }; setMenu({ ...p, flow: screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 }) }); }
       if (e.key === 'v') setTool('select');
       if (e.key === 'h') setTool('hand');
     };
+    let pasteSeen = false;
     const onPaste = (e: ClipboardEvent) => {
+      pasteSeen = true;
       const files = [...(e.clipboardData?.files ?? [])].filter((f) => f.type.startsWith('image/'));
       const tag = (e.target as HTMLElement).tagName; const typing = tag === 'TEXTAREA' || tag === 'INPUT' || (e.target as HTMLElement).isContentEditable;
       if (files.length && useGraph.getState().mode === 'canvas' && !typing) {
         void addImports(files, screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 }));
-      } else if (!files.length && !typing && useGraph.getState().mode === 'canvas' && !e.clipboardData?.getData('text/plain')?.trim()) {
+      } else if (!files.length && !typing && useGraph.getState().mode === 'canvas' && ['', 'canvers-cards'].includes(e.clipboardData?.getData('text/plain')?.trim() ?? '')) {
         if (useGraph.getState().pasteNodes()) e.preventDefault();   // cards copied in any project tab
       }
     };

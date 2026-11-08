@@ -45,7 +45,7 @@ export const useWorkspace = create<WorkspaceState>((set) => ({
   manifest: null, list: [], busy: false, tabs: initTabs.tabs, activeId: initTabs.active,
   refreshList: async () => { try { set({ list: await listProjects() }); } catch { /* a server without the route: the list stays as it was */ } },
 }));
-if (import.meta.env?.DEV && typeof window !== 'undefined') (window as unknown as Record<string, unknown>).__workspace = useWorkspace;   // dev hook for the browser checks
+if (import.meta.env?.DEV && typeof window !== 'undefined') Object.assign(window as unknown as Record<string, unknown>, { __workspace: useWorkspace, __graph: useGraph, __director: useDirector });   // dev hook for the browser checks
 const saveTabs = () => { const { tabs, activeId } = useWorkspace.getState(); try { localStorage.setItem(TABS_KEY, JSON.stringify({ tabs, active: activeId })); } catch { /* ignore */ } };
 /** the active tab shows the open project's name */
 function nameActiveTab() {
@@ -132,7 +132,7 @@ export function startWorkspaceSync(): void {
   });
   // the open tab always carries the name of the open project (a new tab never shows the name of the tab it was made from)
   let shownName = ws().manifest?.name ?? null;
-  useWorkspace.subscribe((st) => { const n = st.manifest?.name ?? null; if (n !== shownName) { shownName = n; nameActiveTab(); } });
+  useWorkspace.subscribe((st) => { const n = st.manifest?.name ?? null; if (n !== shownName) { shownName = n; if (!applying) nameActiveTab(); } });   // while a project is being opened the tab keeps its own name
   // canvas saved / opened, the open tab, the Simple feed
   let cf = useGraph.getState().canvasFile; let mode = useGraph.getState().mode; let runs = useGraph.getState().composerRuns;
   useGraph.subscribe((g) => {
@@ -162,6 +162,8 @@ async function restoreLast(): Promise<void> {
     applying = true;
     useWorkspace.setState({ manifest: m });
     if (m.director && !useDirector.getState().project) { try { await useDirector.getState().open(m.director); } catch { /* the file is gone: the project keeps its other parts */ } }
+    const g = useGraph.getState();
+    if (!g.nodes.length && m.canvas) { try { g.loadProject(await loadCanvas(m.canvas), m.canvas, false); } catch { /* the canvas file is gone */ } }   // the project's canvas comes back with it
   } catch { nameActiveTab(); } finally { applying = false; }
 }
 
@@ -267,6 +269,7 @@ async function loadInto(manifest: ProjectManifest): Promise<void> {
 async function activateTab(id: string, fresh?: () => Promise<void>): Promise<boolean> {
   const cur = ws().activeId; if (id === cur) return true;
   const busy = unsavedWork(); if (busy) { void notify(busy); return false; }
+  const target = ws().tabs.find((t) => t.id === id);   // read before anything changes: its own name tells which project to read
   if (cur) { snaps.set(cur, capture()); useWorkspace.setState({ tabs: ws().tabs.map((t) => (t.id === cur ? { ...t, mode: useGraph.getState().mode } : t)) }); }
   applying = true;
   try {
@@ -276,8 +279,7 @@ async function activateTab(id: string, fresh?: () => Promise<void>): Promise<boo
     if (fresh) { await fresh(); }
     else if (sn) { restore(sn); snaps.delete(id); }
     else {
-      const tab = ws().tabs.find((t) => t.id === id);
-      if (tab?.name) { try { await loadInto(await loadManifest(tab.name)); } catch { blankStores(); useWorkspace.setState({ manifest: null }); } }
+      if (target?.name) { try { await loadInto(await loadManifest(target.name)); } catch (e) { console.error('the project of this tab could not be opened', e); blankStores(); useWorkspace.setState({ manifest: null }); } }
       else { blankStores(); useWorkspace.setState({ manifest: null }); }
     }
   } finally { applying = false; }
