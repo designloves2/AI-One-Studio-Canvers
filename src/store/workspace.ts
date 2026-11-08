@@ -98,19 +98,24 @@ function patch(p: Partial<ProjectManifest>) {
 
 /** a project name that is free (not used by another saved project) */
 async function freeName(base: string): Promise<string> {
-  const names = new Set((await listProjects().catch(() => [] as ProjectEntry[])).map((p) => p.name));
-  const b = projectFileName(base); let n = b, i = 2; while (names.has(n)) n = `${b} ${i++}`;
+  const names = new Set((await listProjects().catch(() => [] as ProjectEntry[])).map((p) => p.name.toLowerCase()));   // file names ignore case on Windows: "Test" and "test" are the same project
+  const b = projectFileName(base); let n = b, i = 2; while (names.has(n.toLowerCase())) n = `${b} ${i++}`;
   return n;
 }
 
 /** the open project; made now (named after `hint`) when the first thing worth keeping appears and no project is open yet */
+let making: Promise<ProjectManifest> | null = null;   // two things (the Director file and the canvas) can ask for the project at the same moment: only one is made
 async function ensureProject(hint: string): Promise<ProjectManifest> {
   const cur = ws().manifest; if (cur) return cur;
-  const name = await freeName(hint || tr('New project'));
-  const m = { ...newManifest(name, useGraph.getState().mode) };
-  useWorkspace.setState({ manifest: m }); nameActiveTab();
-  await saveManifest(m).catch(() => undefined); void ws().refreshList();
-  return m;
+  if (making) return making;
+  making = (async () => {
+    const name = await freeName(hint || tr('New project'));
+    const m = { ...newManifest(name, useGraph.getState().mode) };
+    useWorkspace.setState({ manifest: m }); nameActiveTab();
+    await saveManifest(m).catch(() => undefined); void ws().refreshList();
+    return m;
+  })().finally(() => { making = null; });
+  return making;
 }
 
 // ------------------------------------------------------------------ keeping the manifest up to date
@@ -193,8 +198,9 @@ export function mergeCanvas(base: Project, extra: Project): Project {
   const bottom = base.nodes.length ? Math.max(...base.nodes.map((n) => n.y + estimateBox(n).h)) + 90 : 0;
   const dx = left - Math.min(...add.map((n) => n.x)), dy = bottom - Math.min(...add.map((n) => n.y));
   const moved = add.map((n) => ({ ...n, x: Math.round(n.x + dx), y: Math.round(n.y + dy) }));
-  const ids = new Set(moved.map((n) => n.id));
-  const edges = extra.edges.filter((e) => ids.has(e.source) && ids.has(e.target) && !base.edges.some((b) => b.id === e.id));
+  // a wire may start at a card both canvases have (a shared cast image): it is kept when both ends are in the result
+  const ids = new Set([...have, ...moved.map((n) => n.id)]);
+  const edges = extra.edges.filter((e) => ids.has(e.source) && ids.has(e.target) && !base.edges.some((b) => b.id === e.id || (b.source === e.source && b.target === e.target && b.sourceHandle === e.sourceHandle && b.targetHandle === e.targetHandle)));
   return { ...base, nodes: [...base.nodes, ...moved], edges: [...base.edges, ...edges] };
 }
 
@@ -361,12 +367,12 @@ export async function renameProject(given?: string): Promise<void> {
   if (!m) { await ensureProject(typed); return; }   // a project that has no name yet gets it now
   if (projectFileName(typed) === m.name) return;
   const name = await freeName(typed);
-  try { await saveManifest({ ...m, name }); await deleteManifest(m.name); useWorkspace.setState({ manifest: { ...m, name } }); nameActiveTab(); await ws().refreshList(); }
+  try { if (name.toLowerCase() === m.name.toLowerCase()) await deleteManifest(m.name); await saveManifest({ ...m, name }); if (name.toLowerCase() !== m.name.toLowerCase()) await deleteManifest(m.name); useWorkspace.setState({ manifest: { ...m, name } }); nameActiveTab(); await ws().refreshList(); }
   catch (e) { void notify((e as Error).message); }
 }
 
 // ------------------------------------------------------------------ bundles: copy, export / import, send
-const unique = (base: string, taken: Set<string>): string => { let n = base, i = 2; while (taken.has(n)) n = `${base} ${i++}`; taken.add(n); return n; };
+const unique = (base: string, taken: Set<string>): string => { const low = (x: string) => x.toLowerCase(); const has = (x: string) => [...taken].some((t) => low(t) === low(x)); let n = base, i = 2; while (has(n)) n = `${base} ${i++}`; taken.add(n); return n; };
 
 /** gather the parts of the open project (the Director project and its canvases are read from the files, so save first) */
 export async function collect(parts: Part[]): Promise<Bundle> {

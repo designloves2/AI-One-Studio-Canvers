@@ -141,5 +141,3 @@ export function ProjectsPanel() {
     </div>
   );
 }
-
-const byDirectorNote = (show: boolean, T: (k: string) => string) => (show ? <small className="muted">🎬 {T('Canvases made by the Director belong to it and go with it.')}</small> : null);

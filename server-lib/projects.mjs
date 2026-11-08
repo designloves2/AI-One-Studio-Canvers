@@ -74,7 +74,7 @@ export async function handleProjects(req, res) {
   try {
     if (u.pathname === '/canvers/projects') { if (req.method !== 'GET') return json(res, 405, { error: 'method' }), true; return json(res, 200, { projects: list() }), true; }
     backfill();
-    const name = safeName(decodeURIComponent(u.pathname.slice('/canvers/projects/'.length)));
+    let name = null; try { name = safeName(decodeURIComponent(u.pathname.slice('/canvers/projects/'.length))); } catch { /* a broken %-code is just an invalid name */ }
     if (!name) return json(res, 400, { error: 'invalid name' }), true;
     const file = fileOf(name);
     if (req.method === 'GET') {
