@@ -7,7 +7,7 @@ import { useSettings } from './settings';
 import { saveTurboPick } from '../backend/turboMemory';
 
 export type AppMode = 'director' | 'canvas' | 'simple';
-export type PanelId = null | 'director' | 'canvases' | 'nodes' | 'decks' | 'assets' | 'library' | 'live' | 'settings' | 'models';
+export type PanelId = null | 'projects' | 'director' | 'canvases' | 'nodes' | 'decks' | 'assets' | 'library' | 'live' | 'settings' | 'models';
 
 export interface ComposerRun {
   id: string;
@@ -105,6 +105,8 @@ interface State {
   newProject(): void;
   requestFit(): void;
   addComposerRun(r: ComposerRun): void;
+  /** replace the whole Simple-mode feed (a project was opened / cleared) */
+  setComposerRuns(runs: ComposerRun[]): void;
   patchComposerRun(id: string, patch: Partial<ComposerRun>): void;
   removeComposerRun(id: string): void;
 }
@@ -302,6 +304,7 @@ export const useGraph = create<State>((set, get) => ({
   requestFit: () => set({ fitTick: get().fitTick + 1 }),
   focusNode: (id) => set({ selected: [id], focusId: id, focusTick: get().focusTick + 1 }),
 
+  setComposerRuns: (runs) => { writeRuns(runs); set({ composerRuns: runs }); },
   addComposerRun: (r) => { const runs = [r, ...get().composerRuns]; writeRuns(runs); set({ composerRuns: runs }); },
   patchComposerRun: (id, patch) => { const runs = get().composerRuns.map((r) => (r.id === id ? { ...r, ...patch } : r)); writeRuns(runs); set({ composerRuns: runs }); },
   removeComposerRun: (id) => { const runs = get().composerRuns.filter((r) => r.id !== id); writeRuns(runs); set({ composerRuns: runs }); },

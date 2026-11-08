@@ -800,3 +800,22 @@ button.save-state.dirty { cursor: pointer; } button.save-state.dirty:hover { bac
 .backends { gap: 5px; margin-bottom: 10px; }
 .bk { padding: 6px 8px; align-items: center; justify-content: center; text-align: center; }
 .bk b { font-size: 12px; font-weight: 600; }
+
+/* project: top tabs with a dot (filled = the tab has content), project button, project menu */
+.mode-toggle button { display: inline-flex; align-items: center; gap: 7px; }
+.tab-dot { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid currentColor; opacity: .55; box-sizing: border-box; flex: none; }
+.tab-dot.on { background: var(--ok, #4ade80); border-color: var(--ok, #4ade80); opacity: 1; }
+.mode-toggle button.active .tab-dot:not(.on) { opacity: .8; }
+.project-btn { display: inline-flex; align-items: center; gap: 6px; max-width: 220px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--bg3); color: inherit; cursor: pointer; }
+.project-btn b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: 12.5px; }
+.prj { gap: 10px; }
+.prj-card { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid var(--acc); border-radius: 10px; background: var(--bg3); }
+.prj-title { display: flex; align-items: center; gap: 6px; } .prj-title b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; }
+.prj-send { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--muted); } .prj-send select { flex: 1; min-width: 0; }
+.prj-part { display: flex; flex-direction: column; gap: 4px; padding: 8px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.prj-part header { display: flex; align-items: center; gap: 8px; font-size: 12px; } .prj-part header .spacer { flex: 1; }
+.prj-sub { font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prj-acts { display: flex; gap: 10px; flex-wrap: wrap; }
+.prj-row { display: flex; align-items: center; gap: 8px; } .prj-row.current .prj-name { color: var(--acc); font-weight: 600; }
+.prj-name { flex: 1; min-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: transparent; border: 0; color: inherit; cursor: pointer; padding: 2px 0; font-size: 12px; }
+.prj .panel-row { flex-wrap: wrap; } .prj .panel-row .btn { padding: 5px 9px; }

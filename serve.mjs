@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { handleDownloads } from './server-lib/downloads.mjs';
 import { handleCanvases } from './server-lib/canvases.mjs';
 import { handleDirector } from './server-lib/director.mjs';
+import { handleProjects } from './server-lib/projects.mjs';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), 'dist');
 const defaultTarget = new URL(process.env.COMFY_URL ?? 'http://127.0.0.1:8188');
@@ -26,6 +27,7 @@ const server = http.createServer(async (req, res) => {
   if (await handleDownloads(req, res)) return;
   if (await handleCanvases(req, res)) return;
   if (await handleDirector(req, res)) return;
+  if (await handleProjects(req, res)) return;
   if (p === '/canvers/target') {
     const json = (code, o) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(o)); };
     if (req.method === 'GET') return json(200, { url: target.origin });

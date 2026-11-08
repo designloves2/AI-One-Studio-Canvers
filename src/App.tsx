@@ -17,12 +17,13 @@ import { SimpleView } from './simple/SimpleView';
 import { DirectorView } from './director/DirectorView';
 import { PairBar } from './director/PairBar';
 import { startPairSync } from './director/pairing';
-import { DirectorPanel } from './director/DirectorPanel';
-import { addImports, resumeInflight, runAll, saveCanvasToList, stopAll } from './engine/actions';
+import { ProjectsPanel } from './panels/ProjectsPanel';
+import { newProjectFlow, saveAll, startWorkspaceSync, useWorkspace } from './store/workspace';
+import { useDirector } from './store/director';
+import { addImports, resumeInflight, runAll, stopAll } from './engine/actions';
 import { clearInflight } from './backend/comfy';
 import { loadTurboFromStudio } from './backend/turboMemory';
 import { t as tr } from './i18n';
-import { CanvasesPanel } from './panels/CanvasesPanel';
 import { SystemMonitor } from './ui/SystemMonitor';
 import { LlmNotice } from './ui/LlmNotice';
 import { systemStats } from './backend/comfy';
@@ -59,6 +60,13 @@ function TopBar() {
   const dirty = useGraph((s) => s.dirty);
   const mode = useGraph((s) => s.mode);
   const setMode = useGraph((s) => s.setMode);
+  const project = useWorkspace((s) => s.manifest);
+  // a filled dot = that tab has something in it
+  const hasDirector = useDirector((s) => !!s.project);
+  const hasCanvas = useGraph((s) => s.nodes.length > 0);
+  const hasSimple = useGraph((s) => s.composerRuns.length > 0);
+  const dDirty = useDirector((s) => s.dirty);
+  const unsaved = dirty || dDirty;
   const [up, setUp] = useState<boolean | null>(null);
   const [restarting, setRestarting] = useState(false);
   const restart = async () => {
@@ -78,17 +86,18 @@ function TopBar() {
   return (
     <div className="topbar">
       <div className="brand"><img src="/logo.svg" alt="" /><b>AI ONE Studio</b><em>Canvers</em></div>
-      <input className="project-name" value={name} onChange={(e) => setName(e.target.value)} />
-      <button className={`save-state ${dirty ? 'dirty' : 'clean'}`} title={dirty ? `${T('Not saved')} — ${T('Click to save')} (Ctrl+S)` : T('Saved')} onClick={() => { if (dirty) void saveCanvasToList(); }}>{dirty ? '●' : '✓'} {dirty ? T('Not saved') : T('Saved')}</button>
+      <button className="project-btn" title={`${T('Projects')} (Ctrl+O)`} onClick={() => useGraph.getState().setPanel('projects')}>📁 <b>{project?.name ?? T('New project')}</b></button>
+      {mode === 'canvas' && <input className="project-name" title={T('Canvas name')} value={name} onChange={(e) => setName(e.target.value)} />}
+      <button className={`save-state ${unsaved ? 'dirty' : 'clean'}`} title={unsaved ? `${T('Not saved')} — ${T('Click to save')} (Ctrl+S)` : T('Saved')} onClick={() => { if (unsaved) void saveAll(); }}>{unsaved ? '●' : '✓'} {unsaved ? T('Not saved') : T('Saved')}</button>
       <div className="file-actions">
-        <button title={`${T('New')}`} onClick={async () => { if (!useGraph.getState().nodes.length || await askConfirm(`${T('New')}?`)) useGraph.getState().newProject(); }}>＋</button>
-        <button title={`${T('Canvases')} (Ctrl+O)`} onClick={() => useGraph.getState().setPanel('canvases')}>☰</button>
-        <button title={`${T('Save')} (Ctrl+S)`} onClick={() => void saveCanvasToList()}>⤓</button>
+        <button title={T('New project')} onClick={() => void newProjectFlow()}>＋</button>
+        <button title={`${T('Projects')} (Ctrl+O)`} onClick={() => useGraph.getState().setPanel('projects')}>☰</button>
+        <button title={`${T('Save')} (Ctrl+S)`} onClick={() => void saveAll()}>⤓</button>
       </div>
       <div className="mode-toggle">
-        <button className={mode === 'director' ? 'active' : ''} onClick={() => setMode('director')}>{T('Director')}</button>
-        <button className={mode === 'canvas' ? 'active' : ''} onClick={() => setMode('canvas')}>{T('Canvas')}</button>
-        <button className={mode === 'simple' ? 'active' : ''} onClick={() => setMode('simple')}>{T('Simple')}</button>
+        {([['director', 'Director', hasDirector], ['canvas', 'Canvas', hasCanvas], ['simple', 'Simple', hasSimple]] as const).map(([id, label, has]) => (
+          <button key={id} className={mode === id ? 'active' : ''} onClick={() => setMode(id)} title={has ? T('Has content') : T('Empty')}><i className={`tab-dot${has ? ' on' : ''}`} aria-hidden />{T(label)}</button>
+        ))}
       </div>
       <div className="topbar-right"><SystemMonitor /><span className={`engine-dot ${up ? 'on' : ''}`} title="ComfyUI + STUDIO_ONE"><i />{restarting ? T('Restarting…') : 'ComfyUI'}</span><button className={`restart-btn${restarting ? ' spin' : ''}`} disabled={restarting} onClick={() => void restart()} title={T('Restart ComfyUI')}>↻</button></div>
     </div>
@@ -100,9 +109,9 @@ function Rail() {
   const mode = useGraph((s) => s.mode);
   const panel = useGraph((s) => s.panel);
   const setPanel = useGraph((s) => s.setPanel);
-  const items: [Exclude<PanelId, null>, string, string][] = [['director', 'Director projects', ICONS.director], ['canvases', 'Canvases', ICONS.canvases], ['live', 'Live Canvas', ICONS.live], ['decks', 'Decks', ICONS.nodes], ['nodes', 'Nodes', ICONS.nodes], ['assets', 'Gallery', ICONS.assets], ['library', 'Asset Library', ICONS.library], ['models', 'Models', ICONS.status], ['settings', 'Settings', ICONS.settings]];
+  const items: [Exclude<PanelId, null>, string, string][] = [['projects', 'Projects', ICONS.canvases], ['live', 'Live Canvas', ICONS.live], ['decks', 'Decks', ICONS.nodes], ['nodes', 'Nodes', ICONS.nodes], ['assets', 'Gallery', ICONS.assets], ['library', 'Asset Library', ICONS.library], ['models', 'Models', ICONS.status], ['settings', 'Settings', ICONS.settings]];
   // decks / nodes only make sense on the canvas, so the simple mode hides them
-  const visible = mode === 'simple' ? items.filter(([id]) => id !== 'director' && id !== 'decks' && id !== 'nodes' && id !== 'live' && id !== 'canvases') : mode === 'director' ? items.filter(([id]) => id !== 'decks' && id !== 'nodes' && id !== 'live' && id !== 'canvases') : items.filter(([id]) => id !== 'director');
+  const visible = mode === 'canvas' ? items : items.filter(([id]) => id !== 'decks' && id !== 'nodes' && id !== 'live');
   return (
     <div className="rail">
       {visible.map(([id, label, d]) => (
@@ -172,7 +181,7 @@ export function App() {
     document.body.classList.add('resizing'); window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
   };
 
-  useEffect(() => { startPairSync(); }, []);   // a Director project and its canvas keep the clip prompts equal while both are open
+  useEffect(() => { startPairSync(); startWorkspaceSync(); }, []);   // a Director project and its canvas keep the clip prompts equal while both are open
 
   useEffect(() => {
     setHostSerializer(serializeHost); wireHostStore();
@@ -197,8 +206,8 @@ export function App() {
       const tag = (e.target as HTMLElement).tagName;
       const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
       const g = useGraph.getState();
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); void saveCanvasToList(); return; }
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') { e.preventDefault(); g.setPanel('canvases'); return; }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); void saveAll(); return; }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') { e.preventDefault(); g.setPanel('projects'); return; }
       if (typing || g.mode !== 'canvas') return;
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? g.redo() : g.undo(); return; }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') { e.preventDefault(); if (g.selected.length) g.duplicateNodes(g.selected); return; }
@@ -227,11 +236,10 @@ export function App() {
       <TopBar />
       <div className="body">
         <Rail />
-        {panel && (mode === 'canvas' || (mode === 'director' && panel === 'director') || panel === 'assets' || panel === 'library' || panel === 'settings' || panel === 'models') ? (
+        {panel && (mode === 'canvas' || panel === 'projects' || panel === 'assets' || panel === 'library' || panel === 'settings' || panel === 'models') ? (
           <aside className="panel" style={{ width: panelW }}>
-            <header><b>{T(({ director: 'Director projects', canvases: 'Canvases', decks: 'Decks', nodes: 'Nodes', assets: 'Gallery', settings: 'Settings', models: 'Models', library: 'Asset Library', live: 'Live Canvas' } as const)[panel!])}</b><button onClick={() => useGraph.getState().setPanel(null)}>✕</button></header>
-            {panel === 'director' && <DirectorPanel />}
-            {panel === 'canvases' && <CanvasesPanel />}
+            <header><b>{T(({ projects: 'Projects', director: 'Director projects', canvases: 'Canvases', decks: 'Decks', nodes: 'Nodes', assets: 'Gallery', settings: 'Settings', models: 'Models', library: 'Asset Library', live: 'Live Canvas' } as const)[panel!])}</b><button onClick={() => useGraph.getState().setPanel(null)}>✕</button></header>
+            {panel === 'projects' && <ProjectsPanel />}
             {panel === 'decks' && <DecksPanel />}
             {panel === 'nodes' && <NodesPanel />}
             {panel === 'assets' && <AssetsPanel />}
