@@ -5,6 +5,8 @@ import { useDirector } from '../store/director';
 import { clearPart, canvasesOf, deleteProject, duplicateProject, exportProject, importProject, newProjectFlow, openProject, renameProject, saveAll, sendPart, useWorkspace, type Part } from '../store/workspace';
 import { askConfirm, notify } from '../ui/dialog';
 import { openSavedCanvas } from '../engine/actions';
+import { loadManifest, type ProjectManifest } from '../backend/projects';
+import { listDirectorProjects, type DirectorEntry } from '../backend/director';
 
 const fmt = (ms: number) => new Date(ms).toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
 const MODE_ICON: Record<string, string> = { director: '🎬', canvas: '▦', simple: '✦' };
@@ -22,6 +24,14 @@ export function ProjectsPanel() {
   const gDirty = useGraph((s) => s.dirty);
   const [target, setTarget] = useState('');
   const [move, setMove] = useState(false);
+  // the project list is an accordion: a project opens to show what is in it; it is loaded only by its Load button
+  const [open, setOpen] = useState<string | null>(null);
+  const [info, setInfo] = useState<{ m: ProjectManifest; dir?: DirectorEntry } | null>(null);
+  const peek = async (name: string) => {
+    if (open === name) { setOpen(null); setInfo(null); return; }
+    setOpen(name); setInfo(null);
+    try { const m = await loadManifest(name); const dir = m.director ? (await listDirectorProjects().catch(() => [])).find((d) => d.name === m.director) : undefined; setInfo({ m, dir }); } catch { /* shown as empty */ }
+  };
   useEffect(() => { void useWorkspace.getState().refreshList(); }, []);
   const others = list.filter((p) => p.name !== m?.name);
   const to = others.some((p) => p.name === target) ? target : (others[0]?.name ?? '');
@@ -111,13 +121,32 @@ export function ProjectsPanel() {
 
       <h4>{T('Projects')} · {list.length}</h4>
       <div className="cv-list">
-        {list.map((p) => (
-          <div key={p.name} className={`cv-item${p.name === m?.name ? ' current' : ''}`} title={p.name} onClick={() => { if (p.name !== m?.name) void openProject(p.name); }}>
-            <div className="cv-main"><b>{p.name}</b>
-              <span className="muted">{MODE_ICON[p.mode] ?? ''} {p.hasDirector ? `🎬 ` : ''}{p.canvases ? `▦ ${p.canvases} ` : ''}{p.simple ? `✦ ${p.simple} ` : ''}· {fmt(p.mtime)}</span></div>
-            {p.name !== m?.name && <button className="mini-link" title={T('Delete')} onClick={(e) => { e.stopPropagation(); void deleteProject(p.name); }}>✕</button>}
-          </div>
-        ))}
+        {list.map((p) => {
+          const isOpen = open === p.name; const here = p.name === m?.name;
+          return (
+            <div key={p.name} className={`prj-item${isOpen ? ' open' : ''}${here ? ' current' : ''}`}>
+              <button className="prj-head" aria-expanded={isOpen} onClick={() => void peek(p.name)}>
+                <span className="prj-hname" title={p.name}>{p.name}</span>
+                <span className="muted">{MODE_ICON[p.mode] ?? ''} {fmt(p.mtime)}</span>
+                <i aria-hidden>{isOpen ? '▾' : '▸'}</i>
+              </button>
+              {isOpen && (
+                <div className="prj-body">
+                  {!info ? <p className="muted">…</p> : <>
+                    <div className="prj-line"><b>🎬 {T('Director')}</b><span>{info.m.director ? `${info.dir ? `${info.dir.shots} ${T('clips')}` : ''}${info.dir ? ' · ' : ''}${info.m.director}` : T('Empty')}</span></div>
+                    <div className="prj-line"><b>▦ {T('Canvas')}</b><span>{info.m.canvases.length ? info.m.canvases.join(' · ') : T('Empty')}</span></div>
+                    <div className="prj-line"><b>✦ {T('Simple')}</b><span>{info.m.simple.length ? `${info.m.simple.length} ${T('results')}` : T('Empty')}</span></div>
+                    <div className="prj-line"><b>{T('Saved')}</b><span>{fmt(p.mtime)}</span></div>
+                    <div className="panel-row">
+                      {here ? <span className="muted">{T('This project is open.')}</span> : <button className="btn primary" disabled={busy} onClick={guard(() => openProject(p.name))}>{T('Load')}</button>}
+                      {!here && <button className="btn" disabled={busy} onClick={guard(async () => { await deleteProject(p.name); setOpen(null); setInfo(null); })}>{T('Delete')}</button>}
+                    </div>
+                  </>}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
       {!list.length && <p className="muted">{T('No projects yet.')}</p>}
     </div>

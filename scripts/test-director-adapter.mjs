@@ -48,7 +48,8 @@ ok(r1.project.nodes.find((n) => n.id === A.genNodeId(a.shot_id)).params.aspect =
 ok(r1.project.nodes.find((n) => n.id === A.genNodeId(a.shot_id)).engineId === 'krea2', 'generator starts on the registry default engine');
 const e0 = r1.project.edges[0]; ok(e0.sourceHandle === 'text' && e0.targetHandle === 'text', 'wire goes from the text output to the text input');
 ok(r1.link.shots.length === 3 && r1.link.shots[0].node_ids.length === 2 && M.isId(r1.link.canvas_id, 'cv'), 'link lists the cards of each shot');
-const ys = r1.project.nodes.filter((n) => n.defId === 'prompt').map((n) => n.y); ok(ys[0] < ys[1] && ys[1] < ys[2], 'shots are laid out top to bottom in scene/shot order');
+const ps = r1.project.nodes.filter((n) => n.defId === 'prompt'); ok(ps[0].x < ps[1].x && ps[1].x < ps[2].x && ps.every((n, i) => !i || n.y === ps[0].y), 'three shots stand side by side in scene/shot order (tiles in rows, not one long column)');
+const gn1 = r1.project.nodes.filter((n) => n.defId !== 'prompt'); ok(gn1.every((g) => { const t = ps[gn1.indexOf(g)]; return t && g.x > t.x; }), 'each generator stands right of its prompt');
 ok(JSON.parse(JSON.stringify(r1.project)).nodes.length === 6, 'result is plain JSON');
 
 // ---- building again changes nothing

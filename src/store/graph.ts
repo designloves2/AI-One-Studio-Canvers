@@ -69,6 +69,9 @@ interface State {
   addNode(defId: string, x: number, y: number, init?: Partial<GraphNode>): string;
   removeNodes(ids: string[]): void;
   duplicateNodes(ids: string[]): void;
+  /** Copy / Paste of cards: one clipboard for the whole app, so it works from one project tab to another (and between browser tabs) */
+  copyNodes(ids: string[]): number;
+  pasteNodes(at?: { x: number; y: number }): number;
   moveNode(id: string, x: number, y: number): void;
   moveMany(deltas: { id: string; x: number; y: number }[]): void;
   setSize(id: string, w: number, h: number): void;
@@ -119,6 +122,9 @@ function measure(n: GraphNode): { w: number; h: number } {
 }
 
 const RUNS_KEY = 'canvers.runs.v1';
+const CLIP_KEY = 'canvers.cards.clip';
+interface CardClip { nodes: GraphNode[]; edges: GraphEdge[] }
+let cardClip: CardClip | null = null;
 
 const readMode = (): AppMode => { try { const m = localStorage.getItem(MODE_KEY); return m === 'simple' || m === 'director' ? m : 'canvas'; } catch { return 'canvas'; } };
 const readRuns = (): ComposerRun[] => { try { return JSON.parse(localStorage.getItem(RUNS_KEY) ?? '[]'); } catch { return []; } };
@@ -171,6 +177,29 @@ export const useGraph = create<State>((set, get) => ({
       edges: get().edges.filter((e) => !set_.has(e.source) && !set_.has(e.target)),
       selected: get().selected.filter((s) => !set_.has(s)),
     });
+  },
+  copyNodes: (ids) => {
+    const set = new Set(ids); const nodes = get().nodes.filter((n) => set.has(n.id) && !n.members);
+    if (!nodes.length) return 0;
+    const keep = new Set(nodes.map((n) => n.id));
+    const keepResults = (n: GraphNode) => n.defId.startsWith('import');   // a Load card's picture is its content; a generator's results are not copied
+    const payload: CardClip = { nodes: nodes.map((n) => ({ ...n, params: { ...n.params }, results: keepResults(n) ? n.results.filter((r) => !r.url.startsWith('data:')) : [], activeResult: 0, locked: false, members: undefined })), edges: get().edges.filter((e) => keep.has(e.source) && keep.has(e.target)) };
+    cardClip = payload;
+    try { localStorage.setItem(CLIP_KEY, JSON.stringify(payload)); } catch { /* too big or blocked: the copy still works inside this page */ }
+    return nodes.length;
+  },
+  pasteNodes: (at) => {
+    let c = cardClip;
+    if (!c) { try { c = JSON.parse(localStorage.getItem(CLIP_KEY) ?? 'null') as CardClip | null; } catch { c = null; } }
+    if (!c?.nodes?.length) return 0;
+    get().snapshot();
+    const map = new Map<string, string>(); const copies: GraphNode[] = [];
+    const minX = Math.min(...c.nodes.map((n) => n.x)), minY = Math.min(...c.nodes.map((n) => n.y));
+    const dx = at ? at.x - minX : 40, dy = at ? at.y - minY : 40;
+    for (const n of c.nodes) { const id = uid('n'); map.set(n.id, id); copies.push({ ...n, id, x: n.x + dx, y: n.y + dy, params: { ...n.params }, results: n.results.map((r) => ({ ...r })), activeResult: 0, locked: false, members: undefined }); }
+    const edges = c.edges.filter((e) => map.has(e.source) && map.has(e.target)).map((e) => ({ ...e, id: uid('e'), source: map.get(e.source)!, target: map.get(e.target)! }));
+    set({ nodes: [...get().nodes, ...copies], edges: [...get().edges, ...edges], selected: copies.map((x) => x.id) });
+    return copies.length;
   },
   duplicateNodes: (ids) => {
     get().snapshot();

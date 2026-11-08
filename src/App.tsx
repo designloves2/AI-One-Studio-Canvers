@@ -18,7 +18,7 @@ import { DirectorView } from './director/DirectorView';
 import { PairBar } from './director/PairBar';
 import { startPairSync } from './director/pairing';
 import { ProjectsPanel } from './panels/ProjectsPanel';
-import { newProjectFlow, saveAll, startWorkspaceSync, useWorkspace } from './store/workspace';
+import { closeTab, newProjectFlow, renameProject, saveAll, startWorkspaceSync, switchTab, useWorkspace } from './store/workspace';
 import { useDirector } from './store/director';
 import { addImports, resumeInflight, runAll, stopAll } from './engine/actions';
 import { clearInflight } from './backend/comfy';
@@ -61,6 +61,8 @@ function TopBar() {
   const mode = useGraph((s) => s.mode);
   const setMode = useGraph((s) => s.setMode);
   const project = useWorkspace((s) => s.manifest);
+  const tabs = useWorkspace((s) => s.tabs);
+  const activeId = useWorkspace((s) => s.activeId);
   // a filled dot = that tab has something in it
   const hasDirector = useDirector((s) => !!s.project);
   const hasCanvas = useGraph((s) => s.nodes.length > 0);
@@ -84,23 +86,34 @@ function TopBar() {
     void ping(); const i = setInterval(ping, 10000); return () => clearInterval(i);
   }, []);
   return (
-    <div className="topbar">
-      <div className="brand"><img src="/logo.svg" alt="" /><b>AI ONE Studio</b><em>Canvers</em></div>
-      <button className="project-btn" title={`${T('Projects')} (Ctrl+O)`} onClick={() => useGraph.getState().setPanel('projects')}>📁 <b>{project?.name ?? T('New project')}</b></button>
-      {mode === 'canvas' && <input className="project-name" title={T('Canvas name')} value={name} onChange={(e) => setName(e.target.value)} />}
-      <button className={`save-state ${unsaved ? 'dirty' : 'clean'}`} title={unsaved ? `${T('Not saved')} — ${T('Click to save')} (Ctrl+S)` : T('Saved')} onClick={() => { if (unsaved) void saveAll(); }}>{unsaved ? '●' : '✓'} {unsaved ? T('Not saved') : T('Saved')}</button>
-      <div className="file-actions">
-        <button title={T('New project')} onClick={() => void newProjectFlow()}>＋</button>
-        <button title={`${T('Projects')} (Ctrl+O)`} onClick={() => useGraph.getState().setPanel('projects')}>☰</button>
-        <button title={`${T('Save')} (Ctrl+S)`} onClick={() => void saveAll()}>⤓</button>
+    <>
+      <div className="topbar">
+        <div className="brand"><img src="/logo.svg" alt="" /><b>AI ONE Studio</b><em>Canvers</em></div>
+        <div className="ptabs" role="tablist">
+          {tabs.map((t) => (
+            <div key={t.id} role="tab" aria-selected={t.id === activeId} className={`ptab${t.id === activeId ? ' active' : ''}`} title={t.name || T('New project')} onClick={() => void switchTab(t.id)} onAuxClick={(e) => { if (e.button === 1) void closeTab(t.id); }}>
+              <span className="ptab-name">{t.id === activeId ? (project?.name ?? t.name) || T('New project') : t.name || T('New project')}</span>
+              {t.id === activeId && unsaved && <i className="ptab-dirty" title={T('Not saved')} />}
+              <button className="ptab-x" title={T('Close')} onClick={(e) => { e.stopPropagation(); void closeTab(t.id); }}>✕</button>
+            </div>
+          ))}
+          <button className="ptab-add" title={T('New project')} onClick={() => void newProjectFlow()}>＋</button>
+        </div>
+        <div className="topbar-right"><SystemMonitor /><span className={`engine-dot ${up ? 'on' : ''}`} title="ComfyUI + STUDIO_ONE"><i />{restarting ? T('Restarting…') : 'ComfyUI'}</span><button className={`restart-btn${restarting ? ' spin' : ''}`} disabled={restarting} onClick={() => void restart()} title={T('Restart ComfyUI')}>↻</button></div>
       </div>
-      <div className="mode-toggle">
-        {([['director', 'Director', hasDirector], ['canvas', 'Canvas', hasCanvas], ['simple', 'Simple', hasSimple]] as const).map(([id, label, has]) => (
-          <button key={id} className={mode === id ? 'active' : ''} onClick={() => setMode(id)} title={has ? T('Has content') : T('Empty')}><i className={`tab-dot${has ? ' on' : ''}`} aria-hidden />{T(label)}</button>
-        ))}
+      <div className="subbar">
+        <div className="left">
+          <button className="project-btn" title={T('Rename')} onClick={() => void renameProject()}>📁 <b>{project?.name ?? T('New project')}</b></button>
+          <button className={`save-state ${unsaved ? 'dirty' : 'clean'}`} title={unsaved ? `${T('Not saved')} — ${T('Click to save')} (Ctrl+S)` : T('Saved')} onClick={() => { if (unsaved) void saveAll(); }}>{unsaved ? '●' : '✓'} {unsaved ? T('Not saved') : T('Saved')}</button>
+        </div>
+        <div className="mode-toggle">
+          {([['director', 'Director', hasDirector], ['canvas', 'Canvas', hasCanvas], ['simple', 'Simple', hasSimple]] as const).map(([id, label, has]) => (
+            <button key={id} className={mode === id ? 'active' : ''} onClick={() => setMode(id)} title={has ? T('Has content') : T('Empty')}><i className={`tab-dot${has ? ' on' : ''}`} aria-hidden />{T(label)}</button>
+          ))}
+        </div>
+        <div className="right">{mode === 'canvas' && <input className="project-name" title={T('Canvas name')} value={name} onChange={(e) => setName(e.target.value)} />}</div>
       </div>
-      <div className="topbar-right"><SystemMonitor /><span className={`engine-dot ${up ? 'on' : ''}`} title="ComfyUI + STUDIO_ONE"><i />{restarting ? T('Restarting…') : 'ComfyUI'}</span><button className={`restart-btn${restarting ? ' spin' : ''}`} disabled={restarting} onClick={() => void restart()} title={T('Restart ComfyUI')}>↻</button></div>
-    </div>
+    </>
   );
 }
 
@@ -210,6 +223,8 @@ export function App() {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') { e.preventDefault(); g.setPanel('projects'); return; }
       if (typing || g.mode !== 'canvas') return;
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? g.redo() : g.undo(); return; }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c' && !window.getSelection()?.toString()) { if (g.selected.length && g.copyNodes(g.selected)) e.preventDefault(); return; }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'x' && !window.getSelection()?.toString()) { if (g.selected.length && g.copyNodes(g.selected)) { e.preventDefault(); g.removeNodes(g.selected); } return; }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') { e.preventDefault(); if (g.selected.length) g.duplicateNodes(g.selected); return; }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'g') { e.preventDefault(); if (g.selected.length) g.group(g.selected); return; }
       if (e.key === 'Tab') { e.preventDefault(); const p = { x: window.innerWidth / 2 - 130, y: window.innerHeight / 3 }; setMenu({ ...p, flow: screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 }) }); }
@@ -218,8 +233,11 @@ export function App() {
     };
     const onPaste = (e: ClipboardEvent) => {
       const files = [...(e.clipboardData?.files ?? [])].filter((f) => f.type.startsWith('image/'));
-      if (files.length && useGraph.getState().mode === 'canvas' && (e.target as HTMLElement).tagName !== 'TEXTAREA' && (e.target as HTMLElement).tagName !== 'INPUT') {
+      const tag = (e.target as HTMLElement).tagName; const typing = tag === 'TEXTAREA' || tag === 'INPUT' || (e.target as HTMLElement).isContentEditable;
+      if (files.length && useGraph.getState().mode === 'canvas' && !typing) {
         void addImports(files, screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 }));
+      } else if (!files.length && !typing && useGraph.getState().mode === 'canvas' && !e.clipboardData?.getData('text/plain')?.trim()) {
+        if (useGraph.getState().pasteNodes()) e.preventDefault();   // cards copied in any project tab
       }
     };
     window.addEventListener('keydown', onKey); window.addEventListener('paste', onPaste);

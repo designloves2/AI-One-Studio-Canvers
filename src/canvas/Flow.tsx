@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { tidyCanvas } from '../backend/liveCanvas';
 import {
   ReactFlow, Background, BackgroundVariant, Controls as RFControls, SelectionMode, useReactFlow,
   type Connection, type Edge, type EdgeChange, type Node, type NodeChange,
@@ -101,7 +102,10 @@ export function Flow({ tool, onMenu }: { tool: 'select' | 'hand'; onMenu(at: { x
       { label: 'Run this card', disabled: ids.length !== 1, onClick: () => void runNode(ids[0]) },
       { label: 'Run everything', onClick: () => void runAll() },
       grp ? { label: 'Ungroup', shortcut: 'Ctrl G', divider: true, onClick: () => g.ungroup(ids[0]) } : { label: 'Group selection', shortcut: 'Ctrl G', disabled: !has, divider: true, onClick: () => g.group(ids) },
+      { label: 'Copy', shortcut: 'Ctrl C', disabled: !has, divider: true, onClick: () => { g.copyNodes(ids); } },
+      { label: 'Paste', shortcut: 'Ctrl V', onClick: () => { g.pasteNodes(); } },
       { label: 'Duplicate', shortcut: 'Ctrl D', disabled: !has, onClick: () => g.duplicateNodes(ids) },
+      { label: 'Tidy up', disabled: g.nodes.length < 2, onClick: () => tidyCanvas(ids) },
       { label: lockedAll ? 'Unlock' : 'Lock', disabled: !has, onClick: () => g.setLocked(ids, !lockedAll) },
       { label: 'Card colour', swatches: COLORS, custom: true, divider: true, onPick: (v) => g.setColor(ids, v), onCustom: (bg, text) => g.setCardColors(ids, bg, text), disabled: !has },
       { label: 'Save selection as deck', disabled: !has, onClick: () => { g.select(ids); saveSelectionAsDeck(`Deck ${new Date().toLocaleTimeString()}`); } },

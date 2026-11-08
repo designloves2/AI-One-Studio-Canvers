@@ -2,18 +2,18 @@
 // This store keeps the manifest of the open project in step with the three stores (director / graph) and holds every project-level action:
 // open, new, save, rename, copy, export / import, send a part to another project, clear a part, delete.
 import { create } from 'zustand';
-import { useGraph, type ComposerRun } from './graph';
+import { useGraph, type AppMode, type ComposerRun } from './graph';
 import { useDirector } from './director';
 import { deleteCanvas, listCanvases, loadCanvas, saveCanvas } from '../backend/canvases';
 import { deleteDirectorProject, listDirectorProjects, openDirectorProject, saveDirectorProject } from '../backend/director';
 import { deleteManifest, listProjects, loadManifest, newManifest, saveManifest, type ProjectEntry, type ProjectManifest, type ProjectMode } from '../backend/projects';
 import { askConfirm, askText, notify } from '../ui/dialog';
 import { t as tr } from '../i18n';
+import { uid } from '../backend/comfy';
 import { saveCanvasToList } from '../engine/actions';
 import type { DirectorProject } from '../director/types';
 import type { Project } from '../types';
 
-const LAST_KEY = 'canvers.project.last';
 const BAD = /[\\/:*?"<>|\u0000-\u001f]/g;
 export const projectFileName = (n: string): string => (n.replace(BAD, ' ').replace(/\s+/g, ' ').trim().replace(/^\.+/, '').slice(0, 100)) || 'project';
 
@@ -21,22 +21,65 @@ export type Part = 'director' | 'canvas' | 'simple';
 /** what a project hands over / receives (a copy, an export file, "send to another project") */
 export interface Bundle { kind: 'canvers-project-bundle'; schema: 1; name: string; mode: ProjectMode; director: { file: string; project: DirectorProject } | null; canvases: Record<string, Project>; simple: ComposerRun[] }
 
+/** an open project tab (the projects you work in side by side); `name` is the project's name ('' = nothing saved in it yet) */
+export interface Tab { id: string; name: string; /** the mode this tab was in when it was left */ mode?: AppMode }
+const TABS_KEY = 'canvers.tabs.v1';
+function readTabs(): { tabs: Tab[]; active: string } {
+  try {
+    const v = JSON.parse(localStorage.getItem(TABS_KEY) ?? 'null') as { tabs?: Tab[]; active?: string } | null;
+    if (v?.tabs?.length) return { tabs: v.tabs.filter((t) => t && typeof t.id === 'string'), active: v.tabs.some((t) => t.id === v.active) ? v.active! : v.tabs[0].id };
+  } catch { /* ignore */ }
+  const id = uid('tab'); return { tabs: [{ id, name: '' }], active: id };
+}
+const initTabs = readTabs();
+
 interface WorkspaceState {
   manifest: ProjectManifest | null;
   list: ProjectEntry[];
   busy: boolean;
+  tabs: Tab[];
+  activeId: string;
   refreshList(): Promise<void>;
 }
 export const useWorkspace = create<WorkspaceState>((set) => ({
-  manifest: null, list: [], busy: false,
+  manifest: null, list: [], busy: false, tabs: initTabs.tabs, activeId: initTabs.active,
   refreshList: async () => { try { set({ list: await listProjects() }); } catch { /* a server without the route: the list stays as it was */ } },
 }));
+const saveTabs = () => { const { tabs, activeId } = useWorkspace.getState(); try { localStorage.setItem(TABS_KEY, JSON.stringify({ tabs, active: activeId })); } catch { /* ignore */ } };
+/** the active tab shows the open project's name */
+function nameActiveTab() {
+  const { tabs, activeId, manifest } = useWorkspace.getState();
+  useWorkspace.setState({ tabs: tabs.map((t) => (t.id === activeId ? { ...t, name: manifest?.name ?? '' } : t)) }); saveTabs();
+}
+
+/** what a tab keeps while it is in the background: the three modes exactly as they were, saved or not */
+interface Snap {
+  manifest: ProjectManifest | null;
+  director: { project: DirectorProject | null; file: string | null; dirty: boolean; readOnly: boolean; notes: string[]; view: ReturnType<typeof useDirector.getState>['view']; focus: number; selClips: string[] };
+  canvas: { project: Project; file: string | null; dirty: boolean };
+  runs: ComposerRun[]; mode: AppMode;
+}
+const snaps = new Map<string, Snap>();
+function capture(): Snap {
+  const d = useDirector.getState(); const g = useGraph.getState();
+  return { manifest: useWorkspace.getState().manifest, director: { project: d.project, file: d.file, dirty: d.dirty, readOnly: d.readOnly, notes: d.notes, view: d.view, focus: d.focus, selClips: d.selClips }, canvas: { project: g.toProject(), file: g.canvasFile, dirty: g.dirty }, runs: g.composerRuns, mode: g.mode };
+}
+function blankStores() {
+  const g = useGraph.getState(); const d = useDirector.getState();
+  g.newProject(); g.setComposerRuns([]); d.close();
+}
+function restore(sn: Snap) {
+  const g = useGraph.getState();
+  useDirector.setState({ project: sn.director.project, file: sn.director.file, dirty: sn.director.dirty, readOnly: sn.director.readOnly, notes: sn.director.notes, view: sn.director.view, focus: sn.director.focus, selClips: sn.director.selClips, batch: null });
+  g.loadProject(sn.canvas.project, sn.canvas.file, sn.canvas.dirty); g.setComposerRuns(sn.runs); g.setMode(sn.mode);
+  useWorkspace.setState({ manifest: sn.manifest });
+}
+const tabIsBlank = (): boolean => { const g = useGraph.getState(); return !useWorkspace.getState().manifest && !useDirector.getState().project && !g.nodes.length && !g.composerRuns.length; };
 
 let applying = false;   // true while a project is being opened: the stores change, the manifest must not be rewritten from that
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 
 const ws = () => useWorkspace.getState();
-const remember = (name: string | null) => { try { if (name) localStorage.setItem(LAST_KEY, name); else localStorage.removeItem(LAST_KEY); } catch { /* ignore */ } };
 
 /** every canvas file that belongs to the open project: the ones listed + the ones the Director made for its episodes */
 export function canvasesOf(m: ProjectManifest, d: DirectorProject | null = useDirector.getState().project): string[] {
@@ -64,7 +107,7 @@ async function ensureProject(hint: string): Promise<ProjectManifest> {
   const cur = ws().manifest; if (cur) return cur;
   const name = await freeName(hint || tr('New project'));
   const m = { ...newManifest(name, useGraph.getState().mode) };
-  useWorkspace.setState({ manifest: m }); remember(name);
+  useWorkspace.setState({ manifest: m }); nameActiveTab();
   await saveManifest(m).catch(() => undefined); void ws().refreshList();
   return m;
 }
@@ -105,23 +148,25 @@ export function startWorkspaceSync(): void {
   void restoreLast();
 }
 
-/** after a reload: the project that was open comes back (its Director project opens again; the canvas and the feed are restored by their own stores) */
+/** after a reload: the tabs come back; the open one loads its project (its Director project opens again; the canvas and the feed are restored by their own stores) */
 async function restoreLast(): Promise<void> {
-  let name: string | null = null; try { name = localStorage.getItem(LAST_KEY); } catch { /* ignore */ }
   void ws().refreshList();
-  if (!name) return;
+  const tab = ws().tabs.find((t) => t.id === ws().activeId);
+  if (!tab?.name) return;
   try {
-    const m = await loadManifest(name);
+    const m = await loadManifest(tab.name);
     applying = true;
     useWorkspace.setState({ manifest: m });
     if (m.director && !useDirector.getState().project) { try { await useDirector.getState().open(m.director); } catch { /* the file is gone: the project keeps its other parts */ } }
-  } catch { remember(null); } finally { applying = false; }
+  } catch { nameActiveTab(); } finally { applying = false; }
 }
 
 // ------------------------------------------------------------------ opening / new / save
+/** something is running: the tabs are kept as they are until it is done (a run belongs to the cards on screen) */
 function unsavedWork(): string | null {
   const d = useDirector.getState(); const g = useGraph.getState();
-  if (d.busy) return tr('The crew is working. Wait until it is done.');
+  if (d.busy || d.batch?.running) return tr('The crew is working. Wait until it is done.');
+  if (Object.values(g.runtime).some((r) => r.status === 'running') || g.composerRuns.some((r) => r.status === 'running')) return tr('A generation is running. Wait until it is done, or stop it.');
   return null;
 }
 async function confirmLeave(): Promise<boolean> {
@@ -144,49 +189,114 @@ export async function saveAll(): Promise<boolean> {
   } catch (e) { void notify(`${tr('Could not save')}: ${(e as Error).message}`); return false; }
 }
 
-export async function openProject(name: string): Promise<boolean> {
-  const busy = unsavedWork(); if (busy) { void notify(busy); return false; }
-  if (!(await confirmLeave())) return false;
-  let m: ProjectManifest;
-  try { m = await loadManifest(name); } catch (e) { void notify(`${tr('Could not open')}: ${(e as Error).message}`); return false; }
+/** read a project's files into the three modes (the stores must be blank or about to be replaced) */
+async function loadInto(m: ProjectManifest): Promise<void> {
   applying = true;
   try {
     const g = useGraph.getState(); const d = useDirector.getState();
-    useWorkspace.setState({ manifest: m }); remember(name);
+    useWorkspace.setState({ manifest: m });
     g.newProject(); g.setComposerRuns(m.simple ?? []);
     if (m.director) { try { await d.open(m.director); } catch (e) { void notify(`${tr('Could not open')}: ${(e as Error).message}`); d.close(); } } else d.close();
     if (m.director && useDirector.getState().project) { const { openCanvasOfProject } = await import('../director/pairing'); await openCanvasOfProject(); }
     else if (m.canvas) { try { g.loadProject(await loadCanvas(m.canvas), m.canvas, false); } catch { /* the canvas file is gone */ } }
     g.setMode(m.mode);
   } finally { applying = false; }
+}
+
+/** make `id` the open tab: the one that was open keeps its state in memory, the new one gets its own back (or its files are read) */
+async function activateTab(id: string, fresh?: () => Promise<void>): Promise<boolean> {
+  const cur = ws().activeId; if (id === cur) return true;
+  const busy = unsavedWork(); if (busy) { void notify(busy); return false; }
+  if (cur) { snaps.set(cur, capture()); useWorkspace.setState({ tabs: ws().tabs.map((t) => (t.id === cur ? { ...t, mode: useGraph.getState().mode } : t)) }); }
+  applying = true;
+  try {
+    useWorkspace.setState({ activeId: id }); saveTabs();
+    const sn = snaps.get(id);
+    if (fresh) { await fresh(); }
+    else if (sn) { restore(sn); snaps.delete(id); }
+    else {
+      const tab = ws().tabs.find((t) => t.id === id);
+      if (tab?.name) { try { await loadInto(await loadManifest(tab.name)); } catch { blankStores(); useWorkspace.setState({ manifest: null }); } }
+      else { blankStores(); useWorkspace.setState({ manifest: null }); }
+    }
+  } finally { applying = false; }
   void ws().refreshList();
   return true;
 }
 
-/** an empty project (the three modes start blank). `name` empty = it gets its name from the first thing that is made in it */
+/** a tab that has nothing in it yet is reused for the next project, otherwise a new tab is added */
+function tabForNew(): string {
+  const { tabs, activeId } = ws();
+  if (tabIsBlank()) return activeId;
+  const id = uid('tab'); useWorkspace.setState({ tabs: [...tabs, { id, name: '' }] }); saveTabs();
+  return id;
+}
+
+export const switchTab = (id: string): Promise<boolean> => activateTab(id);
+
+export async function openProject(name: string): Promise<boolean> {
+  const open = ws().tabs.find((t) => t.name === name);
+  if (open) return activateTab(open.id);
+  let m: ProjectManifest;
+  try { m = await loadManifest(name); } catch (e) { void notify(`${tr('Could not open')}: ${(e as Error).message}`); return false; }
+  const reuse = tabIsBlank();
+  const id = tabForNew();
+  if (reuse) { await loadInto(m); }   // the open tab has nothing in it: it becomes this project
+  else if (!(await activateTab(id, () => loadInto(m)))) { useWorkspace.setState({ tabs: ws().tabs.filter((t) => t.id !== id) }); saveTabs(); return false; }
+  nameActiveTab(); void ws().refreshList();
+  return true;
+}
+
+/** an empty project in a tab of its own. Without a name it gets one from the first thing that is made in it */
 export async function newProjectFlow(): Promise<boolean> {
-  const busy = unsavedWork(); if (busy) { void notify(busy); return false; }
   const typed = await askText(tr('Project name'));
   if (typed === null) return false;
-  if (!(await confirmLeave())) return false;
-  applying = true;
-  try {
-    const g = useGraph.getState(); const d = useDirector.getState();
-    g.newProject(); g.setComposerRuns([]); d.close();
-    if (typed.trim()) {
-      const name = await freeName(typed); const m = newManifest(name, g.mode);
-      useWorkspace.setState({ manifest: m }); remember(name); await saveManifest(m).catch(() => undefined);
-    } else { useWorkspace.setState({ manifest: null }); remember(null); }
-  } finally { applying = false; }
-  void ws().refreshList();
+  const reuse = tabIsBlank();
+  const id = tabForNew();
+  const make = async () => {
+    applying = true;
+    try {
+      blankStores();
+      if (typed.trim()) { const name = await freeName(typed); const m = newManifest(name, useGraph.getState().mode); useWorkspace.setState({ manifest: m }); await saveManifest(m).catch(() => undefined); }
+      else useWorkspace.setState({ manifest: null });
+    } finally { applying = false; }
+  };
+  if (reuse) await make();
+  else if (!(await activateTab(id, make))) { useWorkspace.setState({ tabs: ws().tabs.filter((t) => t.id !== id) }); saveTabs(); return false; }
+  nameActiveTab(); void ws().refreshList();
   return true;
+}
+
+/** close a tab; a tab with unsaved work asks first. The last tab is never removed: it becomes a blank one. */
+export async function closeTab(id: string): Promise<void> {
+  const { tabs, activeId } = ws();
+  const tab = tabs.find((t) => t.id === id); if (!tab) return;
+  let unsaved = false;
+  if (id === activeId) { const d = useDirector.getState(), g = useGraph.getState(); unsaved = (!!d.project && d.dirty) || (g.dirty && g.nodes.length > 0); }
+  else { const sn = snaps.get(id); unsaved = !!sn && ((!!sn.director.project && sn.director.dirty) || (sn.canvas.dirty && sn.canvas.project.nodes.length > 0)); }
+  if (unsaved && !(await askConfirm(`${tab.name || tr('New project')}: ${tr('has unsaved changes. Continue?')}`))) return;
+  if (id === activeId) {
+    const busy = unsavedWork(); if (busy) { void notify(busy); return; }
+    const rest = tabs.filter((t) => t.id !== id);
+    snaps.delete(id);
+    if (!rest.length) {
+      const nid = uid('tab'); applying = true;
+      try { blankStores(); useWorkspace.setState({ manifest: null, tabs: [{ id: nid, name: '' }], activeId: nid }); } finally { applying = false; }
+      saveTabs(); return;
+    }
+    const idx = tabs.findIndex((t) => t.id === id); const next = rest[Math.min(idx, rest.length - 1)];
+    useWorkspace.setState({ tabs: rest, activeId: '' });   // the closed tab is gone: its stores are replaced by the neighbour's
+    await activateTab(next.id);
+    return;
+  }
+  snaps.delete(id); useWorkspace.setState({ tabs: tabs.filter((t) => t.id !== id) }); saveTabs();
 }
 
 export async function renameProject(): Promise<void> {
   const m = ws().manifest; if (!m) return;
   const typed = await askText(tr('Project name')); if (typed === null || !typed.trim() || projectFileName(typed) === m.name) return;
   const name = await freeName(typed);
-  try { await saveManifest({ ...m, name }); await deleteManifest(m.name); useWorkspace.setState({ manifest: { ...m, name } }); remember(name); await ws().refreshList(); }
+  try { await saveManifest({ ...m, name }); await deleteManifest(m.name); useWorkspace.setState({ manifest: { ...m, name } }); nameActiveTab(); await ws().refreshList(); }
   catch (e) { void notify((e as Error).message); }
 }
 
@@ -348,7 +458,12 @@ export async function deleteProject(name: string): Promise<void> {
       if (m.director) await deleteDirectorProject(m.director).catch(() => undefined);
       for (const c of files) await deleteCanvas(c).catch(() => undefined);
       await deleteManifest(name);
-      if (cur) { useWorkspace.setState({ manifest: null }); remember(null); }
+      if (cur) useWorkspace.setState({ manifest: null });
+      // the tabs of the deleted project go with it (the open one stays as an empty tab)
+      const { tabs, activeId } = ws();
+      for (const t of tabs) if (t.name === name && t.id !== activeId) snaps.delete(t.id);
+      useWorkspace.setState({ tabs: tabs.filter((t) => t.name !== name || t.id === activeId) });
+      nameActiveTab();
     } finally { applying = false; }
     await ws().refreshList();
   } catch (e) { void notify((e as Error).message); }

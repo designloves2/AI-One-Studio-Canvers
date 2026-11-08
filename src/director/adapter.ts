@@ -8,6 +8,7 @@ import type { Asset, GraphEdge, GraphNode, Primitive, Project } from '../types';
 import type { CanvasLink, DirectorProject, DirectorReference, DirectorShot } from './types';
 import { castOf, newId, shotsOfEpisode, shotSubjects } from './model';
 import { composeClipPrompt, clipPromptOf } from './compose';
+import { estimateBox, layoutCards } from '../canvas/layout';
 
 export interface RegDef {
   id: string;
@@ -69,6 +70,24 @@ export const songNodeId = (episodeId: string) => `n_song_${episodeId}`;
 export const finalNodeId = (episodeId: string) => `n_final_${episodeId}`;
 
 const COL_GEN_X = 420, ROW_H = 480, SCENE_GAP = 80;
+
+/**
+ * Where the cards stand. A first build lays every card out at once (chains in a 3-across grid, shared cards left, joined video right, room kept for the results);
+ * a later build leaves the cards that are already on the canvas where they are (the user may have moved them) and puts only the new ones below.
+ */
+function placeCards(nodes: GraphNode[], edges: GraphEdge[], fresh: Set<string>): void {
+  if (!fresh.size) return;
+  const mine = nodes.filter((n) => fresh.has(n.id));
+  const keep = nodes.filter((n) => !fresh.has(n.id));
+  const pos = layoutCards(mine, edges);
+  let dx = 0, dy = 0;
+  if (keep.length) {
+    const left = Math.min(...keep.map((n) => n.x)), bottom = Math.max(...keep.map((n) => n.y + estimateBox(n).h));
+    const px = Math.min(...[...pos.values()].map((q) => q.x)), py = Math.min(...[...pos.values()].map((q) => q.y));
+    dx = left - px; dy = bottom + 90 - py;
+  }
+  for (const n of mine) { const q = pos.get(n.id); if (q) { n.x = Math.round(q.x + dx); n.y = Math.round(q.y + dy); } }
+}
 
 const textOut = (d: RegDef) => d.outputs.find((o) => o.type === 'text');
 const textIn = (d: RegDef, reg: RegistryLike, from: string) => d.inputs.find((i) => !i.multi && !i.optional && reg.compatible(from, i.type))
@@ -242,6 +261,7 @@ export function buildCanvasFromDirector(p: DirectorProject, reg: RegistryLike, e
   for (const l of prev?.shots ?? []) if (!linkShots.some((s) => s.shot_id === l.shot_id) && !report.orphaned.includes(l.shot_id)) linkShots.push(l);
   for (const k of Object.keys(sent)) if (!inDirector.has(k) && !report.orphaned.includes(k)) delete sent[k];
 
+  placeCards(nodes, edges, new Set([...report.created, ...report.recreated]));
   const project: Project = {
     app: 'ai-one-studio-canvers', version: 1, id: existing?.id ?? p.project_id, name: existing?.name ?? p.name,
     nodes, edges, updatedAt: now,
@@ -372,6 +392,7 @@ export function buildCastingCanvas(p: DirectorProject, reg: RegistryLike, existi
     refs.push({ ref_id: r.ref_id, node_ids: [tid, gid] });
     y += 420;
   }
+  placeCards(nodes, edges, new Set([...report.created, ...report.recreated]));
   const project: Project = { app: 'ai-one-studio-canvers', version: 1, id: existing?.id ?? p.project_id, name: existing?.name ?? `${p.name} casting`, nodes, edges, updatedAt: now };
   const link: CanvasLink = { canvas_id: prev?.canvas_id ?? newId('cv'), canvas_file: canvasFile, shots: [], purpose: 'casting', refs, created_at: prev?.created_at ?? now, prompt_sent: sent, engine_sent: engineSent, seed_sent: seedSent, enhance_sent: enhanceSent };
   return { project, link, report };
@@ -440,5 +461,6 @@ export function buildMusicCanvas(p: DirectorProject, reg: RegistryLike, existing
   const wire = (from: string, to: string, handle: string, id: string) => { if (!edges.some((e) => e.id === id) && !edges.some((e) => e.source === from && e.target === to && e.targetHandle === handle)) edges.push({ id, source: from, sourceHandle: out.id, target: to, targetHandle: handle }); };
   wire(MUSIC_STYLE_ID, MUSIC_GEN_ID, styleIn.id, 'e_music_style');
   if (lyricsIn) wire(MUSIC_LYRICS_ID, MUSIC_GEN_ID, lyricsIn.id, 'e_music_lyrics');
+  placeCards(nodes, edges, new Set(report.created));
   return { project, link, report };
 }

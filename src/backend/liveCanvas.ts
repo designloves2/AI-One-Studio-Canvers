@@ -1,5 +1,6 @@
 // Live Canvas: talk to the LLM, it reads the canvas and answers with a JSON "plan" (add / wire / edit / arrange / run …) that the app executes.
 // The LLM backends here are plain text-in / text-out, so tool use is a JSON protocol instead of native tool calls.
+import { estimateBox, layoutCards, reserveBox } from '../canvas/layout';
 import { liveLlmSettings, runLlm } from './llm';
 import { useGraph } from '../store/graph';
 import { useSettings } from '../store/settings';
@@ -186,8 +187,11 @@ type Rect = { id: string; x: number; y: number; w: number; h: number };
 /** measured size from the DOM when the card is on screen (CSS px, unscaled), else an estimate */
 function sizeOf(n: GraphNode): { w: number; h: number } {
   const el = typeof document !== 'undefined' ? (document.querySelector(`.react-flow__node[data-id="${n.id}"]`) as HTMLElement | null) : null;
-  return { w: n.w ?? (el?.offsetWidth || 300), h: n.h ?? (el?.offsetHeight || EST_H[n.defId] || 400) };
+  // the room of the card once its result is shown (a generator that has no result yet still keeps that room free)
+  return reserveBox(n, { w: n.w ?? (el?.offsetWidth || 300), h: n.h ?? (el?.offsetHeight || 0) });
 }
+/** the room a new card of this kind needs (its result included) */
+const estH = (def: string): number => estimateBox({ id: '', defId: def, x: 0, y: 0, params: {}, results: [], activeResult: 0 }).h;
 const rectOf = (n: GraphNode): Rect => ({ id: n.id, x: n.x, y: n.y, ...sizeOf(n) });
 const overlaps = (a: Rect, b: Rect, pad = 24) => a.x < b.x + b.w + pad && b.x < a.x + a.w + pad && a.y < b.y + b.h + pad && b.y < a.y + a.h + pad;
 
@@ -222,63 +226,20 @@ function setPositions(pos: Map<string, { x: number; y: number }>) {
   useGraph.setState((s) => ({ nodes: s.nodes.map((n) => (pos.has(n.id) && !n.locked ? { ...n, x: Math.round(pos.get(n.id)!.x), y: Math.round(pos.get(n.id)!.y) } : n)) }));
 }
 
-/** left-to-right layers by wires; loose cards (no wires) go to columns of their own, same types together */
-function flowLayout(ids: string[], gap = GAP_X): Map<string, { x: number; y: number }> {
-  const { nodes, edges } = useGraph.getState();
-  const set = new Set(ids);
+/** the default arrange: chains (prompt → video) as tiles in a grid, shared cards left, joined video right, nothing on top of anything */
+function tileLayout(ids: string[], cols?: number, gap = GAP_X): Map<string, { x: number; y: number }> {
+  const set = new Set(ids); const { nodes, edges } = useGraph.getState();
   const list = nodes.filter((n) => set.has(n.id));
-  const es = edges.filter((e) => set.has(e.source) && set.has(e.target));
-  const layer = new Map<string, number>();
-  const linked = new Set(es.flatMap((e) => [e.source, e.target]));
-  const incoming = (id: string) => es.filter((e) => e.target === id).map((e) => e.source);
-  const depth = (id: string, seen: Set<string>): number => {
-    if (layer.has(id)) return layer.get(id)!;
-    if (seen.has(id)) return 0;
-    seen.add(id);
-    const d = Math.max(-1, ...incoming(id).map((s) => depth(s, seen))) + 1;
-    layer.set(id, d); return d;
-  };
-  for (const n of list) if (linked.has(n.id)) depth(n.id, new Set());
-  const cols = new Map<number, GraphNode[]>();
-  for (const n of list) if (linked.has(n.id)) { const l = layer.get(n.id) ?? 0; cols.set(l, [...(cols.get(l) ?? []), n]); }
-  const order = new Map<string, number>(); list.forEach((n) => order.set(n.id, readingKey(n)));
-  const maxLayer = Math.max(-1, ...cols.keys());
-  const pos = new Map<string, { x: number; y: number }>();
-  const startX = Math.min(...list.map((n) => n.x)), startY = Math.min(...list.map((n) => n.y));
-  // row index per card: the first layer in reading order, later layers sit in the row of the card that feeds them (next free row when taken)
-  const rowOf = new Map<string, number>();
-  const layerCards: GraphNode[][] = [];
-  for (let l = 0; l <= maxLayer; l++) {
-    const col = (cols.get(l) ?? []).sort((a, b) => order.get(a.id)! - order.get(b.id)!);
-    layerCards.push(col);
-    const used = new Set<number>(); let next = 0;
-    for (const n of col) {
-      const srcRows = incoming(n.id).map((s) => rowOf.get(s)).filter((r): r is number => r !== undefined);
-      let r = srcRows.length ? Math.min(...srcRows) : next;
-      while (used.has(r)) r++;
-      used.add(r); rowOf.set(n.id, r); next = Math.max(next, r + 1);
-    }
-  }
-  const rowH = new Map<number, number>();
-  for (const n of list) if (rowOf.has(n.id)) rowH.set(rowOf.get(n.id)!, Math.max(rowH.get(rowOf.get(n.id)!) ?? 0, sizeOf(n).h));
-  const rowY = new Map<number, number>(); let yy = startY;
-  for (const r of [...rowH.keys()].sort((a, b) => a - b)) { rowY.set(r, yy); yy += rowH.get(r)! + GAP_Y; }
-  let x = startX;
-  for (const col of layerCards) {
-    let colW = 0;
-    for (const n of col) { const sz = sizeOf(n); pos.set(n.id, { x, y: rowY.get(rowOf.get(n.id)!)! }); colW = Math.max(colW, sz.w); }
-    x += colW + gap;
-  }
-  const loose = list.filter((n) => !linked.has(n.id)).sort((a, b) => a.defId.localeCompare(b.defId) || order.get(a.id)! - order.get(b.id)!);
-  if (loose.length) {
-    let y = startY, colW = 0; const limit = 2600; let prev = '';
-    for (const n of loose) {
-      const s = sizeOf(n);
-      if (y > startY && (y + s.h > startY + limit || (prev && prev !== n.defId && y > startY + limit * 0.6))) { x += colW + gap; y = startY; colW = 0; }
-      pos.set(n.id, { x, y }); y += s.h + GAP_Y; colW = Math.max(colW, s.w); prev = n.defId;
-    }
-  }
-  return pos;
+  return layoutCards(list, edges, { size: sizeOf, order: (n) => readingKey(n), cols, gapX: gap });
+}
+
+/** Tidy up (menu): lay the given cards (default: all unlocked cards) out again, undoable */
+export function tidyCanvas(ids?: string[]): void {
+  const all = useGraph.getState().nodes.filter((n) => !n.members && !n.locked).map((n) => n.id);
+  const pick = ids?.length && ids.length > 1 ? ids : all;
+  if (pick.length < 2) return;
+  setPositions(tileLayout(pick));
+  useGraph.getState().requestFit();
 }
 
 function gridLayout(ids: string[], cols?: number, gap = GAP_X, byType = false): Map<string, { x: number; y: number }> {
@@ -330,7 +291,7 @@ export function applyPlan(plan: Plan, opts: { allowRun?: boolean } = {}): string
   function place(c: PlanCard, x: number, y: number) {
     const params: Params = { ...(c.params ?? {}) };
     if (c.text !== undefined && (c.def === 'prompt' || c.def === 'note')) params.text = c.text;
-    const f = findFree(x, y, 300, EST_H[c.def] ?? 400);
+    const f = findFree(x, y, 300, estH(c.def));
     const id = g().addNode(c.def, f.x, f.y, { ...(c.title ? { title: c.title } : {}) } as never);
     const def = byId.get(c.def)!;
     if (c.engine) { if (def.engines?.some((e) => e.id === c.engine)) g().setEngine(id, c.engine); else notes.push(`unknown engine "${c.engine}"`); }
@@ -364,7 +325,7 @@ export function applyPlan(plan: Plan, opts: { allowRun?: boolean } = {}): string
     const bottom = cur.length ? Math.max(...cur.map((n) => n.y + sizeOf(n).h)) + GAP_Y : 0;
     const rows = [...new Set(blocks.map((c) => c.row ?? 0))].sort((a, b) => a - b);
     const rowTop = new Map<number, number>(); let y = bottom;
-    for (const r of rows) { rowTop.set(r, y); y += Math.max(...blocks.filter((c) => (c.row ?? 0) === r).map((c) => EST_H[c.def] ?? 400)) + GAP_Y; }
+    for (const r of rows) { rowTop.set(r, y); y += Math.max(...blocks.filter((c) => (c.row ?? 0) === r).map((c) => estH(c.def))) + GAP_Y; }
     const nextCol = new Map<number, number>();
     for (const c of blocks) {
       const r = c.row ?? 0, col = c.col ?? nextCol.get(r) ?? 0; nextCol.set(r, col + 1);
@@ -374,7 +335,7 @@ export function applyPlan(plan: Plan, opts: { allowRun?: boolean } = {}): string
   for (const c of cards.filter((x) => x.near)) {   // placed relative to another card (existing or created above)
     const srcId = idOf(c.near); const src = srcId ? nodeOf(srcId) : undefined;
     if (!src) { place(c, 0, 0); continue; }
-    const s = sizeOf(src), mh = EST_H[c.def] ?? 400, p = c.place ?? 'below';
+    const s = sizeOf(src), mh = estH(c.def), p = c.place ?? 'below';
     place(c, p === 'right' ? src.x + s.w + GAP_X : p === 'left' ? src.x - 300 - GAP_X : src.x, p === 'below' ? src.y + s.h + GAP_Y : p === 'above' ? src.y - mh - GAP_Y : src.y);
   }
   if (cards.length) { const n = cards.length, p = cards.filter((c) => c.def === 'prompt').length; notes.push(p === n ? `+${n} prompt cards` : `+${n} cards`); }
@@ -429,12 +390,28 @@ export function applyPlan(plan: Plan, opts: { allowRun?: boolean } = {}): string
   for (const m of [...(plan.move ?? []), ...asMoves]) { const id = idOf(m.id); if (!id) continue; const n = nodeOf(id); moves.set(id, { x: m.x ?? n.x + (m.dx ?? 0), y: m.y ?? n.y + (m.dy ?? 0) }); }
   if (moves.size) { setPositions(moves); notes.push(`${moves.size} moved`); }
   const movable = () => g().nodes.filter((n) => !n.members && !n.locked).map((n) => n.id);
+  // many cards made at once (a whole production): tidied into chains / a grid below the existing cards, with room for every result
+  if (!plan.arrange && !moves.size) {
+    const fresh = g().nodes.filter((n) => !before.has(n.id) && !n.members);
+    if (fresh.length >= 3) {
+      const set = new Set(fresh.map((n) => n.id));
+      const pos = layoutCards(fresh, g().edges, { size: sizeOf, order: (n) => readingKey(n) });
+      const keep = g().nodes.filter((n) => !set.has(n.id) && !n.members);
+      let dx = 0, dy = 0;
+      if (keep.length) {
+        const px = Math.min(...[...pos.values()].map((q) => q.x)), py = Math.min(...[...pos.values()].map((q) => q.y));
+        dx = Math.min(...keep.map((n) => n.x)) - px; dy = Math.max(...keep.map((n) => n.y + sizeOf(n).h)) + GAP_Y - py;
+      }
+      setPositions(new Map([...pos].map(([id, q]) => [id, { x: q.x + dx, y: q.y + dy }])));
+      notes.push('tidied');
+    }
+  }
   if (plan.arrange) {
     const a = plan.arrange; const ids = a.ids?.length ? idsOf(a.ids) : movable();
     if (ids.length > 1) {
       const gap = a.gap && a.gap >= 20 && a.gap <= 400 ? a.gap : GAP_X;
       const pos = a.mode === 'grid' ? gridLayout(ids, a.cols, gap) : a.mode === 'row' ? lineLayout(ids, 'x', gap) : a.mode === 'column' ? lineLayout(ids, 'y', gap)
-        : a.mode === 'group-by-type' ? gridLayout(ids, a.cols, gap, true) : flowLayout(ids, gap);
+        : a.mode === 'group-by-type' ? gridLayout(ids, a.cols, gap, true) : tileLayout(ids, a.cols, gap);
       setPositions(pos); notes.push(`arranged (${a.mode ?? 'flow'})`);
     }
   }
