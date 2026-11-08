@@ -350,8 +350,10 @@ export async function closeTab(id: string): Promise<void> {
 }
 
 export async function renameProject(): Promise<void> {
-  const m = ws().manifest; if (!m) return;
-  const typed = await askText(tr('Project name')); if (typed === null || !typed.trim() || projectFileName(typed) === m.name) return;
+  const m = ws().manifest;
+  const typed = await askText(tr('Project name')); if (typed === null || !typed.trim()) return;
+  if (!m) { await ensureProject(typed); return; }   // a project that has no name yet gets it now
+  if (projectFileName(typed) === m.name) return;
   const name = await freeName(typed);
   try { await saveManifest({ ...m, name }); await deleteManifest(m.name); useWorkspace.setState({ manifest: { ...m, name } }); nameActiveTab(); await ws().refreshList(); }
   catch (e) { void notify((e as Error).message); }

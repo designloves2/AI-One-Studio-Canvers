@@ -232,6 +232,7 @@ export const KO_DIRECTOR: Record<string, string> = {
   'This project is open.': '이 프로젝트가 열려 있습니다.',
   'the Director project (the canvas stays)': '디렉터 프로젝트(캔버스는 그대로 남습니다)',
   cards: '카드',
+  'Double-click to rename': '더블클릭으로 이름 변경',
   General: '일반', Vision: '이미지 설명', Translation: '번역',
   'Joining the clips and adding the song… this can take a few minutes. Please wait.': '클립을 합치고 노래를 얹는 중입니다… 몇 분 걸릴 수 있어요. 잠시만 기다려 주세요.',
   'Joining the clips… this can take a few minutes. Please wait.': '클립을 합치는 중입니다… 몇 분 걸릴 수 있어요. 잠시만 기다려 주세요.',
