@@ -289,41 +289,32 @@ function VideoModels() {
   );
 }
 
-type SetTab = 'general' | 'llm' | 'models';
-type LlmTab = 'main' | 'vision' | 'live' | 'director' | 'translate';
-type ModelTab = 'image' | 'video' | 'music';
-const TAB_KEY = 'canvers.settings.tab';
+type Sec = 'general' | 'main' | 'vision' | 'live' | 'director' | 'translate' | 'image' | 'video' | 'music';
+const OPEN_KEY = 'canvers.settings.open';
 
-/** a row of buttons: one section is shown at a time instead of one very long scroll */
-function Pills<V extends string>({ value, onChange, items, small }: { value: V; onChange(v: V): void; items: [V, string][]; small?: boolean }) {
-  return <div className={`set-tabs${small ? ' sub' : ''}`} role="tablist">{items.map(([id, label]) => <button key={id} role="tab" aria-selected={value === id} className={value === id ? 'on' : ''} onClick={() => onChange(id)}>{label}</button>)}</div>;
-}
-
+/** one accordion: only one section is open at a time, so the list never grows long */
 export function SettingsPanel() {
   const T = useT();
-  const saved = (() => { try { return JSON.parse(localStorage.getItem(TAB_KEY) ?? '{}') as { t?: SetTab; l?: LlmTab; m?: ModelTab }; } catch { return {}; } })();
-  const [tab, setTab] = useState<SetTab>(saved.t ?? 'general');
-  const [llmTab, setLlmTab] = useState<LlmTab>(saved.l ?? 'main');
-  const [modelTab, setModelTab] = useState<ModelTab>(saved.m ?? 'image');
-  useEffect(() => { try { localStorage.setItem(TAB_KEY, JSON.stringify({ t: tab, l: llmTab, m: modelTab })); } catch { /* ignore */ } }, [tab, llmTab, modelTab]);
+  const [open, setOpen] = useState<Sec | null>(() => { try { return (localStorage.getItem(OPEN_KEY) as Sec) || 'general'; } catch { return 'general'; } });
+  const toggle = (id: Sec) => setOpen((cur) => { const n = cur === id ? null : id; try { localStorage.setItem(OPEN_KEY, n ?? ''); } catch { /* ignore */ } return n; });
+  const groups: [string, [Sec, string, () => React.ReactNode][]][] = [
+    ['', [['general', T('Connection & language'), () => <Connection />]]],
+    ['LLM', [['main', T('Brief'), () => <Llm />], ['vision', T('Vision'), () => <Llm target="vision" />], ['live', T('Live Canvas'), () => <Llm target="live" />], ['director', T('Director'), () => <Llm target="director" />], ['translate', T('Translation'), () => <TranslationLlm />]]],
+    [T('Models'), [['image', T('Image'), () => <ImageModels />], ['video', T('Video'), () => <VideoModels />], ['music', T('Music'), () => <MusicModels />]]],
+  ];
   return (
-    <div className="panel-body settings tabbed">
-      <div className="set-head">
-        <Pills<SetTab> value={tab} onChange={setTab} items={[['general', T('General')], ['llm', 'LLM'], ['models', T('Models')]]} />
-        {tab === 'llm' && <Pills<LlmTab> small value={llmTab} onChange={setLlmTab} items={[['main', T('Brief')], ['vision', T('Vision')], ['live', T('Live Canvas')], ['director', T('Director')], ['translate', T('Translation')]]} />}
-        {tab === 'models' && <Pills<ModelTab> small value={modelTab} onChange={setModelTab} items={[['image', T('Image')], ['video', T('Video')], ['music', T('Music')]]} />}
-      </div>
-      <div className="set-body">
-        {tab === 'general' && <Connection />}
-        {tab === 'llm' && llmTab === 'main' && <Llm />}
-        {tab === 'llm' && llmTab === 'vision' && <Llm target="vision" />}
-        {tab === 'llm' && llmTab === 'live' && <Llm target="live" />}
-        {tab === 'llm' && llmTab === 'director' && <Llm target="director" />}
-        {tab === 'llm' && llmTab === 'translate' && <TranslationLlm />}
-        {tab === 'models' && modelTab === 'image' && <ImageModels />}
-        {tab === 'models' && modelTab === 'video' && <VideoModels />}
-        {tab === 'models' && modelTab === 'music' && <MusicModels />}
-      </div>
+    <div className="panel-body settings acc">
+      {groups.map(([group, items]) => (
+        <div key={group || 'g0'} className="acc-group">
+          {group && <div className="acc-cap">{group}</div>}
+          {items.map(([id, label, render]) => (
+            <div key={id} className={`acc-item${open === id ? ' open' : ''}`}>
+              <button className="acc-head" aria-expanded={open === id} onClick={() => toggle(id)}><span>{label}</span><i aria-hidden>{open === id ? '▾' : '▸'}</i></button>
+              {open === id && <div className="acc-body">{render()}</div>}
+            </div>
+          ))}
+        </div>
+      ))}
     </div>
   );
 }
