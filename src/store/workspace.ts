@@ -353,9 +353,9 @@ export async function closeTab(id: string): Promise<void> {
   snaps.delete(id); useWorkspace.setState({ tabs: tabs.filter((t) => t.id !== id) }); saveTabs();
 }
 
-export async function renameProject(): Promise<void> {
+export async function renameProject(given?: string): Promise<void> {
   const m = ws().manifest;
-  const typed = await askText(tr('Project name')); if (typed === null || !typed.trim()) return;
+  const typed = given ?? await askText(tr('Project name')); if (typed === null || !typed.trim()) return;
   if (!m) { await ensureProject(typed); return; }   // a project that has no name yet gets it now
   if (projectFileName(typed) === m.name) return;
   const name = await freeName(typed);

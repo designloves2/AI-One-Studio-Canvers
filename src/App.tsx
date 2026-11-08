@@ -60,6 +60,11 @@ function TopBar() {
   const project = useWorkspace((s) => s.manifest);
   const tabs = useWorkspace((s) => s.tabs);
   const activeId = useWorkspace((s) => s.activeId);
+  // a tab's name is edited right in the tab (double-click): Enter keeps it, Esc leaves it as it was
+  const [editing, setEditing] = useState<string | null>(null);
+  const [draft, setDraft] = useState('');
+  const startEdit = async (id: string, name: string) => { if (id !== useWorkspace.getState().activeId && !(await switchTab(id))) return; setDraft(name); setEditing(id); };
+  const commitEdit = () => { const v = draft.trim(); setEditing(null); if (v) void renameProject(v); };
   // a filled dot = that tab has something in it
   const hasDirector = useDirector((s) => !!s.project);
   const hasCanvas = useGraph((s) => s.nodes.length > 0);
@@ -88,8 +93,10 @@ function TopBar() {
         <div className="brand"><img src="/logo.svg" alt="" /><b>AI ONE Studio</b><em>Canvers</em></div>
         <div className="ptabs" role="tablist">
           {tabs.map((t) => (
-            <div key={t.id} role="tab" aria-selected={t.id === activeId} className={`ptab${t.id === activeId ? ' active' : ''}`} title={`${t.name || T('New project')} — ${T('Double-click to rename')}`} onClick={() => void switchTab(t.id)} onDoubleClick={() => { void (async () => { if (t.id !== activeId && !(await switchTab(t.id))) return; await renameProject(); })(); }} onAuxClick={(e) => { if (e.button === 1) void closeTab(t.id); }}>
-              <span className="ptab-name">{t.name || T('New project')}</span>
+            <div key={t.id} role="tab" aria-selected={t.id === activeId} className={`ptab${t.id === activeId ? ' active' : ''}`} title={`${t.name || T('New project')} — ${T('Double-click to rename')}`} onClick={() => void switchTab(t.id)} onDoubleClick={() => void startEdit(t.id, t.name)} onAuxClick={(e) => { if (e.button === 1) void closeTab(t.id); }}>
+              {editing === t.id
+                ? <input className="ptab-edit" autoFocus value={draft} placeholder={T('Project name')} onChange={(e) => setDraft(e.target.value)} onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()} onBlur={commitEdit} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); else if (e.key === 'Escape') { setDraft(''); setEditing(null); } }} onFocus={(e) => e.currentTarget.select()} />
+                : <span className="ptab-name">{t.name || T('New project')}</span>}
               {t.id === activeId && unsaved && <i className="ptab-dirty" title={T('Not saved')} />}
               <button className="ptab-x" title={T('Close')} onClick={(e) => { e.stopPropagation(); void closeTab(t.id); }}>✕</button>
             </div>
