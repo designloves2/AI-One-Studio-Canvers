@@ -89,7 +89,7 @@ function TopBar() {
         <div className="ptabs" role="tablist">
           {tabs.map((t) => (
             <div key={t.id} role="tab" aria-selected={t.id === activeId} className={`ptab${t.id === activeId ? ' active' : ''}`} title={`${t.name || T('New project')} — ${T('Double-click to rename')}`} onClick={() => void switchTab(t.id)} onDoubleClick={() => { void (async () => { if (t.id !== activeId && !(await switchTab(t.id))) return; await renameProject(); })(); }} onAuxClick={(e) => { if (e.button === 1) void closeTab(t.id); }}>
-              <span className="ptab-name">{t.id === activeId ? (project?.name ?? t.name) || T('New project') : t.name || T('New project')}</span>
+              <span className="ptab-name">{t.name || T('New project')}</span>
               {t.id === activeId && unsaved && <i className="ptab-dirty" title={T('Not saved')} />}
               <button className="ptab-x" title={T('Close')} onClick={(e) => { e.stopPropagation(); void closeTab(t.id); }}>✕</button>
             </div>

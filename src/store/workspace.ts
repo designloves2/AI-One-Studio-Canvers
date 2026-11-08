@@ -130,6 +130,9 @@ export function startWorkspaceSync(): void {
       if (m && s.project) { const all = canvasesOf(m, s.project); if (all.length && (all[0] !== m.canvas || m.canvases.length !== 1)) patch({ canvases: [m.canvas ?? all[0]], canvas: m.canvas ?? all[0] }); }
     }
   });
+  // the open tab always carries the name of the open project (a new tab never shows the name of the tab it was made from)
+  let shownName = ws().manifest?.name ?? null;
+  useWorkspace.subscribe((st) => { const n = st.manifest?.name ?? null; if (n !== shownName) { shownName = n; nameActiveTab(); } });
   // canvas saved / opened, the open tab, the Simple feed
   let cf = useGraph.getState().canvasFile; let mode = useGraph.getState().mode; let runs = useGraph.getState().composerRuns;
   useGraph.subscribe((g) => {
@@ -269,6 +272,7 @@ async function activateTab(id: string, fresh?: () => Promise<void>): Promise<boo
   try {
     useWorkspace.setState({ activeId: id }); saveTabs();
     const sn = snaps.get(id);
+    if (!sn) useWorkspace.setState({ manifest: null });   // the new tab starts empty: it must not keep showing the project it was made from while its own is being read
     if (fresh) { await fresh(); }
     else if (sn) { restore(sn); snaps.delete(id); }
     else {
@@ -313,7 +317,7 @@ export async function newProjectFlow(): Promise<boolean> {
   const make = async () => {
     applying = true;
     try {
-      blankStores();
+      blankStores(); useWorkspace.setState({ manifest: null });
       if (typed.trim()) { const name = await freeName(typed); const m = newManifest(name, useGraph.getState().mode); useWorkspace.setState({ manifest: m }); await saveManifest(m).catch(() => undefined); }
       else useWorkspace.setState({ manifest: null });
     } finally { applying = false; }
