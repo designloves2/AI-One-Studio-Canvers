@@ -20,6 +20,21 @@ function Select({ value, onChange, options, blank }: { value: string; onChange(v
   return <select value={value} onChange={(e) => onChange(e.target.value)}>{withCur.map((o) => <option key={o} value={o}>{o === '' ? blank : o}</option>)}</select>;
 }
 
+/** an accordion inside an accordion: one model group open at a time */
+function SubAcc({ items }: { items: [string, string, React.ReactNode][] }) {
+  const [open, setOpen] = useState<string | null>(null);
+  return (
+    <div className="acc-sub">
+      {items.map(([id, label, body]) => (
+        <div key={id} className={`acc-item sub${open === id ? ' open' : ''}`}>
+          <button className="acc-head" aria-expanded={open === id} onClick={() => setOpen(open === id ? null : id)}><span>{label}</span><i aria-hidden>{open === id ? '▾' : '▸'}</i></button>
+          {open === id && <div className="acc-body">{body}</div>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ------------------------------------------------------------------ connection
 function Connection() {
   const T = useT();
@@ -76,19 +91,20 @@ function ImageModels() {
   return (
     <section>
       <h3>{T('Image models')}</h3>
-      {(Object.keys(FAMILIES) as Family[]).map((f) => {
-        const l = lists[f]; const cur = models[f] ?? { model: '', textEncoder: '', vae: '' };
-        return (
-          <div key={f} className="fam">
-            <h4>{FAMILIES[f].label}</h4>
+      <SubAcc items={[
+        ...(Object.keys(FAMILIES) as Family[]).map((f): [string, string, React.ReactNode] => {
+          const l = lists[f]; const cur = models[f] ?? { model: '', textEncoder: '', vae: '' };
+          return [f, FAMILIES[f].label, <>
             <Row label={f === 'sdxl' ? 'Checkpoint' : 'Diffusion model'}><Select value={cur.model} onChange={(v) => setModel(f, { model: v })} options={(f === 'sdxl' ? l?.checkpoints : l?.diffusion_models) ?? []} blank={`(auto${auto[f] ? ': ' + auto[f] : ''})`} /></Row>
             {f !== 'sdxl' && <Row label={T('Text encoder')}><Select value={cur.textEncoder} onChange={(v) => setModel(f, { textEncoder: v })} options={l?.text_encoders ?? []} blank="(auto)" /></Row>}
             {f !== 'sdxl' && <Row label="VAE"><Select value={cur.vae} onChange={(v) => setModel(f, { vae: v })} options={l?.vaes ?? []} blank="(auto)" /></Row>}
-          </div>
-        );
-      })}
-      <Row label={T('Legacy: load original STUDIO_ONE panels')} hint={T('Adds the old all-in-one panels as extra nodes (reload needed). Off = card nodes only.')}><input type="checkbox" checked={hostPanels} onChange={(e) => set({ hostPanels: e.target.checked })} /></Row>
-      <Row label={T('Output folder')} hint="ComfyUI/output/<folder>"><input value={save} onChange={(e) => set({ saveSubfolder: e.target.value.replace(/[^\w\-/]+/g, '_') })} /></Row>
+          </>];
+        }),
+        ['other', T('Output & legacy'), <>
+          <Row label={T('Legacy: load original STUDIO_ONE panels')} hint={T('Adds the old all-in-one panels as extra nodes (reload needed). Off = card nodes only.')}><input type="checkbox" checked={hostPanels} onChange={(e) => set({ hostPanels: e.target.checked })} /></Row>
+          <Row label={T('Output folder')} hint="ComfyUI/output/<folder>"><input value={save} onChange={(e) => set({ saveSubfolder: e.target.value.replace(/[^\w\-/]+/g, '_') })} /></Row>
+        </>],
+      ]} />
     </section>
   );
 }
@@ -261,7 +277,9 @@ function MusicModels() {
   return (
     <section>
       <h3>{T('Music models')}</h3>
-      {rows.map(([k, label, opts]) => <Row key={k} label={label}><Select value={music[k] ?? ''} onChange={(v) => setMusic(k, v)} options={opts ?? []} blank={`(auto${auto[k] ? ': ' + auto[k] : ''})`} /></Row>)}
+      <SubAcc items={([['ace', 'Ace-Step', ['ace_unet', 'ace_clip1', 'ace_clip2', 'ace_vae']], ['yue2', 'YuE2', ['yue2_ckpt']], ['mm', 'MiniMax Music', ['dit', 'clip', 'dav']]] as [string, string, string[]][]).map(([id, label, keys]): [string, string, React.ReactNode] => [id, label, <>
+        {rows.filter(([k]) => keys.includes(k)).map(([k, l, opts]) => <Row key={k} label={l}><Select value={music[k] ?? ''} onChange={(v) => setMusic(k, v)} options={opts ?? []} blank={`(auto${auto[k] ? ': ' + auto[k] : ''})`} /></Row>)}
+      </>])} />
     </section>
   );
 }
@@ -284,7 +302,9 @@ function VideoModels() {
   return (
     <section>
       <h3>{T('Video models')}</h3>
-      {rows.map(([k, label, opts]) => <Row key={k} label={label}><Select value={video[k] ?? ''} onChange={(v) => setVideo(k, v)} options={opts ?? []} blank={`(auto${auto[k] ? ': ' + auto[k] : ''})`} /></Row>)}
+      <SubAcc items={([['ltx', 'LTX 2.5', 'ltx_'], ['h3', 'MiniMax H3', 'h3_']] as [string, string, string][]).map(([id, label, pre]): [string, string, React.ReactNode] => [id, label, <>
+        {rows.filter(([k]) => k.startsWith(pre)).map(([k, l, opts]) => <Row key={k} label={l}><Select value={video[k] ?? ''} onChange={(v) => setVideo(k, v)} options={opts ?? []} blank={`(auto${auto[k] ? ': ' + auto[k] : ''})`} /></Row>)}
+      </>])} />
     </section>
   );
 }

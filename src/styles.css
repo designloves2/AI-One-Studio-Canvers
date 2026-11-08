@@ -793,3 +793,7 @@ button.save-state.dirty { cursor: pointer; } button.save-state.dirty:hover { bac
 .acc-body { padding: 4px 12px 12px; border-top: 1px solid var(--line); background: var(--bg); }
 .acc-body section { border-bottom: 0; padding-bottom: 0; }
 .acc-body section > h3 { display: none; }
+.acc-sub { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.acc-item.sub { background: var(--bg); }
+.acc-item.sub .acc-head { padding: 7px 10px; font-size: 12px; font-weight: 600; }
+.acc-item.sub .acc-body { background: var(--bg2, var(--bg)); padding: 6px 10px 10px; }
