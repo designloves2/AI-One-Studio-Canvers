@@ -10,9 +10,9 @@ import { deleteManifest, listProjects, loadManifest, newManifest, saveManifest, 
 import { askConfirm, askText, notify } from '../ui/dialog';
 import { t as tr } from '../i18n';
 import { uid } from '../backend/comfy';
-import { saveCanvasToList } from '../engine/actions';
 import type { DirectorProject } from '../director/types';
 import type { Project } from '../types';
+import { estimateBox } from '../canvas/layout';
 
 const BAD = /[\\/:*?"<>|\u0000-\u001f]/g;
 export const projectFileName = (n: string): string => (n.replace(BAD, ' ').replace(/\s+/g, ' ').trim().replace(/^\.+/, '').slice(0, 100)) || 'project';
@@ -45,6 +45,7 @@ export const useWorkspace = create<WorkspaceState>((set) => ({
   manifest: null, list: [], busy: false, tabs: initTabs.tabs, activeId: initTabs.active,
   refreshList: async () => { try { set({ list: await listProjects() }); } catch { /* a server without the route: the list stays as it was */ } },
 }));
+if (import.meta.env?.DEV && typeof window !== 'undefined') (window as unknown as Record<string, unknown>).__workspace = useWorkspace;   // dev hook for the browser checks
 const saveTabs = () => { const { tabs, activeId } = useWorkspace.getState(); try { localStorage.setItem(TABS_KEY, JSON.stringify({ tabs, active: activeId })); } catch { /* ignore */ } };
 /** the active tab shows the open project's name */
 function nameActiveTab() {
@@ -126,7 +127,7 @@ export function startWorkspaceSync(): void {
     if (now !== links) {
       links = now;
       const m = ws().manifest;
-      if (m && s.project) { const all = canvasesOf(m, s.project); if (all.length !== m.canvases.length) patch({ canvases: all }); }
+      if (m && s.project) { const all = canvasesOf(m, s.project); if (all.length && (all[0] !== m.canvas || m.canvases.length !== 1)) patch({ canvases: [m.canvas ?? all[0]], canvas: m.canvas ?? all[0] }); }
     }
   });
   // canvas saved / opened, the open tab, the Simple feed
@@ -135,7 +136,7 @@ export function startWorkspaceSync(): void {
     if (applying) { cf = g.canvasFile; mode = g.mode; runs = g.composerRuns; return; }
     if (g.canvasFile !== cf) {
       cf = g.canvasFile;
-      if (g.canvasFile) { const f = g.canvasFile; void ensureProject(g.projectName || f).then((m) => patch({ canvases: m.canvases.includes(f) ? m.canvases : [...m.canvases, f], canvas: f })); }
+      if (g.canvasFile) { const f = g.canvasFile; void ensureProject(g.projectName || f).then(() => patch({ canvases: [f], canvas: f })); }
     }
     if (g.mode !== mode) { mode = g.mode; if (ws().manifest) patch({ mode }); }
     if (g.composerRuns !== runs) {
@@ -177,12 +178,66 @@ async function confirmLeave(): Promise<boolean> {
   return !bits.length || askConfirm(`${bits.join(' · ')}: ${tr('has unsaved changes. Continue?')}`);
 }
 
+// ------------------------------------------------------------------ one canvas per project
+/** the cards of `extra` are added to `base`, below its cards (a card whose id is already there is skipped) */
+export function mergeCanvas(base: Project, extra: Project): Project {
+  const have = new Set(base.nodes.map((n) => n.id));
+  const add = extra.nodes.filter((n) => !have.has(n.id));
+  if (!add.length) return base;
+  const left = base.nodes.length ? Math.min(...base.nodes.map((n) => n.x)) : 0;
+  const bottom = base.nodes.length ? Math.max(...base.nodes.map((n) => n.y + estimateBox(n).h)) + 90 : 0;
+  const dx = left - Math.min(...add.map((n) => n.x)), dy = bottom - Math.min(...add.map((n) => n.y));
+  const moved = add.map((n) => ({ ...n, x: Math.round(n.x + dx), y: Math.round(n.y + dy) }));
+  const ids = new Set(moved.map((n) => n.id));
+  const edges = extra.edges.filter((e) => ids.has(e.source) && ids.has(e.target) && !base.edges.some((b) => b.id === e.id));
+  return { ...base, nodes: [...base.nodes, ...moved], edges: [...base.edges, ...edges] };
+}
+
+/**
+ * A project has one canvas. Projects saved before that (a canvas per episode, a casting canvas, a song canvas ...) are joined into one the first time they are opened:
+ * the cards stand below each other in one file, the Director's links point at it, the other files are removed.
+ */
+async function consolidateCanvases(m: ProjectManifest): Promise<ProjectManifest> {
+  const d = useDirector.getState();
+  const files = canvasesOf(m, d.project).filter((f) => !f.startsWith('(demo) '));
+  const saved = new Set((await listCanvases().catch(() => [])).map((c) => c.name));
+  const real = files.filter((f) => saved.has(f));
+  if (real.length <= 1) { const only = real[0] ?? m.canvas ?? null; return only === m.canvas && m.canvases.length === (only ? 1 : 0) ? m : { ...m, canvases: only ? [only] : [], canvas: only }; }
+  const focus = d.project ? d.project.canvas_links.find((l) => l.episode_id && real.includes(l.canvas_file))?.canvas_file : undefined;
+  const primary = (focus && real.includes(focus) ? focus : m.canvas && real.includes(m.canvas) ? m.canvas : real[0]);
+  let merged = await loadCanvas(primary);
+  const done: string[] = [];
+  for (const f of real) {
+    if (f === primary) continue;
+    try { merged = mergeCanvas(merged, await loadCanvas(f)); done.push(f); } catch { /* an unreadable canvas stays where it is */ }
+  }
+  await saveCanvas(primary, merged);
+  if (d.project && !d.readOnly) d.edit((x) => { for (const l of x.canvas_links) if (done.includes(l.canvas_file)) l.canvas_file = primary; });
+  for (const f of done) await deleteCanvas(f).catch(() => undefined);
+  return { ...m, canvases: [primary], canvas: primary };
+}
+
+/** save the open canvas as THE canvas of the project: named after the project, never asked */
+async function saveProjectCanvas(): Promise<boolean> {
+  const g = useGraph.getState();
+  const hint = g.projectName && g.projectName !== 'untitled' ? g.projectName : tr('New project');
+  const m = ws().manifest ?? await ensureProject(hint);
+  const dp = useDirector.getState().project;
+  let file = g.canvasFile ?? m.canvas;
+  if (!file) { if (dp) { const { sharedCanvasFile } = await import('../director/canvasAction'); file = sharedCanvasFile(dp); } else file = projectFileName(m.name); }
+  g.setName(m.name);
+  await saveCanvas(file, useGraph.getState().toProject());
+  useGraph.getState().markSaved(file);
+  patch({ canvases: [file], canvas: file });
+  return true;
+}
+
 /** save everything of the open project: the Director project, the open canvas, the manifest */
 export async function saveAll(): Promise<boolean> {
   const d = useDirector.getState(); const g = useGraph.getState();
   try {
     if (d.project && !d.readOnly && !d.demo && (d.dirty || !d.file)) await d.save();   // an untouched project is not rewritten (its saved time stays)
-    if (g.nodes.length && (g.dirty || !g.canvasFile)) { if (!(await saveCanvasToList())) return false; }
+    if (g.nodes.length && (g.dirty || !g.canvasFile)) { if (!(await saveProjectCanvas())) return false; }
     const m = ws().manifest;
     if (m) { await saveManifest({ ...m, canvases: canvasesOf(m) }); await ws().refreshList(); }
     return true;
@@ -190,13 +245,15 @@ export async function saveAll(): Promise<boolean> {
 }
 
 /** read a project's files into the three modes (the stores must be blank or about to be replaced) */
-async function loadInto(m: ProjectManifest): Promise<void> {
+async function loadInto(manifest: ProjectManifest): Promise<void> {
+  let m = manifest;
   applying = true;
   try {
     const g = useGraph.getState(); const d = useDirector.getState();
     useWorkspace.setState({ manifest: m });
     g.newProject(); g.setComposerRuns(m.simple ?? []);
     if (m.director) { try { await d.open(m.director); } catch (e) { void notify(`${tr('Could not open')}: ${(e as Error).message}`); d.close(); } } else d.close();
+    try { const one = await consolidateCanvases(m); if (one !== m) { m = one; useWorkspace.setState({ manifest: one }); schedule(); } } catch { /* the canvases stay as they are */ }
     if (m.director && useDirector.getState().project) { const { openCanvasOfProject } = await import('../director/pairing'); await openCanvasOfProject(); }
     else if (m.canvas) { try { g.loadProject(await loadCanvas(m.canvas), m.canvas, false); } catch { /* the canvas file is gone */ } }
     g.setMode(m.mode);
@@ -403,11 +460,15 @@ export async function sendPart(part: Part, target: string, move: boolean, canvas
       const b = await collect(['director']); const r = await install(b, `${m.director}`);
       t.director = r.director; t.canvases = [...new Set([...t.canvases, ...r.canvases])]; t.canvas ??= r.canvases[0] ?? null;
     } else if (part === 'canvas') {
-      const files = canvasFile ? [canvasFile] : canvasesOf(m);
-      const b: Bundle = { kind: 'canvers-project-bundle', schema: 1, name: m.name, mode: 'canvas', director: null, canvases: {}, simple: [] };
-      for (const c of files) b.canvases[c] = await loadCanvas(c);
-      const r = await install(b, '');
-      t.canvases = [...new Set([...t.canvases, ...r.canvases])]; t.canvas ??= r.canvases[0] ?? null;
+      const src = ws().manifest ? canvasesOf(ws().manifest!)[0] : undefined; if (!src) return;
+      const mine = await loadCanvas(src);
+      if (t.canvas) { const base = await loadCanvas(t.canvas); await saveCanvas(t.canvas, mergeCanvas(base, mine)); }
+      else {
+        const taken = new Set((await listCanvases().catch(() => [])).map((c) => c.name));
+        const file = unique(projectFileName(target), taken);
+        const copy: Project = JSON.parse(JSON.stringify(mine)); delete copy.director; copy.name = target;
+        await saveCanvas(file, copy); t.canvas = file; t.canvases = [file];
+      }
     } else {
       t.simple = [...useGraph.getState().composerRuns, ...(t.simple ?? [])].slice(0, 150);
     }
@@ -423,20 +484,18 @@ export async function clearPart(part: Part, canvasFile?: string, silent = false)
   const m = ws().manifest; if (!m) return;
   const g = useGraph.getState(); const d = useDirector.getState();
   if (!silent) {
-    const what = part === 'director' ? tr('the Director project and its canvases') : part === 'canvas' ? (canvasFile ?? tr('all canvases')) : tr('the Simple feed');
+    const what = part === 'director' ? tr('the Director project (the canvas stays)') : part === 'canvas' ? (canvasFile ?? tr('all canvases')) : tr('the Simple feed');
     if (!(await askConfirm(`${tr('Remove from this project')}: ${what}\n${tr('This cannot be undone.')}`))) return;
   }
   applying = true;
   try {
     if (part === 'director') {
-      const links = (d.project?.canvas_links ?? []).map((l) => l.canvas_file);
       const file = m.director;
       d.close();
       if (file) await deleteDirectorProject(file).catch(() => undefined);
-      for (const c of links) { await deleteCanvas(c).catch(() => undefined); if (g.canvasFile === c) g.newProject(); }
-      patch({ director: null, canvases: m.canvases.filter((c) => !links.includes(c)), canvas: m.canvas && links.includes(m.canvas) ? null : m.canvas });
+      patch({ director: null });   // the canvas stays: its cards are ordinary cards now
     } else if (part === 'canvas') {
-      const files = canvasFile ? [canvasFile] : m.canvases;
+      const files = canvasFile ? [canvasFile] : canvasesOf(m, d.project);
       for (const c of files) { await deleteCanvas(c).catch(() => undefined); if (g.canvasFile === c) g.newProject(); }
       patch({ canvases: m.canvases.filter((c) => !files.includes(c)), canvas: m.canvas && files.includes(m.canvas) ? null : m.canvas });
     } else { g.setComposerRuns([]); patch({ simple: [] }); }

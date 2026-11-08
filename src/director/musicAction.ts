@@ -15,7 +15,7 @@ import { appRegistry } from './adapterRegistry';
 import { applyEpisodeFinal, applyMusicResult, newSeed } from './execution';
 import { defaultSections } from './music';
 import { demoFinalResult, demoSongResult, pushPicked } from './demoMedia';
-import { DEMO_FILE, existingCanvas, isDemo, linkOfEpisode, makeEpisodeCanvas, refreshOpenCanvas, setLink, sleep } from './canvasAction';
+import { DEMO_FILE, existingCanvas, isDemo, isOwnCanvas, linkOfEpisode, makeEpisodeCanvas, refreshOpenCanvas, setLink, sharedCanvasFile, sleep } from './canvasAction';
 import { episodeByNo, shotsOfEpisode } from './model';
 import type { CanvasLink, DirectorProject } from './types';
 
@@ -76,8 +76,8 @@ export async function generateSong(opt: { newSeedNow?: boolean } = {}): Promise<
     return { made: true, cancelled: false };
   }
   let prev = linkOfMusic(p); if (prev && prev.canvas_file.startsWith(DEMO_FILE)) prev = null;
-  const file = prev?.canvas_file ?? `${canvasFileName(p.name)} - song`;
-  const existing = await existingCanvas(file, !!prev);
+  const file = prev?.canvas_file ?? sharedCanvasFile(p);
+  const existing = await existingCanvas(file, !!prev || isOwnCanvas(p, file));
   const res = buildMusicCanvas(p, appRegistry, existing, prev, file);
   if (res.report.missing.length) throw new Error(`${tr('Not built')}: ${res.report.missing[0]}`);
   await saveCanvas(file, stampPair(res.project, res.link, file));

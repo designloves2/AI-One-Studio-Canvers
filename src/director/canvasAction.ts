@@ -1,5 +1,6 @@
 // App-side actions of the Director screen: build the episode canvas / the casting canvas, run cards through the normal engine, pull results back,
 // register the cast images as assets. Building never runs a card. A card only runs from runFromDirector / generateCast, after a button press and a "yes".
+import { useWorkspace } from '../store/workspace';
 import { useDirector } from '../store/director';
 import { useGraph } from '../store/graph';
 import type { BatchItemState } from '../store/director';
@@ -56,6 +57,17 @@ export function describeReport(r: AdapterReport): string {
   ].filter(Boolean).join('\n') || tr('Nothing to change.');
 }
 
+/**
+ * A project has ONE canvas. Every Director build (the cast, every episode, the song) goes into it, side by side: the new cards are put below the ones that are already there.
+ * The file is the one the project's links already use, else it is named after the project.
+ */
+export function sharedCanvasFile(p: DirectorProject, demo = false): string {
+  const own = p.canvas_links.find((l) => !l.aspect && isDemoLink(l) === demo);
+  return own?.canvas_file ?? (demo ? undefined : useWorkspace.getState().manifest?.canvas) ?? `${demo ? DEMO_FILE : ''}${canvasFileName(p.name)}`;
+}
+/** true when the file is already this project's canvas (so it is read, not asked about) */
+export const isOwnCanvas = (p: DirectorProject, file: string): boolean => p.canvas_links.some((l) => l.canvas_file === file) || useWorkspace.getState().manifest?.canvas === file;
+
 export async function existingCanvas(file: string, known: boolean): Promise<Project | null> {
   const saved = await listCanvases();
   if (!saved.some((c) => c.name === file)) return null;
@@ -73,8 +85,8 @@ export async function makeEpisodeCanvas(no?: number): Promise<{ file: string; re
   let prev = linkOfEpisode(p, ep.no);
   if (prev && isDemoLink(prev) !== isDemo()) prev = null;   // a demo canvas and a real one are never mixed
   const demo = isDemo();
-  const file = prev?.canvas_file ?? `${demo ? DEMO_FILE : ''}${canvasFileName(p.name)} - ep${pad2(ep.no)}`;
-  const existing = demo ? null : await existingCanvas(file, !!prev);
+  const file = prev?.canvas_file ?? sharedCanvasFile(p, demo);
+  const existing = demo ? null : await existingCanvas(file, !!prev || isOwnCanvas(p, file));
   const turbo = turboSettings(p.series);
   // the picked image of every cast entry the clips use: connected to each clip as a reference image, in the order of its prompt
   const refAssets: Record<string, Asset> = {};
@@ -274,8 +286,8 @@ export async function openCastingCanvas(opt: { engine?: string } = {}): Promise<
   if (d.readOnly) throw new Error(tr('Read-only (saved by a newer version)'));
   if (isDemo()) throw new Error(tr('The demo does not make canvas files. Turn the demo off to build the real canvas.'));
   let prev = linkOfCasting(p); if (prev && isDemoLink(prev)) prev = null;
-  const file = prev?.canvas_file ?? `${canvasFileName(p.name)} - casting`;
-  const existing = await existingCanvas(file, !!prev);
+  const file = prev?.canvas_file ?? sharedCanvasFile(p);
+  const existing = await existingCanvas(file, !!prev || isOwnCanvas(p, file));
   const res = buildCastingCanvas(p, appRegistry, existing, prev, file, { engineId: opt.engine, baseAssets: pickedCastAssets(p) });
   if (res.report.missing.length) throw new Error(`${tr('Not built')}: ${res.report.missing[0].reason}`);
   await saveCanvas(file, stampPair(res.project, res.link, file));
@@ -284,7 +296,10 @@ export async function openCastingCanvas(opt: { engine?: string } = {}): Promise<
   return file;
 }
 
-/** The casting canvas is temporary: once the cast is approved its link and file go away (the images are already in the cast entries). */
+/**
+ * The casting cards are a temporary workbench: once the cast is approved the cards of the cast and their link go away (the images are already in the cast entries).
+ * They share the project's canvas with the episodes, so only their cards are taken out; the file goes only when nothing else is left in it.
+ */
 export async function removeCastingCanvas(): Promise<void> {
   const d = useDirector.getState(); const p = d.project;
   const link = p && linkOfCasting(p);
@@ -293,9 +308,20 @@ export async function removeCastingCanvas(): Promise<void> {
   d.edit((x) => { x.canvas_links = x.canvas_links.filter((l) => l.canvas_id !== link.canvas_id); });
   if (demo) return;
   try {
+    const mine = (id: string) => (link.refs ?? []).some((r) => id.startsWith(`n_${r.ref_id}_`));
     const g = useGraph.getState();
-    if (g.canvasFile === link.canvas_file) g.newProject();   // the file is about to be gone: do not leave it open (and saved again)
-    await deleteCanvas(link.canvas_file);
+    if (g.canvasFile === link.canvas_file) {
+      g.removeNodes(g.nodes.filter((n) => mine(n.id)).map((n) => n.id));
+      const now = useGraph.getState();
+      if (now.nodes.length) { await saveCanvas(link.canvas_file, now.toProject()); now.markSaved(link.canvas_file); }
+      else { now.newProject(); await deleteCanvas(link.canvas_file); }   // nothing else in it: the file is gone, do not leave it open (and saved again)
+      return;
+    }
+    const c = await loadCanvas(link.canvas_file);
+    const ids = new Set(c.nodes.filter((n) => mine(n.id)).map((n) => n.id));
+    const nodes = c.nodes.filter((n) => !ids.has(n.id));
+    if (nodes.length) await saveCanvas(link.canvas_file, { ...c, nodes, edges: c.edges.filter((e) => !ids.has(e.source) && !ids.has(e.target)) });
+    else await deleteCanvas(link.canvas_file);
   } catch { /* the file may already be gone; the link is enough */ }
 }
 
@@ -332,8 +358,8 @@ export async function generateCast(opt: { refIds?: string[]; engine?: string; ne
   }
   let prev = linkOfCasting(p);
   if (prev && isDemoLink(prev)) prev = null;
-  const file = prev?.canvas_file ?? `${canvasFileName(p.name)} - casting`;
-  const existing = await existingCanvas(file, !!prev);
+  const file = prev?.canvas_file ?? sharedCanvasFile(p);
+  const existing = await existingCanvas(file, !!prev || isOwnCanvas(p, file));
   // a new look is edited from the picked image of the entry it is a look of (the same face)
   const res = buildCastingCanvas(p, appRegistry, existing, prev, file, { engineId: opt.engine, baseAssets: pickedCastAssets(p) });
   if (res.report.missing.length) throw new Error(`${tr('Not built')}: ${res.report.missing[0].reason}`);

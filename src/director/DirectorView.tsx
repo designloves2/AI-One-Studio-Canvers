@@ -929,7 +929,6 @@ function CanvasCard({ p, ro }: { p: DirectorProject; ro: boolean }) {
           <div className="dx-tiles two"><Tile icon="clip" value={String(shots.length)} label={T('Clips')} tone="b" /><Tile icon="bolt" value={PRESET_LABEL[p.series.preset]} label={`${T('with the shared 7+1 card')} · ${p.series.resolution}`} tone="a" /></div>
           <div className="dx-btns"><button className={`btn ${missing ? 'miss' : 'primary'}`} disabled={ro || busy} title={T('Put the edited prompts on the canvas prompt cards and open the canvas. Your settings in the canvas are kept, and nothing runs by itself.')} onClick={() => void applyAndOpen()}>{T(missing ? 'Make the generation canvas' : 'Verify the generation canvas')}</button></div>
         </section>) : <p className="dirx-muted">{T('The canvas is being built…')}</p>}
-      {link && !missing && <VersionsBlock p={p} />}
     </div>
   );
 }

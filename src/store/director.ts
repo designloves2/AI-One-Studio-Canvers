@@ -213,10 +213,10 @@ export const useDirector = create<DirectorState>((set, get) => {
       if (!t || get().busy) return;
       if (get().readOnly) return;
       if (!get().project) {
-        // a canvas without a Director project is open: the new project replaces it with a canvas made for the Director (saved first, or cancelled)
-        const { prepareCanvasForNewDirector } = await import('../director/pairing');
-        if (!(await prepareCanvasForNewDirector())) return;
-        const base =safeProjectName(t.replace(/[\\/:*?"<>|\n\r]+/g, ' ').slice(0, 24)) ?? 'drama';
+        // the project is the only name: its Director project is named like it (a project with no name yet is named after the first sentence)
+        const { useWorkspace } = await import('./workspace');
+        const projectName = useWorkspace.getState().manifest?.name;
+        const base = (projectName && safeProjectName(projectName)) || safeProjectName(t.replace(/[\\/:*?"<>|\n\r]+/g, ' ').slice(0, 24)) || 'drama';
         const names = new Set(get().list.map((e) => e.name));
         let name = base, i = 2; while (names.has(name)) name = `${base} ${i++}`;
         set({ project: newDirectorProject(name), file: null, dirty: true, view: 'brief', focus: 1 });

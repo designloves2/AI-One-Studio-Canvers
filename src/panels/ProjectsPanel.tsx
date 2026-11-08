@@ -37,16 +37,11 @@ export function ProjectsPanel() {
   const to = others.some((p) => p.name === target) ? target : (others[0]?.name ?? '');
   const guard = (f: () => Promise<unknown>) => () => { f().catch((e) => void notify((e as Error).message)); };
   const goMode = (mode: 'director' | 'canvas' | 'simple') => useGraph.getState().setMode(mode);
-  const dirCanvases = new Set((dir?.canvas_links ?? []).map((l) => l.canvas_file));
   const canvases = m ? canvasesOf(m, dir) : [];
   const unsaved = dirDirty || gDirty;
 
-  const openCanvas = async (f: string) => { await openSavedCanvas(f); goMode('canvas'); };
-  const newCanvas = async () => {
-    const g = useGraph.getState();
-    if (g.dirty && g.nodes.length && !(await askConfirm(T('This canvas has unsaved changes. Open anyway?')))) return;
-    g.newProject(); goMode('canvas');
-  };
+  const nodeCount = useGraph((x) => x.nodes.length);
+  const openCanvas = async (f?: string) => { if (f && useGraph.getState().canvasFile !== f) await openSavedCanvas(f); goMode('canvas'); };
   const send = (part: Part, file?: string) => guard(() => sendPart(part, to, move, file));
 
   const Send = ({ part, file }: { part: Part; file?: string }) => (to ? <button className="mini-link" disabled={busy} title={`${move ? T('Move') : T('Copy')} → ${to}`} onClick={send(part, file)}>{move ? '⇥' : '⧉'} {T('Send')}</button> : null);
@@ -92,18 +87,12 @@ export function ProjectsPanel() {
           </div>
 
           <div className="prj-part">
-            <header><b>▦ {T('Canvas')}</b><span className="muted">{canvases.length ? `${canvases.length}` : T('Empty')}</span><span className="spacer" /><button className="mini-link" onClick={guard(newCanvas)}>＋ {T('New canvas')}</button></header>
-            {canvases.map((f) => {
-              const byDirector = dirCanvases.has(f);
-              return (
-                <div key={f} className={`prj-row${f === canvasFile ? ' current' : ''}`}>
-                  <button className="prj-name" title={f} onClick={guard(() => openCanvas(f))}>{byDirector ? '🎬 ' : ''}{f}{f === canvasFile && gDirty ? ' ●' : ''}</button>
-                  {!byDirector && <Send part="canvas" file={f} />}
-                  {!byDirector && <button className="mini-link" title={T('Delete')} disabled={busy} onClick={guard(() => clearPart('canvas', f))}>✕</button>}
-                </div>
-              );
-            })}
-            {byDirectorNote(canvases.length > 0 && dirCanvases.size > 0, T)}
+            <header><b>▦ {T('Canvas')}</b><span className="muted">{canvases.length ? `${nodeCount} ${T('cards')}` : T('Empty')}</span></header>
+            <div className="prj-acts">
+              <button className="mini-link" onClick={guard(() => openCanvas(canvases[0]))}>{T('Open')}</button>
+              {canvases.length > 0 && <Send part="canvas" file={canvases[0]} />}
+              {canvases.length > 0 && <button className="mini-link" disabled={busy} onClick={guard(() => clearPart('canvas'))}>{T('Clear')}</button>}
+            </div>
           </div>
 
           <div className="prj-part">

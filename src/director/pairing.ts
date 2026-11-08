@@ -135,16 +135,22 @@ let syncStarted = false;
 function pairContext() {
   const d = useDirector.getState(); const g = useGraph.getState(); const p = d.project;
   if (!p || d.readOnly || d.demo || !g.canvasFile) return null;
-  const link = p.canvas_links.find((l) => l.canvas_file === g.canvasFile && l.shots.length && !l.aspect && l.purpose !== 'casting' && l.purpose !== 'music');
-  return link ? { d, g, p, link } : null;
+  // the project has one canvas: every episode that was built into it counts
+  const links = p.canvas_links.filter((l) => l.canvas_file === g.canvasFile && l.shots.length && !l.aspect && l.purpose !== 'casting' && l.purpose !== 'music');
+  return links.length ? { d, g, p, links } : null;
 }
+/** which episode link holds the clip whose prompt card is `nodeId` */
+const clipOfCard = (c: NonNullable<ReturnType<typeof pairContext>>, nodeId: string) => {
+  for (const link of c.links) { const sh = link.shots.find((x) => x.node_ids[0] === nodeId); if (sh) return { link, sh }; }
+  return null;
+};
 const effectiveOf = (p: DirectorProject, s: DirectorProject['shots'][number]) => clipPromptOf(s, p.series.language, shotSubjects(p, s));
 const cardTextOf = (g: ReturnType<typeof useGraph.getState>, id: string) => { const n = g.nodes.find((x) => x.id === id); return n ? String(n.params.text ?? '') : undefined; };
 
 /** the prompt card of a clip of the paired canvas: does its text differ from what the Director holds? (null = not a paired clip card) */
 export function promptCardState(nodeId: string): { shotId: string; differs: boolean } | null {
   const c = pairContext(); if (!c) return null;
-  const sh = c.link.shots.find((x) => x.node_ids[0] === nodeId); const s = sh && c.p.shots.find((x) => x.shot_id === sh.shot_id); if (!sh || !s) return null;
+  const hit = clipOfCard(c, nodeId); const sh = hit?.sh; const s = sh && c.p.shots.find((x) => x.shot_id === sh.shot_id); if (!sh || !s) return null;
   const text = (cardTextOf(c.g, nodeId) ?? '').trim();
   return { shotId: sh.shot_id, differs: !!text && text !== effectiveOf(c.p, s).trim() };
 }
@@ -152,11 +158,11 @@ export function promptCardState(nodeId: string): { shotId: string; differs: bool
 /** the card's "Apply to the Director" button: the card text becomes the clip's prompt in the Director */
 export function applyCardToDirector(nodeId: string): boolean {
   const c = pairContext(); if (!c) return false;
-  const sh = c.link.shots.find((x) => x.node_ids[0] === nodeId); const s = sh && c.p.shots.find((x) => x.shot_id === sh.shot_id); if (!sh || !s) return false;
+  const hit = clipOfCard(c, nodeId); const sh = hit?.sh; const s = sh && c.p.shots.find((x) => x.shot_id === sh.shot_id); if (!hit || !sh || !s) return false;
   const text = (cardTextOf(c.g, nodeId) ?? '').trim(); if (!text) return false;
   c.d.edit((x) => {
     const q = x.shots.find((z) => z.shot_id === sh.shot_id); if (q) q.prompt_user = text === composeClipPrompt(q, x.series.language, shotSubjects(x, q)) ? undefined : text;
-    const l = x.canvas_links.find((z) => z.canvas_id === c.link.canvas_id); if (l) l.prompt_sent = { ...(l.prompt_sent ?? {}), [sh.shot_id]: text };
+    const l = x.canvas_links.find((z) => z.canvas_id === hit.link.canvas_id); if (l) l.prompt_sent = { ...(l.prompt_sent ?? {}), [sh.shot_id]: text };
   });
   return true;
 }
@@ -167,13 +173,13 @@ export function startPairSync(): void {
   const dirSnap = new Map<string, string>();   // shot -> the Director's prompt as last seen
   const sameKey = (c: NonNullable<ReturnType<typeof pairContext>>) => {
     const k = `${c.p.project_id}|${c.g.canvasFile}`; if (k === key) return true;
-    key = k; dirSnap.clear(); for (const sh of c.link.shots) { const s = c.p.shots.find((x) => x.shot_id === sh.shot_id); if (s) dirSnap.set(s.shot_id, effectiveOf(c.p, s)); }
+    key = k; dirSnap.clear(); for (const link of c.links) for (const sh of link.shots) { const s = c.p.shots.find((x) => x.shot_id === sh.shot_id); if (s) dirSnap.set(s.shot_id, effectiveOf(c.p, s)); }
     return false;
   };
   useDirector.subscribe(() => {
     const c = pairContext(); if (!c) { key = ''; return; }
     if (!sameKey(c)) return;
-    for (const sh of c.link.shots) {
+    for (const link of c.links) for (const sh of link.shots) {
       const s = c.p.shots.find((x) => x.shot_id === sh.shot_id); if (!s) continue;
       const now = effectiveOf(c.p, s);
       if (dirSnap.get(s.shot_id) === now) continue;
@@ -181,7 +187,7 @@ export function startPairSync(): void {
       const id = sh.node_ids[0]; const cur = cardTextOf(c.g, id);
       if (cur === undefined || cur === now) continue;
       c.g.setParam(id, 'text', now);
-      if (c.link.prompt_sent?.[s.shot_id] !== now) c.d.edit((x) => { const l = x.canvas_links.find((z) => z.canvas_id === c.link.canvas_id); if (l) l.prompt_sent = { ...(l.prompt_sent ?? {}), [s.shot_id]: now }; });   // not "stale"
+      if (link.prompt_sent?.[s.shot_id] !== now) c.d.edit((x) => { const l = x.canvas_links.find((z) => z.canvas_id === link.canvas_id); if (l) l.prompt_sent = { ...(l.prompt_sent ?? {}), [s.shot_id]: now }; });   // not "stale"
     }
   });
 }

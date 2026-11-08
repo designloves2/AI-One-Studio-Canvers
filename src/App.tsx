@@ -15,7 +15,6 @@ import { SettingsPanel } from './panels/SettingsPanel';
 import { StatusPanel } from './panels/StatusPanel';
 import { SimpleView } from './simple/SimpleView';
 import { DirectorView } from './director/DirectorView';
-import { PairBar } from './director/PairBar';
 import { startPairSync } from './director/pairing';
 import { ProjectsPanel } from './panels/ProjectsPanel';
 import { closeTab, newProjectFlow, renameProject, saveAll, startWorkspaceSync, switchTab, useWorkspace } from './store/workspace';
@@ -55,8 +54,6 @@ const ICONS = {
 
 function TopBar() {
   const T = useT();
-  const name = useGraph((s) => s.projectName);
-  const setName = useGraph((s) => s.setName);
   const dirty = useGraph((s) => s.dirty);
   const mode = useGraph((s) => s.mode);
   const setMode = useGraph((s) => s.setMode);
@@ -111,7 +108,7 @@ function TopBar() {
             <button key={id} className={mode === id ? 'active' : ''} onClick={() => setMode(id)} title={has ? T('Has content') : T('Empty')}><i className={`tab-dot${has ? ' on' : ''}`} aria-hidden />{T(label)}</button>
           ))}
         </div>
-        <div className="right">{mode === 'canvas' && <input className="project-name" title={T('Canvas name')} value={name} onChange={(e) => setName(e.target.value)} />}</div>
+        <div className="right" />
       </div>
     </>
   );
@@ -274,7 +271,6 @@ export function App() {
               <Flow tool={tool} onMenu={setMenu} />
               <Toolbar tool={tool} setTool={setTool} onAdd={() => setMenu({ x: window.innerWidth / 2 - 130, y: window.innerHeight / 3, flow: screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 }) })} />
               <SelectionBar />
-              <PairBar />
             </>
           ) : mode === 'director' ? <DirectorView /> : <SimpleView />}
           <LlmNotice mode={mode} />
