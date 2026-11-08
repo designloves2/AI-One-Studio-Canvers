@@ -782,3 +782,14 @@ button.save-state.dirty { cursor: pointer; } button.save-state.dirty:hover { bac
 
 .pair-apply { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 6px; padding: 5px 8px; border: 1px solid var(--acc); border-radius: 8px; font-size: 11px; background: var(--bg3); }
 .dx-shotprompt.draft { border-color: var(--acc); } .dx-shotprompt header i.warn { color: #e0a030; font-style: normal; }
+
+.settings.tabbed { padding: 0; gap: 0; }
+.settings.tabbed .set-head { position: sticky; top: 0; z-index: 2; background: var(--bg2, var(--bg)); padding: 10px 12px 8px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+.settings.tabbed .set-body { padding: 12px; display: flex; flex-direction: column; gap: 14px; }
+.settings.tabbed .set-body section:last-child { border-bottom: 0; }
+.set-tabs { display: flex; flex-wrap: wrap; gap: 4px; }
+.set-tabs button { flex: 1 1 auto; padding: 7px 10px; font-size: 12.5px; background: var(--bg3); border: 1px solid var(--line); border-radius: 8px; color: var(--muted, inherit); cursor: pointer; white-space: nowrap; }
+.set-tabs button:hover { color: inherit; }
+.set-tabs button.on { background: var(--acc); border-color: var(--acc); color: #fff; font-weight: 600; }
+.set-tabs.sub button { flex: 0 1 auto; padding: 4px 10px; font-size: 11.5px; border-radius: 999px; }
+.set-tabs.sub button.on { background: #1c1b33; color: inherit; border-color: var(--acc); }

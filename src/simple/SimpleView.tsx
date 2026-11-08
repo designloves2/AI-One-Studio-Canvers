@@ -13,6 +13,9 @@ import { runRefine } from '../ui/refine';
 import { useT } from '../i18n';
 import { useOptions } from '../backend/options';
 import { openLightbox } from '../ui/Lightbox';
+import { routeFirstMessage, setPendingLive } from './route';
+import { useDirector } from '../store/director';
+import { notify } from '../ui/dialog';
 
 const MODELS = ['image-generate', 'image-edit', 'outpaint', 'video-generate'];
 
@@ -57,7 +60,20 @@ export function SimpleView() {
   const [turbo, setTurbo] = useState({ on: false, lora: 'none', hires: true });
   const loras = useOptions('loras:h3', ['none']);
   const isH3 = defId === 'video-generate' && engineId !== 'ltx25';
+  // the very first sentence of a fresh feed may be a request for a whole canvas or a Director production: open that mode and hand the sentence over
+  const handOff = async (to: 'canvas' | 'director', text: string) => {
+    const g = useGraph.getState();
+    if (to === 'canvas') { setPendingLive(text); g.setMode('canvas'); g.setPanel('live'); setPrompt(''); return; }
+    const d = useDirector.getState();
+    if (d.project) {
+      if (d.file) { try { await d.save(); } catch { /* keep going: the project stays open */ } d.close(); }
+      else { g.setMode('director'); await notify(T('A Director project is open and not saved yet. Continue it there, or save it first.')); return; }
+    }
+    g.setMode('director'); setPrompt('');
+    void useDirector.getState().send(text);
+  };
   const go = () => {
+    if (!runs.length && !refs.length) { const to = routeFirstMessage(prompt); if (to) { void handOff(to, prompt.trim()); return; } }
     const cards = isH3 && turbo.on ? [{ def: 'h3-turbo', params: { turbo: 'pdd', turbo_lora: turbo.lora, hires: turbo.hires } }] : [];
     void runComposer({ defId, engineId, prompt, params, refs, cards });
   };
@@ -65,7 +81,7 @@ export function SimpleView() {
   return (
     <div className="simple">
       <div className="feed">
-        {!runs.length && <div className="hint"><h2>AI ONE Studio Canvers</h2><p>{T('Describe what you want below and press Generate.')}</p></div>}
+        {!runs.length && <div className="hint"><h2>AI ONE Studio Canvers</h2><p>{T('Describe what you want below and press Generate.')}</p><p className="muted">{T('If your first sentence asks for a canvas, it opens the canvas; if it asks for a drama, ad, music video or other production, it opens the Director.')}</p></div>}
         {runs.map((r) => (
           <article key={r.id} className="sim-run">
             <div className="bubble user"><p className="run-prompt">{r.prompt}</p><time>{new Date(r.createdAt).toLocaleTimeString()}</time></div>

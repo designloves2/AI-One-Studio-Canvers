@@ -8,6 +8,7 @@ import { importFile } from '../engine/run';
 import { useGraph } from '../store/graph';
 import { useSettings } from '../store/settings';
 import { useT } from '../i18n';
+import { takePendingLive } from '../simple/route';
 
 const KEY = 'canvers_live_chat_v1';
 const load = (): LiveMsg[] => { try { const v = JSON.parse(localStorage.getItem(KEY) ?? '[]'); return Array.isArray(v) ? v.slice(-60) : []; } catch { return []; } };
@@ -58,6 +59,9 @@ export function LivePanel() {
     } catch (e) { setMsgs((m) => [...m, { role: 'assistant', text: (e as Error).message, error: true }]); }
     finally { setBusy(false); setStatus(''); }
   };
+
+  // a first sentence typed in Simple mode: the chat opens with it already sent
+  useEffect(() => { const t = takePendingLive(); if (t) void send(t); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
 
   const attach = async (files: FileList | null) => {
     if (!files?.length) return;

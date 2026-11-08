@@ -191,6 +191,9 @@ export const KO_DIRECTOR: Record<string, string> = {
   'Generating the official H3 prompt of each clip one by one…': '클립별 공식 H3 프롬포트를 하나씩 생성 중입니다…',
   // Director <-> canvas pairs
   'Stop generating': '생성 정지',
+  'A Director project is open and not saved yet. Continue it there, or save it first.': '저장 안 된 디렉터 프로젝트가 열려 있습니다. 거기서 이어서 하거나 먼저 저장해 주세요.',
+  'If your first sentence asks for a canvas, it opens the canvas; if it asks for a drama, ad, music video or other production, it opens the Director.': '첫 문장이 캔버스를 만들어 달라는 말이면 캔버스로, 드라마·광고·뮤직비디오 같은 작품 제작이면 디렉터로 바로 열립니다.',
+  General: '일반', Vision: '이미지 설명', Translation: '번역',
   'Joining the clips and adding the song… this can take a few minutes. Please wait.': '클립을 합치고 노래를 얹는 중입니다… 몇 분 걸릴 수 있어요. 잠시만 기다려 주세요.',
   'Joining the clips… this can take a few minutes. Please wait.': '클립을 합치는 중입니다… 몇 분 걸릴 수 있어요. 잠시만 기다려 주세요.',
   'Joining…': '합치는 중…',
