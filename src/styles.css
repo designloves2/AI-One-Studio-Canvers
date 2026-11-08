@@ -797,3 +797,6 @@ button.save-state.dirty { cursor: pointer; } button.save-state.dirty:hover { bac
 .acc-item.sub { background: var(--bg); }
 .acc-item.sub .acc-head { padding: 7px 10px; font-size: 12px; font-weight: 600; }
 .acc-item.sub .acc-body { background: var(--bg2, var(--bg)); padding: 6px 10px 10px; }
+.backends { gap: 5px; margin-bottom: 10px; }
+.bk { padding: 6px 8px; align-items: center; justify-content: center; text-align: center; }
+.bk b { font-size: 12px; font-weight: 600; }

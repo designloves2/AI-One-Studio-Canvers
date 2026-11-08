@@ -197,6 +197,7 @@ export const KO_DIRECTOR: Record<string, string> = {
   'Output & legacy': '출력 · 옛 패널',
   'Set separately': '따로 설정', 'Same as': '같게 사용:', 'Brief LLM': '브리프 LLM', 'Vision LLM': '이미지 설명 LLM',
   'Uses the same settings as the chosen LLM. Choose "Set separately" to give this one its own backend / model.': '선택한 LLM과 같은 설정을 사용합니다. 이 항목만 따로 쓰려면 "따로 설정"을 고르세요.',
+  'Translation test': '번역 시험',
   General: '일반', Vision: '이미지 설명', Translation: '번역',
   'Joining the clips and adding the song… this can take a few minutes. Please wait.': '클립을 합치고 노래를 얹는 중입니다… 몇 분 걸릴 수 있어요. 잠시만 기다려 주세요.',
   'Joining the clips… this can take a few minutes. Please wait.': '클립을 합치는 중입니다… 몇 분 걸릴 수 있어요. 잠시만 기다려 주세요.',

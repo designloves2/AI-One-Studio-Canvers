@@ -1179,7 +1179,7 @@ function ChatDock({ p, T }: { p: DirectorProject | null; T: (k: string) => strin
         <textarea rows={4} value={text} disabled={d.readOnly} placeholder={p ? T('Tell the crew what to do, or what to change…') : T('Say what you want to make…')}
           onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(); } }} />
         <div className="dirx-input-bar">
-          <button className="dirx-model" title={T('Model settings')} onClick={() => setShowModel(true)}>⚙ <span>{llmLabel(dirSet.same, mainLlm, dirSet.llm, T, ({ main: 'Main LLM', vision: 'Vision LLM', live: 'Live Canvas LLM', director: 'Director LLM' } as const)[dirSet.follow ?? 'main'])}</span></button>
+          <button className="dirx-model" title={T('Model settings')} onClick={() => setShowModel(true)}>⚙ <span>{llmLabel(dirSet.same, mainLlm, dirSet.llm, T, ({ main: 'Main LLM', vision: 'Vision LLM', live: 'Live Canvas LLM', director: 'Director LLM', translate: 'Translation LLM' } as const)[dirSet.follow ?? 'main'])}</span></button>
           <span className="dirx-hint">{T('Enter to send, Shift+Enter for a new line')}</span><button className="btn primary" disabled={d.busy || !text.trim() || d.readOnly} onClick={send}>{T('Send')}</button></div>
       </div>
       {showModel && <ModelDialog onClose={() => setShowModel(false)} />}

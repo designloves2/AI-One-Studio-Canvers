@@ -4,7 +4,7 @@ import { useSyncExternalStore } from 'react';
 import { getJson, postJson } from './http';
 import { runLlm } from './llm';
 import { notify } from '../ui/dialog';
-import { DEFAULT_LLM, effectiveLlm, useSettings } from '../store/settings';
+import { DEFAULT_LLM, effectiveLlm, type LlmSettings, useSettings } from '../store/settings';
 import { useGraph } from '../store/graph';
 import { byId } from '../registry';
 import { ensureEnglish, fieldFill, koKey, newestKey, viewKey, fieldNeedsEnglish, translateText } from './bilingual';
@@ -36,23 +36,39 @@ const KO_KEY = 'tj_use_ko_canvers';
 export const getUseKo = (): boolean => { try { return localStorage.getItem(KO_KEY) !== '0'; } catch { return true; } };
 export function setUseKo(on: boolean) { try { localStorage.setItem(KO_KEY, on ? '1' : '0'); } catch { /* private window: the choice just is not remembered */ } }
 
-/** `(system, user) => text` for the shared translate backend */
+/** the shared (node) translate backend that matches a Translation LLM of the settings; the nodes of the ComfyUI page keep using the server copy */
+export function toTranslateConfig(l: LlmSettings): Partial<TranslateConfig> {
+  if (l.backend === 'local') return { backend: 'llamagguf', llama_model: l.gguf_model, llama_n_ctx: l.n_ctx || 16384 };
+  if (l.backend === 'comfy') return { backend: 'native', native_clip: l.text_encoder_name };
+  if (l.backend === 'openrouter') return { backend: 'openrouter', or_model: l.or_model_text };
+  return { backend: 'custom', custom_base: l.custom_base, custom_model: l.custom_model, custom_ctx: l.custom_ctx };
+}
+/** the other way: the first time, the Translation LLM starts from what the server already has */
+export function fromTranslateConfig(c: TranslateConfig): Partial<LlmSettings> {
+  if (c.backend === 'llamagguf') return { backend: 'local', gguf_model: c.llama_model, n_ctx: c.llama_n_ctx };
+  if (c.backend === 'native') return { backend: 'comfy', text_encoder_name: c.native_clip };
+  if (c.backend === 'openrouter') return { backend: 'openrouter', or_model_text: c.or_model };
+  return { backend: 'custom', custom_base: c.custom_base, custom_model: c.custom_model, custom_ctx: c.custom_ctx };
+}
+
+/** the first time the Translation LLM of the settings starts from the server's shared translate backend */
+export async function seedTranslate(): Promise<void> {
+  const st = useSettings.getState();
+  if (st.translate.seeded) return;
+  try { st.setTranslateLlm(fromTranslateConfig(await loadTranslateConfig())); } catch { /* backend without the route: the defaults stay */ }
+  useSettings.getState().setTranslate({ seeded: true });
+}
+
+/** `(system, user) => text` with the Translation LLM of the settings (its own backend, or the same as another LLM) */
 export const translateLlm = () => async (system: string, user: string): Promise<string> => {
-  // "same as <another LLM>": translate with that slot's settings (the server's shared translate backend is left as it is for the nodes)
+  await seedTranslate();
   const t = useSettings.getState().translate;
-  if (t.same) return runLlm({ system, prompt: user, max_tokens: 4096, temperature: 0.2, llm: { ...effectiveLlm(t.follow), max_tokens: 4096, temperature: 0.2 } });
-  const c = await loadTranslateConfig();
-  if (c.backend === 'native') {
-    if (!c.native_clip) throw new Error('No translate CLIP set - pick one in Settings -> Translation LLM.');
-    return runLlm({ system, prompt: user, max_tokens: 4096, temperature: 0.2, llm: { ...DEFAULT_LLM, backend: 'comfy', text_encoder_name: c.native_clip, max_tokens: 4096, temperature: 0.2 } });
-  }
-  if (c.backend === 'openrouter' && !c.or_model.trim()) {
-    const msg = 'OpenRouter 모델이 선택되지 않았습니다. 설정 > 번역 LLM 에서 모델을 선택하세요.';
+  const l = { ...(t.same ? effectiveLlm(t.follow) : t.llm), max_tokens: 4096, temperature: 0.2 };
+  if (l.backend === 'openrouter' && !l.or_model_text.trim()) {
+    const msg = 'OpenRouter 모델이 선택되지 않았습니다. 설정 > LLM > 번역 에서 모델을 선택하세요.';
     void notify(msg); throw new Error(msg);
   }
-  const d = await postJson<{ ok: boolean; text?: string; error?: string }>('/tj_shared/translate_llm', { system, user });
-  if (!d.ok) throw new Error(d.error || 'Translate failed');
-  return d.text ?? '';
+  return runLlm({ system, prompt: user, max_tokens: 4096, temperature: 0.2, llm: l });
 };
 
 /** the keys a card's long text fields keep their Korean view in */

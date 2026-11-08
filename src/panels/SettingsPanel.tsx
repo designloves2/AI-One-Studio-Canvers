@@ -7,7 +7,7 @@ import { systemStats } from '../backend/comfy';
 import { FAMILIES, clearStudioCache, getModels, pickModels, type Family, type ModelLists } from '../backend/studio';
 import { resetOptions } from '../backend/options';
 import { useT } from '../i18n';
-import { TRANSLATE_DEFAULTS, getUseKo, setUseKo, loadTranslateConfig, saveTranslateConfig, translateLlm, type TranslateConfig } from '../backend/translate';
+import { getUseKo, setUseKo, saveTranslateConfig, seedTranslate, toTranslateConfig, translateLlm } from '../backend/translate';
 import { translateText } from '../backend/bilingual';
 
 function Row({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
@@ -20,16 +20,15 @@ function Select({ value, onChange, options, blank }: { value: string; onChange(v
   return <select value={value} onChange={(e) => onChange(e.target.value)}>{withCur.map((o) => <option key={o} value={o}>{o === '' ? blank : o}</option>)}</select>;
 }
 
-const KIND_LABEL: Record<LlmKind, string> = { main: 'Brief LLM', vision: 'Vision LLM', live: 'Live Canvas LLM', director: 'Director LLM' };
+const KIND_LABEL: Record<LlmKind, string> = { main: 'Brief LLM', vision: 'Vision LLM', live: 'Live Canvas LLM', director: 'Director LLM', translate: 'Translation LLM' };
 
 /** "Use the same settings as ..." dropdown of a slot: its own settings, or any other slot (never itself, never a loop) */
-function FollowSelect({ kind }: { kind: Exclude<LlmKind, 'main'> | 'translate' }) {
+function FollowSelect({ kind }: { kind: Exclude<LlmKind, 'main'> }) {
   const T = useT();
   const st = useSettings();
   const cur = st[kind];
   const set = kind === 'director' ? st.setDirector : kind === 'live' ? st.setLive : kind === 'translate' ? st.setTranslate : st.setVision;
-  // nobody follows the translation slot (it has no LLM settings of its own here), so it never makes a loop
-  const options = (['main', 'vision', 'live', 'director'] as LlmKind[]).filter((k) => k !== kind && (kind === 'translate' || !followsKind(st, k, kind)));
+  const options = (['main', 'vision', 'live', 'director', 'translate'] as LlmKind[]).filter((k) => k !== kind && !followsKind(st, k, kind));
   const value = cur.same && options.includes(cur.follow) ? cur.follow : cur.same ? 'main' : 'own';
   return (
     <>
@@ -134,23 +133,26 @@ function ImageModels() {
 }
 
 // ------------------------------------------------------------------ LLM (the four TJ backends)
-export function Llm({ target = 'main' }: { target?: 'main' | 'live' | 'vision' | 'director' }) {
+export function Llm({ target = 'main' }: { target?: 'main' | 'live' | 'vision' | 'director' | 'translate' }) {
   const T = useT();
   const live = target === 'live';
   const vis = target === 'vision';
   const dir = target === 'director';
+  const tr = target === 'translate';
   const alt = target !== 'main';   // Live Canvas, Vision and the Director have their own settings
   const dirSet = useSettings((s) => s.director);
   const visSet = useSettings((s) => s.vision);
   const mainLlm = useSettings((s) => s.llm);
   const liveSet = useSettings((s) => s.live);
-  const llm = dir ? dirSet.llm : live ? liveSet.llm : vis ? visSet.llm : mainLlm;
+  const trSet = useSettings((s) => s.translate);
+  const llm = tr ? trSet.llm : dir ? dirSet.llm : live ? liveSet.llm : vis ? visSet.llm : mainLlm;
   const keys = useSettings((s) => s.keys);
   const setMainLlm = useSettings((s) => s.setLlm);
   const setLiveLlm = useSettings((s) => s.setLiveLlm);
   const setVisLlm = useSettings((s) => s.setVisionLlm);
   const setDirLlm = useSettings((s) => s.setDirectorLlm);
-  const setLlm = dir ? setDirLlm : live ? setLiveLlm : vis ? setVisLlm : setMainLlm;
+  const setTrLlm = useSettings((s) => s.setTranslateLlm);
+  const setLlm = tr ? setTrLlm : dir ? setDirLlm : live ? setLiveLlm : vis ? setVisLlm : setMainLlm;
   const setKey = useSettings((s) => s.setKey);
   const [cat, setCat] = useState<LlmCatalog | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -182,18 +184,18 @@ export function Llm({ target = 'main' }: { target?: 'main' | 'live' | 'vision' |
     const out = await runLlm({ system: 'Reply with the single word OK.', prompt: 'ping', max_tokens: 400, ...(alt ? { llm } : {}) });
     return `“${out.slice(0, 60)}” · ${Math.round(performance.now() - t0)} ms`;
   });
-  const saveAll = () => wrap(async () => { if (target !== 'live' && !dir) await saveServerSettings(); if (llm.backend === 'openrouter') await saveOpenRouter(keys.openrouter || undefined); return T('Saved'); });
+  const saveAll = () => wrap(async () => { if (tr) { if (!trSet.same) await saveTranslateConfig(toTranslateConfig(llm)); } else if (target !== 'live' && !dir) await saveServerSettings(); if (llm.backend === 'openrouter') await saveOpenRouter(keys.openrouter || undefined); return T('Saved'); });
 
   return (
     <section>
-      <h3>{T(dir ? 'Director LLM' : live ? 'Live Canvas LLM' : vis ? 'LLM (Vision) backend' : 'LLM (Brief) backend')}</h3>
+      <h3>{T(tr ? 'Translation LLM' : dir ? 'Director LLM' : live ? 'Live Canvas LLM' : vis ? 'LLM (Vision) backend' : 'LLM (Brief) backend')}</h3>
       {alt && <FollowSelect kind={target as Exclude<LlmKind, 'main'>} />}
       {live && !liveSet.same && llm.backend === 'local' && llm.n_ctx < 8192 && <p className="status bad">{T('Live Canvas needs a context of 8192 or more for a local model.')}</p>}
-      {alt && (dir ? dirSet.same : live ? liveSet.same : visSet.same) ? null : <>
+      {alt && (tr ? trSet.same : dir ? dirSet.same : live ? liveSet.same : visSet.same) ? null : <>
       <div className="backends">
         {BACKENDS.map((b) => (
           <button key={b.id} className={`bk ${llm.backend === b.id ? 'on' : ''}`} onClick={() => setLlm({ backend: b.id as LlmBackend })} title={b.hint}>
-            <b>{T(b.label)}</b><small>{b.hint}</small>
+            <b>{T(b.label)}</b>
           </button>
         ))}
       </div>
@@ -243,41 +245,27 @@ export function Llm({ target = 'main' }: { target?: 'main' | 'live' | 'vision' |
   );
 }
 
-// ------------------------------------------------------------------ Translation LLM (shared by every TJ node, node v1.49.0)
+// ------------------------------------------------------------------ Translation LLM: the same slot as the other LLMs, plus the auto-translate switch and a test
 function TranslationLlm() {
   const T = useT();
-  const [c, setC] = useState<TranslateConfig>(TRANSLATE_DEFAULTS);
   const [useKo, setUseKoState] = useState(getUseKo());
-  const [cat, setCat] = useState<LlmCatalog | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const follows = useSettings((s) => s.translate.same);
-  useEffect(() => { void loadTranslateConfig(true).then(setC); void fetchCatalog().then(setCat).catch(() => setCat(null)); }, []);
-  const set = (patch: Partial<TranslateConfig>) => { setC((x) => ({ ...x, ...patch })); void saveTranslateConfig(patch).then(setC).catch((e) => setMsg({ ok: false, text: (e as Error).message })); };
+  useEffect(() => { void seedTranslate(); }, []);
   const test = async () => {
     setMsg(null); const t0 = performance.now();
     try { const out = await translateText('A woman walks along the beach at sunset.', 'ko', translateLlm()); setMsg({ ok: true, text: `“${out.slice(0, 80)}” · ${Math.round(performance.now() - t0)} ms` }); } catch (e) { setMsg({ ok: false, text: (e as Error).message }); }
   };
-  const labels: Record<string, string> = { native: 'Native (ComfyUI CLIP)', openrouter: 'OpenRouter (cloud)', llamagguf: 'Llama GGUF (local llama.cpp)', custom: 'Connect Custom' };
   return (
-    <section>
-      <h3>{T('Translation LLM')}</h3>
-      <label className="srow"><span className="field-label">{T('Use Korean translation')}</span><input type="checkbox" checked={useKo} onChange={(e) => { setUseKo(e.target.checked); setUseKoState(e.target.checked); }} /></label>
-      <p className="muted">{T('Off: no automatic translation (before a run, after Enhance / Refine, the Korean side of the Refine result). The EN / 한 button still translates once each time it is pressed.')}</p>
-      <p className="muted">{T('Used by the KO / EN button on every prompt field. Changing it here changes it in all nodes at once.')}</p>
-      <FollowSelect kind="translate" />
-      {follows ? null : <>
-      <Row label={T('Backend')}><select value={c.backend} onChange={(e) => set({ backend: e.target.value as TranslateConfig['backend'] })}>{Object.keys(labels).map((k) => <option key={k} value={k}>{labels[k]}</option>)}</select></Row>
-      {c.backend === 'native' && <Row label={T('Text encoder')}><Select value={c.native_clip} onChange={(v) => set({ native_clip: v })} options={cat?.text_encoders ?? []} blank="(choose)" /></Row>}
-      {c.backend === 'openrouter' && <Row label={T('Text model')}><input list="or-models" value={c.or_model} onChange={(e) => setC({ ...c, or_model: e.target.value })} onBlur={() => set({ or_model: c.or_model })} /></Row>}
-      {c.backend === 'llamagguf' && <Row label={T('GGUF model')}><Select value={c.llama_model} onChange={(v) => set({ llama_model: v })} options={cat?.gguf ?? []} blank="(choose)" /></Row>}
-      {c.backend === 'custom' && <>
-        <Row label={T('Base URL')}><input value={c.custom_base} onChange={(e) => setC({ ...c, custom_base: e.target.value })} onBlur={() => set({ custom_base: c.custom_base })} /></Row>
-        <Row label={T('Model')}><input value={c.custom_model} onChange={(e) => setC({ ...c, custom_model: e.target.value })} onBlur={() => set({ custom_model: c.custom_model })} /></Row>
-      </>}
-      </>}
-      <div className="srow-actions"><button className="btn" onClick={() => void test()}>{T('Test')}</button></div>
-      {msg && <p className={`status ${msg.ok ? 'ok' : 'bad'}`}>{msg.text}</p>}
-    </section>
+    <>
+      <section>
+        <label className="srow"><span className="field-label">{T('Use Korean translation')}</span><input type="checkbox" checked={useKo} onChange={(e) => { setUseKo(e.target.checked); setUseKoState(e.target.checked); }} /></label>
+        <p className="muted">{T('Off: no automatic translation (before a run, after Enhance / Refine, the Korean side of the Refine result). The EN / 한 button still translates once each time it is pressed.')}</p>
+        <p className="muted">{T('Used by the KO / EN button on every prompt field. Changing it here changes it in all nodes at once.')}</p>
+        <div className="srow-actions"><button className="btn" onClick={() => void test()}>{T('Translation test')}</button></div>
+        {msg && <p className={`status ${msg.ok ? 'ok' : 'bad'}`}>{msg.text}</p>}
+      </section>
+      <Llm target="translate" />
+    </>
   );
 }
 
