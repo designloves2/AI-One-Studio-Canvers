@@ -50,6 +50,8 @@ export interface Settings {
   director: { same: boolean; follow: LlmKind; llm: LlmSettings };
   /** LLM (Vision): describes images; same = follow the Brief LLM. Canvers' own setting, separate from the ONE STUDIO nodes. */
   vision: { same: boolean; follow: LlmKind; llm: LlmSettings };
+  /** Translation: its own backend (kept on the server, shared by every TJ node) or the same settings as one of the LLM slots above */
+  translate: { same: boolean; follow: LlmKind };
   /** API keys live in memory only; they are sent to the backend once (never persisted here). */
   keys: { custom: string; openrouter: string };
   /** per image family overrides picked in Settings → Image models (blank = backend default) */
@@ -76,6 +78,7 @@ export interface Settings {
   setDirector: (patch: Partial<{ same: boolean; follow: LlmKind }>) => void;
   setDirectorLlm: (patch: Partial<LlmSettings>) => void;
   setLive: (patch: Partial<{ same: boolean; follow: LlmKind }>) => void;
+  setTranslate: (patch: Partial<{ same: boolean; follow: LlmKind }>) => void;
   setLiveLlm: (patch: Partial<LlmSettings>) => void;
   setKey: (which: 'custom' | 'openrouter', v: string) => void;
   setModel: (family: string, patch: Partial<ModelChoice>) => void;
@@ -90,8 +93,8 @@ function load(): Partial<Settings> {
 export const useSettings = create<Settings>((set, get) => {
   const saved = load();
   const persist = () => {
-    const { comfyUrl, llm, live, vision, director, models, saveSubfolder, music, video, hostPanels, h3Turbo, lastParams } = get();
-    try { localStorage.setItem(KEY, JSON.stringify({ comfyUrl, llm, live, vision, director, models, saveSubfolder, music, video, hostPanels, h3Turbo, lastParams })); } catch { /* ignore */ }
+    const { comfyUrl, llm, live, vision, director, translate, models, saveSubfolder, music, video, hostPanels, h3Turbo, lastParams } = get();
+    try { localStorage.setItem(KEY, JSON.stringify({ comfyUrl, llm, live, vision, director, translate, models, saveSubfolder, music, video, hostPanels, h3Turbo, lastParams })); } catch { /* ignore */ }
   };
   return {
     comfyUrl: saved.comfyUrl ?? '',
@@ -99,6 +102,7 @@ export const useSettings = create<Settings>((set, get) => {
     vision: { same: saved.vision?.same ?? true, follow: (saved.vision?.follow as LlmKind) ?? 'main', llm: { ...DEFAULT_LLM, ...(saved.vision?.llm ?? {}) } },
     live: { same: saved.live?.same ?? true, follow: (saved.live?.follow as LlmKind) ?? 'main', llm: { ...DEFAULT_LLM, temperature: 0.5, max_tokens: 3500, ...(saved.live?.llm ?? {}) } },
     director: { same: saved.director?.same ?? false, follow: (saved.director?.follow as LlmKind) ?? 'main', llm: { ...DEFAULT_LLM, ...(saved.llm ?? {}), temperature: 0.6, max_tokens: 7000, ...(saved.director?.llm ?? {}) } },
+    translate: { same: saved.translate?.same ?? false, follow: (saved.translate?.follow as LlmKind) ?? 'main' },
     keys: { custom: '', openrouter: '' },
     models: saved.models ?? {},
     saveSubfolder: saved.saveSubfolder ?? 'ai-one-canvers',
@@ -117,6 +121,7 @@ export const useSettings = create<Settings>((set, get) => {
     setVisionLlm: (patch) => { for (const k of Object.keys(patch)) llmDirty.vision.add(k); set({ vision: { ...get().vision, llm: { ...get().vision.llm, ...patch } } }); persist(); },
     setDirector: (patch) => { set({ director: { ...get().director, ...patch } }); persist(); },
     setDirectorLlm: (patch) => { set({ director: { ...get().director, llm: { ...get().director.llm, ...patch } } }); persist(); },
+    setTranslate: (patch) => { set({ translate: { ...get().translate, ...patch } }); persist(); },
     setLive: (patch) => { set({ live: { ...get().live, ...patch } }); persist(); },
     setLiveLlm: (patch) => { set({ live: { ...get().live, llm: { ...get().live.llm, ...patch } } }); persist(); },
     setKey: (which, v) => set({ keys: { ...get().keys, [which]: v } }),

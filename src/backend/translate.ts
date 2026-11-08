@@ -4,7 +4,7 @@ import { useSyncExternalStore } from 'react';
 import { getJson, postJson } from './http';
 import { runLlm } from './llm';
 import { notify } from '../ui/dialog';
-import { DEFAULT_LLM } from '../store/settings';
+import { DEFAULT_LLM, effectiveLlm, useSettings } from '../store/settings';
 import { useGraph } from '../store/graph';
 import { byId } from '../registry';
 import { ensureEnglish, fieldFill, koKey, newestKey, viewKey, fieldNeedsEnglish, translateText } from './bilingual';
@@ -38,6 +38,9 @@ export function setUseKo(on: boolean) { try { localStorage.setItem(KO_KEY, on ? 
 
 /** `(system, user) => text` for the shared translate backend */
 export const translateLlm = () => async (system: string, user: string): Promise<string> => {
+  // "same as <another LLM>": translate with that slot's settings (the server's shared translate backend is left as it is for the nodes)
+  const t = useSettings.getState().translate;
+  if (t.same) return runLlm({ system, prompt: user, max_tokens: 4096, temperature: 0.2, llm: { ...effectiveLlm(t.follow), max_tokens: 4096, temperature: 0.2 } });
   const c = await loadTranslateConfig();
   if (c.backend === 'native') {
     if (!c.native_clip) throw new Error('No translate CLIP set - pick one in Settings -> Translation LLM.');
