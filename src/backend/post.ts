@@ -18,13 +18,51 @@ type L = [string, number];
 export type PostStep =
   | { kind: 'deblur'; strength: string }
   | { kind: 'denoise'; strength: string }
-  | { kind: 'upscale'; method: 'flashvsr' | 'rtx' | 'model'; srcW: number; srcH: number;
+  | { kind: 'upscale'; method: 'flashvsr' | 'recavsr' | 'relayvsr' | 'rtx' | 'model'; srcW: number; srcH: number;
+      recavsr?: RecaVsrParams; relayvsr?: RelayVsrParams;
       flashvsr: { model: string; mode: string; scale: number; colorFix: boolean; tileSize: number; tileOverlap: number; seed: number };
       rtx: RtxSize; modelName: string; twoPass: boolean; pass2: RtxSize }
   | { kind: 'skin'; evenness: number; smoothing: number; redness: number; shine: number; blemish: string; preserveMarks: boolean; microtexture: number }
   | { kind: 'grain'; amount: number; size: number; color: number; lumBias: number; noise: 'smooth' | 'grainy' }
   | { kind: 'interpolate'; targetFps: number; scale: number; modelName: string; batchSize: number; fp16: boolean }
   | { kind: 'resize'; mode: string; method: string; targetPx: number; ratioW: number; ratioH: number; megapixels: number; width: number; height: number; crop: string };
+
+/** ReCaVSR (ComfyUI-ReCaVSR pack) and RelayVSR (ComfyUI core): two more video super-resolution methods (node SPEC_RELAY_VSR_UPSCALERS) */
+export interface RecaVsrParams { transformer: string; vae?: string; scale: number; colorFix: string; seed: number; decoder: string; kernels: string; kvOffload: boolean; encoder: string }
+export interface RelayVsrParams { unet: string; vae: string; seed: number }
+
+/** ReCaVSR: ReCaVSRLoader -> ReCaVSRUpscale (frames in, a VIDEO out) -> GetVideoComponents (frames again, so the rest of the graph works on frames like every other method) */
+async function addReCaVSR(g: Record<string, any>, p: RecaVsrParams, images: L, fps: number): Promise<L> {
+  await need('ReCaVSRLoader', 'ReCaVSR', 'ComfyUI-ReCaVSR (run install_requirements and restart ComfyUI)');
+  await need('ReCaVSRUpscale', 'ReCaVSR', 'ComfyUI-ReCaVSR');
+  await need('GetVideoComponents', 'GetVideoComponents', 'a newer ComfyUI core');
+  if (!p.transformer || p.transformer === 'none') throw new Error('ReCaVSR: pick a transformer file (models/recavsr).');
+  const decoder = p.decoder || 'flashdecoder';
+  if (decoder === 'vae' && (!p.vae || p.vae === 'none')) throw new Error('ReCaVSR: the "vae" decoder needs the Wan 2.2 VAE — pick it.');
+  g['P:rc_load'] = { class_type: 'ReCaVSRLoader', inputs: { transformer: p.transformer } };
+  const inputs: Record<string, any> = {
+    model: ['P:rc_load', 0], images, scale: Math.min(8, Math.max(0.5, p.scale || 2)), color_fix: p.colorFix || 'wavelet',
+    seed: Math.max(0, Math.round(Number(p.seed ?? 42)) || 0), decoder, kernels: p.kernels || 'fast', kv_offload: !!p.kvOffload, encoder: p.encoder || 'auto', fps: Math.round(fps || FPS) || FPS,
+  };
+  if (decoder === 'vae') { g['P:rc_vae'] = { class_type: 'VAELoader', inputs: { vae_name: p.vae } }; inputs.vae = ['P:rc_vae', 0]; }
+  g['P:rc_up'] = { class_type: 'ReCaVSRUpscale', inputs };
+  g['P:rc_frames'] = { class_type: 'GetVideoComponents', inputs: { video: ['P:rc_up', 0] } };
+  return ['P:rc_frames', 0];
+}
+
+/** RelayVSR: UNETLoader -> RelayVSRConditioning -> KSampler (1 step, cfg 1) -> VSRDecode. The factor is the model's own (x2 file = 2x, x4 file = 4x). */
+async function addRelayVSR(g: Record<string, any>, p: RelayVsrParams, images: L): Promise<L> {
+  await need('RelayVSRConditioning', 'RelayVSR', 'a newer ComfyUI core');
+  await need('VSRDecode', 'RelayVSR (VSRDecode)', 'a newer ComfyUI core');
+  if (!p.unet || p.unet === 'none') throw new Error('RelayVSR: pick the RelayVSR UNET.');
+  if (!p.vae || p.vae === 'none') throw new Error('RelayVSR: pick the RelayVSR VAE (the x2 UNET goes with the x2 VAE).');
+  g['P:rl_unet'] = { class_type: 'UNETLoader', inputs: { unet_name: p.unet, weight_dtype: 'default' } };
+  g['P:rl_cond'] = { class_type: 'RelayVSRConditioning', inputs: { model: ['P:rl_unet', 0], images } };
+  g['P:rl_samp'] = { class_type: 'KSampler', inputs: { model: ['P:rl_unet', 0], positive: ['P:rl_cond', 0], negative: ['P:rl_cond', 0], latent_image: ['P:rl_cond', 1], seed: p.seed, steps: 1, cfg: 1, sampler_name: 'euler', scheduler: 'simple', denoise: 1 } };
+  g['P:rl_vae'] = { class_type: 'VAELoader', inputs: { vae_name: p.vae } };
+  g['P:rl_dec'] = { class_type: 'VSRDecode', inputs: { vae: ['P:rl_vae', 0], samples: ['P:rl_samp', 0], images, detail: 1 } };
+  return ['P:rl_dec', 0];
+}
 
 export interface RtxSize { mode: string; scale: number; short: number; long: number; w: number; h: number; anchor: string; quality: string }
 
@@ -130,6 +168,12 @@ export async function buildPostGraph(job: PostJob): Promise<PostGraph> {
       g['P:pipe'] = { class_type: 'FlashVSRInitPipe', inputs: { model: f.model, mode: f.mode, alt_vae: 'none', force_offload: true, precision: 'bf16', device: 'cuda:0', attention_mode: 'sparse_sage_attention' } };
       g['P:step'] = { class_type: 'FlashVSRNodeAdv', inputs: { pipe: ['P:pipe', 0], frames: images, scale: Math.min(4, Math.max(2, Math.round(f.scale))), color_fix: f.colorFix, tiled_vae: true, tiled_dit: true, tile_size: f.tileSize, tile_overlap: f.tileOverlap, unload_dit: false, sparse_ratio: 2, kv_ratio: 3, local_range: 11, seed: f.seed } };
       images = ['P:step', 0];
+    } else if (s.method === 'recavsr') {
+      if (!s.recavsr) throw new Error('ReCaVSR: no settings');
+      images = await addReCaVSR(g, s.recavsr, images, fps);
+    } else if (s.method === 'relayvsr') {
+      if (!s.relayvsr) throw new Error('RelayVSR: no settings');
+      images = await addRelayVSR(g, s.relayvsr, images);
     } else if (s.method === 'rtx') {
       await need('TJ_NODE_RTXVSR', 'RTX VSR', 'ComfyUI-TJ_NODE (NVIDIA RTX GPU)');
       const t = rtxTarget(s.rtx, s.srcW, s.srcH);

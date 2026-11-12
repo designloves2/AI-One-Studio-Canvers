@@ -23,6 +23,10 @@ async function load(source: string): Promise<string[]> {
     return ['none', ...new Set(lists.flat().filter((x) => x && x !== 'none'))];
   }
   if (source === 'h3unets') { const l = await getJson<{ diffusion_models?: string[] }>('/minimax_h3_one/models'); return ['none', ...(l.diffusion_models ?? []).filter((x) => x && x !== 'none')]; }
+  if (source === 'recavsr') { const l = await getJson<{ recavsr_models?: string[] }>('/minimax_h3_one/models'); return ['none', ...(l.recavsr_models ?? []).filter((x) => /transformer/i.test(x))]; }   // models/recavsr: only the transformer files
+  if (source === 'relayvsr_unets') { const l = await getJson<{ diffusion_models?: string[] }>('/minimax_h3_one/models'); return ['none', ...(l.diffusion_models ?? []).filter((x) => /relayvsr/i.test(x))]; }
+  if (source === 'relayvsr_vaes') { const l = await getJson<{ vaes?: string[] }>('/minimax_h3_one/models'); return ['none', ...(l.vaes ?? []).filter((x) => /relayvsr/i.test(x))]; }
+  if (source === 'vaes') { const l = await getJson<{ vaes?: string[] }>('/minimax_h3_one/models'); return ['none', ...(l.vaes ?? []).filter((x) => x && x !== 'none')]; }
   if (source === 'tinyvaes') { const i = await objectInfo('ModelPreviewOverrideKJ'); return i?.ModelPreviewOverrideKJ?.input?.optional?.tiny_vae?.[1]?.options ?? ['none']; }
   if (source === 'tinyvaes+auto') return ['auto', ...(await loadOptions('tinyvaes'))];
   if (source === 'seedvr2dit') { const i = await objectInfo('SeedVR2LoadDiTModel'); return ['none', ...(i?.SeedVR2LoadDiTModel?.input?.required?.model?.[0] ?? [])]; }

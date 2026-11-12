@@ -254,4 +254,5 @@ export const KO_DIRECTOR: Record<string, string> = {
   'Save this canvas first, then continue?': '이 캔버스를 먼저 저장하고 계속할까요?',
   'This canvas belongs to a Director project that was replaced or renamed.': '이 캔버스의 디렉터 프로젝트가 바뀌었거나 이름이 달라졌습니다.',
   'The Director project of this canvas could not be opened.': '이 캔버스의 디렉터 프로젝트를 열 수 없습니다.',
+  'ComfyUI native — Generate Text details': 'ComfyUI 기본 — Generate Text 상세 옵션', 'MTP': 'MTP', 'Reset to defaults': '기본값으로 되돌리기', 'Used by every tool that writes with ComfyUI Generate Text. Today the Prompt Enhance routes take the length, the temperature and the seed; the other options are kept for the Generate Text node (TextGenerateV2 when ComfyUI has it).': 'ComfyUI Generate Text로 글을 쓰는 모든 기능이 함께 씁니다. 지금 프롬프트 향상 경로가 받는 값은 길이·온도·시드이고, 나머지 옵션은 Generate Text 노드(ComfyUI에 있으면 TextGenerateV2)용으로 저장해 둡니다.', 'Max length': '최대 길이', 'Sampling Mode': '샘플링 모드', 'Top K': 'Top K', 'Top P': 'Top P', 'Min P': 'Min P', 'Presence penalty': '존재 패널티', 'Thinking': '생각 모드', 'Use default template': '기본 템플릿 사용',
 };

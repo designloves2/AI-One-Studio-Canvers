@@ -1,13 +1,16 @@
 // Runners for the card-style nodes: LoRA / H3 option cards / Asset Library, the Postprocess steps,
 // Face Refine and Character Sheet.  Every node here talks to ComfyUI through the STUDIO_ONE / TJ_NODE API.
 import { migrateTiledParams } from '../backend/tiledMigrate';
-import type { Asset } from '../types';
+import type { Asset, Primitive } from '../types';
 import type { Ctx } from './run';
 import { assetFromFile, ensureInput, runPrompt } from '../backend/comfy';
 import { getJson } from '../backend/http';
 import { DEFAULT_OPT, ONE_TAKE_OVERLAP_SEC, copyToInput, type H3Options } from '../backend/h3';
-import { buildPostGraph, type PostStep, type RtxSize } from '../backend/post';
+import { buildPostGraph, type PostStep, type RecaVsrParams, type RelayVsrParams, type RtxSize } from '../backend/post';
+import { loadOptions } from '../backend/options';
 import { buildH3ImageGraph } from '../backend/h3Image';
+import { runLlm } from '../backend/llm';
+import { formatFor, NO_AESTHETIC } from '../backend/promptStyle';
 import { buildLtxGraph, ltxSize } from '../backend/ltx';
 import { loadBitmap } from '../editing/ops';
 import { beatDetect, bridgeClip, itdaFileUrl, itdaUpload, sceneDetect } from '../backend/itda';
@@ -139,12 +142,22 @@ function post(stepOf: (c: Ctx, size: { w: number; h: number }) => PostStep): Run
 
 const withLegacySeed = (c: Ctx) => { const si = c.inputs('seed_in')[0]; const sv = si ? num(si.text, -1) : num(c.p.seed, -1); return sv < 0 ? Math.floor(Math.random() * 2 ** 40) : sv; };
 
-const ppUpscale = post((c, s) => {
-    const p = c.p; const method = (c.engineId ?? 'flashvsr') as 'flashvsr' | 'rtx' | 'model';
-    return { kind: 'upscale', method, srcW: s.w, srcH: s.h,
+/** a ReCaVSR / RelayVSR file left on "none" uses the first one found (RelayVSR: the x2 pair - the x4 pair is too big for a 16GB card) */
+async function firstOf(source: string, now: Primitive | undefined, prefer?: RegExp): Promise<string> {
+  const v = str(now, 'none'); if (v && v !== 'none') return v;
+  const all = (await loadOptions(source)).filter((x) => x && x !== 'none');
+  return (prefer && all.find((x) => prefer.test(x))) || all[0] || '';
+}
+const ppUpscale: Runner = async (c) => {
+  const p = c.p; const method = (c.engineId ?? 'flashvsr') as 'flashvsr' | 'recavsr' | 'relayvsr' | 'rtx' | 'model';
+  let recavsr: RecaVsrParams | undefined, relayvsr: RelayVsrParams | undefined;
+  if (method === 'recavsr') recavsr = { transformer: await firstOf('recavsr', p.rc_transformer, /int8/i), vae: str(p.rc_vae, 'none') === 'none' ? (await loadOptions('vaes')).find((x) => /wan2?\.?2.*vae/i.test(x)) : str(p.rc_vae), scale: num(p.rc_scale, 2), colorFix: str(p.rc_color, 'wavelet'), seed: num(p.rc_seed, 42), decoder: str(p.rc_decoder, 'flashdecoder'), kernels: str(p.rc_kernels, 'fast'), kvOffload: !!p.rc_kv, encoder: str(p.rc_encoder, 'auto') };
+  if (method === 'relayvsr') relayvsr = { unet: await firstOf('relayvsr_unets', p.rl_unet, /x2/i), vae: await firstOf('relayvsr_vaes', p.rl_vae, /x2/i), seed: Math.floor(Math.random() * 2 ** 32) };
+  if (method === 'relayvsr' && /x4/i.test(relayvsr!.unet)) c.progress(1, 'RelayVSR x4 is very heavy — on a 16GB card use the x2 pair');
+  return post((_cc, s) => ({ kind: 'upscale', method, srcW: s.w, srcH: s.h, recavsr, relayvsr,
       flashvsr: { model: str(p.fv_model, 'FlashVSR-v1.1'), mode: str(p.fv_mode, 'tiny'), scale: num(p.fv_scale, 2), colorFix: p.fv_color !== false, tileSize: num(p.fv_tile, 384), tileOverlap: num(p.fv_overlap, 32), seed: num(p.fv_seed, 42) },
-      rtx: rtxOf(p, 'rtx_'), modelName: str(p.model_name, 'none'), twoPass: !!p.two_pass, pass2: rtxOf(p, 'p2_') };
-});
+      rtx: rtxOf(p, 'rtx_'), modelName: str(p.model_name, 'none'), twoPass: !!p.two_pass, pass2: rtxOf(p, 'p2_') }))(c);
+};
 
 export const EXTRA_RUNNERS: Record<string, Runner> = {
   // ---------------- cards
@@ -194,10 +207,15 @@ export const EXTRA_RUNNERS: Record<string, Runner> = {
   'h3-image': async (c) => {
     const p = c.p; const s = useSettings.getState();
     const refs: string[] = []; for (const a of c.inputs('image').slice(0, 9)) refs.push(await ensureInput(a));
+    let prompt = c.text('prompt');
+    if (p.auto_enhance && prompt) {   // Prompt Enhance with the format of the mode (T2I / R2I), right before generating
+      c.progress(1, 'enhancing prompt…');
+      const style = { ...formatFor(c.def.id, c.engineId, refs.length > 0), aesthetic: NO_AESTHETIC, extra_instructions: 'Dialogue: sentences wrapped in <d> </d> are spoken lines in their original language. Use the text inside <d> </d> exactly as it is - never translate, never rewrite, never remove the <d> </d> markers.' };
+      prompt = (await runLlm({ system: '', prompt, style, where: 'bottom' })) || prompt;
+    }
     const g = await buildH3ImageGraph({
-      refs, prompt: c.text('prompt'), aspect: str(p.aspect, '1:1'), previewMp: num(p.preview_mp, 0.5), finalMp: num(p.final_mp, 1.5), final: p.final !== false,
-      steps: num(p.steps, 20), secondPassSteps: num(p.pass2, 3), fizgig: !!p.fizgig, refImageSize: str(p.ref_size, 'max'),
-      opt: optFromCards(h3Cards(c)), loras: cardLoras(c), seed: withLegacySeed(c), models: s.video, saveSubfolder: s.saveSubfolder, stem: 'MMH3',
+      refs, prompt, aspect: str(p.aspect, '1:1'), megapixels: num(p.final_mp, 1.5), refMp: num(p.ref_mp, 1), steps: num(p.steps, 6),
+      loras: cardLoras(c), seed: withLegacySeed(c), models: s.video, saveSubfolder: s.saveSubfolder, stem: 'MMH3',
     });
     const res = await runPrompt(g.graph, { onProgress: c.progress, signal: c.signal });
     return [assetFromFile(outFile(res.raw, g.save), 'image', 'image')];

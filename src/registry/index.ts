@@ -329,7 +329,7 @@ export const REGISTRY: NodeDef[] = [
     return [
       pp('pp-deblur', 'Deblur (RTX)', [sel('strength', 'Strength', ['LOW', 'MEDIUM', 'HIGH', 'ULTRA'], 'MEDIUM')], 'NVIDIA RTX Deblur on every frame.'),
       pp('pp-denoise', 'Denoise (RTX)', [sel('strength', 'Strength', ['LOW', 'MEDIUM', 'HIGH', 'ULTRA'], 'MEDIUM')], 'NVIDIA RTX Denoise on every frame.'),
-      withPrompt(pp('pp-upscale', 'Video Upscale', [], 'Enlarge a video: Latent Upscale (Use H3), FlashVSR, LTX 2.5 Upscale, RTX VSR or an upscale model; optional second RTX pass. The two latent methods take the prompt from the Prompt input, else from the clip itself (a clip made by Video Generate keeps its prompt).', [
+      withPrompt(pp('pp-upscale', 'Video Upscale', [], 'Enlarge a video: Latent Upscale (Use H3), FlashVSR, ReCaVSR, RelayVSR, LTX 2.5 Upscale, RTX VSR or an upscale model; optional second RTX pass. The two latent methods take the prompt from the Prompt input, else from the clip itself (a clip made by Video Generate keeps its prompt).', [
         { id: 'h3lat', label: 'Latent Upscale (Use H3)', family: 'post', params: [
           { id: 'h3_turbo', label: 'Turbo', control: { kind: 'select', options: ['pdd', 'none'], labels: { pdd: 'Turbo LoRA (Basic)', none: 'None (8-step checkpoint)' } }, default: 'pdd' },
           dyn('h3_pdd_file', 'Turbo LoRA (Basic)', 'loras:h3', 'none', { when: (p) => p.h3_turbo !== 'none' && p.h3_kind !== 'ref' }), dyn('h3_pdd_file_ref', 'Turbo LoRA (Reference)', 'loras:h3', 'none', { when: (p) => p.h3_turbo !== 'none' && p.h3_kind === 'ref' }),
@@ -345,6 +345,14 @@ export const REGISTRY: NodeDef[] = [
         { id: 'flashvsr', label: 'FlashVSR', family: 'post', default: true, params: [
           sel('fv_model', 'Model', ['FlashVSR-v1.1', 'FlashVSR'], 'FlashVSR-v1.1'), sel('fv_mode', 'Mode', ['tiny', 'tiny-long', 'full'], 'tiny'), slider('fv_scale', 'Scale', 2, 4, 1, 2), toggle('fv_color', 'Colour fix', true),
           num('fv_tile', 'Tile size', 384, { advanced: true }, 64, 2048, 32), num('fv_overlap', 'Tile overlap', 32, { advanced: true }, 0, 512, 8), num('fv_seed', 'Seed', 42, { advanced: true }),
+          toggle('two_pass', '2nd pass with RTX VSR', false), ...rtxP('p2_', (p) => !!p.two_pass)] },
+        { id: 'recavsr', label: 'ReCaVSR', family: 'post', params: [
+          dyn('rc_transformer', 'Transformer (models/recavsr; none = the first one found)', 'recavsr', 'none'), slider('rc_scale', 'Scale (×)', 0.5, 8, 0.25, 2), sel('rc_color', 'Color fix', ['none', 'adain', 'wavelet'], 'wavelet'),
+          sel('rc_decoder', 'Decoder', ['flashdecoder', 'vae'], 'flashdecoder'), dyn('rc_vae', 'Wan 2.2 VAE (only for Decoder = vae)', 'vaes', 'none', { when: (p) => p.rc_decoder === 'vae' }),
+          sel('rc_kernels', 'Kernels', ['fast', 'exact'], 'fast', { advanced: true }), sel('rc_encoder', 'Encoder', ['auto', 'hevc nvenc', 'h264 nvenc', 'h264'], 'auto', { advanced: true }),
+          toggle('rc_kv', 'KV offload', false, { advanced: true }), num('rc_seed', 'Seed', 42, { advanced: true }), toggle('two_pass', '2nd pass with RTX VSR', false), ...rtxP('p2_', (p) => !!p.two_pass)] },
+        { id: 'relayvsr', label: 'RelayVSR', family: 'post', params: [
+          dyn('rl_unet', 'RelayVSR UNET (none = the x2 model)', 'relayvsr_unets', 'none'), dyn('rl_vae', 'RelayVSR VAE (the same x as the UNET; none = the x2 VAE)', 'relayvsr_vaes', 'none'),
           toggle('two_pass', '2nd pass with RTX VSR', false), ...rtxP('p2_', (p) => !!p.two_pass)] },
         { id: 'ltx', label: 'LTX 2.5 Upscale', family: 'post', params: [
           slider('ltx_steps', 'Steps', 1, 20, 1, 4), slider('ltx_denoise', 'Denoise', 0.05, 1, 0.05, 0.15), dyn('ltx_sampler', 'Sampler', 'samplers', 'euler_ancestral'), dyn('ltx_scheduler', 'Scheduler', 'schedulers', 'simple'),
@@ -373,12 +381,11 @@ export const REGISTRY: NodeDef[] = [
           sel('undetected', 'Frames without a face', ['fade_out', 'skip', 'composite_anyway'], 'fade_out', { advanced: true }), seed,
         ], description: 'Redraw small faces in a finished H3 clip: track → crop → H3 redraw → stitch back. Needs ComfyUI-H3-FaceRefine.' },
       { id: 'h3-image', title: 'Image Generate (H3)', category: 'Image', kind: 'generate',
-    inputs: [P.textIn(), P.imgIn('image', 'Reference images (optional)', true, true), P.cardIn('H3 option cards'), P.loraIn(), P.seedIn()], outputs: [P.imgOut()],
+    inputs: [P.textIn(), P.imgIn('image', 'Reference images (optional)', true, true), P.loraIn(), P.seedIn()], outputs: [P.imgOut()],
     params: [
-      sel('aspect', 'Aspect ratio', ASPECTS, '1:1'), slider('final_mp', 'Final size (MP)', 0.25, 4, 0.25, 1.5), toggle('final', 'High quality 2nd pass', true, { note: 'latent upscale' }),
-      slider('preview_mp', 'First pass size (MP)', 0.1, 1.5, 0.05, 0.5, { advanced: true }), slider('steps', 'Steps (no turbo)', 1, 60, 1, 20, { advanced: true }), slider('pass2', '2nd pass steps', 3, 5, 1, 3, { advanced: true, when: (p) => !!p.final }),
-      toggle('fizgig', 'Fizgig single-frame latent', false, { advanced: true }), sel('ref_size', 'Reference size', ['max', 'match'], 'max', { advanced: true }), seed,
-    ], description: 'A still image from the MiniMax H3 model — text to image, or add reference images (up to 9).' },
+      sel('aspect', 'Aspect ratio', ASPECTS, '1:1'), slider('final_mp', 'Size (MP, multiples of 32)', 0.25, 4, 0.25, 1.5), slider('steps', 'Steps', 1, 30, 1, 6), autoEnhance,
+      slider('ref_mp', 'Reference image size (MP, 0 = as uploaded)', 0, 4, 0.25, 1, { advanced: true }), seed,
+    ], description: 'A still image from the official MiniMax H3 Image model — text to image, or add reference images (up to 9) for reference to image. The prompt format follows the mode (T2I / R2I).' },
   { id: 'character-sheet', title: 'Character Sheet', category: 'Image', kind: 'generate',
         inputs: [P.imgIn('image', 'Character reference', false, true), P.textIn('prompt', 'Prompt (optional)', true), P.loraIn(), P.seedIn()],
         outputs: [P.imgOut('image', 'Sheet'), { id: 'video', label: 'Turnaround video', type: 'video' }],

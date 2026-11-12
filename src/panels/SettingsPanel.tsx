@@ -1,3 +1,4 @@
+import { MTP_CHOICES, useNativeOpts } from '../backend/nativeOpts';
 import { postJson } from '../backend/http';
 import { useEffect, useState } from 'react';
 import { followsKind, useSettings, type LlmBackend, type LlmKind } from '../store/settings';
@@ -232,8 +233,10 @@ export function Llm({ target = 'main' }: { target?: 'main' | 'live' | 'vision' |
         <Row label=""><button className="btn" disabled={busy} onClick={() => void connect()}>{T('Connect & test')}</button></Row>
       </>}
 
-      <Row label={T('Temperature')}><input type="number" step={0.05} min={0} max={2} value={llm.temperature} onChange={(e) => setLlm({ temperature: +e.target.value })} /></Row>
-      <Row label={T('Max tokens')}><input type="number" step={50} min={50} max={8192} value={llm.max_tokens} onChange={(e) => setLlm({ max_tokens: +e.target.value })} /></Row>
+      {llm.backend === 'comfy' ? <NativeLlmOptions /> : <>
+        <Row label={T('Temperature')}><input type="number" step={0.05} min={0} max={2} value={llm.temperature} onChange={(e) => setLlm({ temperature: +e.target.value })} /></Row>
+        <Row label={T('Max tokens')}><input type="number" step={50} min={50} max={8192} value={llm.max_tokens} onChange={(e) => setLlm({ max_tokens: +e.target.value })} /></Row>
+      </>}
 
       <div className="srow-actions">
         <button className="btn" disabled={busy} onClick={() => void test()}>{T('Test')}</button>
@@ -242,6 +245,32 @@ export function Llm({ target = 'main' }: { target?: 'main' | 'live' | 'vision' |
       {msg && <p className={`status ${msg.ok ? 'ok' : 'bad'}`}>{msg.text}</p>}
       </>}
     </section>
+  );
+}
+
+/** ComfyUI native "Generate Text" details: one set for every tool (node SPEC_RELAY_H3_IMAGE_OFFICIAL, section 3) */
+function NativeLlmOptions() {
+  const T = useT();
+  const o = useNativeOpts((s) => s.opts); const set = useNativeOpts((s) => s.set); const reset = useNativeOpts((s) => s.reset);
+  const n = (k: 'max_length' | 'temperature' | 'top_k' | 'top_p' | 'min_p' | 'repetition_penalty' | 'presence_penalty' | 'seed', label: string, step: number, min: number, max: number) => (
+    <Row label={T(label)}><input type="number" step={step} min={min} max={max} value={o[k]} onChange={(e) => set({ [k]: +e.target.value })} /></Row>
+  );
+  const b = (k: 'sampling' | 'thinking' | 'use_default_template', label: string) => <Row label={T(label)}><input type="checkbox" checked={o[k]} onChange={(e) => set({ [k]: e.target.checked })} /></Row>;
+  return (
+    <div className="native-llm">
+      <h4>{T('ComfyUI native — Generate Text details')}</h4>
+      {n('max_length', 'Max length', 128, 16, 32768)}
+      {b('sampling', 'Sampling Mode')}
+      {o.sampling && <>
+        {n('temperature', 'Temperature', 0.05, 0, 2)}{n('top_k', 'Top K', 1, 0, 1000)}{n('top_p', 'Top P', 0.01, 0, 1)}{n('min_p', 'Min P', 0.01, 0, 1)}
+        {n('repetition_penalty', 'Repetition penalty', 0.01, 0.5, 2)}{n('presence_penalty', 'Presence penalty', 0.1, -2, 2)}
+      </>}
+      {n('seed', 'Seed', 1, 0, 2 ** 31)}
+      {b('thinking', 'Thinking')}{b('use_default_template', 'Use default template')}
+      <Row label={T('MTP')}><Select value={o.mtp} onChange={(v) => set({ mtp: v })} options={MTP_CHOICES} /></Row>
+      <p className="muted">{T('Used by every tool that writes with ComfyUI Generate Text. Today the Prompt Enhance routes take the length, the temperature and the seed; the other options are kept for the Generate Text node (TextGenerateV2 when ComfyUI has it).')}</p>
+      <button className="btn" onClick={reset}>{T('Reset to defaults')}</button>
+    </div>
   );
 }
 
@@ -299,13 +328,15 @@ function VideoModels() {
   const [lists, setLists] = useState<Awaited<ReturnType<typeof import('../backend/ltx').ltxModelLists>> | null>(null);
   const [auto, setAuto] = useState<Record<string, string>>({});
   useEffect(() => {
-    void import('../backend/ltx').then(async (m) => { try { setLists(await m.ltxModelLists()); const a = await m.resolveLtxModels({}); const h = await (await import('../backend/h3')).resolveH3Models({}, 't2v'); const hr = await (await import('../backend/h3')).resolveH3Models({}, 'reference'); setAuto({ ltx_unet: a.unet, ltx_clip: a.clip, ltx_vae_video: a.vaeVideo, ltx_vae_audio: a.vaeAudio, ltx_upscaler: a.upscaler, h3_unet_fl: h.unet, h3_unet_ref: hr.unet, h3_clip: h.clip, h3_vae_video: h.vaeVideo, h3_vae_audio: h.vaeAudio }); } catch { /* no LTX routes */ } });
+    void import('../backend/ltx').then(async (m) => { try { setLists(await m.ltxModelLists()); const a = await m.resolveLtxModels({}); const h = await (await import('../backend/h3')).resolveH3Models({}, 't2v'); const hr = await (await import('../backend/h3')).resolveH3Models({}, 'reference'); const hi = await import('../backend/h3Image'); const it = await hi.resolveH3ImageModels({}, false); const ir = await hi.resolveH3ImageModels({}, true); setAuto({ ltx_unet: a.unet, ltx_clip: a.clip, ltx_vae_video: a.vaeVideo, ltx_vae_audio: a.vaeAudio, ltx_upscaler: a.upscaler, h3_unet_fl: h.unet, h3_unet_ref: hr.unet, h3_clip: h.clip, h3_vae_video: h.vaeVideo, h3_vae_audio: h.vaeAudio, h3_img_unet_t2i: it.unet, h3_img_unet_ref2i: ir.unet, h3_img_clip: it.clip, h3_img_vae: it.vae }); } catch { /* no LTX routes */ } });
   }, []);
   const rows: [string, string, string[] | undefined][] = [
     ['ltx_unet', 'LTX diffusion', lists?.diffusion_models], ['ltx_clip', 'LTX text encoder', lists?.text_encoders_all ?? lists?.text_encoders], ['ltx_vae_video', 'LTX video VAE', lists?.vaes],
     ['ltx_vae_audio', 'LTX audio VAE', lists?.vaes], ['ltx_upscaler', 'LTX latent upscaler', lists?.latent_upscale_models],
     ['h3_unet_fl', 'H3 first/last diffusion', lists?.diffusion_models], ['h3_unet_ref', 'H3 reference diffusion', lists?.diffusion_models], ['h3_clip', 'H3 text encoder', lists?.text_encoders_all ?? lists?.text_encoders],
     ['h3_vae_video', 'H3 video VAE', lists?.vaes], ['h3_vae_audio', 'H3 audio VAE', lists?.vaes],
+    ['h3_img_unet_t2i', 'H3 Image MODEL · Text to Image', lists?.diffusion_models], ['h3_img_unet_ref2i', 'H3 Image MODEL · Reference to Image', lists?.diffusion_models],
+    ['h3_img_clip', 'H3 Image CLIP (blank = the H3 text encoder)', lists?.text_encoders_all ?? lists?.text_encoders], ['h3_img_vae', 'H3 Image VAE', lists?.vaes],
   ];
   return (
     <section>

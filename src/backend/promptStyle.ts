@@ -26,11 +26,12 @@ export function styleCatalog(): Promise<StyleCatalog> {
   return catalog;
 }
 
-export function formatFor(defId: string, engineId?: string): { model_format: string; purpose: string; system_override?: string } {
+export function formatFor(defId: string, engineId?: string, hasRefs?: boolean): { model_format: string; purpose: string; system_override?: string } {
   const def = byId.get(defId);
   const eng = def ? engineFor(def, engineId) : undefined;
   const video = def?.category === 'Video' || defId === 'h3-image' && false;
-  const fmt = (engineId && FORMAT_BY_ENGINE[engineId]) || FORMAT_BY_DEF[defId] || (eng?.family && FORMAT_BY_FAMILY[eng.family]) || (eng && FORMAT_BY_ENGINE[eng.id]) || 'Universal Natural Language';
+  // the H3 Image Generator writes for the mode it runs in: Reference to Image when reference images are connected, else Text to Image
+  const fmt = (defId === 'h3-image' && (hasRefs ? 'MiniMax H3 Image (R2I)' : 'MiniMax H3 Image (T2I)')) || (engineId && FORMAT_BY_ENGINE[engineId]) || FORMAT_BY_DEF[defId] || (eng?.family && FORMAT_BY_FAMILY[eng.family]) || (eng && FORMAT_BY_ENGINE[eng.id]) || 'Universal Natural Language';
   const moss = eng?.family === 'moss' ? { system_override: mossSystemPrompt(eng.id === 'moss-r2i' ? 'r2i' : 't2i') } : {};
   return { model_format: fmt, purpose: video ? 'Video' : (defId === 'image-edit' ? 'Edit (Inpainting/I2V)' : 'Image'), ...moss };
 }
@@ -41,7 +42,7 @@ export function downstreamTarget(nodeId: string): { model_format: string; purpos
   for (const e of edges.filter((x) => x.source === nodeId)) {
     const t = nodes.find((n) => n.id === e.target); if (!t) continue;
     const def = byId.get(t.defId); if (!def || (def.kind !== 'generate')) continue;
-    return formatFor(t.defId, t.engineId);
+    return formatFor(t.defId, t.engineId, edges.some((x) => x.target === t.id && x.targetHandle === 'image'));
   }
   return null;
 }

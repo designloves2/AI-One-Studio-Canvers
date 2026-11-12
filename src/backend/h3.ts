@@ -69,7 +69,7 @@ const alignFrameCount = (n: number) => { let f = Math.max(5, Math.round(n)); whi
 export const ONE_TAKE_OVERLAP_SEC = alignFrameCount(ONE_TAKE_OVERLAP_FRAMES) / 24;
 export const TAIL_CANDIDATES = 8;
 
-interface Lists { diffusion_models: string[]; text_encoders: string[]; text_encoders_all?: string[]; vaes: string[]; loras: string[]; upscale_models?: string[] }
+interface Lists { diffusion_models: string[]; text_encoders: string[]; text_encoders_all?: string[]; vaes: string[]; loras: string[]; upscale_models?: string[]; recavsr_models?: string[] }
 let cache: Promise<Lists> | null = null;
 export const h3ModelLists = () => (cache ??= getJson<Lists>('/minimax_h3_one/models').catch((e) => { cache = null; throw e; }));
 let availCache: Promise<Record<string, boolean>> | null = null;

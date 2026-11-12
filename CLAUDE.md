@@ -81,6 +81,9 @@
 - 알려진 제한: 소리 없는 mp4 는 VHS 로더가 실패, 소스 프레임 수를 길이×24 로 추정(±1프레임).
 - 다음 할 일은 스튜디오 세션(`TJ_STUDIO_ONE-10월`)이 `SPEC_RELAY_*` 로 보낸다. 상세 이력은 `CHANGELOG.md`, 방향·메모는 `docs/HANDOFF.md`.
 
+### 노드 이식 2026-11-13 (스튜디오 세션 전달, 미릴리즈·미푸시)
+- `SPEC_RELAY_H3_IMAGE_OFFICIAL.md`(1·2절 = `backend/h3Image.ts` 공식 노드 그래프 + `promptStyle.formatFor(…, hasRefs)` T2I/R2I 포맷, 이미지 전용 모델은 `settings.video.h3_img_*`, 3절 = `backend/nativeOpts.ts` + 설정 블록 + `llm.ts common()`), `SPEC_RELAY_VSR_UPSCALERS.md`(= `backend/post.ts` `addReCaVSR/addRelayVSR`, `pp-upscale` 엔진 recavsr/relayvsr, `options.ts` recavsr·relayvsr_unets·relayvsr_vaes·vaes). 해당 없음: 인라인(클립별) Upscale·설치 배치·가용성 목록(Canvers는 objectInfo 로 확인)·클라이언트 TextGenerateV2 그래프(서버 라우트가 LLM 을 부름). 노드 쪽이 미릴리즈라 버전업·태그 하지 말고 사용자 확인 후 진행.
+
 ### Director ↔ 캔버스 짝 묶기 (2026-11-03, 코드 완료 · 미릴리즈 · 화면 검증 전)
 - 규칙: **Director 프로젝트가 주인, 캔버스는 짝**. `Project.director`(`DirectorPair`: file·project_id·name·episode_id·no·purpose)를 캔버스 파일에 기록. 코드: `src/director/pairing.ts`(`stampPair` 저장 때 기록, `backfillPairs` 옛 캔버스에 짝 추가, `openCanvasOfProject` Director 열면 캔버스 열기, `openDirectorOfCanvas` 캔버스에서 Director 열기, `prepareCanvasForNewDirector` 짝 없는 캔버스 + 새 프로젝트면 경고→저장→빈 캔버스, `adoptIntoEmptyCanvas` 빈 자리에 편 캔버스 열기), `PairBar.tsx`(캔버스 위 띠), `store/graph.ts`(`directorPair`, toProject/loadProject에 포함), `server-lib/canvases.mjs` 목록에 `director` 요약, `CanvasesPanel` 🎬 표시. 훅: `canvasAction`·`musicAction` 저장 4곳(`stampPair`), `DirectorPanel.open`, `store/director.send`(첫 문장).
 - **프롬프트 동기화 = 버튼으로 저장**("바깥 클릭 저장"은 위험해서 쓰지 않음): 5단계·6단계 격자(`ShotPrompt` = `shot.prompt_user`)는 고치기 시작하면 "저장 안 됨" + [저장][취소], [저장] 때만 `prompt_user` 반영. Director→카드는 `pairing.startPairSync` 가 `prompt_user` 변화를 보고 즉시 `setParam`(저장·작업팀 생성 모두), 카드→Director 는 카드 아래 `PairApply`("디렉터와 다름 · 디렉터에 적용", `promptCardState`/`applyCardToDirector`)를 누를 때만. `link.prompt_sent` 도 같이 갱신해 "캔버스가 오래됨"이 안 뜸. 데모·읽기 전용·짝 아닌 캔버스는 동작 안 함. 주의: Director 저장이 카드의 아직 적용 안 한 손글을 덮어씀. 화면 검증 전.

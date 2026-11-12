@@ -4,6 +4,7 @@
 //   openrouter → OpenRouter cloud models
 //   custom     → Connect Custom (any OpenAI-compatible server)
 // All four are served by ComfyUI-TJ_NODE_STUDIO_ONE's /tj_studio_one/llm/* and /tj_shared/* routes.
+import { nativeRequest } from './nativeOpts';
 import { newCallId, useLlmLog, type LlmUsage } from './llmLog';
 import { acquireLocalLlm, type NoticePlace } from './llmGuard';
 import type { Asset } from '../types';
@@ -149,11 +150,14 @@ async function imageDataUrl(a: Asset, maxEdge = 1280): Promise<string> {
 }
 
 function common(l: LlmSettings, req: LlmRequest) {
+  // ComfyUI's own Generate Text takes its length / temperature / seed from the "native" details (Settings → LLM), the other backends from the slot
+  const nat = l.backend === 'comfy' ? nativeRequest() : null;
   return {
     call_id: req.callId,
     backend: l.backend,
-    temperature: req.temperature ?? l.temperature,
-    max_tokens: req.max_tokens ?? l.max_tokens,
+    temperature: req.temperature ?? nat?.temperature ?? l.temperature,
+    max_tokens: req.max_tokens ?? nat?.max_tokens ?? l.max_tokens,
+    ...(nat ? { seed: nat.seed, native: nat.native } : {}),
     gguf_model: l.gguf_model, mmproj_file: l.mmproj_file,
     n_ctx: l.n_ctx, n_gpu_layers: l.n_gpu_layers,
     text_encoder_name: l.text_encoder_name, clip_loader_type: l.clip_loader_type,
