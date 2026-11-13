@@ -2,9 +2,9 @@
 
 형식: 버전 · 날짜 / 추가 · 변경 · 수정. 버전은 `package.json`, `mcp/server.ts`와 같습니다.
 
-## 미릴리즈 — 2026-11-03
+## 2.32.0 — 2026-11-13
 
-### 노드 이식 (스튜디오 세션 2026-11-13 전달: SPEC_RELAY_H3_IMAGE_OFFICIAL · SPEC_RELAY_VSR_UPSCALERS, 노드는 미릴리즈라 버전·태그 없음)
+### 노드 v1.52.0 이식 (SPEC_RELAY_H3_IMAGE_OFFICIAL · SPEC_RELAY_VSR_UPSCALERS)
 
 - **H3 이미지 생성(Image Generate (H3)) 카드가 공식 MiniMax H3 Image 노드로 바뀌었습니다**(텍스트→이미지 / 레퍼런스→이미지만, 캐릭터 시트는 그대로). 크기는 비율 + 하나의 MP(32의 배수), Steps 기본 6, 레퍼런스 이미지 크기(MP, 0 = 원본), 프롬프트 자동 향상. 레퍼런스 이미지를 연결하면 R2I, 없으면 T2I로 동작하고 프롬프트 형식(MiniMax H3 Image (T2I)/(R2I))도 따라 바뀝니다(프롬프트 카드의 ✨ 향상 · ✎ 수정도 같음). 이미지 전용 모델은 설정 → 비디오 → MiniMax H3의 'H3 Image MODEL(T2I/R2I)·CLIP·VAE'(비워 두면 이름으로 자동 선택, 없으면 비디오 모델). 이전의 2차 패스·미리보기 MP·Fizgig·H3 옵션 카드 입력은 이 카드에서 없어졌습니다.
 - **영상 업스케일에 ReCaVSR · RelayVSR가 추가되었습니다**(Video Upscale 카드의 방식 목록). ReCaVSR는 배율·색 보정·디코더·커널·인코더·KV 오프로드·시드, RelayVSR는 UNET/VAE(비우면 x2 쌍; x4는 16GB에서 어려움). 두 방식 모두 뒤에 RTX VSR 2번째 패스를 붙일 수 있습니다. 팩(ComfyUI-ReCaVSR)이 없으면 오류로 알려 줍니다.

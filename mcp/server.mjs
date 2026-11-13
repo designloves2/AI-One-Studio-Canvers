@@ -2263,7 +2263,19 @@ function load() {
     return {};
   }
 }
-var DEFAULT_LLM, llmDirty, KEY, useSettings;
+function resolveLlmKind(st, kind) {
+  const seen = /* @__PURE__ */ new Set();
+  let k = kind;
+  while (k !== "main") {
+    if (seen.has(k)) return "main";
+    seen.add(k);
+    const s = st[k];
+    if (!s.same) return k;
+    k = s.follow ?? "main";
+  }
+  return "main";
+}
+var DEFAULT_LLM, llmDirty, KEY, useSettings, llmOfKind, effectiveLlm;
 var init_settings = __esm({
   "src/store/settings.ts"() {
     "use strict";
@@ -2290,18 +2302,19 @@ var init_settings = __esm({
     useSettings = create((set2, get) => {
       const saved = load();
       const persist = () => {
-        const { comfyUrl, llm, live, vision, director, models, saveSubfolder, music, video, hostPanels, h3Turbo, lastParams } = get();
+        const { comfyUrl, llm, live, vision, director, translate, models, saveSubfolder, music, video, hostPanels, h3Turbo, lastParams } = get();
         try {
-          localStorage.setItem(KEY, JSON.stringify({ comfyUrl, llm, live, vision, director, models, saveSubfolder, music, video, hostPanels, h3Turbo, lastParams }));
+          localStorage.setItem(KEY, JSON.stringify({ comfyUrl, llm, live, vision, director, translate, models, saveSubfolder, music, video, hostPanels, h3Turbo, lastParams }));
         } catch {
         }
       };
       return {
         comfyUrl: saved.comfyUrl ?? "",
         llm: { ...DEFAULT_LLM, ...saved.llm ?? {} },
-        vision: { same: saved.vision?.same ?? true, llm: { ...DEFAULT_LLM, ...saved.vision?.llm ?? {} } },
-        live: { same: saved.live?.same ?? true, llm: { ...DEFAULT_LLM, temperature: 0.5, max_tokens: 3500, ...saved.live?.llm ?? {} } },
-        director: { same: saved.director?.same ?? false, llm: { ...DEFAULT_LLM, ...saved.llm ?? {}, temperature: 0.6, max_tokens: 7e3, ...saved.director?.llm ?? {} } },
+        vision: { same: saved.vision?.same ?? true, follow: saved.vision?.follow ?? "main", llm: { ...DEFAULT_LLM, ...saved.vision?.llm ?? {} } },
+        live: { same: saved.live?.same ?? true, follow: saved.live?.follow ?? "main", llm: { ...DEFAULT_LLM, temperature: 0.5, max_tokens: 3500, ...saved.live?.llm ?? {} } },
+        director: { same: saved.director?.same ?? false, follow: saved.director?.follow ?? "main", llm: { ...DEFAULT_LLM, ...saved.llm ?? {}, temperature: 0.6, max_tokens: 7e3, ...saved.director?.llm ?? {} } },
+        translate: { same: saved.translate?.same ?? false, follow: saved.translate?.follow ?? "main", seeded: saved.translate?.seeded ?? false, llm: { ...DEFAULT_LLM, temperature: 0.2, max_tokens: 4096, ...saved.translate?.llm ?? {} } },
         keys: { custom: "", openrouter: "" },
         models: saved.models ?? {},
         saveSubfolder: saved.saveSubfolder ?? "ai-one-canvers",
@@ -2353,6 +2366,14 @@ var init_settings = __esm({
           set2({ director: { ...get().director, llm: { ...get().director.llm, ...patch } } });
           persist();
         },
+        setTranslate: (patch) => {
+          set2({ translate: { ...get().translate, ...patch } });
+          persist();
+        },
+        setTranslateLlm: (patch) => {
+          set2({ translate: { ...get().translate, llm: { ...get().translate.llm, ...patch } } });
+          persist();
+        },
         setLive: (patch) => {
           set2({ live: { ...get().live, ...patch } });
           persist();
@@ -2369,6 +2390,11 @@ var init_settings = __esm({
         }
       };
     });
+    llmOfKind = (st, kind) => kind === "main" ? st.llm : st[kind].llm;
+    effectiveLlm = (kind) => {
+      const st = useSettings.getState();
+      return llmOfKind(st, resolveLlmKind(st, kind));
+    };
   }
 });
 
@@ -2977,7 +3003,7 @@ var init_registry = __esm({
         return [
           pp("pp-deblur", "Deblur (RTX)", [sel("strength", "Strength", ["LOW", "MEDIUM", "HIGH", "ULTRA"], "MEDIUM")], "NVIDIA RTX Deblur on every frame."),
           pp("pp-denoise", "Denoise (RTX)", [sel("strength", "Strength", ["LOW", "MEDIUM", "HIGH", "ULTRA"], "MEDIUM")], "NVIDIA RTX Denoise on every frame."),
-          withPrompt(pp("pp-upscale", "Video Upscale", [], "Enlarge a video: Latent Upscale (Use H3), FlashVSR, LTX 2.5 Upscale, RTX VSR or an upscale model; optional second RTX pass. The two latent methods take the prompt from the Prompt input, else from the clip itself (a clip made by Video Generate keeps its prompt).", [
+          withPrompt(pp("pp-upscale", "Video Upscale", [], "Enlarge a video: Latent Upscale (Use H3), FlashVSR, ReCaVSR, RelayVSR, LTX 2.5 Upscale, RTX VSR or an upscale model; optional second RTX pass. The two latent methods take the prompt from the Prompt input, else from the clip itself (a clip made by Video Generate keeps its prompt).", [
             { id: "h3lat", label: "Latent Upscale (Use H3)", family: "post", params: [
               { id: "h3_turbo", label: "Turbo", control: { kind: "select", options: ["pdd", "none"], labels: { pdd: "Turbo LoRA (Basic)", none: "None (8-step checkpoint)" } }, default: "pdd" },
               dyn("h3_pdd_file", "Turbo LoRA (Basic)", "loras:h3", "none", { when: (p) => p.h3_turbo !== "none" && p.h3_kind !== "ref" }),
@@ -3007,6 +3033,25 @@ var init_registry = __esm({
               num("fv_tile", "Tile size", 384, { advanced: true }, 64, 2048, 32),
               num("fv_overlap", "Tile overlap", 32, { advanced: true }, 0, 512, 8),
               num("fv_seed", "Seed", 42, { advanced: true }),
+              toggle("two_pass", "2nd pass with RTX VSR", false),
+              ...rtxP("p2_", (p) => !!p.two_pass)
+            ] },
+            { id: "recavsr", label: "ReCaVSR", family: "post", params: [
+              dyn("rc_transformer", "Transformer (models/recavsr; none = the first one found)", "recavsr", "none"),
+              slider("rc_scale", "Scale (\xD7)", 0.5, 8, 0.25, 2),
+              sel("rc_color", "Color fix", ["none", "adain", "wavelet"], "wavelet"),
+              sel("rc_decoder", "Decoder", ["flashdecoder", "vae"], "flashdecoder"),
+              dyn("rc_vae", "Wan 2.2 VAE (only for Decoder = vae)", "vaes", "none", { when: (p) => p.rc_decoder === "vae" }),
+              sel("rc_kernels", "Kernels", ["fast", "exact"], "fast", { advanced: true }),
+              sel("rc_encoder", "Encoder", ["auto", "hevc nvenc", "h264 nvenc", "h264"], "auto", { advanced: true }),
+              toggle("rc_kv", "KV offload", false, { advanced: true }),
+              num("rc_seed", "Seed", 42, { advanced: true }),
+              toggle("two_pass", "2nd pass with RTX VSR", false),
+              ...rtxP("p2_", (p) => !!p.two_pass)
+            ] },
+            { id: "relayvsr", label: "RelayVSR", family: "post", params: [
+              dyn("rl_unet", "RelayVSR UNET (none = the x2 model)", "relayvsr_unets", "none"),
+              dyn("rl_vae", "RelayVSR VAE (the same x as the UNET; none = the x2 VAE)", "relayvsr_vaes", "none"),
               toggle("two_pass", "2nd pass with RTX VSR", false),
               ...rtxP("p2_", (p) => !!p.two_pass)
             ] },
@@ -3074,20 +3119,17 @@ var init_registry = __esm({
             title: "Image Generate (H3)",
             category: "Image",
             kind: "generate",
-            inputs: [P.textIn(), P.imgIn("image", "Reference images (optional)", true, true), P.cardIn("H3 option cards"), P.loraIn(), P.seedIn()],
+            inputs: [P.textIn(), P.imgIn("image", "Reference images (optional)", true, true), P.loraIn(), P.seedIn()],
             outputs: [P.imgOut()],
             params: [
               sel("aspect", "Aspect ratio", ASPECTS, "1:1"),
-              slider("final_mp", "Final size (MP)", 0.25, 4, 0.25, 1.5),
-              toggle("final", "High quality 2nd pass", true, { note: "latent upscale" }),
-              slider("preview_mp", "First pass size (MP)", 0.1, 1.5, 0.05, 0.5, { advanced: true }),
-              slider("steps", "Steps (no turbo)", 1, 60, 1, 20, { advanced: true }),
-              slider("pass2", "2nd pass steps", 3, 5, 1, 3, { advanced: true, when: (p) => !!p.final }),
-              toggle("fizgig", "Fizgig single-frame latent", false, { advanced: true }),
-              sel("ref_size", "Reference size", ["max", "match"], "max", { advanced: true }),
+              slider("final_mp", "Size (MP, multiples of 32)", 0.25, 4, 0.25, 1.5),
+              slider("steps", "Steps", 1, 30, 1, 6),
+              autoEnhance,
+              slider("ref_mp", "Reference image size (MP, 0 = as uploaded)", 0, 4, 0.25, 1, { advanced: true }),
               seed
             ],
-            description: "A still image from the MiniMax H3 model \u2014 text to image, or add reference images (up to 9)."
+            description: "A still image from the official MiniMax H3 Image model \u2014 text to image, or add reference images (up to 9) for reference to image. The prompt format follows the mode (T2I / R2I)."
           },
           {
             id: "character-sheet",
@@ -3755,7 +3797,23 @@ var init_i18n_cards = __esm({
       "Load Video \u2192 Prompt \u2192 Video Edit": "\uC601\uC0C1 \uBD88\uB7EC\uC624\uAE30 \u2192 \uD504\uB86C\uD504\uD2B8 \u2192 \uC601\uC0C1 \uC218\uC815",
       "Load Video \u2192 Face Refine \u2192 View \u2192 Upscale \u2192 View": "\uC601\uC0C1 \u2192 \uC5BC\uAD74 \uB9AC\uD30C\uC778 \u2192 \uD655\uC778 \u2192 \uC5C5\uC2A4\uCF00\uC77C \u2192 \uD655\uC778",
       "Asset Library \u2192 H3 reference video (@names)": "\uC5D0\uC14B \uB77C\uC774\uBE0C\uB7EC\uB9AC \u2192 H3 \uB808\uD37C\uB7F0\uC2A4 \uC601\uC0C1 (@\uC774\uB984)",
-      "Prompt \u2192 Music \u2192 Listen": "\uD504\uB86C\uD504\uD2B8 \u2192 \uC74C\uC545 \u2192 \uB4E3\uAE30"
+      "Prompt \u2192 Music \u2192 Listen": "\uD504\uB86C\uD504\uD2B8 \u2192 \uC74C\uC545 \u2192 \uB4E3\uAE30",
+      "Size (MP, multiples of 32)": "\uD06C\uAE30 (MP, 32\uC758 \uBC30\uC218)",
+      "Reference image size (MP, 0 = as uploaded)": "\uB808\uD37C\uB7F0\uC2A4 \uC774\uBBF8\uC9C0 \uD06C\uAE30 (MP, 0 = \uC6D0\uBCF8 \uADF8\uB300\uB85C)",
+      "A still image from the official MiniMax H3 Image model \u2014 text to image, or add reference images (up to 9) for reference to image. The prompt format follows the mode (T2I / R2I).": "\uACF5\uC2DD MiniMax H3 Image \uBAA8\uB378\uB85C \uB9CC\uB4DC\uB294 \uC815\uC9C0 \uC774\uBBF8\uC9C0\uC785\uB2C8\uB2E4. \uAE00\uB9CC \uC4F0\uBA74 \uD14D\uC2A4\uD2B8\u2192\uC774\uBBF8\uC9C0, \uB808\uD37C\uB7F0\uC2A4 \uC774\uBBF8\uC9C0(\uCD5C\uB300 9\uC7A5)\uB97C \uBD99\uC774\uBA74 \uB808\uD37C\uB7F0\uC2A4\u2192\uC774\uBBF8\uC9C0\uB85C \uB3D9\uC791\uD558\uACE0, \uD504\uB86C\uD504\uD2B8 \uD615\uC2DD\uB3C4 \uBAA8\uB4DC\uC5D0 \uB9DE\uAC8C \uBC14\uB01D\uB2C8\uB2E4.",
+      "ReCaVSR": "ReCaVSR",
+      "RelayVSR": "RelayVSR",
+      "Transformer (models/recavsr; none = the first one found)": "\uD2B8\uB79C\uC2A4\uD3EC\uBA38 (models/recavsr, none = \uCC98\uC74C \uCC3E\uC740 \uAC83)",
+      "Scale (\xD7)": "\uBC30\uC728 (\xD7)",
+      "Color fix": "\uC0C9 \uBCF4\uC815",
+      "Decoder": "\uB514\uCF54\uB354",
+      "Wan 2.2 VAE (only for Decoder = vae)": "Wan 2.2 VAE (\uB514\uCF54\uB354\uAC00 vae\uC77C \uB54C\uB9CC)",
+      "Kernels": "\uCEE4\uB110",
+      "Encoder": "\uC778\uCF54\uB354",
+      "KV offload": "KV \uC624\uD504\uB85C\uB4DC",
+      "RelayVSR UNET (none = the x2 model)": "RelayVSR UNET (none = x2 \uBAA8\uB378)",
+      "RelayVSR VAE (the same x as the UNET; none = the x2 VAE)": "RelayVSR VAE (UNET\uACFC \uAC19\uC740 \uBC30\uC728, none = x2 VAE)",
+      "Enlarge a video: Latent Upscale (Use H3), FlashVSR, ReCaVSR, RelayVSR, LTX 2.5 Upscale, RTX VSR or an upscale model; optional second RTX pass. The two latent methods take the prompt from the Prompt input, else from the clip itself (a clip made by Video Generate keeps its prompt).": "\uC601\uC0C1\uC744 \uD0A4\uC6C1\uB2C8\uB2E4: \uB798\uD134\uD2B8 \uC5C5\uC2A4\uCF00\uC77C(H3 \uC0AC\uC6A9), FlashVSR, ReCaVSR, RelayVSR, LTX 2.5 \uC5C5\uC2A4\uCF00\uC77C, RTX VSR, \uC5C5\uC2A4\uCF00\uC77C \uBAA8\uB378 \uC911 \uC120\uD0DD\uD558\uACE0 \uB450 \uBC88\uC9F8 RTX \uD328\uC2A4\uB97C \uB354\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4. \uB450 \uB798\uD134\uD2B8 \uBC29\uC2DD\uC740 \uD504\uB86C\uD504\uD2B8 \uC785\uB825\uC758 \uAE00\uC744 \uC4F0\uACE0, \uC5C6\uC73C\uBA74 \uD074\uB9BD\uC5D0 \uB4E4\uC5B4 \uC788\uB294 \uD504\uB86C\uD504\uD2B8\uB97C \uC501\uB2C8\uB2E4."
     };
   }
 });
@@ -4162,7 +4220,89 @@ var init_i18n_director = __esm({
       "Generating prompt": "\uD504\uB86C\uD3EC\uD2B8 \uC0DD\uC131\uC911",
       Waiting: "\uB300\uAE30 \uC911",
       generated: "\uC0DD\uC131\uB428",
-      "Generating the official H3 prompt of each clip one by one\u2026": "\uD074\uB9BD\uBCC4 \uACF5\uC2DD H3 \uD504\uB86C\uD3EC\uD2B8\uB97C \uD558\uB098\uC529 \uC0DD\uC131 \uC911\uC785\uB2C8\uB2E4\u2026"
+      "Generating the official H3 prompt of each clip one by one\u2026": "\uD074\uB9BD\uBCC4 \uACF5\uC2DD H3 \uD504\uB86C\uD3EC\uD2B8\uB97C \uD558\uB098\uC529 \uC0DD\uC131 \uC911\uC785\uB2C8\uB2E4\u2026",
+      // Director <-> canvas pairs
+      "Stop generating": "\uC0DD\uC131 \uC815\uC9C0",
+      "A Director project is open and not saved yet. Continue it there, or save it first.": "\uC800\uC7A5 \uC548 \uB41C \uB514\uB809\uD130 \uD504\uB85C\uC81D\uD2B8\uAC00 \uC5F4\uB824 \uC788\uC2B5\uB2C8\uB2E4. \uAC70\uAE30\uC11C \uC774\uC5B4\uC11C \uD558\uAC70\uB098 \uBA3C\uC800 \uC800\uC7A5\uD574 \uC8FC\uC138\uC694.",
+      "If your first sentence asks for a canvas, it opens the canvas; if it asks for a drama, ad, music video or other production, it opens the Director.": "\uCCAB \uBB38\uC7A5\uC774 \uCE94\uBC84\uC2A4\uB97C \uB9CC\uB4E4\uC5B4 \uB2EC\uB77C\uB294 \uB9D0\uC774\uBA74 \uCE94\uBC84\uC2A4\uB85C, \uB4DC\uB77C\uB9C8\xB7\uAD11\uACE0\xB7\uBBA4\uC9C1\uBE44\uB514\uC624 \uAC19\uC740 \uC791\uD488 \uC81C\uC791\uC774\uBA74 \uB514\uB809\uD130\uB85C \uBC14\uB85C \uC5F4\uB9BD\uB2C8\uB2E4.",
+      "Connection & language": "\uC5F0\uACB0 \xB7 \uC5B8\uC5B4",
+      "Output & legacy": "\uCD9C\uB825 \xB7 \uC61B \uD328\uB110",
+      "Set separately": "\uB530\uB85C \uC124\uC815",
+      "Same as": "\uAC19\uAC8C \uC0AC\uC6A9:",
+      "Brief LLM": "\uBE0C\uB9AC\uD504 LLM",
+      "Vision LLM": "\uC774\uBBF8\uC9C0 \uC124\uBA85 LLM",
+      'Uses the same settings as the chosen LLM. Choose "Set separately" to give this one its own backend / model.': '\uC120\uD0DD\uD55C LLM\uACFC \uAC19\uC740 \uC124\uC815\uC744 \uC0AC\uC6A9\uD569\uB2C8\uB2E4. \uC774 \uD56D\uBAA9\uB9CC \uB530\uB85C \uC4F0\uB824\uBA74 "\uB530\uB85C \uC124\uC815"\uC744 \uACE0\uB974\uC138\uC694.',
+      "Translation test": "\uBC88\uC5ED \uC2DC\uD5D8",
+      "Projects": "\uD504\uB85C\uC81D\uD2B8",
+      "Has content": "\uB0B4\uC6A9 \uC788\uC74C",
+      "Canvas name": "\uCE94\uBC84\uC2A4 \uC774\uB984",
+      "Make a copy": "\uBCF5\uC81C",
+      "Send to": "\uBCF4\uB0BC \uD504\uB85C\uC81D\uD2B8",
+      "Copy": "\uBCF5\uC0AC",
+      "Move": "\uC774\uB3D9",
+      "Rename": "\uC774\uB984 \uBCC0\uACBD",
+      "results": "\uACB0\uACFC",
+      "There is no open project yet. It is made automatically when you create something, or press New project.": "\uC5F4\uB9B0 \uD504\uB85C\uC81D\uD2B8\uAC00 \uC544\uC9C1 \uC5C6\uC2B5\uB2C8\uB2E4. \uBB34\uC5B8\uAC00 \uB9CC\uB4E4\uBA74 \uC790\uB3D9\uC73C\uB85C \uB9CC\uB4E4\uC5B4\uC9C0\uACE0, [\uC0C8 \uD504\uB85C\uC81D\uD2B8]\uB85C \uC9C1\uC811 \uB9CC\uB4E4 \uC218\uB3C4 \uC788\uC2B5\uB2C8\uB2E4.",
+      "No projects yet.": "\uC800\uC7A5\uB41C \uD504\uB85C\uC81D\uD2B8\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.",
+      "Canvases made by the Director belong to it and go with it.": "\uB514\uB809\uD130\uAC00 \uB9CC\uB4E0 \uCE94\uBC84\uC2A4\uB294 \uB514\uB809\uD130\uC5D0 \uC18D\uD574\uC11C \uD568\uAED8 \uC6C0\uC9C1\uC785\uB2C8\uB2E4.",
+      "has unsaved changes. Continue?": "\uC800\uC7A5 \uC548 \uB41C \uB0B4\uC6A9\uC774 \uC788\uC2B5\uB2C8\uB2E4. \uACC4\uC18D\uD560\uAE4C\uC694?",
+      "Nothing to copy yet.": "\uC544\uC9C1 \uBCF5\uC81C\uD560 \uB0B4\uC6A9\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.",
+      "Name of the copy": "\uBCF5\uC81C\uBCF8 \uC774\uB984",
+      "Copied as": "\uBCF5\uC81C\uB428",
+      "Could not copy": "\uBCF5\uC81C\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4",
+      "Not a project file.": "\uD504\uB85C\uC81D\uD2B8 \uD30C\uC77C\uC774 \uC544\uB2D9\uB2C8\uB2E4.",
+      "already has a Director project. Add this one next to it (the old one stays as a file)?": "\uC5D0 \uC774\uBBF8 \uB514\uB809\uD130 \uD504\uB85C\uC81D\uD2B8\uAC00 \uC788\uC2B5\uB2C8\uB2E4. \uC774\uCABD \uAC83\uC73C\uB85C \uBC14\uAFC0\uAE4C\uC694? (\uAE30\uC874 \uAC83\uC740 \uD30C\uC77C\uB85C \uB0A8\uC2B5\uB2C8\uB2E4)",
+      "Sent to": "\uBCF4\uB0C8\uC2B5\uB2C8\uB2E4",
+      "Could not send": "\uBCF4\uB0B4\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4",
+      "Remove from this project": "\uC774 \uD504\uB85C\uC81D\uD2B8\uC5D0\uC11C \uC9C0\uC6C0",
+      "This cannot be undone.": "\uB418\uB3CC\uB9B4 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.",
+      "the Director project and its canvases": "\uB514\uB809\uD130 \uD504\uB85C\uC81D\uD2B8\uC640 \uADF8 \uCE94\uBC84\uC2A4",
+      "all canvases": "\uBAA8\uB4E0 \uCE94\uBC84\uC2A4",
+      "the Simple feed": "\uC2EC\uD50C \uC791\uC5C5 \uBAA9\uB85D",
+      "Delete this project with everything in it (Director project, canvases, Simple feed)?": "\uC774 \uD504\uB85C\uC81D\uD2B8\uB97C \uC548\uC5D0 \uB4E0 \uAC83(\uB514\uB809\uD130 \uD504\uB85C\uC81D\uD2B8, \uCE94\uBC84\uC2A4, \uC2EC\uD50C \uC791\uC5C5)\uAE4C\uC9C0 \uBAA8\uB450 \uC0AD\uC81C\uD560\uAE4C\uC694?",
+      "Tidy up": "\uC815\uB9AC\uD558\uAE30",
+      "A generation is running. Wait until it is done, or stop it.": "\uC0DD\uC131\uC774 \uC9C4\uD589 \uC911\uC785\uB2C8\uB2E4. \uB05D\uB09C \uB4A4\uC5D0, \uB610\uB294 \uC911\uC9C0\uD55C \uB4A4\uC5D0 \uC804\uD658\uD558\uC138\uC694.",
+      Paste: "\uBD99\uC5EC\uB123\uAE30",
+      "Load": "\uBD88\uB7EC\uC624\uAE30",
+      "This project is open.": "\uC774 \uD504\uB85C\uC81D\uD2B8\uAC00 \uC5F4\uB824 \uC788\uC2B5\uB2C8\uB2E4.",
+      "the Director project (the canvas stays)": "\uB514\uB809\uD130 \uD504\uB85C\uC81D\uD2B8(\uCE94\uBC84\uC2A4\uB294 \uADF8\uB300\uB85C \uB0A8\uC2B5\uB2C8\uB2E4)",
+      cards: "\uCE74\uB4DC",
+      "Double-click to rename": "\uB354\uBE14\uD074\uB9AD\uC73C\uB85C \uC774\uB984 \uBCC0\uACBD",
+      "Tidy up the cards so none overlap (the selected cards, or all of them)": "\uCE74\uB4DC\uAC00 \uACB9\uCE58\uC9C0 \uC54A\uAC8C \uC815\uB9AC\uD569\uB2C8\uB2E4(\uC120\uD0DD\uD55C \uCE74\uB4DC, \uC5C6\uC73C\uBA74 \uC804\uCCB4)",
+      General: "\uC77C\uBC18",
+      Vision: "\uC774\uBBF8\uC9C0 \uC124\uBA85",
+      Translation: "\uBC88\uC5ED",
+      "Joining the clips and adding the song\u2026 this can take a few minutes. Please wait.": "\uD074\uB9BD\uC744 \uD569\uCE58\uACE0 \uB178\uB798\uB97C \uC5B9\uB294 \uC911\uC785\uB2C8\uB2E4\u2026 \uBA87 \uBD84 \uAC78\uB9B4 \uC218 \uC788\uC5B4\uC694. \uC7A0\uC2DC\uB9CC \uAE30\uB2E4\uB824 \uC8FC\uC138\uC694.",
+      "Joining the clips\u2026 this can take a few minutes. Please wait.": "\uD074\uB9BD\uC744 \uD569\uCE58\uB294 \uC911\uC785\uB2C8\uB2E4\u2026 \uBA87 \uBD84 \uAC78\uB9B4 \uC218 \uC788\uC5B4\uC694. \uC7A0\uC2DC\uB9CC \uAE30\uB2E4\uB824 \uC8FC\uC138\uC694.",
+      "Joining\u2026": "\uD569\uCE58\uB294 \uC911\u2026",
+      "This clip is being made. Save after it finishes.": "\uC774 \uD074\uB9BD\uC744 \uB9CC\uB4DC\uB294 \uC911\uC785\uB2C8\uB2E4. \uB05D\uB09C \uB4A4\uC5D0 \uC800\uC7A5\uD558\uC138\uC694.",
+      "Cancel the clip that is being made and do not start the next ones.": "\uB9CC\uB4E4\uACE0 \uC788\uB294 \uD074\uB9BD\uC744 \uCDE8\uC18C\uD558\uACE0 \uB2E4\uC74C \uD074\uB9BD\uC740 \uC2DC\uC791\uD558\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4.",
+      "Different from the Director": "\uB514\uB809\uD130\uC640 \uB2E4\uB984",
+      "Apply to the Director": "\uB514\uB809\uD130\uC5D0 \uC801\uC6A9",
+      "The generation canvas is missing": "\uC0DD\uC131\uC6A9 \uCE94\uBC84\uC2A4\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4",
+      "Make the generation canvas": "\uC0DD\uC131\uC6A9 \uCE94\uBC84\uC2A4 \uC0DD\uC131",
+      "There is no canvas paired with this episode. Make the generation canvas to continue.": "\uC774 \uD3B8\uACFC \uC9DD\uC774 \uB418\uB294 \uCE94\uBC84\uC2A4\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4. \uACC4\uC18D\uD558\uB824\uBA74 \uC0DD\uC131\uC6A9 \uCE94\uBC84\uC2A4\uB97C \uB9CC\uB4E4\uC5B4 \uC8FC\uC138\uC694.",
+      "The paired canvas of these episodes is missing (never made, or deleted in the Canvas):": "\uB2E4\uC74C \uD3B8\uC758 \uC9DD \uCE94\uBC84\uC2A4\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4(\uB9CC\uB4E0 \uC801\uC774 \uC5C6\uAC70\uB098 \uCE94\uBC84\uC2A4\uC5D0\uC11C \uC0AD\uC81C\uB428):",
+      "Make the generation canvas now?": "\uC9C0\uAE08 \uC0DD\uC131\uC6A9 \uCE94\uBC84\uC2A4\uB97C \uB9CC\uB4E4\uAE4C\uC694?",
+      "Open in Director": "\uB514\uB809\uD130\uC5D0\uC11C \uC5F4\uAE30",
+      "No Director project": "\uB514\uB809\uD130 \uC9DD \uC5C6\uC74C",
+      "This canvas has no Director project. A new Director project replaces it with a new canvas made for the Director (you are asked to save first).": "\uC774 \uCE94\uBC84\uC2A4\uC5D0\uB294 \uC9DD\uC774 \uB418\uB294 \uB514\uB809\uD130 \uD504\uB85C\uC81D\uD2B8\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4. \uB514\uB809\uD130\uC5D0\uC11C \uC0C8 \uD504\uB85C\uC81D\uD2B8\uB97C \uB9CC\uB4E4\uBA74 \uC774 \uCE94\uBC84\uC2A4\uB294 \uB514\uB809\uD130\uC6A9 \uC0C8 \uCE94\uBC84\uC2A4\uB85C \uBC14\uB01D\uB2C8\uB2E4(\uBA3C\uC800 \uC800\uC7A5\uD560\uC9C0 \uBB3C\uC5B4\uBD05\uB2C8\uB2E4).",
+      "The open canvas has no Director project. A new Director project replaces it with a new canvas made for the Director.": "\uC5F4\uB824 \uC788\uB294 \uCE94\uBC84\uC2A4\uC5D0\uB294 \uC9DD\uC774 \uB418\uB294 \uB514\uB809\uD130 \uD504\uB85C\uC81D\uD2B8\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4. \uC0C8 \uB514\uB809\uD130 \uD504\uB85C\uC81D\uD2B8\uB97C \uB9CC\uB4E4\uBA74 \uC774 \uCE94\uBC84\uC2A4\uB294 \uB514\uB809\uD130\uC6A9 \uC0C8 \uCE94\uBC84\uC2A4\uB85C \uBC14\uB01D\uB2C8\uB2E4.",
+      "Save this canvas first, then continue?": "\uC774 \uCE94\uBC84\uC2A4\uB97C \uBA3C\uC800 \uC800\uC7A5\uD558\uACE0 \uACC4\uC18D\uD560\uAE4C\uC694?",
+      "This canvas belongs to a Director project that was replaced or renamed.": "\uC774 \uCE94\uBC84\uC2A4\uC758 \uB514\uB809\uD130 \uD504\uB85C\uC81D\uD2B8\uAC00 \uBC14\uB00C\uC5C8\uAC70\uB098 \uC774\uB984\uC774 \uB2EC\uB77C\uC84C\uC2B5\uB2C8\uB2E4.",
+      "The Director project of this canvas could not be opened.": "\uC774 \uCE94\uBC84\uC2A4\uC758 \uB514\uB809\uD130 \uD504\uB85C\uC81D\uD2B8\uB97C \uC5F4 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.",
+      "ComfyUI native \u2014 Generate Text details": "ComfyUI \uAE30\uBCF8 \u2014 Generate Text \uC0C1\uC138 \uC635\uC158",
+      "MTP": "MTP",
+      "Reset to defaults": "\uAE30\uBCF8\uAC12\uC73C\uB85C \uB418\uB3CC\uB9AC\uAE30",
+      "Used by every tool that writes with ComfyUI Generate Text. Today the Prompt Enhance routes take the length, the temperature and the seed; the other options are kept for the Generate Text node (TextGenerateV2 when ComfyUI has it).": "ComfyUI Generate Text\uB85C \uAE00\uC744 \uC4F0\uB294 \uBAA8\uB4E0 \uAE30\uB2A5\uC774 \uD568\uAED8 \uC501\uB2C8\uB2E4. \uC9C0\uAE08 \uD504\uB86C\uD504\uD2B8 \uD5A5\uC0C1 \uACBD\uB85C\uAC00 \uBC1B\uB294 \uAC12\uC740 \uAE38\uC774\xB7\uC628\uB3C4\xB7\uC2DC\uB4DC\uC774\uACE0, \uB098\uBA38\uC9C0 \uC635\uC158\uC740 Generate Text \uB178\uB4DC(ComfyUI\uC5D0 \uC788\uC73C\uBA74 TextGenerateV2)\uC6A9\uC73C\uB85C \uC800\uC7A5\uD574 \uB461\uB2C8\uB2E4.",
+      "Max length": "\uCD5C\uB300 \uAE38\uC774",
+      "Sampling Mode": "\uC0D8\uD50C\uB9C1 \uBAA8\uB4DC",
+      "Top K": "Top K",
+      "Top P": "Top P",
+      "Min P": "Min P",
+      "Presence penalty": "\uC874\uC7AC \uD328\uB110\uD2F0",
+      "Thinking": "\uC0DD\uAC01 \uBAA8\uB4DC",
+      "Use default template": "\uAE30\uBCF8 \uD15C\uD50C\uB9BF \uC0AC\uC6A9"
     };
   }
 });
@@ -5912,15 +6052,15 @@ var init_tiledMigrate = __esm({
 // src/backend/turboMemory.ts
 function saveTurboPick(kind, lora) {
   if (!lora || lora === "none") return;
-  void postJson("/minimax_h3_one/config", { [KEY2[kind]]: lora }).catch(() => void 0);
+  void postJson("/minimax_h3_one/config", { [KEY3[kind]]: lora }).catch(() => void 0);
 }
-var KEY2;
+var KEY3;
 var init_turboMemory = __esm({
   "src/backend/turboMemory.ts"() {
     "use strict";
     init_http();
     init_settings();
-    KEY2 = { fl: "pdd_file", ref: "pdd_file_reference" };
+    KEY3 = { fl: "pdd_file", ref: "pdd_file_reference" };
   }
 });
 
@@ -6012,7 +6152,7 @@ function restoreAutosave() {
     return false;
   }
 }
-var MODE_KEY, RUNS_KEY, readMode, readRuns, writeRuns, hostSerializer, setHostSerializer, useGraph, REMEMBER_ADVANCED, quiet, AUTO_KEY, timer;
+var MODE_KEY, RUNS_KEY, CLIP_KEY, cardClip, readMode, readRuns, writeRuns, hostSerializer, setHostSerializer, useGraph, REMEMBER_ADVANCED, quiet, AUTO_KEY, timer;
 var init_graph = __esm({
   "src/store/graph.ts"() {
     "use strict";
@@ -6024,6 +6164,8 @@ var init_graph = __esm({
     init_turboMemory();
     MODE_KEY = "canvers.mode";
     RUNS_KEY = "canvers.runs.v1";
+    CLIP_KEY = "canvers.cards.clip";
+    cardClip = null;
     readMode = () => {
       try {
         const m = localStorage.getItem(MODE_KEY);
@@ -6052,6 +6194,7 @@ var init_graph = __esm({
     useGraph = create((set2, get) => ({
       projectId: uid("p"),
       projectName: "untitled",
+      directorPair: null,
       canvasFile: null,
       dirty: false,
       nodes: [],
@@ -6125,6 +6268,44 @@ var init_graph = __esm({
           edges: get().edges.filter((e) => !set_.has(e.source) && !set_.has(e.target)),
           selected: get().selected.filter((s) => !set_.has(s))
         });
+      },
+      copyNodes: (ids) => {
+        const set3 = new Set(ids);
+        const nodes = get().nodes.filter((n2) => set3.has(n2.id) && !n2.members);
+        if (!nodes.length) return 0;
+        const keep = new Set(nodes.map((n2) => n2.id));
+        const keepResults = (n2) => n2.defId.startsWith("import");
+        const payload = { nodes: nodes.map((n2) => ({ ...n2, params: { ...n2.params }, results: keepResults(n2) ? n2.results.filter((r) => !r.url.startsWith("data:")) : [], activeResult: 0, locked: false, members: void 0 })), edges: get().edges.filter((e) => keep.has(e.source) && keep.has(e.target)) };
+        cardClip = payload;
+        try {
+          localStorage.setItem(CLIP_KEY, JSON.stringify(payload));
+        } catch {
+        }
+        return nodes.length;
+      },
+      pasteNodes: (at) => {
+        let c = cardClip;
+        if (!c) {
+          try {
+            c = JSON.parse(localStorage.getItem(CLIP_KEY) ?? "null");
+          } catch {
+            c = null;
+          }
+        }
+        if (!c?.nodes?.length) return 0;
+        get().snapshot();
+        const map = /* @__PURE__ */ new Map();
+        const copies = [];
+        const minX = Math.min(...c.nodes.map((n2) => n2.x)), minY = Math.min(...c.nodes.map((n2) => n2.y));
+        const dx = at ? at.x - minX : 40, dy = at ? at.y - minY : 40;
+        for (const n2 of c.nodes) {
+          const id = uid("n");
+          map.set(n2.id, id);
+          copies.push({ ...n2, id, x: n2.x + dx, y: n2.y + dy, params: { ...n2.params }, results: n2.results.map((r) => ({ ...r })), activeResult: 0, locked: false, members: void 0 });
+        }
+        const edges = c.edges.filter((e) => map.has(e.source) && map.has(e.target)).map((e) => ({ ...e, id: uid("e"), source: map.get(e.source), target: map.get(e.target) }));
+        set2({ nodes: [...get().nodes, ...copies], edges: [...get().edges, ...edges], selected: copies.map((x) => x.id) });
+        return copies.length;
       },
       duplicateNodes: (ids) => {
         get().snapshot();
@@ -6277,12 +6458,17 @@ var init_graph = __esm({
       openMelody: (nodeId) => set2({ melody: nodeId }),
       openAssetPicker: (nodeId) => set2({ assetPicker: nodeId }),
       openFacePicker: (nodeId) => set2({ facePicker: nodeId }),
-      toProject: () => ({ app: "ai-one-studio-canvers", version: 1, id: get().projectId, name: get().projectName, nodes: hostSerializer ? get().nodes.map(hostSerializer) : get().nodes, edges: get().edges, updatedAt: (/* @__PURE__ */ new Date()).toISOString() }),
+      toProject: () => ({ app: "ai-one-studio-canvers", version: 1, id: get().projectId, name: get().projectName, nodes: hostSerializer ? get().nodes.map(hostSerializer) : get().nodes, edges: get().edges, updatedAt: (/* @__PURE__ */ new Date()).toISOString(), ...get().directorPair ? { director: get().directorPair } : {} }),
       markSaved: (file) => set2({ canvasFile: file, dirty: false }),
-      loadProject: (p, file = null, dirty = false) => quietly(() => set2({ canvasFile: file, dirty, projectId: p.id ?? uid("p"), projectName: p.name || "untitled", nodes: fillTurbo(p.nodes ?? []), edges: p.edges ?? [], runtime: {}, selected: [], past: [], future: [], fitTick: get().fitTick + 1 })),
-      newProject: () => quietly(() => set2({ canvasFile: null, dirty: false, projectId: uid("p"), projectName: "untitled", nodes: [], edges: [], runtime: {}, selected: [], past: [], future: [] })),
+      setDirectorPair: (directorPair) => set2({ directorPair }),
+      loadProject: (p, file = null, dirty = false) => quietly(() => set2({ canvasFile: file, dirty, directorPair: p.director ?? null, projectId: p.id ?? uid("p"), projectName: p.name || "untitled", nodes: fillTurbo(p.nodes ?? []), edges: p.edges ?? [], runtime: {}, selected: [], past: [], future: [], fitTick: get().fitTick + 1 })),
+      newProject: () => quietly(() => set2({ canvasFile: null, dirty: false, directorPair: null, projectId: uid("p"), projectName: "untitled", nodes: [], edges: [], runtime: {}, selected: [], past: [], future: [] })),
       requestFit: () => set2({ fitTick: get().fitTick + 1 }),
       focusNode: (id) => set2({ selected: [id], focusId: id, focusTick: get().focusTick + 1 }),
+      setComposerRuns: (runs) => {
+        writeRuns(runs);
+        set2({ composerRuns: runs });
+      },
       addComposerRun: (r) => {
         const runs = [r, ...get().composerRuns];
         writeRuns(runs);
@@ -6972,6 +7158,55 @@ async function buildImageGraph(job) {
   return buildZImage(withDefaults, m);
 }
 
+// src/backend/nativeOpts.ts
+init_esm();
+var NATIVE_DEFAULTS = {
+  max_length: 2048,
+  sampling: true,
+  temperature: 0.7,
+  top_k: 64,
+  top_p: 0.95,
+  min_p: 0.05,
+  repetition_penalty: 1.05,
+  presence_penalty: 0,
+  seed: 0,
+  thinking: false,
+  use_default_template: true,
+  mtp: "auto"
+};
+var KEY2 = "canvers.nativeLlm.v1";
+function read2() {
+  try {
+    const v = JSON.parse(localStorage.getItem(KEY2) ?? "null");
+    return { ...NATIVE_DEFAULTS, ...v ?? {} };
+  } catch {
+    return { ...NATIVE_DEFAULTS };
+  }
+}
+var useNativeOpts = create((set2, get) => ({
+  opts: read2(),
+  set: (p) => {
+    const opts = { ...get().opts, ...p };
+    set2({ opts });
+    try {
+      localStorage.setItem(KEY2, JSON.stringify(opts));
+    } catch {
+    }
+  },
+  reset: () => {
+    set2({ opts: { ...NATIVE_DEFAULTS } });
+    try {
+      localStorage.removeItem(KEY2);
+    } catch {
+    }
+  }
+}));
+var nativeOpts = () => useNativeOpts.getState().opts;
+function nativeRequest() {
+  const o = nativeOpts();
+  return { max_tokens: Math.max(1, Math.round(o.max_length)), temperature: o.sampling ? o.temperature : 0, seed: Math.max(0, Math.round(o.seed)), native: o };
+}
+
 // src/backend/llmLog.ts
 init_esm();
 var estTokens = (chars) => Math.round(chars / 2.5);
@@ -7108,11 +7343,13 @@ async function imageDataUrl(a, maxEdge = 1280) {
   return toDataUrl(out);
 }
 function common(l, req) {
+  const nat = l.backend === "comfy" ? nativeRequest() : null;
   return {
     call_id: req.callId,
     backend: l.backend,
-    temperature: req.temperature ?? l.temperature,
-    max_tokens: req.max_tokens ?? l.max_tokens,
+    temperature: req.temperature ?? nat?.temperature ?? l.temperature,
+    max_tokens: req.max_tokens ?? nat?.max_tokens ?? l.max_tokens,
+    ...nat ? { seed: nat.seed, native: nat.native } : {},
     gguf_model: l.gguf_model,
     mmproj_file: l.mmproj_file,
     n_ctx: l.n_ctx,
@@ -7137,8 +7374,8 @@ async function warmUpServer() {
 }
 function llmFor(req) {
   if (req.llm) return req.llm;
-  const { llm, vision } = useSettings.getState();
-  return req.images?.length && !vision.same ? vision.llm : llm;
+  const { llm } = useSettings.getState();
+  return req.images?.length ? effectiveLlm("vision") : llm;
 }
 var usageOf = /* @__PURE__ */ new Map();
 var listening = false;
@@ -7368,11 +7605,11 @@ function styleCatalog() {
   });
   return catalog;
 }
-function formatFor(defId, engineId) {
+function formatFor(defId, engineId, hasRefs) {
   const def = byId.get(defId);
   const eng = def ? engineFor(def, engineId) : void 0;
   const video = def?.category === "Video" || defId === "h3-image" && false;
-  const fmt = engineId && FORMAT_BY_ENGINE[engineId] || FORMAT_BY_DEF[defId] || eng?.family && FORMAT_BY_FAMILY[eng.family] || eng && FORMAT_BY_ENGINE[eng.id] || "Universal Natural Language";
+  const fmt = defId === "h3-image" && (hasRefs ? "MiniMax H3 Image (R2I)" : "MiniMax H3 Image (T2I)") || engineId && FORMAT_BY_ENGINE[engineId] || FORMAT_BY_DEF[defId] || eng?.family && FORMAT_BY_FAMILY[eng.family] || eng && FORMAT_BY_ENGINE[eng.id] || "Universal Natural Language";
   const moss2 = eng?.family === "moss" ? { system_override: mossSystemPrompt(eng.id === "moss-r2i" ? "r2i" : "t2i") } : {};
   return { model_format: fmt, purpose: video ? "Video" : defId === "image-edit" ? "Edit (Inpainting/I2V)" : "Image", ...moss2 };
 }
@@ -7383,7 +7620,7 @@ function downstreamTarget(nodeId) {
     if (!t2) continue;
     const def = byId.get(t2.defId);
     if (!def || def.kind !== "generate") continue;
-    return formatFor(t2.defId, t2.engineId);
+    return formatFor(t2.defId, t2.engineId, edges.some((x) => x.target === t2.id && x.targetHandle === "image"));
   }
   return null;
 }
@@ -7415,6 +7652,22 @@ async function load2(source) {
   if (source === "h3unets") {
     const l = await getJson("/minimax_h3_one/models");
     return ["none", ...(l.diffusion_models ?? []).filter((x) => x && x !== "none")];
+  }
+  if (source === "recavsr") {
+    const l = await getJson("/minimax_h3_one/models");
+    return ["none", ...(l.recavsr_models ?? []).filter((x) => /transformer/i.test(x))];
+  }
+  if (source === "relayvsr_unets") {
+    const l = await getJson("/minimax_h3_one/models");
+    return ["none", ...(l.diffusion_models ?? []).filter((x) => /relayvsr/i.test(x))];
+  }
+  if (source === "relayvsr_vaes") {
+    const l = await getJson("/minimax_h3_one/models");
+    return ["none", ...(l.vaes ?? []).filter((x) => /relayvsr/i.test(x))];
+  }
+  if (source === "vaes") {
+    const l = await getJson("/minimax_h3_one/models");
+    return ["none", ...(l.vaes ?? []).filter((x) => x && x !== "none")];
   }
   if (source === "tinyvaes") {
     const i = await objectInfo("ModelPreviewOverrideKJ");
@@ -8220,6 +8473,46 @@ function hasNode(cls) {
 async function need2(cls, label, pack) {
   if (!await hasNode(cls)) throw new Error(`${label} (${cls}) is not installed${pack ? ` \u2014 it comes with ${pack}` : ""}.`);
 }
+async function addReCaVSR(g, p, images, fps) {
+  await need2("ReCaVSRLoader", "ReCaVSR", "ComfyUI-ReCaVSR (run install_requirements and restart ComfyUI)");
+  await need2("ReCaVSRUpscale", "ReCaVSR", "ComfyUI-ReCaVSR");
+  await need2("GetVideoComponents", "GetVideoComponents", "a newer ComfyUI core");
+  if (!p.transformer || p.transformer === "none") throw new Error("ReCaVSR: pick a transformer file (models/recavsr).");
+  const decoder = p.decoder || "flashdecoder";
+  if (decoder === "vae" && (!p.vae || p.vae === "none")) throw new Error('ReCaVSR: the "vae" decoder needs the Wan 2.2 VAE \u2014 pick it.');
+  g["P:rc_load"] = { class_type: "ReCaVSRLoader", inputs: { transformer: p.transformer } };
+  const inputs = {
+    model: ["P:rc_load", 0],
+    images,
+    scale: Math.min(8, Math.max(0.5, p.scale || 2)),
+    color_fix: p.colorFix || "wavelet",
+    seed: Math.max(0, Math.round(Number(p.seed ?? 42)) || 0),
+    decoder,
+    kernels: p.kernels || "fast",
+    kv_offload: !!p.kvOffload,
+    encoder: p.encoder || "auto",
+    fps: Math.round(fps || FPS) || FPS
+  };
+  if (decoder === "vae") {
+    g["P:rc_vae"] = { class_type: "VAELoader", inputs: { vae_name: p.vae } };
+    inputs.vae = ["P:rc_vae", 0];
+  }
+  g["P:rc_up"] = { class_type: "ReCaVSRUpscale", inputs };
+  g["P:rc_frames"] = { class_type: "GetVideoComponents", inputs: { video: ["P:rc_up", 0] } };
+  return ["P:rc_frames", 0];
+}
+async function addRelayVSR(g, p, images) {
+  await need2("RelayVSRConditioning", "RelayVSR", "a newer ComfyUI core");
+  await need2("VSRDecode", "RelayVSR (VSRDecode)", "a newer ComfyUI core");
+  if (!p.unet || p.unet === "none") throw new Error("RelayVSR: pick the RelayVSR UNET.");
+  if (!p.vae || p.vae === "none") throw new Error("RelayVSR: pick the RelayVSR VAE (the x2 UNET goes with the x2 VAE).");
+  g["P:rl_unet"] = { class_type: "UNETLoader", inputs: { unet_name: p.unet, weight_dtype: "default" } };
+  g["P:rl_cond"] = { class_type: "RelayVSRConditioning", inputs: { model: ["P:rl_unet", 0], images } };
+  g["P:rl_samp"] = { class_type: "KSampler", inputs: { model: ["P:rl_unet", 0], positive: ["P:rl_cond", 0], negative: ["P:rl_cond", 0], latent_image: ["P:rl_cond", 1], seed: p.seed, steps: 1, cfg: 1, sampler_name: "euler", scheduler: "simple", denoise: 1 } };
+  g["P:rl_vae"] = { class_type: "VAELoader", inputs: { vae_name: p.vae } };
+  g["P:rl_dec"] = { class_type: "VSRDecode", inputs: { vae: ["P:rl_vae", 0], samples: ["P:rl_samp", 0], images, detail: 1 } };
+  return ["P:rl_dec", 0];
+}
 function rtxTarget(r, srcW, srcH) {
   const round8 = (v) => Math.max(8, Math.round(v / 8) * 8);
   if (r.mode === "short" || r.mode === "long") {
@@ -8312,6 +8605,12 @@ async function buildPostGraph(job) {
       g["P:pipe"] = { class_type: "FlashVSRInitPipe", inputs: { model: f.model, mode: f.mode, alt_vae: "none", force_offload: true, precision: "bf16", device: "cuda:0", attention_mode: "sparse_sage_attention" } };
       g["P:step"] = { class_type: "FlashVSRNodeAdv", inputs: { pipe: ["P:pipe", 0], frames: images, scale: Math.min(4, Math.max(2, Math.round(f.scale))), color_fix: f.colorFix, tiled_vae: true, tiled_dit: true, tile_size: f.tileSize, tile_overlap: f.tileOverlap, unload_dit: false, sparse_ratio: 2, kv_ratio: 3, local_range: 11, seed: f.seed } };
       images = ["P:step", 0];
+    } else if (s.method === "recavsr") {
+      if (!s.recavsr) throw new Error("ReCaVSR: no settings");
+      images = await addReCaVSR(g, s.recavsr, images, fps);
+    } else if (s.method === "relayvsr") {
+      if (!s.relayvsr) throw new Error("RelayVSR: no settings");
+      images = await addRelayVSR(g, s.relayvsr, images);
     } else if (s.method === "rtx") {
       await need2("TJ_NODE_RTXVSR", "RTX VSR", "ComfyUI-TJ_NODE (NVIDIA RTX GPU)");
       const t2 = rtxTarget(s.rtx, s.srcW, s.srcH);
@@ -8368,166 +8667,60 @@ async function buildPostGraph(job) {
   return { graph: g, save, label };
 }
 
-// src/backend/charSheet.ts
-var CHARSHEET_FRAMES = 124;
-var CHARSHEET_DEFAULT_FRAMES = [7, 22, 37, 52, 67, 82, 107, 118];
-var PASS2_SIGMAS = {
-  3: "0.9035, 0.6316, 0.3158, 0.0000",
-  4: "0.9035, 0.8000, 0.6316, 0.3158, 0.0000",
-  5: "0.9231, 0.8780, 0.8000, 0.6316, 0.3158, 0.0000"
-};
-var CHARSHEET_PROMPT = "subject_definitions:\n@image1 is <Subject 1>, Protagonist.\n\nstyle_definitions:\n@style is <Style 1>, @image1 High quality and detailed 3d anime\n\nretention_analysis:\n<Subject 1>: fully_preserved the exact facial identity, anatomy, clothing, skin color, skin texture, skin shade, skin radiance and proportions of <Subject 1>. Never render @image1 as a shot.\n<Style 1>: fully_preserved the artistic medium, line weight, shading, and texture across all angles.\n\ndetailed_description:\nThe scene is a character model sheet on a seamless neutral white studio backdrop with even lighting. No border. @style is applied throughout. Start directly at Shot 1. \n  \n[Shot 1]: Static full-body shot, front view from head to toe. <Subject 1> maintains a neutral pose and expression, arms relaxed at sides with empty open hands.\n[[Shot 2] At 00:00.625]: Static full-body shot, back view from head to toe. <Subject 1> maintains a neutral pose and expression, arms relaxed at sides with empty open hands.\n[[Shot 3] At 00:01.250]: Static full-body shot of <Subject 1>, showing left and right profile views. <Subject 1> maintains a neutral pose and expression, arms relaxed at sides with empty open hands.\n[[Shot 4] At 00:01.875]: Static front_three_quarter view (framed from mid-thigh to top of head) of <Subject 1>. <Subject 1> maintains a neutral pose and expression, arms relaxed at sides with empty open hands.\n[[Shot 5] At 00:02.500]: Static Back_three_quarter (framed from mid-thigh to top of head) of <Subject 1>. <Subject 1> maintains a neutral pose and expression, arms relaxed at sides with empty open hands.\n[[Shot 6] At 00:03.125]: Static tight close-up shot of <Subject 1>, framed directly on the face from shoulders to top of head, facing front. <Subject 1> has a neutral expression.\n[[Shot 7] At 00:03.750]: Static tight close-up shot of <Subject 1>, framed directly on the face from shoulders to top of head, facing front. <Subject 1> has a happy smile expression.\n[[Shot 8] At 00:04.375]: Static tight close-up shot of <Subject 1>, framed directly on the face from shoulders to top of head, facing front. <Subject 1> has an very angry expression.\n\n\noverall_soundscape: N/A\nnon_diegetic_music: N/A\n";
-async function buildSheetVideoGraph(j) {
-  if (!j.refs.length) throw new Error("Character Sheet needs at least one reference image");
-  const m = await resolveH3Models(j.models, "reference");
-  if (!m.unet || !m.clip || !m.vaeVideo) throw new Error("Pick the MiniMax H3 reference model, text encoder and video VAE in Settings \u2192 Video models.");
-  const avail = await h3Availability();
-  const has = (n2) => !!avail[n2];
-  const { width, height } = h3Size(j.aspect, j.megapixels);
-  const pass = j.latentUpscale ? h3Size(j.aspect, j.firstPassMp) : { width, height };
+// src/backend/h3Image.ts
+async function resolveH3ImageModels(user, ref) {
+  const l = await h3ModelLists();
+  const video = await resolveH3Models(user, ref ? "reference" : "firstlast");
+  const find = (list, ...res) => {
+    for (const re of res) {
+      const hit = real3(list).find((x) => re.test(x));
+      if (hit) return hit;
+    }
+    return "";
+  };
+  const own = ref ? user.h3_img_unet_ref2i : user.h3_img_unet_t2i;
+  return {
+    unet: own || find(l.diffusion_models, /minimax_h3_image/i, /h3.?image/i) || video.unet,
+    clip: user.h3_img_clip || video.clip,
+    vae: user.h3_img_vae || find(l.vaes, /h3.*image.*vae|image.*vae/i) || video.vaeVideo
+  };
+}
+async function buildH3ImageGraph(j) {
+  const ref = j.refs.length > 0;
+  const m = await resolveH3ImageModels(j.models, ref);
+  if (!m.unet) throw new Error("Image MODEL is not set \u2014 pick it in Settings \u2192 Video models \u2192 MiniMax H3 (Image).");
+  if (!m.clip) throw new Error("Image CLIP is not set \u2014 pick the text encoder in Settings \u2192 Video models \u2192 MiniMax H3.");
+  if (!m.vae) throw new Error("Image VAE is not set \u2014 pick it in Settings \u2192 Video models \u2192 MiniMax H3 (Image).");
+  if (!j.prompt.trim()) throw new Error("Prompt is empty");
+  for (const n2 of ["MiniMaxH3ImageConditioning", "ConditioningZeroOut"]) if (!await hasNode(n2)) throw new Error(`${n2} is not available \u2014 update ComfyUI to a version with the official MiniMax H3 Image nodes, then restart.`);
+  if (ref && !await hasNode("ResizeImageMaskNode")) throw new Error("ResizeImageMaskNode is not available \u2014 update ComfyUI.");
+  const size = h3Size(j.aspect, j.megapixels);
   const g = {};
   g.unet = { class_type: "UNETLoader", inputs: { unet_name: m.unet, weight_dtype: "default" } };
   let model = ["unet", 0];
-  if (has("PathchSageAttentionKJ")) {
-    g.sage = { class_type: "PathchSageAttentionKJ", inputs: { sage_attention: "auto", allow_compile: false, model } };
-    model = ["sage", 0];
-  }
-  if (has("MiniMaxH3MemoryEfficientSageAttentionPatch")) {
-    g.mem = { class_type: "MiniMaxH3MemoryEfficientSageAttentionPatch", inputs: { model } };
-    model = ["mem", 0];
-  }
   j.loras.forEach((l, i) => {
-    if (l.name && l.name !== "none" && l.strength > 0) {
-      g[`lora${i}`] = { class_type: "LoraLoaderModelOnly", inputs: { model, lora_name: l.name, strength_model: l.strength } };
-      model = [`lora${i}`, 0];
-    }
+    if (!l.name || l.name === "none" || !(l.strength > 0)) return;
+    g[`lora${i}`] = { class_type: "LoraLoaderModelOnly", inputs: { model, lora_name: l.name, strength_model: l.strength } };
+    model = [`lora${i}`, 0];
   });
-  g.shift = { class_type: "MiniMaxH3SigmaShift", inputs: { model, shift_video: 12, shift_audio: 3 } };
-  model = ["shift", 0];
   g.clip = { class_type: "CLIPLoader", inputs: { clip_name: m.clip, type: "minimax", device: "default" } };
-  g.vaeV = { class_type: "VAELoader", inputs: { vae_name: m.vaeVideo } };
-  const cond = { clip: ["clip", 0], vae: ["vaeV", 0], prompt: j.prompt, width: pass.width, height: pass.height, length: CHARSHEET_FRAMES, ref_image_size: j.refImageSize };
+  g.vae = { class_type: "VAELoader", inputs: { vae_name: m.vae } };
+  const cond = { clip: ["clip", 0], vae: ["vae", 0], prompt: j.prompt, width: size.width, height: size.height };
   j.refs.slice(0, 9).forEach((f, i) => {
     g[`ref${i}`] = { class_type: "LoadImage", inputs: { image: f } };
-    cond[`ref_images.ref_image_${i}`] = [`ref${i}`, 0];
-  });
-  g.cond = { class_type: "MiniMaxH3ReferenceToVideo", inputs: cond };
-  g.noise = { class_type: "RandomNoise", inputs: { noise_seed: j.seed } };
-  g.s1 = { class_type: "KSamplerSelect", inputs: { sampler_name: "euler" } };
-  g.sched = { class_type: "BasicScheduler", inputs: { scheduler: "simple", steps: 8, denoise: 1, model } };
-  g.guider = { class_type: "BasicGuider", inputs: { model, conditioning: ["cond", 0] } };
-  g.samp = { class_type: "SamplerCustomAdvanced", inputs: { noise: ["noise", 0], guider: ["guider", 0], sampler: ["s1", 0], sigmas: ["sched", 0], latent_image: ["cond", 1] } };
-  let samples = ["samp", 0];
-  if (j.latentUpscale) {
-    if (!has("MinimaxH3LatentUpscaler3D")) throw new Error("Latent upscale needs the MinimaxH3LatentUpscaler3D node.");
-    g.sep = { class_type: "LTXVSeparateAVLatent", inputs: { av_latent: ["samp", 1] } };
-    g.up = { class_type: "MinimaxH3LatentUpscaler3D", inputs: { model_name: "minimax_h3_latent_upscaler_3d_bf16.safetensors", mode: "target dimensions", "mode.width": width, "mode.height": height, align: 32, enable_temporal_chunking: true, force_unload: true, device: "cuda", precision: "fp16", latent: ["sep", 0] } };
-    g.cat = { class_type: "LTXVConcatAVLatent", inputs: { video_latent: ["up", 0], audio_latent: ["sep", 1] } };
-    g.s2 = { class_type: "KSamplerSelect", inputs: { sampler_name: "euler" } };
-    g.guider2 = { class_type: "BasicGuider", inputs: { model, conditioning: ["cond", 0] } };
-    g.sig2 = { class_type: "ManualSigmas", inputs: { sigmas: PASS2_SIGMAS[j.secondPassSteps] ?? PASS2_SIGMAS[3] } };
-    g.samp2 = { class_type: "SamplerCustomAdvanced", inputs: { noise: ["noise", 0], guider: ["guider2", 0], sampler: ["s2", 0], sigmas: ["sig2", 0], latent_image: ["cat", 0] } };
-    samples = ["samp2", 0];
-  }
-  g.dec = { class_type: "VAEDecode", inputs: { samples, vae: ["vaeV", 0] } };
-  let images = ["dec", 0];
-  if (j.deblur && j.deblur !== "none") {
-    if (!await hasNode("TJ_RTXDeblur")) throw new Error("RTX Deblur (TJ_RTXDeblur) is not installed.");
-    g.deblur = { class_type: "TJ_RTXDeblur", inputs: { images, strength: j.deblur } };
-    images = ["deblur", 0];
-  }
-  if (j.rtx) {
-    if (!await hasNode("RTXVideoSuperResolution")) throw new Error("RTX Video Super Resolution is not installed.");
-    g.rtx = { class_type: "RTXVideoSuperResolution", inputs: { images, resize_type: "scale by multiplier", "resize_type.scale": 2, quality: "ULTRA" } };
-    images = ["rtx", 0];
-    if (j.rtxSupersample) {
-      g.down = { class_type: "ImageScale", inputs: { image: images, upscale_method: "lanczos", width, height, crop: "center" } };
-      images = ["down", 0];
+    let link = [`ref${i}`, 0];
+    if (j.refMp > 0) {
+      g[`refmp${i}`] = { class_type: "ResizeImageMaskNode", inputs: { input: link, resize_type: "scale total pixels", "resize_type.megapixels": j.refMp, scale_method: "area" } };
+      link = [`refmp${i}`, 0];
     }
-  }
-  const save = await addVideoSave(g, images, void 0, FPS, `${j.saveSubfolder}/${j.stem}_charsheet_video`, "C");
-  return { graph: g, save, width, height };
-}
-async function buildSheetGridGraph(o) {
-  for (const n2 of ["BatchImagesNode", "ImageGrid", "ImageScaleToMaxDimension"]) if (!await hasNode(n2)) throw new Error(`${n2} is not installed (ComfyUI core is out of date).`);
-  const g = {};
-  g.load = { class_type: "VHS_LoadVideo", inputs: { video: o.video, force_rate: 0, custom_width: 0, custom_height: 0, frame_load_cap: 0, skip_first_frames: 0, select_every_nth: 1 } };
-  g.ref = { class_type: "LoadImage", inputs: { image: o.ref } };
-  g.refS = { class_type: "ImageScale", inputs: { image: ["ref", 0], upscale_method: "lanczos", width: o.cellW, height: o.cellH, crop: "center" } };
-  const batch = { "images.image0": ["refS", 0] };
-  const idx = (o.frames.length ? o.frames : CHARSHEET_DEFAULT_FRAMES).slice(0, 8);
-  idx.forEach((n2, i) => {
-    g[`f${i}`] = { class_type: "ImageFromBatch", inputs: { batch_index: n2, length: 1, image: ["load", 0] } };
-    batch[`images.image${i + 1}`] = [`f${i}`, 0];
-    if (o.saveEach) g[`fs${i}`] = { class_type: "SaveImage", inputs: { filename_prefix: `${o.folder}/${o.stem}_charsheet_shot${i + 1}`, images: [`f${i}`, 0] } };
+    g[`refsnap${i}`] = { class_type: "ResizeImageMaskNode", inputs: { input: link, resize_type: "scale to multiple", "resize_type.multiple": 32, scale_method: "area" } };
+    cond[`images.image_${i}`] = [`refsnap${i}`, 0];
   });
-  g.batch = { class_type: "BatchImagesNode", inputs: batch };
-  g.grid = { class_type: "ImageGrid", inputs: { columns: 3, cell_width: o.cellW, cell_height: o.cellH, padding: 8, images: ["batch", 0] } };
-  g.max = { class_type: "ImageScaleToMaxDimension", inputs: { upscale_method: "area", largest_size: o.maxDim, image: ["grid", 0] } };
-  g.save = { class_type: "SaveImage", inputs: { filename_prefix: `${o.folder}/${o.stem}_charsheet`, images: ["max", 0] } };
-  return { graph: g, save: "save" };
-}
-
-// src/backend/h3Image.ts
-var LENGTH = 8;
-async function buildH3ImageGraph(j) {
-  const ref = j.refs.length > 0;
-  const m = await resolveH3Models(j.models, ref ? "reference" : "firstlast");
-  if (!m.unet || !m.clip || !m.vaeVideo) throw new Error("Pick the MiniMax H3 model, text encoder and video VAE in Settings \u2192 Video models.");
-  if (!j.prompt.trim()) throw new Error("Prompt is empty");
-  const avail = await h3Availability();
-  const has = (n2) => !!avail[n2];
-  if (j.fizgig && !(await hasNode("FizgigH3StillLatent") && await hasNode("FizgigH3StillDecode"))) throw new Error("Fizgig latent needs ComfyUI-Fizgig-H3-Still \u2014 install it or switch Fizgig off.");
-  const preview = h3Size(j.aspect, j.previewMp), fin = h3Size(j.aspect, j.finalMp);
-  const render = j.fizgig && j.final ? fin : preview;
-  const turbo = effectiveTurbo({ ...DEFAULT_OPT, ...j.opt, hires: false }, has);
-  const g = {};
-  g.unet = { class_type: "UNETLoader", inputs: { unet_name: m.unet, weight_dtype: "default" } };
-  const model = h3ModelChain(g, ["unet", 0], { ...DEFAULT_OPT, ...j.opt, hires: false }, turbo, j.loras, has);
-  g.clip = { class_type: "CLIPLoader", inputs: { clip_name: m.clip, type: "minimax", device: "default" } };
-  g.vaeV = { class_type: "VAELoader", inputs: { vae_name: m.vaeVideo } };
-  const cond = { clip: ["clip", 0], vae: ["vaeV", 0], prompt: j.prompt, width: render.width, height: render.height, length: LENGTH };
-  if (ref) {
-    cond.ref_image_size = j.refImageSize;
-    j.refs.slice(0, 9).forEach((f, i) => {
-      g[`ref${i}`] = { class_type: "LoadImage", inputs: { image: f } };
-      cond[`ref_images.ref_image_${i}`] = [`ref${i}`, 0];
-    });
-    g.cond = { class_type: "MiniMaxH3ReferenceToVideo", inputs: cond };
-  } else g.cond = { class_type: "MiniMaxH3ImageToVideo", inputs: cond };
-  let start = ["cond", 1];
-  if (j.fizgig) {
-    g.fiz = { class_type: "FizgigH3StillLatent", inputs: { width: render.width, height: render.height, batch_size: 1 } };
-    start = ["fiz", 0];
-  }
-  const steps = turbo === "none" ? Math.max(1, Math.round(j.steps)) : Math.max(1, Math.round(j.opt.turboSteps));
-  g.noise = { class_type: "RandomNoise", inputs: { noise_seed: j.seed } };
-  g.s1 = { class_type: "KSamplerSelect", inputs: { sampler_name: "euler" } };
-  g.sched = { class_type: "BasicScheduler", inputs: { scheduler: "simple", steps, denoise: 1, model } };
-  g.guider = { class_type: "BasicGuider", inputs: { model, conditioning: ["cond", 0] } };
-  g.samp = { class_type: "SamplerCustomAdvanced", inputs: { noise: ["noise", 0], guider: ["guider", 0], sampler: ["s1", 0], sigmas: ["sched", 0], latent_image: start } };
-  let samples = ["samp", 0];
-  if (j.final && !j.fizgig) {
-    if (!has("MinimaxH3LatentUpscaler3D")) throw new Error('The 2nd pass needs the MinimaxH3LatentUpscaler3D node \u2014 or turn "High quality 2nd pass" off.');
-    g.sep = { class_type: "LTXVSeparateAVLatent", inputs: { av_latent: ["samp", 1] } };
-    g.up = { class_type: "MinimaxH3LatentUpscaler3D", inputs: { model_name: "minimax_h3_latent_upscaler_3d_bf16.safetensors", mode: "target dimensions", "mode.width": fin.width, "mode.height": fin.height, align: 32, enable_temporal_chunking: true, force_unload: true, device: "cuda", precision: "fp16", latent: ["sep", 0] } };
-    g.cat = { class_type: "LTXVConcatAVLatent", inputs: { video_latent: ["up", 0], audio_latent: ["sep", 1] } };
-    g.s2 = { class_type: "KSamplerSelect", inputs: { sampler_name: "euler" } };
-    g.guider2 = { class_type: "BasicGuider", inputs: { model, conditioning: ["cond", 0] } };
-    g.sig2 = { class_type: "ManualSigmas", inputs: { sigmas: PASS2_SIGMAS[j.secondPassSteps] ?? PASS2_SIGMAS[3] } };
-    g.samp2 = { class_type: "SamplerCustomAdvanced", inputs: { noise: ["noise", 0], guider: ["guider2", 0], sampler: ["s2", 0], sigmas: ["sig2", 0], latent_image: ["cat", 0] } };
-    samples = ["samp2", 0];
-  }
-  let still;
-  if (j.fizgig) {
-    g.dec = { class_type: "FizgigH3StillDecode", inputs: { samples, vae: ["vaeV", 0] } };
-    still = ["dec", 0];
-  } else {
-    g.dec = { class_type: "VAEDecode", inputs: { samples, vae: ["vaeV", 0] } };
-    g.frame = { class_type: "ImageFromBatch", inputs: { batch_index: LENGTH, length: 1, image: ["dec", 0] } };
-    still = ["frame", 0];
-  }
-  g.save = { class_type: "SaveImage", inputs: { filename_prefix: `${j.saveSubfolder}/${j.stem}_h3img`, images: still } };
+  g.cond = { class_type: "MiniMaxH3ImageConditioning", inputs: cond };
+  g.neg = { class_type: "ConditioningZeroOut", inputs: { conditioning: ["cond", 0] } };
+  g.samp = { class_type: "KSampler", inputs: { model, positive: ["cond", 0], negative: ["neg", 0], latent_image: ["cond", 1], seed: j.seed, steps: Math.max(1, Math.round(j.steps)), cfg: 1, sampler_name: "euler", scheduler: "simple", denoise: 1 } };
+  g.dec = { class_type: "VAEDecode", inputs: { samples: ["samp", 0], vae: ["vae", 0] } };
+  g.save = { class_type: "SaveImage", inputs: { filename_prefix: `${j.saveSubfolder}/${j.stem}_h3img`, images: ["dec", 0] } };
   return { graph: g, save: "save" };
 }
 
@@ -8973,6 +9166,106 @@ async function buildFaceRefineGraph(job) {
   g.stitch = { class_type: "H3FaceStitch", inputs: { base_images: images, refined_crops: ["dec", 0], transform: ["track", 1], paste_region: job.paste, mask_dilation: 16, feather: job.feather, colour_match: job.colour, blend: job.blend, undetected_frames: job.undetected } };
   const save = await addVideoSave(g, ["stitch", 0], ["lock", 1], FPS, `${job.saveSubfolder}/${job.stem}_FACEREFINE`, "F");
   return { graph: g, save };
+}
+
+// src/backend/charSheet.ts
+var CHARSHEET_FRAMES = 124;
+var CHARSHEET_DEFAULT_FRAMES = [7, 22, 37, 52, 67, 82, 107, 118];
+var PASS2_SIGMAS = {
+  3: "0.9035, 0.6316, 0.3158, 0.0000",
+  4: "0.9035, 0.8000, 0.6316, 0.3158, 0.0000",
+  5: "0.9231, 0.8780, 0.8000, 0.6316, 0.3158, 0.0000"
+};
+var CHARSHEET_PROMPT = "subject_definitions:\n@image1 is <Subject 1>, Protagonist.\n\nstyle_definitions:\n@style is <Style 1>, @image1 High quality and detailed 3d anime\n\nretention_analysis:\n<Subject 1>: fully_preserved the exact facial identity, anatomy, clothing, skin color, skin texture, skin shade, skin radiance and proportions of <Subject 1>. Never render @image1 as a shot.\n<Style 1>: fully_preserved the artistic medium, line weight, shading, and texture across all angles.\n\ndetailed_description:\nThe scene is a character model sheet on a seamless neutral white studio backdrop with even lighting. No border. @style is applied throughout. Start directly at Shot 1. \n  \n[Shot 1]: Static full-body shot, front view from head to toe. <Subject 1> maintains a neutral pose and expression, arms relaxed at sides with empty open hands.\n[[Shot 2] At 00:00.625]: Static full-body shot, back view from head to toe. <Subject 1> maintains a neutral pose and expression, arms relaxed at sides with empty open hands.\n[[Shot 3] At 00:01.250]: Static full-body shot of <Subject 1>, showing left and right profile views. <Subject 1> maintains a neutral pose and expression, arms relaxed at sides with empty open hands.\n[[Shot 4] At 00:01.875]: Static front_three_quarter view (framed from mid-thigh to top of head) of <Subject 1>. <Subject 1> maintains a neutral pose and expression, arms relaxed at sides with empty open hands.\n[[Shot 5] At 00:02.500]: Static Back_three_quarter (framed from mid-thigh to top of head) of <Subject 1>. <Subject 1> maintains a neutral pose and expression, arms relaxed at sides with empty open hands.\n[[Shot 6] At 00:03.125]: Static tight close-up shot of <Subject 1>, framed directly on the face from shoulders to top of head, facing front. <Subject 1> has a neutral expression.\n[[Shot 7] At 00:03.750]: Static tight close-up shot of <Subject 1>, framed directly on the face from shoulders to top of head, facing front. <Subject 1> has a happy smile expression.\n[[Shot 8] At 00:04.375]: Static tight close-up shot of <Subject 1>, framed directly on the face from shoulders to top of head, facing front. <Subject 1> has an very angry expression.\n\n\noverall_soundscape: N/A\nnon_diegetic_music: N/A\n";
+async function buildSheetVideoGraph(j) {
+  if (!j.refs.length) throw new Error("Character Sheet needs at least one reference image");
+  const m = await resolveH3Models(j.models, "reference");
+  if (!m.unet || !m.clip || !m.vaeVideo) throw new Error("Pick the MiniMax H3 reference model, text encoder and video VAE in Settings \u2192 Video models.");
+  const avail = await h3Availability();
+  const has = (n2) => !!avail[n2];
+  const { width, height } = h3Size(j.aspect, j.megapixels);
+  const pass = j.latentUpscale ? h3Size(j.aspect, j.firstPassMp) : { width, height };
+  const g = {};
+  g.unet = { class_type: "UNETLoader", inputs: { unet_name: m.unet, weight_dtype: "default" } };
+  let model = ["unet", 0];
+  if (has("PathchSageAttentionKJ")) {
+    g.sage = { class_type: "PathchSageAttentionKJ", inputs: { sage_attention: "auto", allow_compile: false, model } };
+    model = ["sage", 0];
+  }
+  if (has("MiniMaxH3MemoryEfficientSageAttentionPatch")) {
+    g.mem = { class_type: "MiniMaxH3MemoryEfficientSageAttentionPatch", inputs: { model } };
+    model = ["mem", 0];
+  }
+  j.loras.forEach((l, i) => {
+    if (l.name && l.name !== "none" && l.strength > 0) {
+      g[`lora${i}`] = { class_type: "LoraLoaderModelOnly", inputs: { model, lora_name: l.name, strength_model: l.strength } };
+      model = [`lora${i}`, 0];
+    }
+  });
+  g.shift = { class_type: "MiniMaxH3SigmaShift", inputs: { model, shift_video: 12, shift_audio: 3 } };
+  model = ["shift", 0];
+  g.clip = { class_type: "CLIPLoader", inputs: { clip_name: m.clip, type: "minimax", device: "default" } };
+  g.vaeV = { class_type: "VAELoader", inputs: { vae_name: m.vaeVideo } };
+  const cond = { clip: ["clip", 0], vae: ["vaeV", 0], prompt: j.prompt, width: pass.width, height: pass.height, length: CHARSHEET_FRAMES, ref_image_size: j.refImageSize };
+  j.refs.slice(0, 9).forEach((f, i) => {
+    g[`ref${i}`] = { class_type: "LoadImage", inputs: { image: f } };
+    cond[`ref_images.ref_image_${i}`] = [`ref${i}`, 0];
+  });
+  g.cond = { class_type: "MiniMaxH3ReferenceToVideo", inputs: cond };
+  g.noise = { class_type: "RandomNoise", inputs: { noise_seed: j.seed } };
+  g.s1 = { class_type: "KSamplerSelect", inputs: { sampler_name: "euler" } };
+  g.sched = { class_type: "BasicScheduler", inputs: { scheduler: "simple", steps: 8, denoise: 1, model } };
+  g.guider = { class_type: "BasicGuider", inputs: { model, conditioning: ["cond", 0] } };
+  g.samp = { class_type: "SamplerCustomAdvanced", inputs: { noise: ["noise", 0], guider: ["guider", 0], sampler: ["s1", 0], sigmas: ["sched", 0], latent_image: ["cond", 1] } };
+  let samples = ["samp", 0];
+  if (j.latentUpscale) {
+    if (!has("MinimaxH3LatentUpscaler3D")) throw new Error("Latent upscale needs the MinimaxH3LatentUpscaler3D node.");
+    g.sep = { class_type: "LTXVSeparateAVLatent", inputs: { av_latent: ["samp", 1] } };
+    g.up = { class_type: "MinimaxH3LatentUpscaler3D", inputs: { model_name: "minimax_h3_latent_upscaler_3d_bf16.safetensors", mode: "target dimensions", "mode.width": width, "mode.height": height, align: 32, enable_temporal_chunking: true, force_unload: true, device: "cuda", precision: "fp16", latent: ["sep", 0] } };
+    g.cat = { class_type: "LTXVConcatAVLatent", inputs: { video_latent: ["up", 0], audio_latent: ["sep", 1] } };
+    g.s2 = { class_type: "KSamplerSelect", inputs: { sampler_name: "euler" } };
+    g.guider2 = { class_type: "BasicGuider", inputs: { model, conditioning: ["cond", 0] } };
+    g.sig2 = { class_type: "ManualSigmas", inputs: { sigmas: PASS2_SIGMAS[j.secondPassSteps] ?? PASS2_SIGMAS[3] } };
+    g.samp2 = { class_type: "SamplerCustomAdvanced", inputs: { noise: ["noise", 0], guider: ["guider2", 0], sampler: ["s2", 0], sigmas: ["sig2", 0], latent_image: ["cat", 0] } };
+    samples = ["samp2", 0];
+  }
+  g.dec = { class_type: "VAEDecode", inputs: { samples, vae: ["vaeV", 0] } };
+  let images = ["dec", 0];
+  if (j.deblur && j.deblur !== "none") {
+    if (!await hasNode("TJ_RTXDeblur")) throw new Error("RTX Deblur (TJ_RTXDeblur) is not installed.");
+    g.deblur = { class_type: "TJ_RTXDeblur", inputs: { images, strength: j.deblur } };
+    images = ["deblur", 0];
+  }
+  if (j.rtx) {
+    if (!await hasNode("RTXVideoSuperResolution")) throw new Error("RTX Video Super Resolution is not installed.");
+    g.rtx = { class_type: "RTXVideoSuperResolution", inputs: { images, resize_type: "scale by multiplier", "resize_type.scale": 2, quality: "ULTRA" } };
+    images = ["rtx", 0];
+    if (j.rtxSupersample) {
+      g.down = { class_type: "ImageScale", inputs: { image: images, upscale_method: "lanczos", width, height, crop: "center" } };
+      images = ["down", 0];
+    }
+  }
+  const save = await addVideoSave(g, images, void 0, FPS, `${j.saveSubfolder}/${j.stem}_charsheet_video`, "C");
+  return { graph: g, save, width, height };
+}
+async function buildSheetGridGraph(o) {
+  for (const n2 of ["BatchImagesNode", "ImageGrid", "ImageScaleToMaxDimension"]) if (!await hasNode(n2)) throw new Error(`${n2} is not installed (ComfyUI core is out of date).`);
+  const g = {};
+  g.load = { class_type: "VHS_LoadVideo", inputs: { video: o.video, force_rate: 0, custom_width: 0, custom_height: 0, frame_load_cap: 0, skip_first_frames: 0, select_every_nth: 1 } };
+  g.ref = { class_type: "LoadImage", inputs: { image: o.ref } };
+  g.refS = { class_type: "ImageScale", inputs: { image: ["ref", 0], upscale_method: "lanczos", width: o.cellW, height: o.cellH, crop: "center" } };
+  const batch = { "images.image0": ["refS", 0] };
+  const idx = (o.frames.length ? o.frames : CHARSHEET_DEFAULT_FRAMES).slice(0, 8);
+  idx.forEach((n2, i) => {
+    g[`f${i}`] = { class_type: "ImageFromBatch", inputs: { batch_index: n2, length: 1, image: ["load", 0] } };
+    batch[`images.image${i + 1}`] = [`f${i}`, 0];
+    if (o.saveEach) g[`fs${i}`] = { class_type: "SaveImage", inputs: { filename_prefix: `${o.folder}/${o.stem}_charsheet_shot${i + 1}`, images: [`f${i}`, 0] } };
+  });
+  g.batch = { class_type: "BatchImagesNode", inputs: batch };
+  g.grid = { class_type: "ImageGrid", inputs: { columns: 3, cell_width: o.cellW, cell_height: o.cellH, padding: 8, images: ["batch", 0] } };
+  g.max = { class_type: "ImageScaleToMaxDimension", inputs: { upscale_method: "area", largest_size: o.maxDim, image: ["grid", 0] } };
+  g.save = { class_type: "SaveImage", inputs: { filename_prefix: `${o.folder}/${o.stem}_charsheet`, images: ["max", 0] } };
+  return { graph: g, save: "save" };
 }
 
 // src/backend/assetlib.ts
@@ -9475,21 +9768,33 @@ var withLegacySeed = (c) => {
   const sv = si ? num2(si.text, -1) : num2(c.p.seed, -1);
   return sv < 0 ? Math.floor(Math.random() * 2 ** 40) : sv;
 };
-var ppUpscale = post((c, s) => {
+async function firstOf(source, now, prefer) {
+  const v = str(now, "none");
+  if (v && v !== "none") return v;
+  const all = (await loadOptions(source)).filter((x) => x && x !== "none");
+  return prefer && all.find((x) => prefer.test(x)) || all[0] || "";
+}
+var ppUpscale = async (c) => {
   const p = c.p;
   const method = c.engineId ?? "flashvsr";
-  return {
+  let recavsr, relayvsr;
+  if (method === "recavsr") recavsr = { transformer: await firstOf("recavsr", p.rc_transformer, /int8/i), vae: str(p.rc_vae, "none") === "none" ? (await loadOptions("vaes")).find((x) => /wan2?\.?2.*vae/i.test(x)) : str(p.rc_vae), scale: num2(p.rc_scale, 2), colorFix: str(p.rc_color, "wavelet"), seed: num2(p.rc_seed, 42), decoder: str(p.rc_decoder, "flashdecoder"), kernels: str(p.rc_kernels, "fast"), kvOffload: !!p.rc_kv, encoder: str(p.rc_encoder, "auto") };
+  if (method === "relayvsr") relayvsr = { unet: await firstOf("relayvsr_unets", p.rl_unet, /x2/i), vae: await firstOf("relayvsr_vaes", p.rl_vae, /x2/i), seed: Math.floor(Math.random() * 2 ** 32) };
+  if (method === "relayvsr" && /x4/i.test(relayvsr.unet)) c.progress(1, "RelayVSR x4 is very heavy \u2014 on a 16GB card use the x2 pair");
+  return post((_cc, s) => ({
     kind: "upscale",
     method,
     srcW: s.w,
     srcH: s.h,
+    recavsr,
+    relayvsr,
     flashvsr: { model: str(p.fv_model, "FlashVSR-v1.1"), mode: str(p.fv_mode, "tiny"), scale: num2(p.fv_scale, 2), colorFix: p.fv_color !== false, tileSize: num2(p.fv_tile, 384), tileOverlap: num2(p.fv_overlap, 32), seed: num2(p.fv_seed, 42) },
     rtx: rtxOf(p, "rtx_"),
     modelName: str(p.model_name, "none"),
     twoPass: !!p.two_pass,
     pass2: rtxOf(p, "p2_")
-  };
-});
+  }))(c);
+};
 var EXTRA_RUNNERS = {
   // ---------------- cards
   "lora-card": async (c) => {
@@ -9539,18 +9844,19 @@ var EXTRA_RUNNERS = {
     const s = useSettings.getState();
     const refs = [];
     for (const a of c.inputs("image").slice(0, 9)) refs.push(await ensureInput(a));
+    let prompt = c.text("prompt");
+    if (p.auto_enhance && prompt) {
+      c.progress(1, "enhancing prompt\u2026");
+      const style = { ...formatFor(c.def.id, c.engineId, refs.length > 0), aesthetic: NO_AESTHETIC, extra_instructions: "Dialogue: sentences wrapped in <d> </d> are spoken lines in their original language. Use the text inside <d> </d> exactly as it is - never translate, never rewrite, never remove the <d> </d> markers." };
+      prompt = await runLlm({ system: "", prompt, style, where: "bottom" }) || prompt;
+    }
     const g = await buildH3ImageGraph({
       refs,
-      prompt: c.text("prompt"),
+      prompt,
       aspect: str(p.aspect, "1:1"),
-      previewMp: num2(p.preview_mp, 0.5),
-      finalMp: num2(p.final_mp, 1.5),
-      final: p.final !== false,
-      steps: num2(p.steps, 20),
-      secondPassSteps: num2(p.pass2, 3),
-      fizgig: !!p.fizgig,
-      refImageSize: str(p.ref_size, "max"),
-      opt: optFromCards(h3Cards(c)),
+      megapixels: num2(p.final_mp, 1.5),
+      refMp: num2(p.ref_mp, 1),
+      steps: num2(p.steps, 6),
       loras: cardLoras(c),
       seed: withLegacySeed(c),
       models: s.video,
@@ -10865,7 +11171,7 @@ var send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 async function handle(msg) {
   const { id, method, params } = msg;
   try {
-    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.31.1" } } });
+    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.32.0" } } });
     if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS.map(({ run: _r, ...t2 }) => t2) } });
     if (method === "tools/call") {
       const tool = TOOLS.find((t2) => t2.name === params?.name);
