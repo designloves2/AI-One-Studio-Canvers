@@ -49,8 +49,7 @@ export async function buildH3ImageGraph(j: H3ImageJob): Promise<{ graph: Record<
   if (j.shiftOn) {   // the H3 Sigma Shift node (ModelSamplingAuraFlow when that is all ComfyUI has)
     const shift = Math.max(0.01, j.shift);
     if (await hasNode('MiniMaxH3SigmaShift')) g.shift = { class_type: 'MiniMaxH3SigmaShift', inputs: { model, shift_video: shift, shift_audio: 3 } };
-    else if (await hasNode('ModelSamplingAuraFlow')) g.shift = { class_type: 'ModelSamplingAuraFlow', inputs: { model, shift } };
-    else throw new Error('Shift needs MiniMaxH3SigmaShift (or ModelSamplingAuraFlow) — update ComfyUI, or turn Use Shift off.');
+    else g.shift = { class_type: 'ModelSamplingAuraFlow', inputs: { model, shift } };   // a ComfyUI core node: no availability check
     model = ['shift', 0];
   }
   g.clip = { class_type: 'CLIPLoader', inputs: { clip_name: m.clip, type: 'minimax', device: 'default' } };
