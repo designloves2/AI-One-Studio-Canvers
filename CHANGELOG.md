@@ -2,7 +2,7 @@
 
 형식: 버전 · 날짜 / 추가 · 변경 · 수정. 버전은 `package.json`, `mcp/server.ts`와 같습니다.
 
-## 미릴리즈 — 2026-11-13
+## 2.33.1 — 2026-11-13
 
 - **H3 이미지 Use Shift**: `MiniMaxH3SigmaShift`가 없을 때 쓰는 `ModelSamplingAuraFlow`(ComfyUI 기본 노드)를 설치 확인으로 막던 검사를 없앴습니다(웹에서 같은 방식의 오류가 나서 점검). `EmptyImage`는 처음부터 검사하지 않았습니다.
 

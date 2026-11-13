@@ -8719,8 +8719,7 @@ async function buildH3ImageGraph(j) {
   if (j.shiftOn) {
     const shift = Math.max(0.01, j.shift);
     if (await hasNode("MiniMaxH3SigmaShift")) g.shift = { class_type: "MiniMaxH3SigmaShift", inputs: { model, shift_video: shift, shift_audio: 3 } };
-    else if (await hasNode("ModelSamplingAuraFlow")) g.shift = { class_type: "ModelSamplingAuraFlow", inputs: { model, shift } };
-    else throw new Error("Shift needs MiniMaxH3SigmaShift (or ModelSamplingAuraFlow) \u2014 update ComfyUI, or turn Use Shift off.");
+    else g.shift = { class_type: "ModelSamplingAuraFlow", inputs: { model, shift } };
     model = ["shift", 0];
   }
   g.clip = { class_type: "CLIPLoader", inputs: { clip_name: m.clip, type: "minimax", device: "default" } };
@@ -11202,7 +11201,7 @@ var send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 async function handle(msg) {
   const { id, method, params } = msg;
   try {
-    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.33.0" } } });
+    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.33.1" } } });
     if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS.map(({ run: _r, ...t2 }) => t2) } });
     if (method === "tools/call") {
       const tool = TOOLS.find((t2) => t2.name === params?.name);
