@@ -28,7 +28,7 @@ export interface LlmSettings {
 
 export const DEFAULT_LLM: LlmSettings = {
   backend: 'custom',
-  gguf_model: '', mmproj_file: 'none', n_ctx: 4096, n_gpu_layers: -1,
+  gguf_model: '', mmproj_file: 'none', n_ctx: 16000, n_gpu_layers: -1,
   text_encoder_name: '', clip_loader_type: 'Auto',
   or_model_text: '', or_model_vision: '',   // OpenRouter has no default model: the user picks one
   custom_base: 'http://localhost:3000/v1', custom_model: '', custom_ctx: 0,

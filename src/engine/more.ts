@@ -155,7 +155,7 @@ const ppUpscale: Runner = async (c) => {
   const p = c.p; const method = (c.engineId ?? 'flashvsr') as 'flashvsr' | 'recavsr' | 'relayvsr' | 'rtx' | 'model';
   let recavsr: RecaVsrParams | undefined, relayvsr: RelayVsrParams | undefined;
   if (method === 'recavsr') recavsr = { transformer: await firstOf('recavsr', p.rc_transformer, /int8/i), vae: str(p.rc_vae, 'none') === 'none' ? (await loadOptions('vaes')).find((x) => /wan2?\.?2.*vae/i.test(x)) : str(p.rc_vae), scale: num(p.rc_scale, 2), colorFix: str(p.rc_color, 'wavelet'), seed: num(p.rc_seed, 42), decoder: str(p.rc_decoder, 'flashdecoder'), kernels: str(p.rc_kernels, 'fast'), kvOffload: !!p.rc_kv, encoder: str(p.rc_encoder, 'auto') };
-  if (method === 'relayvsr') relayvsr = { unet: await firstOf('relayvsr_unets', p.rl_unet, /x2/i), vae: await firstOf('relayvsr_vaes', p.rl_vae, /x2/i), seed: Math.floor(Math.random() * 2 ** 32) };
+  if (method === 'relayvsr') relayvsr = { unet: await firstOf('relayvsr_unets', p.rl_unet, /x2/i), vae: await firstOf('relayvsr_vaes', p.rl_vae, /x2/i), seed: Math.max(0, Math.round(num(p.rl_seed, 42))) };
   if (method === 'relayvsr' && /x4/i.test(relayvsr!.unet)) c.progress(1, 'RelayVSR x4 is very heavy — on a 16GB card use the x2 pair');
   return post((_cc, s) => ({ kind: 'upscale', method, srcW: s.w, srcH: s.h, recavsr, relayvsr,
       flashvsr: { model: str(p.fv_model, 'FlashVSR-v1.1'), mode: str(p.fv_mode, 'tiny'), scale: num(p.fv_scale, 2), colorFix: p.fv_color !== false, tileSize: num(p.fv_tile, 384), tileOverlap: num(p.fv_overlap, 32), seed: num(p.fv_seed, 42) },

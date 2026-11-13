@@ -352,7 +352,7 @@ export const REGISTRY: NodeDef[] = [
           sel('rc_kernels', 'Kernels', ['fast', 'exact'], 'fast', { advanced: true }), sel('rc_encoder', 'Encoder', ['auto', 'hevc nvenc', 'h264 nvenc', 'h264'], 'auto', { advanced: true }),
           toggle('rc_kv', 'KV offload', false, { advanced: true }), num('rc_seed', 'Seed', 42, { advanced: true }), toggle('two_pass', '2nd pass with RTX VSR', false), ...rtxP('p2_', (p) => !!p.two_pass)] },
         { id: 'relayvsr', label: 'RelayVSR', family: 'post', params: [
-          dyn('rl_unet', 'RelayVSR UNET (none = the x2 model)', 'relayvsr_unets', 'none'), dyn('rl_vae', 'RelayVSR VAE (the same x as the UNET; none = the x2 VAE)', 'relayvsr_vaes', 'none'),
+          dyn('rl_unet', 'RelayVSR UNET (none = the x2 model)', 'relayvsr_unets', 'none'), dyn('rl_vae', 'RelayVSR VAE (the same x as the UNET; none = the x2 VAE)', 'relayvsr_vaes', 'none'), num('rl_seed', 'Seed', 42, { advanced: true }),
           toggle('two_pass', '2nd pass with RTX VSR', false), ...rtxP('p2_', (p) => !!p.two_pass)] },
         { id: 'ltx', label: 'LTX 2.5 Upscale', family: 'post', params: [
           slider('ltx_steps', 'Steps', 1, 20, 1, 4), slider('ltx_denoise', 'Denoise', 0.05, 1, 0.05, 0.15), dyn('ltx_sampler', 'Sampler', 'samplers', 'euler_ancestral'), dyn('ltx_scheduler', 'Scheduler', 'schedulers', 'simple'),

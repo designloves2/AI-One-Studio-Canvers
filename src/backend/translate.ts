@@ -13,7 +13,7 @@ export interface TranslateConfig {
   backend: 'native' | 'openrouter' | 'llamagguf' | 'custom'; native_clip: string; or_model: string; llama_model: string;
   llama_n_ctx: number; llama_max_tokens: number; custom_base: string; custom_model: string; custom_ctx: number;
 }
-export const TRANSLATE_DEFAULTS: TranslateConfig = { backend: 'native', native_clip: '', or_model: '', llama_model: '', llama_n_ctx: 16384, llama_max_tokens: 4096, custom_base: '', custom_model: '', custom_ctx: 0 };
+export const TRANSLATE_DEFAULTS: TranslateConfig = { backend: 'native', native_clip: '', or_model: '', llama_model: '', llama_n_ctx: 16000, llama_max_tokens: 4096, custom_base: '', custom_model: '', custom_ctx: 0 };
 
 let cfg: TranslateConfig = { ...TRANSLATE_DEFAULTS };
 let loaded: Promise<TranslateConfig> | null = null;
@@ -38,7 +38,7 @@ export function setUseKo(on: boolean) { try { localStorage.setItem(KO_KEY, on ? 
 
 /** the shared (node) translate backend that matches a Translation LLM of the settings; the nodes of the ComfyUI page keep using the server copy */
 export function toTranslateConfig(l: LlmSettings): Partial<TranslateConfig> {
-  if (l.backend === 'local') return { backend: 'llamagguf', llama_model: l.gguf_model, llama_n_ctx: l.n_ctx || 16384 };
+  if (l.backend === 'local') return { backend: 'llamagguf', llama_model: l.gguf_model, llama_n_ctx: l.n_ctx || 16000 };
   if (l.backend === 'comfy') return { backend: 'native', native_clip: l.text_encoder_name };
   if (l.backend === 'openrouter') return { backend: 'openrouter', or_model: l.or_model_text };
   return { backend: 'custom', custom_base: l.custom_base, custom_model: l.custom_model, custom_ctx: l.custom_ctx };
