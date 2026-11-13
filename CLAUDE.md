@@ -74,15 +74,17 @@
 - 웹 쌍둥이 `AI-ONE-STUDIO` 와 기능이 같아야 하는 것(번역 KO/EN, H3 업스케일 분할, 연속성)은 같은 명세를 받아 각자 이식한다. 한쪽을 고치면 다른 쪽도 확인 필요.
 - 터널: `canvers.tjtj.cloud` → 8765. 허용 호스트는 `vite.config.ts` / `CANVERS_ALLOWED_HOSTS`. ComfyUI 는 `--enable-cors-header` 로 켜져 있음(주소를 바꾸면 `COMFY_URL` 또는 설정에서 입력 → `/canvers/target`).
 
-## 8. 현재 진행 상황 (2026-11-13 기준, v2.32.0 — Director Mode, Split Sigma, Tiled 업스케일러, LLM 실시간 로그 포함)
+## 8. 현재 진행 상황 (2026-11-13 기준, v2.33.0 — Director Mode, Split Sigma, Tiled 업스케일러, LLM 실시간 로그 포함)
 - 최근 릴리즈: 2.23.x 프록시·갤러리·라이트박스 → 2.24 클립 이어서 생성 카드 → 2.25 노드 v1.47.0(Kimchy 업스케일, LTX 업스케일 분할)·새로고침 뒤 여러 클립 복구 → 2.26.0 H3 업스케일 분할 모드(노드 v1.48.0) → 2.27.x 번역(KO/EN, 번역 LLM, 노드 v1.49.0~1.49.2), OpenRouter 기본 모델 제거.
 - 실기 미검증으로 남은 것: 새 Latent Upscale 그래프(H3/Kimchy/LTX) 전체, 분할 모드 실렌더·복구, H3 여러 클립 복구, 번역 켠 상태의 OpenRouter/GGUF/Custom 백엔드, 설정 "번역 LLM" 화면, Face Refine 다인 체인, Anima inpaint.
 - 이식하지 않기로 한 것(관제 합의): frames→vision 프롬프트 대체, H3→LTX 프롬프트 재작성, Merge clips/Write 메뉴/Long Shot(대응 카드 없음), hires 테두리, 툴팁 텍스트 필드.
 - 알려진 제한: 소리 없는 mp4 는 VHS 로더가 실패, 소스 프레임 수를 길이×24 로 추정(±1프레임).
 - 다음 할 일은 스튜디오 세션(`TJ_STUDIO_ONE-10월`)이 `SPEC_RELAY_*` 로 보낸다. 상세 이력은 `CHANGELOG.md`, 방향·메모는 `docs/HANDOFF.md`.
 
-### 노드 v1.52.0 이식 2026-11-13 (릴리즈 2.32.0)
+### 노드 v1.52.0 · v1.53.0 이식 2026-11-13 (릴리즈 2.32.0 · 2.33.0)
 - `SPEC_RELAY_H3_IMAGE_OFFICIAL.md`(1·2절 = `backend/h3Image.ts` 공식 노드 그래프 + `promptStyle.formatFor(…, hasRefs)` T2I/R2I 포맷, 이미지 전용 모델은 `settings.video.h3_img_*`, 3절 = `backend/nativeOpts.ts` + 설정 블록 + `llm.ts common()`), `SPEC_RELAY_VSR_UPSCALERS.md`(= `backend/post.ts` `addReCaVSR/addRelayVSR`, `pp-upscale` 엔진 recavsr/relayvsr, `options.ts` recavsr·relayvsr_unets·relayvsr_vaes·vaes). 해당 없음: 인라인(클립별) Upscale·설치 배치·가용성 목록(Canvers는 objectInfo 로 확인)·클라이언트 TextGenerateV2 그래프(서버 라우트가 LLM 을 부름)..
+
+- v1.53.0(`SPEC_RELAY_H3_IMAGE_OPTIONS.md`): `h3-image` 카드 고급 옵션 sampler/scheduler/cfg/shift_on/shift/prompt_weight → `backend/h3Image.ts`(KSampler 값, `MiniMaxH3SigmaShift`/`ModelSamplingAuraFlow`, T2I 에서만 `EmptyImage` 검정 1024 를 `images.image_0`). 해당 없음: 결과 휠 확대·⛶·Send to R2I·Warn if no reference(카드 구조).
 
 ### Director ↔ 캔버스 짝 묶기 (2026-11-03, 코드 완료 · 미릴리즈 · 화면 검증 전)
 - 규칙: **Director 프로젝트가 주인, 캔버스는 짝**. `Project.director`(`DirectorPair`: file·project_id·name·episode_id·no·purpose)를 캔버스 파일에 기록. 코드: `src/director/pairing.ts`(`stampPair` 저장 때 기록, `backfillPairs` 옛 캔버스에 짝 추가, `openCanvasOfProject` Director 열면 캔버스 열기, `openDirectorOfCanvas` 캔버스에서 Director 열기, `prepareCanvasForNewDirector` 짝 없는 캔버스 + 새 프로젝트면 경고→저장→빈 캔버스, `adoptIntoEmptyCanvas` 빈 자리에 편 캔버스 열기), `PairBar.tsx`(캔버스 위 띠), `store/graph.ts`(`directorPair`, toProject/loadProject에 포함), `server-lib/canvases.mjs` 목록에 `director` 요약, `CanvasesPanel` 🎬 표시. 훅: `canvasAction`·`musicAction` 저장 4곳(`stampPair`), `DirectorPanel.open`, `store/director.send`(첫 문장).

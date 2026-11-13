@@ -121,7 +121,7 @@ npm run mock       # GPU 없이 UI 시험용 가짜 ComfyUI (:8188)
 - **7+1 LoRA**: FL2VA용 / REF2VA용 두 가지를 고르면 영상 종류에 맞게 자동 적용되고, 마지막 선택은 One Studio 저장 설정에 기억되어 새 카드에 자동으로 들어갑니다.
 - **여러 클립을 스티치로**: 영상 카드에 결과가 쌓여 있고 그 카드가 **영상 스티치에 연결돼 있으면**, 카드 아래 '스티치로 보낼 클립'에서 여러 개를 골라 고른 순서대로 이어붙입니다(고르지 않으면 보이는 클립만).
 - **드롭다운 검색**: LoRA·모델 같은 긴 목록과 8개 이상 목록은 맨 위 검색창으로 거릅니다.
-- 이미지: 생성·편집·인페인트·아웃페인트·페이스스왑·업스케일(ESRGAN/SeedVR2), Z-Image ControlNet·Face Redraw, Krea 2 ControlNet·Identity Edit, Anima Control/Inpaint, Qwen Camera Angle, H3 이미지, Character Sheet
+- 이미지: 생성·편집·인페인트·아웃페인트·페이스스왑·업스케일(ESRGAN/SeedVR2), Z-Image ControlNet·Face Redraw, Krea 2 ControlNet·Identity Edit, Anima Control/Inpaint, Qwen Camera Angle, H3 이미지(공식 MiniMax H3 Image 노드: 텍스트→이미지 / 레퍼런스→이미지, 샘플러·스케줄러·CFG·시프트·H3 프롬프트 가중), Character Sheet
 - 영상: H3(텍스트/첫-끝/레퍼런스) · LTX · LTX Director · Video Edit(LTX) · Face Refine · Stitch · 오디오 넣기 · Scene/Beat Detect
 - 음악: Ace-Step / MiniMax / YuE2(커버·멜로디), Music Writer(LLM)
 - Postprocess: Deblur · Denoise · Upscale · Skin · Grain · Interpolate · Resize (각각 카드)

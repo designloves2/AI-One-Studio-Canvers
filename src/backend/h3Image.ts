@@ -8,6 +8,10 @@ export interface H3ImageJob {
   refs: string[]; prompt: string; aspect: string; megapixels: number;
   /** megapixels each reference image is scaled to first (0 = as uploaded) */
   refMp: number; steps: number;
+  /** sampling (node v1.53.0): the template defaults are euler · simple · cfg 1 · 6 steps; Shift is off unless asked for */
+  sampler: string; scheduler: string; cfg: number; shiftOn: boolean; shift: number;
+  /** text to image only: a 1024x1024 black image goes in as reference image 0 (works better than the prompt alone) */
+  promptWeight: boolean;
   loras: { name: string; strength: number }[];
   seed: number; models: Record<string, string>; saveSubfolder: string; stem: string;
 }
@@ -42,6 +46,13 @@ export async function buildH3ImageGraph(j: H3ImageJob): Promise<{ graph: Record<
     if (!l.name || l.name === 'none' || !(l.strength > 0)) return;
     g[`lora${i}`] = { class_type: 'LoraLoaderModelOnly', inputs: { model, lora_name: l.name, strength_model: l.strength } }; model = [`lora${i}`, 0];
   });
+  if (j.shiftOn) {   // the H3 Sigma Shift node (ModelSamplingAuraFlow when that is all ComfyUI has)
+    const shift = Math.max(0.01, j.shift);
+    if (await hasNode('MiniMaxH3SigmaShift')) g.shift = { class_type: 'MiniMaxH3SigmaShift', inputs: { model, shift_video: shift, shift_audio: 3 } };
+    else if (await hasNode('ModelSamplingAuraFlow')) g.shift = { class_type: 'ModelSamplingAuraFlow', inputs: { model, shift } };
+    else throw new Error('Shift needs MiniMaxH3SigmaShift (or ModelSamplingAuraFlow) — update ComfyUI, or turn Use Shift off.');
+    model = ['shift', 0];
+  }
   g.clip = { class_type: 'CLIPLoader', inputs: { clip_name: m.clip, type: 'minimax', device: 'default' } };
   g.vae = { class_type: 'VAELoader', inputs: { vae_name: m.vae } };
   const cond: Record<string, any> = { clip: ['clip', 0], vae: ['vae', 0], prompt: j.prompt, width: size.width, height: size.height };
@@ -52,9 +63,10 @@ export async function buildH3ImageGraph(j: H3ImageJob): Promise<{ graph: Record<
     g[`refsnap${i}`] = { class_type: 'ResizeImageMaskNode', inputs: { input: link, resize_type: 'scale to multiple', 'resize_type.multiple': 32, scale_method: 'area' } };
     cond[`images.image_${i}`] = [`refsnap${i}`, 0];
   });
+  if (!ref && j.promptWeight) { g.black = { class_type: 'EmptyImage', inputs: { width: 1024, height: 1024, batch_size: 1, color: 0 } }; cond['images.image_0'] = ['black', 0]; }
   g.cond = { class_type: 'MiniMaxH3ImageConditioning', inputs: cond };
   g.neg = { class_type: 'ConditioningZeroOut', inputs: { conditioning: ['cond', 0] } };
-  g.samp = { class_type: 'KSampler', inputs: { model, positive: ['cond', 0], negative: ['neg', 0], latent_image: ['cond', 1], seed: j.seed, steps: Math.max(1, Math.round(j.steps)), cfg: 1, sampler_name: 'euler', scheduler: 'simple', denoise: 1 } };
+  g.samp = { class_type: 'KSampler', inputs: { model, positive: ['cond', 0], negative: ['neg', 0], latent_image: ['cond', 1], seed: j.seed, steps: Math.max(1, Math.round(j.steps)), cfg: j.cfg, sampler_name: j.sampler, scheduler: j.scheduler, denoise: 1 } };
   g.dec = { class_type: 'VAEDecode', inputs: { samples: ['samp', 0], vae: ['vae', 0] } };
   g.save = { class_type: 'SaveImage', inputs: { filename_prefix: `${j.saveSubfolder}/${j.stem}_h3img`, images: ['dec', 0] } };
   return { graph: g, save: 'save' };

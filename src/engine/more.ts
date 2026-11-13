@@ -218,6 +218,7 @@ export const EXTRA_RUNNERS: Record<string, Runner> = {
     }
     const g = await buildH3ImageGraph({
       refs, prompt, aspect: str(p.aspect, '1:1'), megapixels: num(p.final_mp, 1.5), refMp: num(p.ref_mp, 1), steps: num(p.steps, 6),
+      sampler: str(p.sampler, 'euler'), scheduler: str(p.scheduler, 'simple'), cfg: num(p.cfg, 1), shiftOn: !!p.shift_on, shift: num(p.shift, 3), promptWeight: p.prompt_weight !== false,
       loras: cardLoras(c), seed: withLegacySeed(c), models: s.video, saveSubfolder: s.saveSubfolder, stem: 'MMH3',
     });
     const res = await runPrompt(g.graph, { onProgress: c.progress, signal: c.signal });

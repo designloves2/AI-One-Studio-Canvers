@@ -2284,7 +2284,7 @@ var init_settings = __esm({
       backend: "custom",
       gguf_model: "",
       mmproj_file: "none",
-      n_ctx: 4096,
+      n_ctx: 16e3,
       n_gpu_layers: -1,
       text_encoder_name: "",
       clip_loader_type: "Auto",
@@ -3052,6 +3052,7 @@ var init_registry = __esm({
             { id: "relayvsr", label: "RelayVSR", family: "post", params: [
               dyn("rl_unet", "RelayVSR UNET (none = the x2 model)", "relayvsr_unets", "none"),
               dyn("rl_vae", "RelayVSR VAE (the same x as the UNET; none = the x2 VAE)", "relayvsr_vaes", "none"),
+              num("rl_seed", "Seed", 42, { advanced: true }),
               toggle("two_pass", "2nd pass with RTX VSR", false),
               ...rtxP("p2_", (p) => !!p.two_pass)
             ] },
@@ -3126,6 +3127,12 @@ var init_registry = __esm({
               slider("final_mp", "Size (MP, multiples of 32)", 0.25, 4, 0.25, 1.5),
               slider("steps", "Steps", 1, 30, 1, 6),
               autoEnhance,
+              dyn("sampler", "Sampler", "samplers", "euler", { advanced: true }),
+              dyn("scheduler", "Scheduler", "schedulers", "simple", { advanced: true }),
+              slider("cfg", "CFG", 0, 10, 0.1, 1, { advanced: true }),
+              toggle("shift_on", "Use Shift", false, { note: "H3 Sigma Shift (off = the model own shift)", advanced: true }),
+              slider("shift", "Shift", 0.01, 12, 0.01, 3, { advanced: true, when: (p) => !!p.shift_on }),
+              toggle("prompt_weight", "H3 prompt weight", true, { note: "Text to Image: a black 1024x1024 reference image 0 makes the prompt work better", advanced: true }),
               slider("ref_mp", "Reference image size (MP, 0 = as uploaded)", 0, 4, 0.25, 1, { advanced: true }),
               seed
             ],
@@ -3813,7 +3820,13 @@ var init_i18n_cards = __esm({
       "KV offload": "KV \uC624\uD504\uB85C\uB4DC",
       "RelayVSR UNET (none = the x2 model)": "RelayVSR UNET (none = x2 \uBAA8\uB378)",
       "RelayVSR VAE (the same x as the UNET; none = the x2 VAE)": "RelayVSR VAE (UNET\uACFC \uAC19\uC740 \uBC30\uC728, none = x2 VAE)",
-      "Enlarge a video: Latent Upscale (Use H3), FlashVSR, ReCaVSR, RelayVSR, LTX 2.5 Upscale, RTX VSR or an upscale model; optional second RTX pass. The two latent methods take the prompt from the Prompt input, else from the clip itself (a clip made by Video Generate keeps its prompt).": "\uC601\uC0C1\uC744 \uD0A4\uC6C1\uB2C8\uB2E4: \uB798\uD134\uD2B8 \uC5C5\uC2A4\uCF00\uC77C(H3 \uC0AC\uC6A9), FlashVSR, ReCaVSR, RelayVSR, LTX 2.5 \uC5C5\uC2A4\uCF00\uC77C, RTX VSR, \uC5C5\uC2A4\uCF00\uC77C \uBAA8\uB378 \uC911 \uC120\uD0DD\uD558\uACE0 \uB450 \uBC88\uC9F8 RTX \uD328\uC2A4\uB97C \uB354\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4. \uB450 \uB798\uD134\uD2B8 \uBC29\uC2DD\uC740 \uD504\uB86C\uD504\uD2B8 \uC785\uB825\uC758 \uAE00\uC744 \uC4F0\uACE0, \uC5C6\uC73C\uBA74 \uD074\uB9BD\uC5D0 \uB4E4\uC5B4 \uC788\uB294 \uD504\uB86C\uD504\uD2B8\uB97C \uC501\uB2C8\uB2E4."
+      "Enlarge a video: Latent Upscale (Use H3), FlashVSR, ReCaVSR, RelayVSR, LTX 2.5 Upscale, RTX VSR or an upscale model; optional second RTX pass. The two latent methods take the prompt from the Prompt input, else from the clip itself (a clip made by Video Generate keeps its prompt).": "\uC601\uC0C1\uC744 \uD0A4\uC6C1\uB2C8\uB2E4: \uB798\uD134\uD2B8 \uC5C5\uC2A4\uCF00\uC77C(H3 \uC0AC\uC6A9), FlashVSR, ReCaVSR, RelayVSR, LTX 2.5 \uC5C5\uC2A4\uCF00\uC77C, RTX VSR, \uC5C5\uC2A4\uCF00\uC77C \uBAA8\uB378 \uC911 \uC120\uD0DD\uD558\uACE0 \uB450 \uBC88\uC9F8 RTX \uD328\uC2A4\uB97C \uB354\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4. \uB450 \uB798\uD134\uD2B8 \uBC29\uC2DD\uC740 \uD504\uB86C\uD504\uD2B8 \uC785\uB825\uC758 \uAE00\uC744 \uC4F0\uACE0, \uC5C6\uC73C\uBA74 \uD074\uB9BD\uC5D0 \uB4E4\uC5B4 \uC788\uB294 \uD504\uB86C\uD504\uD2B8\uB97C \uC501\uB2C8\uB2E4.",
+      "CFG": "CFG",
+      "Use Shift": "\uC2DC\uD504\uD2B8 \uC0AC\uC6A9",
+      "Shift": "\uC2DC\uD504\uD2B8",
+      "H3 Sigma Shift (off = the model own shift)": "H3 \uC2DC\uADF8\uB9C8 \uC2DC\uD504\uD2B8 (\uB044\uBA74 \uBAA8\uB378 \uC790\uCCB4 \uC2DC\uD504\uD2B8)",
+      "H3 prompt weight": "H3 \uD504\uB86C\uD504\uD2B8 \uAC00\uC911",
+      "Text to Image: a black 1024x1024 reference image 0 makes the prompt work better": "\uD14D\uC2A4\uD2B8\u2192\uC774\uBBF8\uC9C0: \uAC80\uC740 1024x1024 \uC774\uBBF8\uC9C0\uB97C 0\uBC88 \uB808\uD37C\uB7F0\uC2A4\uB85C \uB123\uC5B4 \uD504\uB86C\uD504\uD2B8\uAC00 \uB354 \uC798 \uBA39\uC2B5\uB2C8\uB2E4"
     };
   }
 });
@@ -8703,6 +8716,13 @@ async function buildH3ImageGraph(j) {
     g[`lora${i}`] = { class_type: "LoraLoaderModelOnly", inputs: { model, lora_name: l.name, strength_model: l.strength } };
     model = [`lora${i}`, 0];
   });
+  if (j.shiftOn) {
+    const shift = Math.max(0.01, j.shift);
+    if (await hasNode("MiniMaxH3SigmaShift")) g.shift = { class_type: "MiniMaxH3SigmaShift", inputs: { model, shift_video: shift, shift_audio: 3 } };
+    else if (await hasNode("ModelSamplingAuraFlow")) g.shift = { class_type: "ModelSamplingAuraFlow", inputs: { model, shift } };
+    else throw new Error("Shift needs MiniMaxH3SigmaShift (or ModelSamplingAuraFlow) \u2014 update ComfyUI, or turn Use Shift off.");
+    model = ["shift", 0];
+  }
   g.clip = { class_type: "CLIPLoader", inputs: { clip_name: m.clip, type: "minimax", device: "default" } };
   g.vae = { class_type: "VAELoader", inputs: { vae_name: m.vae } };
   const cond = { clip: ["clip", 0], vae: ["vae", 0], prompt: j.prompt, width: size.width, height: size.height };
@@ -8716,9 +8736,13 @@ async function buildH3ImageGraph(j) {
     g[`refsnap${i}`] = { class_type: "ResizeImageMaskNode", inputs: { input: link, resize_type: "scale to multiple", "resize_type.multiple": 32, scale_method: "area" } };
     cond[`images.image_${i}`] = [`refsnap${i}`, 0];
   });
+  if (!ref && j.promptWeight) {
+    g.black = { class_type: "EmptyImage", inputs: { width: 1024, height: 1024, batch_size: 1, color: 0 } };
+    cond["images.image_0"] = ["black", 0];
+  }
   g.cond = { class_type: "MiniMaxH3ImageConditioning", inputs: cond };
   g.neg = { class_type: "ConditioningZeroOut", inputs: { conditioning: ["cond", 0] } };
-  g.samp = { class_type: "KSampler", inputs: { model, positive: ["cond", 0], negative: ["neg", 0], latent_image: ["cond", 1], seed: j.seed, steps: Math.max(1, Math.round(j.steps)), cfg: 1, sampler_name: "euler", scheduler: "simple", denoise: 1 } };
+  g.samp = { class_type: "KSampler", inputs: { model, positive: ["cond", 0], negative: ["neg", 0], latent_image: ["cond", 1], seed: j.seed, steps: Math.max(1, Math.round(j.steps)), cfg: j.cfg, sampler_name: j.sampler, scheduler: j.scheduler, denoise: 1 } };
   g.dec = { class_type: "VAEDecode", inputs: { samples: ["samp", 0], vae: ["vae", 0] } };
   g.save = { class_type: "SaveImage", inputs: { filename_prefix: `${j.saveSubfolder}/${j.stem}_h3img`, images: ["dec", 0] } };
   return { graph: g, save: "save" };
@@ -9716,6 +9740,7 @@ async function videoFps(url2) {
       const fps = 1 / med;
       const common2 = [8, 12, 15, 16, 20, 24, 25, 30, 48, 50, 60];
       const near = common2.find((c) => Math.abs(c - fps) < 0.6);
+      if (!near && (fps < 8 || fps > 120)) return resolve(null);
       resolve(near ?? Math.round(fps * 100) / 100);
     };
     const tick = (_, m) => {
@@ -9779,7 +9804,7 @@ var ppUpscale = async (c) => {
   const method = c.engineId ?? "flashvsr";
   let recavsr, relayvsr;
   if (method === "recavsr") recavsr = { transformer: await firstOf("recavsr", p.rc_transformer, /int8/i), vae: str(p.rc_vae, "none") === "none" ? (await loadOptions("vaes")).find((x) => /wan2?\.?2.*vae/i.test(x)) : str(p.rc_vae), scale: num2(p.rc_scale, 2), colorFix: str(p.rc_color, "wavelet"), seed: num2(p.rc_seed, 42), decoder: str(p.rc_decoder, "flashdecoder"), kernels: str(p.rc_kernels, "fast"), kvOffload: !!p.rc_kv, encoder: str(p.rc_encoder, "auto") };
-  if (method === "relayvsr") relayvsr = { unet: await firstOf("relayvsr_unets", p.rl_unet, /x2/i), vae: await firstOf("relayvsr_vaes", p.rl_vae, /x2/i), seed: Math.floor(Math.random() * 2 ** 32) };
+  if (method === "relayvsr") relayvsr = { unet: await firstOf("relayvsr_unets", p.rl_unet, /x2/i), vae: await firstOf("relayvsr_vaes", p.rl_vae, /x2/i), seed: Math.max(0, Math.round(num2(p.rl_seed, 42))) };
   if (method === "relayvsr" && /x4/i.test(relayvsr.unet)) c.progress(1, "RelayVSR x4 is very heavy \u2014 on a 16GB card use the x2 pair");
   return post((_cc, s) => ({
     kind: "upscale",
@@ -9857,6 +9882,12 @@ var EXTRA_RUNNERS = {
       megapixels: num2(p.final_mp, 1.5),
       refMp: num2(p.ref_mp, 1),
       steps: num2(p.steps, 6),
+      sampler: str(p.sampler, "euler"),
+      scheduler: str(p.scheduler, "simple"),
+      cfg: num2(p.cfg, 1),
+      shiftOn: !!p.shift_on,
+      shift: num2(p.shift, 3),
+      promptWeight: p.prompt_weight !== false,
       loras: cardLoras(c),
       seed: withLegacySeed(c),
       models: s.video,
@@ -11171,7 +11202,7 @@ var send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 async function handle(msg) {
   const { id, method, params } = msg;
   try {
-    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.32.0" } } });
+    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.33.0" } } });
     if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS.map(({ run: _r, ...t2 }) => t2) } });
     if (method === "tools/call") {
       const tool = TOOLS.find((t2) => t2.name === params?.name);

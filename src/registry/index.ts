@@ -384,6 +384,9 @@ export const REGISTRY: NodeDef[] = [
     inputs: [P.textIn(), P.imgIn('image', 'Reference images (optional)', true, true), P.loraIn(), P.seedIn()], outputs: [P.imgOut()],
     params: [
       sel('aspect', 'Aspect ratio', ASPECTS, '1:1'), slider('final_mp', 'Size (MP, multiples of 32)', 0.25, 4, 0.25, 1.5), slider('steps', 'Steps', 1, 30, 1, 6), autoEnhance,
+      dyn('sampler', 'Sampler', 'samplers', 'euler', { advanced: true }), dyn('scheduler', 'Scheduler', 'schedulers', 'simple', { advanced: true }), slider('cfg', 'CFG', 0, 10, 0.1, 1, { advanced: true }),
+      toggle('shift_on', 'Use Shift', false, { note: 'H3 Sigma Shift (off = the model own shift)', advanced: true }), slider('shift', 'Shift', 0.01, 12, 0.01, 3, { advanced: true, when: (p) => !!p.shift_on }),
+      toggle('prompt_weight', 'H3 prompt weight', true, { note: 'Text to Image: a black 1024x1024 reference image 0 makes the prompt work better', advanced: true }),
       slider('ref_mp', 'Reference image size (MP, 0 = as uploaded)', 0, 4, 0.25, 1, { advanced: true }), seed,
     ], description: 'A still image from the official MiniMax H3 Image model — text to image, or add reference images (up to 9) for reference to image. The prompt format follows the mode (T2I / R2I).' },
   { id: 'character-sheet', title: 'Character Sheet', category: 'Image', kind: 'generate',
