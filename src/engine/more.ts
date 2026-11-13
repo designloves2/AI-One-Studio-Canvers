@@ -105,7 +105,10 @@ async function videoFps(url: string): Promise<number | null> {
       if (d.length < 3) return resolve(null);
       d.sort((a, b) => a - b); const med = d[Math.floor(d.length / 2)];
       const fps = 1 / med; const common = [8, 12, 15, 16, 20, 24, 25, 30, 48, 50, 60];
-      const near = common.find((c) => Math.abs(c - fps) < 0.6); resolve(near ?? Math.round(fps * 100) / 100);
+      const near = common.find((c) => Math.abs(c - fps) < 0.6);
+      // a page that is hidden / throttled reports frames far apart (a 24 fps clip measured as 1 fps): that is not a frame rate, so the caller falls back to 24
+      if (!near && (fps < 8 || fps > 120)) return resolve(null);
+      resolve(near ?? Math.round(fps * 100) / 100);
     };
     const tick = (_: number, m: { mediaTime: number }) => { times.push(m.mediaTime); if (times.length >= 14) finish(); else v.requestVideoFrameCallback!(tick); };
     v.muted = true; v.playsInline = true; v.onerror = () => finish();
