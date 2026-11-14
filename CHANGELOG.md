@@ -2,6 +2,10 @@
 
 형식: 버전 · 날짜 / 추가 · 변경 · 수정. 버전은 `package.json`, `mcp/server.ts`와 같습니다.
 
+## 2.33.2 — 2026-11-14
+
+- **수정**: Sampler / Scheduler 목록이 ComfyUI에서 오기 전(또는 못 받았을 때)에는 7개·5개짜리 짧은 목록이 보이던 것을, ComfyUI 기본 전체 목록(샘플러 66개 · 스케줄러 11개)으로 바꿨습니다. 정상일 때는 ComfyUI가 알려 주는 목록을 그대로 씁니다(H3 이미지, LTX 업스케일 등 이 목록을 쓰는 모든 카드).
+
 ## 2.33.1 — 2026-11-13
 
 - **H3 이미지 Use Shift**: `MiniMaxH3SigmaShift`가 없을 때 쓰는 `ModelSamplingAuraFlow`(ComfyUI 기본 노드)를 설치 확인으로 막던 검사를 없앴습니다(웹에서 같은 방식의 오류가 나서 점검). `EmptyImage`는 처음부터 검사하지 않았습니다.
