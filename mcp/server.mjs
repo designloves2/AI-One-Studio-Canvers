@@ -2887,9 +2887,9 @@ var init_registry = __esm({
           dyn("turbo_lora_ref", "Turbo LoRA (reference)", "loras:h3", "none", { when: (p) => p.turbo !== "none" }),
           slider("turbo_strength", "Turbo strength", 0, 2, 0.05, 1, { when: (p) => p.turbo !== "none" }),
           slider("turbo_steps", "Turbo steps", 1, 16, 1, 8, { advanced: true, when: (p) => p.turbo !== "none" }),
-          toggle("hires", "Split Sigma", true, { when: (p) => p.turbo === "pdd" || p.turbo === "none", help: "Needs an 8-step turbo: the Turbo LoRA above, or Turbo None with an 8-step checkpoint. Steps are fixed at 8: LOW Sigma steps run small, the HIGH Sigma steps (8 \u2212 LOW) run after the latent upscale (7 LOW is recommended)." }),
+          toggle("hires", "Split Sigma", true, { when: (p) => p.turbo === "pdd" || p.turbo === "none", help: "The whole schedule is the Turbo step (Turbo LoRA 4, 6, 8 \u2026 steps; Turbo None = an 8-step checkpoint): LOW + HIGH = Turbo step. LOW Sigma steps run small, the HIGH Sigma steps run after the latent upscale at Final MP (HIGH 1 is recommended)." }),
           { id: "hires_upscaler", label: "Upscaler", control: { kind: "select", options: ["h3", "tiled"], labels: { h3: "H3 Latent Upscaler", tiled: "H3 Latent Upscale Tiled (TJ)" } }, default: "h3", when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires },
-          { ...num("hires_split_step", "LOW Sigma step (1~7, 7 recommended)", 7, { when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && p.hires_upscaler !== "tiled" }, 1, 7, 1), info: { text: "HIGH Sigma: {n} step(s) (8 \u2212 LOW) \u2014 the latent upscale runs here, then these steps at Final MP", calc: (v) => 8 - Math.min(7, Math.max(1, Math.round(Number(v)) || 7)) } },
+          { ...num("hires_high_steps", "HIGH Sigma step (1 recommended; LOW = Turbo step \u2212 HIGH)", 1, { when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires }, 1, 15, 1), info: { text: "HIGH Sigma: {n} step(s) run after the latent upscale at Final MP; LOW = Turbo step \u2212 HIGH. Tiled is slow, so HIGH 1 is recommended.", calc: (v) => Math.max(1, Math.round(Number(v)) || 1) } },
           slider("hires_start_mp", "Start size (MP)", 0.2, 1, 0.05, 0.7, { when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && p.hires_upscaler !== "tiled" }),
           slider("hires_final_mp", "Final size (MP)", 0.4, 3, 0.05, 1.6, { when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && p.hires_upscaler !== "tiled" }),
           { id: "hires_tiled_up", label: "Latent upscale", control: { kind: "select", options: ["neural", "bicubic", "trilinear"], labels: { neural: "Neural (trained upscaler)", bicubic: "Bicubic (plain interpolation)", trilinear: "Trilinear (plain interpolation)" } }, default: "neural", when: (p) => (p.turbo === "pdd" || p.turbo === "none") && !!p.hires && p.hires_upscaler === "tiled" },
@@ -3014,6 +3014,8 @@ var init_registry = __esm({
               dyn("h3_last_model", 'Fixed model (none = One Studio setting "UNET - Split Sigma last step")', "h3unets", "none", { when: (p) => p.h3_last === "fixed" }),
               { id: "h3_upscaler", label: "Upscaler", control: { kind: "select", options: ["h3", "tiled"], labels: { h3: "H3 Latent Upscaler", tiled: "H3 Latent Upscale Tiled (TJ)" } }, default: "h3" },
               { id: "h3_tiled_up", label: "Latent upscale", control: { kind: "select", options: ["neural", "bicubic", "trilinear"], labels: { neural: "Neural (trained upscaler)", bicubic: "Bicubic (plain interpolation)", trilinear: "Trilinear (plain interpolation)" } }, default: "neural", when: (p) => p.h3_upscaler === "tiled" },
+              num("h3_steps", "Turbo step (the step count this clip was made with: 4, 6, 8 ...)", 8, {}, 2, 16, 1),
+              { ...num("h3_high_steps", "HIGH Sigma step (1 recommended)", 1, {}, 1, 15, 1), info: { text: "Schedule: LOW {n} + HIGH. The clip is upscaled, then only the HIGH steps are sampled (refine). Tiled is slow, so HIGH 1 is recommended.", calc: (v) => Math.max(1, Math.round(Number(v)) || 1) } },
               toggle("h3_no_opt", "Bypass H3 Memory Optimization", false),
               slider("h3_final_mp", "Final MP", 0.4, 3, 0.05, 1.6, { when: (p) => p.h3_upscaler !== "tiled" }),
               slider("h3_tiled_final_mp", "Final MP", 1, 8.5, 0.1, 2, { when: (p) => p.h3_upscaler === "tiled" }),
@@ -3826,7 +3828,13 @@ var init_i18n_cards = __esm({
       "Shift": "\uC2DC\uD504\uD2B8",
       "H3 Sigma Shift (off = the model own shift)": "H3 \uC2DC\uADF8\uB9C8 \uC2DC\uD504\uD2B8 (\uB044\uBA74 \uBAA8\uB378 \uC790\uCCB4 \uC2DC\uD504\uD2B8)",
       "H3 prompt weight": "H3 \uD504\uB86C\uD504\uD2B8 \uAC00\uC911",
-      "Text to Image: a black 1024x1024 reference image 0 makes the prompt work better": "\uD14D\uC2A4\uD2B8\u2192\uC774\uBBF8\uC9C0: \uAC80\uC740 1024x1024 \uC774\uBBF8\uC9C0\uB97C 0\uBC88 \uB808\uD37C\uB7F0\uC2A4\uB85C \uB123\uC5B4 \uD504\uB86C\uD504\uD2B8\uAC00 \uB354 \uC798 \uBA39\uC2B5\uB2C8\uB2E4"
+      "Text to Image: a black 1024x1024 reference image 0 makes the prompt work better": "\uD14D\uC2A4\uD2B8\u2192\uC774\uBBF8\uC9C0: \uAC80\uC740 1024x1024 \uC774\uBBF8\uC9C0\uB97C 0\uBC88 \uB808\uD37C\uB7F0\uC2A4\uB85C \uB123\uC5B4 \uD504\uB86C\uD504\uD2B8\uAC00 \uB354 \uC798 \uBA39\uC2B5\uB2C8\uB2E4",
+      "HIGH Sigma step (1 recommended; LOW = Turbo step \u2212 HIGH)": "HIGH \uC2DC\uADF8\uB9C8 \uC2A4\uD15D (1 \uAD8C\uC7A5, LOW = \uD130\uBCF4 \uC2A4\uD15D \u2212 HIGH)",
+      "HIGH Sigma: {n} step(s) run after the latent upscale at Final MP; LOW = Turbo step \u2212 HIGH. Tiled is slow, so HIGH 1 is recommended.": "HIGH \uC2DC\uADF8\uB9C8: {n}\uC2A4\uD15D\uC744 \uB798\uD134\uD2B8 \uC5C5\uC2A4\uCF00\uC77C \uB4A4 \uCD5C\uC885 MP\uC5D0\uC11C \uC2E4\uD589\uD569\uB2C8\uB2E4. LOW = \uD130\uBCF4 \uC2A4\uD15D \u2212 HIGH. Tiled\uB294 \uB290\uB824\uC11C HIGH 1\uC744 \uAD8C\uC7A5\uD569\uB2C8\uB2E4.",
+      "The whole schedule is the Turbo step (Turbo LoRA 4, 6, 8 \u2026 steps; Turbo None = an 8-step checkpoint): LOW + HIGH = Turbo step. LOW Sigma steps run small, the HIGH Sigma steps run after the latent upscale at Final MP (HIGH 1 is recommended).": "\uC804\uCCB4 \uC2A4\uCF00\uC904\uC774 \uD130\uBCF4 \uC2A4\uD15D\uC785\uB2C8\uB2E4(\uD130\uBCF4 LoRA 4\xB76\xB78 \u2026 \uC2A4\uD15D, \uD130\uBCF4 \uC5C6\uC74C = 8\uC2A4\uD15D \uCCB4\uD06C\uD3EC\uC778\uD2B8): LOW + HIGH = \uD130\uBCF4 \uC2A4\uD15D. LOW \uC2A4\uD15D\uC740 \uC791\uAC8C, HIGH \uC2A4\uD15D\uC740 \uB798\uD134\uD2B8 \uC5C5\uC2A4\uCF00\uC77C \uB4A4 \uCD5C\uC885 MP\uC5D0\uC11C \uC2E4\uD589\uD569\uB2C8\uB2E4(HIGH 1 \uAD8C\uC7A5).",
+      "Turbo step (the step count this clip was made with: 4, 6, 8 ...)": "\uD130\uBCF4 \uC2A4\uD15D (\uC774 \uD074\uB9BD\uC744 \uB9CC\uB4E4 \uB54C\uC758 \uC2A4\uD15D \uC218: 4, 6, 8 \u2026)",
+      "HIGH Sigma step (1 recommended)": "HIGH \uC2DC\uADF8\uB9C8 \uC2A4\uD15D (1 \uAD8C\uC7A5)",
+      "Schedule: LOW {n} + HIGH. The clip is upscaled, then only the HIGH steps are sampled (refine). Tiled is slow, so HIGH 1 is recommended.": "\uC2A4\uCF00\uC904: LOW {n} + HIGH. \uD074\uB9BD\uC744 \uC5C5\uC2A4\uCF00\uC77C\uD55C \uB4A4 HIGH \uC2A4\uD15D\uB9CC \uC0D8\uD50C\uB9C1\uD569\uB2C8\uB2E4(\uB9AC\uD30C\uC778). Tiled\uB294 \uB290\uB824\uC11C HIGH 1\uC744 \uAD8C\uC7A5\uD569\uB2C8\uB2E4."
     };
   }
 });
@@ -8105,10 +8113,16 @@ async function buildLtxGraph(job) {
 
 // src/backend/h3.ts
 init_http();
-function splitStepOf(o) {
-  if (o.hiresUpscaler === "tiled") return 7;
-  const v = Number(o.hiresSplitStep ?? 7);
-  return Number.isFinite(v) ? Math.min(7, Math.max(1, Math.round(v))) : 7;
+function hiresTotalSteps(o, turbo = o.turbo) {
+  return turbo === "none" ? 8 : Math.max(2, Math.round(Number(o.turboSteps) || 8));
+}
+function hiresHighOf(high, total) {
+  const v = Math.round(Number(high ?? 1));
+  return Math.min(total - 1, Math.max(1, Number.isFinite(v) ? v : 1));
+}
+function splitStepOf(o, turbo = o.turbo) {
+  const total = hiresTotalSteps(o, turbo);
+  return total - hiresHighOf(o.hiresHighSteps, total);
 }
 var DEFAULT_OPT = {
   attnBackend: "none",
@@ -8249,7 +8263,7 @@ async function buildH3Graph(job) {
   const hires = o.hires && (turbo === "pdd" || o.turbo === "none");
   const final = job.size ?? h3Size(job.aspect, hires ? o.hiresFinalMp : job.megapixels);
   const start = hires ? h3Size(job.aspect, o.hiresStartMp) : final;
-  const steps = hires ? 8 : turbo === "none" ? Math.max(1, Math.round(job.steps)) : Math.max(1, Math.round(o.turboSteps));
+  const steps = hires ? hiresTotalSteps(o, o.turbo === "none" ? "none" : turbo) : turbo === "none" ? Math.max(1, Math.round(job.steps)) : Math.max(1, Math.round(o.turboSteps));
   const g = {};
   g.unet = m.unet.toLowerCase().endsWith(".gguf") ? { class_type: "UnetLoaderGGUF", inputs: { unet_name: m.unet } } : { class_type: "UNETLoader", inputs: { unet_name: m.unet, weight_dtype: "default" } };
   let model = ["unet", 0];
@@ -8337,7 +8351,7 @@ async function buildH3Graph(job) {
   }
   let sigmas = ["sched", 0];
   if (hires) {
-    g.split = { class_type: "SplitSigmas", inputs: { sigmas, step: splitStepOf(o) } };
+    g.split = { class_type: "SplitSigmas", inputs: { sigmas, step: splitStepOf(o, o.turbo === "none" ? "none" : turbo) } };
     sigmas = ["split", 0];
   }
   g.samp = { class_type: "SamplerCustomAdvanced", inputs: { noise: ["noise", 0], guider: ["guider", 0], sampler: ["sel", 0], sigmas, latent_image: latent } };
@@ -9386,8 +9400,9 @@ async function buildH3LatGraph(j) {
   }
   const memModel = model;
   g.hrSparse = { class_type: "BlockSparseAttention", inputs: { model, selection: "sol-attn", "selection.tau": 1.3, start_percent: 0.2, end_percent: 1, dense_blocks: "", min_tokens: 12288, extra_tokens: 256, sink_conditioning: "exact_kv_and_rows", verbose: true } };
-  g.sched = { class_type: "BasicScheduler", inputs: { model: ["hrShift", 0], scheduler: "simple", steps: 8, denoise: 1 } };
-  g.split = { class_type: "SplitSigmas", inputs: { sigmas: ["sched", 0], step: 7 } };
+  const total = Math.max(2, Math.round(j.totalSteps ?? 8)), high = Math.min(total - 1, Math.max(1, Math.round(j.highSteps ?? 1)));
+  g.sched = { class_type: "BasicScheduler", inputs: { model: ["hrShift", 0], scheduler: "simple", steps: total, denoise: 1 } };
+  g.split = { class_type: "SplitSigmas", inputs: { sigmas: ["sched", 0], step: total - high } };
   g.noise = { class_type: "RandomNoise", inputs: { noise_seed: j.seed } };
   g.sel = { class_type: "KSamplerSelect", inputs: { sampler_name: "euler" } };
   const step = (key, condLink, latent) => {
@@ -9468,6 +9483,63 @@ var sizeAndFps = async (url2) => {
   const dur = await videoDuration(url2);
   return { ...wh, fps: 24, total: Math.floor(dur * 24) };
 };
+async function grabFrame(url2, t2) {
+  return new Promise((resolve) => {
+    const v = document.createElement("video");
+    v.preload = "auto";
+    v.muted = true;
+    v.crossOrigin = "anonymous";
+    let done = false;
+    const end = (c) => {
+      if (done) return;
+      done = true;
+      v.removeAttribute("src");
+      resolve(c);
+    };
+    v.onloadedmetadata = () => {
+      v.currentTime = Math.min(Math.max(0, t2), Math.max(0, (v.duration || t2) - 1e-3));
+    };
+    v.onseeked = () => {
+      const k = Math.min(1, 640 / Math.max(v.videoWidth || 1, v.videoHeight || 1));
+      const c = document.createElement("canvas");
+      c.width = Math.max(1, Math.round((v.videoWidth || 640) * k));
+      c.height = Math.max(1, Math.round((v.videoHeight || 360) * k));
+      try {
+        c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+        end(c);
+      } catch {
+        end(null);
+      }
+    };
+    v.onerror = () => end(null);
+    setTimeout(() => end(null), 8e3);
+    v.src = url2;
+  });
+}
+async function writeFirstLastBrief(url2, duration, base2, c) {
+  const a = await grabFrame(url2, 0.05), b = await grabFrame(url2, Math.max(0.05, duration - 0.05));
+  if (!a || !b) return "";
+  const both = document.createElement("canvas");
+  both.width = a.width + b.width + 8;
+  both.height = Math.max(a.height, b.height);
+  const g = both.getContext("2d");
+  g.fillStyle = "#000";
+  g.fillRect(0, 0, both.width, both.height);
+  g.drawImage(a, 0, 0);
+  g.drawImage(b, a.width + 8, 0);
+  const asset = { id: "ppframes", type: "image", url: both.toDataURL("image/jpeg", 0.9) };
+  c.progress(1, "reading the first and last frame\u2026");
+  const seen = await runLlm({ system: "", prompt: "The left picture is the first frame of a short video and the right picture is its last frame. Describe who or what is in them, the setting, the look, and what changes from the first frame to the last (movement, camera, expressions).", images: [asset], where: "bottom" });
+  if (!seen.trim()) return "";
+  c.progress(1, "writing the First/Last frame prompt\u2026");
+  const note = base2.trim() ? `
+
+(This is the clip's existing prompt, written for another mode or model (reference tags like <Picture N> / @name, or an LTX-style prompt). Revise it into a First/Last-frame brief: keep its story, actions, camera, dialogue, sound and style, and replace every reference tag with what the starting and ending frames actually show.)
+${base2}` : "\n\n(no text supplied \u2014 base the brief on the frame analysis above)";
+  const style = { ...formatFor("video-generate", "h3"), aesthetic: NO_AESTHETIC, extra_instructions: "Write a First/Last-frame video brief (the clip starts on the first frame and ends on the last). Dialogue wrapped in <d> </d> stays exactly as it is." };
+  return (await runLlm({ system: "", prompt: `Frame analysis of the first and last frame:
+${seen}${note}`, style, where: "bottom" })).trim();
+}
 var isH3Brief = (t2) => /\[Shot|<Picture|subject_definitions|technical_settings|integrated_multimodal_description/.test(t2);
 var isBaseBrief = (t2) => /integrated_multimodal_description|\[Shot 1\]/.test(t2) && !/<Picture|<Video|<Audio|@\w/.test(t2);
 async function runH3Lat(c) {
@@ -9483,7 +9555,15 @@ async function runH3LatCore(c) {
   const s = useSettings.getState();
   const v = need(c.inputs("video")[0], "Video");
   const metaPrompt = String(v.meta?.prompt ?? "");
-  const prompt = resume ? String(resume.prompt) : c.text("prompt").trim() || (isBaseBrief(metaPrompt) ? metaPrompt : "");
+  let prompt = resume ? String(resume.prompt) : c.text("prompt").trim() || (isBaseBrief(metaPrompt) ? metaPrompt : "");
+  if (!prompt) {
+    const dur = await videoDuration(v.url);
+    try {
+      prompt = dur > 0 ? await writeFirstLastBrief(v.url, dur, c.text("prompt").trim() || metaPrompt, c) : "";
+    } catch (e) {
+      throw new Error(`Latent Upscale (Use H3): could not write a prompt from the first and last frame (${e.message}). Connect the clip's H3 prompt to the Prompt input.`);
+    }
+  }
   if (!prompt) throw new Error("Latent Upscale (Use H3): connect the clip's H3 prompt to the Prompt input (this clip carries no usable prompt of its own).");
   c.progress(2, "uploading video\u2026");
   const file = await ensureInput(v);
@@ -9522,7 +9602,9 @@ async function runH3LatCore(c) {
     noOpt: !!p.h3_no_opt,
     chunkRows: num2(p.h3_chunk_rows, 2048),
     models: s.video,
-    saveSubfolder: s.saveSubfolder
+    saveSubfolder: s.saveSubfolder,
+    totalSteps: Math.max(2, Math.round(num2(p.h3_steps, 8))),
+    highSteps: Math.max(1, Math.round(num2(p.h3_high_steps, 1)))
   };
   const plan = p.h3_split && info.total > 0 ? h3SegmentPlan(str(p.h3_split_mode, "seconds") === "count" ? "count" : "seconds", num2(p.h3_split_sec, 5), num2(p.h3_split_cnt, 2), info.total, info.fps) : { passes: [], overlap: 0 };
   const runOne = async (frames, skip, suffix, label, pid) => {
@@ -9681,7 +9763,7 @@ function optFromCards(cards) {
   return {
     ...DEFAULT_OPT,
     ...s ? { attnBackend: s.attn_backend, attnForward: s.attn_forward, optimizer: s.optimizer, blockCache: s.block_cache, spectrum: !!s.spectrum, fusedModulation: !!s.fused_mod, shiftVideo: s.shift_video, shiftAudio: s.shift_audio } : {},
-    ...t2 ? { turbo: t2.turbo, turboLora: t2.turbo_lora, turboStrength: t2.turbo_strength, turboSteps: t2.turbo_steps, hires: !!t2.hires, hiresUpscaler: t2.hires_upscaler === "tiled" ? "tiled" : "h3", hiresTiledUp: t2.hires_tiled_up === "bicubic" || t2.hires_tiled_up === "trilinear" ? t2.hires_tiled_up : "neural", hiresStartMp: t2.hires_upscaler === "tiled" ? t2.hires_tiled_start_mp : t2.hires_start_mp, hiresFinalMp: t2.hires_upscaler === "tiled" ? t2.hires_tiled_final_mp : t2.hires_final_mp, hiresLastFixed: t2.hires_last === "fixed", hiresLastModel: t2.hires_last_model, hiresNoOpt: !!t2.hires_no_opt, hiresChunkRows: t2.hires_chunk_rows, hiresSplitStep: t2.hires_split_step } : {}
+    ...t2 ? { turbo: t2.turbo, turboLora: t2.turbo_lora, turboStrength: t2.turbo_strength, turboSteps: t2.turbo_steps, hires: !!t2.hires, hiresUpscaler: t2.hires_upscaler === "tiled" ? "tiled" : "h3", hiresTiledUp: t2.hires_tiled_up === "bicubic" || t2.hires_tiled_up === "trilinear" ? t2.hires_tiled_up : "neural", hiresStartMp: t2.hires_upscaler === "tiled" ? t2.hires_tiled_start_mp : t2.hires_start_mp, hiresFinalMp: t2.hires_upscaler === "tiled" ? t2.hires_tiled_final_mp : t2.hires_final_mp, hiresLastFixed: t2.hires_last === "fixed", hiresLastModel: t2.hires_last_model, hiresNoOpt: !!t2.hires_no_opt, hiresChunkRows: t2.hires_chunk_rows, hiresHighSteps: t2.hires_high_steps != null ? Number(t2.hires_high_steps) : t2.hires_split_step != null ? Math.max(1, 8 - Number(t2.hires_split_step)) : 1 } : {}
   };
 }
 async function h3Opt(cards, ref = false) {
@@ -11201,7 +11283,7 @@ var send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 async function handle(msg) {
   const { id, method, params } = msg;
   try {
-    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.33.2" } } });
+    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.34.0" } } });
     if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS.map(({ run: _r, ...t2 }) => t2) } });
     if (method === "tools/call") {
       const tool = TOOLS.find((t2) => t2.name === params?.name);
