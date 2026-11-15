@@ -86,7 +86,7 @@
 
 - v1.53.0(`SPEC_RELAY_H3_IMAGE_OPTIONS.md`): `h3-image` 카드 고급 옵션 sampler/scheduler/cfg/shift_on/shift/prompt_weight → `backend/h3Image.ts`(KSampler 값, `MiniMaxH3SigmaShift`/`ModelSamplingAuraFlow`, T2I 에서만 `EmptyImage` 검정 1024 를 `images.image_0`). 해당 없음: 결과 휠 확대·⛶·Send to R2I·Warn if no reference(카드 구조).
 
-- v1.53.1 이후(`SPEC_RELAY_AFTER_V1_53_1.md`, 미릴리즈 로컬): Split Sigma 터보 스텝 = LOW + HIGH(`h3.ts` `hiresTotalSteps/hiresHighOf/splitStepOf`, 카드 `hires_high_steps`, 옛 `hires_split_step` 은 `optFromCards` 에서 8−LOW 로 변환), Latent Upscale 엔진 `h3_steps`/`h3_high_steps`(`h3Lat.ts` totalSteps/highSteps), 프롬프트 없는 클립은 `ppLat.ts` `writeFirstLastBrief`(첫·끝 프레임 한 장으로 붙여 비전 → H3 포맷 LLM).
+- 노드 v1.54.0 이식(릴리즈 2.34.0, `SPEC_RELAY_AFTER_V1_53_1.md`): Split Sigma 터보 스텝 = LOW + HIGH(`h3.ts` `hiresTotalSteps/hiresHighOf/splitStepOf`, 카드 `hires_high_steps`, 옛 `hires_split_step` 은 `optFromCards` 에서 8−LOW 로 변환), Latent Upscale 엔진 `h3_steps`/`h3_high_steps`(`h3Lat.ts` totalSteps/highSteps), 프롬프트 없는 클립은 `ppLat.ts` `writeFirstLastBrief`(첫·끝 프레임 한 장으로 붙여 비전 → H3 포맷 LLM).
 
 ### Director ↔ 캔버스 짝 묶기 (2026-11-03, 코드 완료 · 미릴리즈 · 화면 검증 전)
 - 규칙: **Director 프로젝트가 주인, 캔버스는 짝**. `Project.director`(`DirectorPair`: file·project_id·name·episode_id·no·purpose)를 캔버스 파일에 기록. 코드: `src/director/pairing.ts`(`stampPair` 저장 때 기록, `backfillPairs` 옛 캔버스에 짝 추가, `openCanvasOfProject` Director 열면 캔버스 열기, `openDirectorOfCanvas` 캔버스에서 Director 열기, `prepareCanvasForNewDirector` 짝 없는 캔버스 + 새 프로젝트면 경고→저장→빈 캔버스, `adoptIntoEmptyCanvas` 빈 자리에 편 캔버스 열기), `PairBar.tsx`(캔버스 위 띠), `store/graph.ts`(`directorPair`, toProject/loadProject에 포함), `server-lib/canvases.mjs` 목록에 `director` 요약, `CanvasesPanel` 🎬 표시. 훅: `canvasAction`·`musicAction` 저장 4곳(`stampPair`), `DirectorPanel.open`, `store/director.send`(첫 문장).

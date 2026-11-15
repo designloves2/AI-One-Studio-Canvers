@@ -4,7 +4,7 @@
 
 ## 2.34.0 — 2026-11-15
 
-### 노드 v1.53.1 이후 이식 (SPEC_RELAY_AFTER_V1_53_1)
+### 노드 v1.54.0 이식 — ports node v1.54.0 (SPEC_RELAY_AFTER_V1_53_1, 노드 v1.53.1 이후 변경)
 
 - **Split Sigma: 터보 스텝 = LOW + HIGH** (4 · 6 · 8스텝 로라 지원). 예전처럼 8스텝·LOW 7로 고정되지 않고, 터보 카드의 Turbo steps가 전체 스텝이 되며 **HIGH Sigma step**(기본 1, 1~터보−1)을 고르면 LOW는 `터보 스텝 − HIGH`입니다. H3 래턴트 업스케일러와 Tiled 둘 다 같은 칸입니다. 옛 카드의 LOW 값은 `8 − LOW`를 HIGH로 바꿔 읽습니다.
 - **Video Upscale → Latent Upscale (Use H3)**에 **Turbo step**(기본 8)과 **HIGH Sigma step**(기본 1) 입력이 생겼습니다. 클립을 만든 터보 스텝 중 HIGH 구간만 다시 샘플링하고, 기본값(8, 1)은 예전(7+1)과 같습니다.
