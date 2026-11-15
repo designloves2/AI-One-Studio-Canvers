@@ -11,6 +11,8 @@ import { useSettings } from '../store/settings';
 import { need, num, str } from './util';
 import { cardLoras } from './more';
 import { migrateTiledParams } from '../backend/tiledMigrate';
+import { runLlm } from '../backend/llm';
+import { formatFor, NO_AESTHETIC } from '../backend/promptStyle';
 
 /** duration (s) of a video, from the browser; 0 when it cannot be told */
 function videoDuration(url: string): Promise<number> {
@@ -27,6 +29,40 @@ const sizeAndFps = async (url: string): Promise<{ w: number; h: number; fps: num
   return { ...wh, fps: 24, total: Math.floor(dur * 24) };
 };
 
+/** a frame of a video at time t (s), as a data URL (long edge ≤ 640); null when the browser cannot read it */
+async function grabFrame(url: string, t: number): Promise<HTMLCanvasElement | null> {
+  return new Promise((resolve) => {
+    const v = document.createElement('video'); v.preload = 'auto'; v.muted = true; v.crossOrigin = 'anonymous';
+    let done = false; const end = (c: HTMLCanvasElement | null) => { if (done) return; done = true; v.removeAttribute('src'); resolve(c); };
+    v.onloadedmetadata = () => { v.currentTime = Math.min(Math.max(0, t), Math.max(0, (v.duration || t) - 0.001)); };
+    v.onseeked = () => {
+      const k = Math.min(1, 640 / Math.max(v.videoWidth || 1, v.videoHeight || 1)); const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round((v.videoWidth || 640) * k)); c.height = Math.max(1, Math.round((v.videoHeight || 360) * k));
+      try { c.getContext('2d')!.drawImage(v, 0, 0, c.width, c.height); end(c); } catch { end(null); }
+    };
+    v.onerror = () => end(null); setTimeout(() => end(null), 8000); v.src = url;
+  });
+}
+
+/**
+ * Last resort (node v1.53.1 spec 4): a clip with no usable prompt gets a First/Last-frame brief written from its first and last frame
+ * (put side by side in one picture: the vision step takes one image). An existing prompt that is for another mode (reference tags, an LTX prompt) is revised, not thrown away.
+ */
+async function writeFirstLastBrief(url: string, duration: number, base: string, c: Ctx): Promise<string> {
+  const a = await grabFrame(url, 0.05), b = await grabFrame(url, Math.max(0.05, duration - 0.05));
+  if (!a || !b) return '';
+  const both = document.createElement('canvas'); both.width = a.width + b.width + 8; both.height = Math.max(a.height, b.height);
+  const g = both.getContext('2d')!; g.fillStyle = '#000'; g.fillRect(0, 0, both.width, both.height); g.drawImage(a, 0, 0); g.drawImage(b, a.width + 8, 0);
+  const asset: Asset = { id: 'ppframes', type: 'image', url: both.toDataURL('image/jpeg', 0.9) };
+  c.progress(1, 'reading the first and last frame…');
+  const seen = await runLlm({ system: '', prompt: 'The left picture is the first frame of a short video and the right picture is its last frame. Describe who or what is in them, the setting, the look, and what changes from the first frame to the last (movement, camera, expressions).', images: [asset], where: 'bottom' });
+  if (!seen.trim()) return '';
+  c.progress(1, 'writing the First/Last frame prompt…');
+  const note = base.trim() ? `\n\n(This is the clip's existing prompt, written for another mode or model (reference tags like <Picture N> / @name, or an LTX-style prompt). Revise it into a First/Last-frame brief: keep its story, actions, camera, dialogue, sound and style, and replace every reference tag with what the starting and ending frames actually show.)\n${base}` : '\n\n(no text supplied — base the brief on the frame analysis above)';
+  const style = { ...formatFor('video-generate', 'h3'), aesthetic: NO_AESTHETIC, extra_instructions: 'Write a First/Last-frame video brief (the clip starts on the first frame and ends on the last). Dialogue wrapped in <d> </d> stays exactly as it is.' };
+  return (await runLlm({ system: '', prompt: `Frame analysis of the first and last frame:\n${seen}${note}`, style, where: 'bottom' })).trim();
+}
+
 /** An H3 brief (as opposed to an LTX prompt) is told by its section names; a base brief has no reference tags (spec 2b prompt rule) */
 const isH3Brief = (t: string) => /\[Shot|<Picture|subject_definitions|technical_settings|integrated_multimodal_description/.test(t);
 const isBaseBrief = (t: string) => /integrated_multimodal_description|\[Shot 1\]/.test(t) && !/<Picture|<Video|<Audio|@\w/.test(t);
@@ -41,8 +77,12 @@ async function runH3LatCore(c: Ctx): Promise<Asset[]> {
   const p = migrateTiledParams(c.p); const s = useSettings.getState();
   const v = need(c.inputs('video')[0], 'Video');
   const metaPrompt = String((v.meta as { prompt?: string } | undefined)?.prompt ?? '');
-  const prompt = resume ? String(resume.prompt) : c.text('prompt').trim() || (isBaseBrief(metaPrompt) ? metaPrompt : '');
-  // shortcut: no per-clip meta for frames → vision → H3 brief yet; connect a Prompt card (or use a clip made by Video Generate), same as the node would write
+  let prompt = resume ? String(resume.prompt) : c.text('prompt').trim() || (isBaseBrief(metaPrompt) ? metaPrompt : '');
+  // order: the Prompt input, then the clip's own H3 prompt (no LLM), and only then a First/Last-frame brief written from the first and last frame
+  if (!prompt) {
+    const dur = await videoDuration(v.url);
+    try { prompt = dur > 0 ? await writeFirstLastBrief(v.url, dur, c.text('prompt').trim() || metaPrompt, c) : ''; } catch (e) { throw new Error(`Latent Upscale (Use H3): could not write a prompt from the first and last frame (${(e as Error).message}). Connect the clip's H3 prompt to the Prompt input.`); }
+  }
   if (!prompt) throw new Error("Latent Upscale (Use H3): connect the clip's H3 prompt to the Prompt input (this clip carries no usable prompt of its own).");
   c.progress(2, 'uploading video…');
   const file = await ensureInput(v);
@@ -66,6 +106,7 @@ async function runH3LatCore(c: Ctx): Promise<Asset[]> {
     file, fps: info.fps, srcW: info.w, srcH: info.h, finalMp, prompt, kind, hasAudio: p.h3_audio !== false, seed,
     turbo, pddFile, pddStrength: num(p.h3_pdd_strength, 1), lastFixed, lastModel, upscaler, tiledUp: (['neural', 'bicubic', 'trilinear'].includes(str(p.h3_tiled_up)) ? str(p.h3_tiled_up) : 'neural') as 'neural',
     noOpt: !!p.h3_no_opt, chunkRows: num(p.h3_chunk_rows, 2048), models: s.video, saveSubfolder: s.saveSubfolder,
+    totalSteps: Math.max(2, Math.round(num(p.h3_steps, 8))), highSteps: Math.max(1, Math.round(num(p.h3_high_steps, 1))),
   } as const;
   const plan = p.h3_split && info.total > 0 ? h3SegmentPlan(str(p.h3_split_mode, 'seconds') === 'count' ? 'count' : 'seconds', num(p.h3_split_sec, 5), num(p.h3_split_cnt, 2), info.total, info.fps) : { passes: [], overlap: 0 };
   // marked like a 7+1 clip (hires border / badge) and as a postprocess result; never hiresFinish (Reuse would switch 7+1 on)

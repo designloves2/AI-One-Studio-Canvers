@@ -23,8 +23,8 @@ export interface H3Options {
   hiresUpscaler?: 'h3' | 'tiled'; hiresTiledUp?: 'neural' | 'bicubic' | 'trilinear';
   /** 7+1 last step: its own UNET (hiresLastFixed + hiresLastModel), and bypass of H3 Memory Optimization on that step */
   hiresLastFixed?: boolean; hiresLastModel?: string; hiresNoOpt?: boolean; hiresChunkRows?: number;
-  /** Split Sigma: how many of the 8 steps run small before the latent upscale (H3 Latent Upscaler only, 1–7, 7 recommended; Tiled is fixed at 7) */
-  hiresSplitStep?: number;
+  /** Split Sigma (node v1.53.1): the whole schedule is the Turbo step; HIGH steps run after the latent upscale, LOW = Turbo step − HIGH run small (1 ≤ HIGH ≤ Turbo step − 1, 1 recommended) */
+  hiresHighSteps?: number;
   shiftVideo: number; shiftAudio: number;
   audioLock?: { file: string; startSec: number; mode: string; strength: number; fit: string };
 }
@@ -49,11 +49,18 @@ export interface H3Job {
   preview?: PreviewCfg;
 }
 
-/** Split Sigma: the step the 8 steps are split at. Tiled is fixed at 7; the H3 Latent Upscaler takes 1–7 (not a number → 7). The postprocess Latent Upscale keeps its own 7. */
-export function splitStepOf(o: Pick<H3Options, 'hiresUpscaler' | 'hiresSplitStep'>): number {
-  if (o.hiresUpscaler === 'tiled') return 7;
-  const v = Number(o.hiresSplitStep ?? 7);
-  return Number.isFinite(v) ? Math.min(7, Math.max(1, Math.round(v))) : 7;
+/** Split Sigma: the whole schedule is the Turbo step (Turbo None = the 8-step checkpoint → 8); LOW + HIGH = that number */
+export function hiresTotalSteps(o: Pick<H3Options, 'turbo' | 'turboSteps'>, turbo: H3Options['turbo'] = o.turbo): number {
+  return turbo === 'none' ? 8 : Math.max(2, Math.round(Number(o.turboSteps) || 8));
+}
+export function hiresHighOf(high: number | undefined, total: number): number {
+  const v = Math.round(Number(high ?? 1));
+  return Math.min(total - 1, Math.max(1, Number.isFinite(v) ? v : 1));
+}
+/** the step SplitSigmas cuts at = LOW */
+export function splitStepOf(o: Pick<H3Options, 'turbo' | 'turboSteps' | 'hiresHighSteps'>, turbo: H3Options['turbo'] = o.turbo): number {
+  const total = hiresTotalSteps(o, turbo);
+  return total - hiresHighOf(o.hiresHighSteps, total);
 }
 
 export const DEFAULT_OPT: H3Options = {
@@ -175,7 +182,7 @@ export async function buildH3Graph(job: H3Job): Promise<H3Graph> {
   const hires = o.hires && (turbo === 'pdd' || o.turbo === 'none');
   const final = job.size ?? h3Size(job.aspect, hires ? o.hiresFinalMp : job.megapixels);
   const start = hires ? h3Size(job.aspect, o.hiresStartMp) : final;
-  const steps = hires ? 8 : turbo === 'none' ? Math.max(1, Math.round(job.steps)) : Math.max(1, Math.round(o.turboSteps));
+  const steps = hires ? hiresTotalSteps(o, o.turbo === 'none' ? 'none' : turbo) : turbo === 'none' ? Math.max(1, Math.round(job.steps)) : Math.max(1, Math.round(o.turboSteps));
 
   const g: Record<string, any> = {};
   g.unet = m.unet.toLowerCase().endsWith('.gguf') ? { class_type: 'UnetLoaderGGUF', inputs: { unet_name: m.unet } } : { class_type: 'UNETLoader', inputs: { unet_name: m.unet, weight_dtype: 'default' } };
@@ -252,7 +259,7 @@ export async function buildH3Graph(job: H3Job): Promise<H3Graph> {
   }
 
   let sigmas: L = ['sched', 0];
-  if (hires) { g.split = { class_type: 'SplitSigmas', inputs: { sigmas, step: splitStepOf(o) } }; sigmas = ['split', 0]; }
+  if (hires) { g.split = { class_type: 'SplitSigmas', inputs: { sigmas, step: splitStepOf(o, o.turbo === 'none' ? 'none' : turbo) } }; sigmas = ['split', 0]; }
   g.samp = { class_type: 'SamplerCustomAdvanced', inputs: { noise: ['noise', 0], guider: ['guider', 0], sampler: ['sel', 0], sigmas, latent_image: latent } };
   if (job.checkpoint && has('TJ_H3_SaveLatentCheckpoint')) g.chkSave = { class_type: 'TJ_H3_SaveLatentCheckpoint', inputs: { latent: hires ? ['samp', 1] : ['samp', 0], checkpoint_name: job.checkpoint } };
 

@@ -7,6 +7,8 @@ import { addVideoLoad, addVideoSave } from './post';
 
 export interface H3LatJob {
   file: string; frames: number; fps: number; srcW: number; srcH: number; finalMp: number; prompt: string; kind: 'fl' | 'ref'; hasAudio: boolean; seed: number;
+  /** the clip's Turbo step (its Turbo LoRA: 4, 6, 8 ...; default 8) and how many HIGH Sigma steps are sampled again (default 1; LOW = total − HIGH is not run again) */
+  totalSteps?: number; highSteps?: number;
   turbo: 'pdd' | 'none'; pddFile: string; pddStrength: number; lastFixed: boolean; lastModel: string;
   upscaler: 'h3' | 'tiled'; tiledUp: 'neural' | 'bicubic' | 'trilinear'; noOpt: boolean; chunkRows: number;
   models: Record<string, string>; saveSubfolder: string; stem: string;
@@ -68,8 +70,9 @@ export async function buildH3LatGraph(j: H3LatJob): Promise<H3LatGraph> {
   if (!j.noOpt) { g.hrMem = { class_type: 'H3MemoryOptimization', inputs: { model, fused_qkv: 'auto', preserve_precision: true, embedding_memory_mode: 'Auto', mlp_memory: 'auto', chunk_rows: Math.round(j.chunkRows || 2048), precision_mode: 'Preserve native', qkv_streaming_mode: 'Forced', kitchen_v_memory_mode: 'Lower VRAM (slower)' } }; model = ['hrMem', 0]; }
   const memModel = model;   // Tiled takes the memory-optimised model without Sol-Attn
   g.hrSparse = { class_type: 'BlockSparseAttention', inputs: { model, selection: 'sol-attn', 'selection.tau': 1.3, start_percent: 0.2, end_percent: 1, dense_blocks: '', min_tokens: 12288, extra_tokens: 256, sink_conditioning: 'exact_kv_and_rows', verbose: true } };
-  g.sched = { class_type: 'BasicScheduler', inputs: { model: ['hrShift', 0], scheduler: 'simple', steps: 8, denoise: 1 } };
-  g.split = { class_type: 'SplitSigmas', inputs: { sigmas: ['sched', 0], step: 7 } };
+  const total = Math.max(2, Math.round(j.totalSteps ?? 8)), high = Math.min(total - 1, Math.max(1, Math.round(j.highSteps ?? 1)));
+  g.sched = { class_type: 'BasicScheduler', inputs: { model: ['hrShift', 0], scheduler: 'simple', steps: total, denoise: 1 } };
+  g.split = { class_type: 'SplitSigmas', inputs: { sigmas: ['sched', 0], step: total - high } };
   g.noise = { class_type: 'RandomNoise', inputs: { noise_seed: j.seed } };
   g.sel = { class_type: 'KSamplerSelect', inputs: { sampler_name: 'euler' } };
   const step = (key: string, condLink: L, latent: L): L => {
