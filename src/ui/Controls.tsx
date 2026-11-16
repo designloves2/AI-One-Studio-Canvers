@@ -36,8 +36,10 @@ export const ImeTextarea = forwardRef<HTMLTextAreaElement, Omit<TextareaHTMLAttr
     const pending = useRef<ReturnType<typeof setTimeout> | null>(null);
     const latest = useRef(local); latest.current = local;
     useImperativeHandle(ref, () => inner.current!);
-    useEffect(() => { if (!pending.current) setLocal(value); }, [value]);
-    const flush = () => { if (pending.current) { clearTimeout(pending.current); pending.current = null; onChange(latest.current); } };
+    // an outside change is taken in only while the box is not being typed in: a late echo of an earlier flush must not overwrite newer typing (dropped letters, any language)
+    useEffect(() => { if (pending.current) return; if (document.activeElement === inner.current && value === sent.current) return; if (document.activeElement === inner.current && sent.current !== null && value !== latest.current) { if (recent.current.has(value)) return; } setLocal(value); }, [value]);
+    const sent = useRef<string | null>(null); const recent = useRef(new Set<string>());
+    const flush = () => { if (pending.current) { clearTimeout(pending.current); pending.current = null; sent.current = latest.current; recent.current.add(latest.current); if (recent.current.size > 20) recent.current.delete(recent.current.values().next().value as string); onChange(latest.current); } };
     useEffect(() => flush, []); // eslint-disable-line react-hooks/exhaustive-deps
     return <textarea {...rest} ref={inner} value={local}
       onChange={(e) => { const v = e.target.value; setLocal(v); latest.current = v; onLive?.(v); if (pending.current) clearTimeout(pending.current); pending.current = setTimeout(flush, 300); }}

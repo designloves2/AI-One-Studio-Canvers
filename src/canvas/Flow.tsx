@@ -32,6 +32,8 @@ export function Flow({ tool, onMenu }: { tool: 'select' | 'hand'; onMenu(at: { x
     const resizable = isGroup || n.defId === 'note';
     return {
       id: n.id, type: isGroup ? 'group' : 'card', position: { x: n.x, y: n.y }, data: {},
+      // keep the size React Flow measured: a node rebuilt without it is hidden until measured again, which drops the focus of a field being typed in
+      ...(rf.getInternalNode(n.id)?.measured?.width ? { measured: rf.getInternalNode(n.id)!.measured } : {}),
       selected: selected.includes(n.id), draggable: !n.locked, deletable: !n.locked,
       zIndex: isGroup ? -10 : 0,
       ...(resizable ? { style: { width: n.w ?? 240, height: n.h ?? 160 } } : {}),
