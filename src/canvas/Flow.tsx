@@ -27,6 +27,21 @@ export function Flow({ tool, onMenu }: { tool: 'select' | 'hand'; onMenu(at: { x
   const rf = useReactFlow();
   const wrap = useRef<HTMLDivElement>(null);
 
+  // the wheel over anything that scrolls (a text field, a result list, a menu ...) scrolls it; only the empty canvas zooms
+  useEffect(() => {
+    const el = wrap.current; if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (e.ctrlKey) return;   // pinch / Ctrl + wheel stays a zoom
+      for (let n = e.target as HTMLElement | null; n && n !== el; n = n.parentElement) {
+        if (n.scrollHeight <= n.clientHeight + 1) continue;
+        const oy = getComputedStyle(n).overflowY;
+        if (oy === 'auto' || oy === 'scroll') { e.stopPropagation(); return; }
+      }
+    };
+    el.addEventListener('wheel', onWheel, { capture: true, passive: true });
+    return () => el.removeEventListener('wheel', onWheel, { capture: true } as EventListenerOptions);
+  }, []);
+
   const rfNodes = useMemo<Node[]>(() => nodes.map((n) => {
     const isGroup = !!n.members;
     const resizable = isGroup || n.defId === 'note';
