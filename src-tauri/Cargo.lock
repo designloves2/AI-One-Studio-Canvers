@@ -403,7 +403,7 @@ dependencies = [
 
 [[package]]
 name = "canvers"
-version = "2.35.1"
+version = "2.36.0"
 dependencies = [
  "serde_json",
  "sys-locale",

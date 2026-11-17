@@ -382,7 +382,7 @@ export const REGISTRY: NodeDef[] = [
           sel('undetected', 'Frames without a face', ['fade_out', 'skip', 'composite_anyway'], 'fade_out', { advanced: true }), seed,
         ], description: 'Redraw small faces in a finished H3 clip: track → crop → H3 redraw → stitch back. Needs ComfyUI-H3-FaceRefine.' },
       { id: 'h3-image', title: 'Image Generate (H3)', category: 'Image', kind: 'generate',
-    inputs: [P.textIn(), P.imgIn('image', 'Reference images (optional)', true, true), P.loraIn(), P.seedIn()], outputs: [P.imgOut()],
+    inputs: [P.textIn(), P.imgIn('image', 'Reference images (optional)', true, true), P.loraIn(), P.seedIn()], outputs: [P.imgOut(), { id: 'preview', label: 'Live preview', type: 'pipe' }],
     params: [
       sel('aspect', 'Aspect ratio', ASPECTS, '1:1'), slider('final_mp', 'Size (MP, multiples of 32)', 0.25, 4, 0.25, 1.5), slider('steps', 'Steps', 1, 30, 1, 6), autoEnhance,
       dyn('sampler', 'Sampler', 'samplers', 'euler', { advanced: true }), dyn('scheduler', 'Scheduler', 'schedulers', 'simple', { advanced: true }), slider('cfg', 'CFG', 0, 10, 0.1, 1, { advanced: true }),

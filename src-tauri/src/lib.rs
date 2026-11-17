@@ -7,8 +7,8 @@ use std::process::{Child, Command};
 use std::sync::Mutex;
 use std::time::Duration;
 
-use tauri::menu::{MenuBuilder, SubmenuBuilder};
-use tauri::webview::NewWindowResponse;
+use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
+use tauri::webview::{NewWindowResponse, PageLoadEvent};
 use tauri::{Manager, RunEvent, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 use tauri_plugin_updater::UpdaterExt;
@@ -25,6 +25,21 @@ fn ko(app: &tauri::AppHandle) -> bool {
 fn tr(app: &tauri::AppHandle, k: &'static str, e: &'static str) -> &'static str {
     if ko(app) { k } else { e }
 }
+
+/// a small "back to the local / remote choice" button on every page (the remote page has no way back of its own); not on the setup page itself
+const SWITCH_JS: &str = r#"(function(){
+  try{
+    var h=location.hostname, p=location.pathname||'';
+    if(h==='tauri.localhost'||location.protocol==='tauri:'||p.indexOf('/canvers/connect')===0) return;
+    if(document.getElementById('canvers-switch')||!document.body) return;
+    var a=document.createElement('a');
+    a.id='canvers-switch'; a.href='http://127.0.0.1:8775/canvers/connect'; a.textContent='\u21C4';
+    a.title=/^ko/i.test(navigator.language)?'연결 바꾸기 (로컬 / 원격)':'Switch connection (local / remote)';
+    a.style.cssText='position:fixed;left:8px;bottom:8px;z-index:2147483647;width:22px;height:22px;line-height:22px;text-align:center;border-radius:11px;background:#1b1e26;color:#cfd3dc;border:1px solid #2a2e38;font:13px system-ui;text-decoration:none;opacity:.35;cursor:pointer';
+    a.onmouseenter=function(){a.style.opacity='1'}; a.onmouseleave=function(){a.style.opacity='.35'};
+    document.body.appendChild(a);
+  }catch(e){}
+})();"#;
 
 /// fixed on purpose: the page's saved settings (localStorage) belong to this address
 const PORT: u16 = 8775;
@@ -129,6 +144,11 @@ pub fn run() {
                 .inner_size(1440.0, 900.0)
                 .min_inner_size(900.0, 600.0)
                 .disable_drag_drop_handler()
+                .on_page_load(|webview, payload| {
+                    if matches!(payload.event(), PageLoadEvent::Finished) && webview.label() == "main" {
+                        let _ = webview.eval(SWITCH_JS);
+                    }
+                })
                 .on_new_window(move |url, _| {
                     if let Some(w) = again.get_webview_window("main") {
                         let target = serde_json::to_string(url.as_str()).unwrap_or_default();
@@ -140,7 +160,11 @@ pub fn run() {
             let menu = MenuBuilder::new(app)
                 .item(
                     &SubmenuBuilder::new(app, tr(app.handle(), "연결", "Connection"))
-                        .text("connect", tr(app.handle(), "연결 설정…", "Connection settings…"))
+                        .item(
+                            &MenuItemBuilder::with_id("connect", tr(app.handle(), "연결 설정… (로컬 / 원격)", "Connection settings… (local / remote)"))
+                                .accelerator("CmdOrCtrl+Shift+K")
+                                .build(app)?,
+                        )
                         .separator()
                         .quit()
                         .build()?,
@@ -150,7 +174,9 @@ pub fn run() {
             app.on_menu_event(|app, event| {
                 if event.id() == "connect" {
                     if let Some(w) = app.get_webview_window("main") {
-                        let _ = w.eval(&format!("window.location.replace('http://127.0.0.1:{PORT}/canvers/connect')"));
+                        if let Ok(url) = format!("http://127.0.0.1:{PORT}/canvers/connect").parse::<tauri::Url>() {
+                            let _ = w.navigate(url);
+                        }
                     }
                 }
             });

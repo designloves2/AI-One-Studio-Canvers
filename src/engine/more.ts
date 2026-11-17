@@ -9,6 +9,7 @@ import { DEFAULT_OPT, ONE_TAKE_OVERLAP_SEC, copyToInput, type H3Options } from '
 import { buildPostGraph, type PostStep, type RecaVsrParams, type RelayVsrParams, type RtxSize } from '../backend/post';
 import { loadOptions } from '../backend/options';
 import { buildH3ImageGraph } from '../backend/h3Image';
+import { previewFor } from '../backend/preview';
 import { runLlm } from '../backend/llm';
 import { formatFor, NO_AESTHETIC } from '../backend/promptStyle';
 import { buildLtxGraph, ltxSize } from '../backend/ltx';
@@ -216,12 +217,13 @@ export const EXTRA_RUNNERS: Record<string, Runner> = {
       const style = { ...formatFor(c.def.id, c.engineId, refs.length > 0), aesthetic: NO_AESTHETIC, extra_instructions: 'Dialogue: sentences wrapped in <d> </d> are spoken lines in their original language. Use the text inside <d> </d> exactly as it is - never translate, never rewrite, never remove the <d> </d> markers.' };
       prompt = (await runLlm({ system: '', prompt, style, where: 'bottom' })) || prompt;
     }
+    const pvCfg = await previewFor(c.node.id, 'taeh3', true);   // the Model Preview card on this card's Live preview output (one still frame)
     const g = await buildH3ImageGraph({
       refs, prompt, aspect: str(p.aspect, '1:1'), megapixels: num(p.final_mp, 1.5), refMp: num(p.ref_mp, 1), steps: num(p.steps, 6),
       sampler: str(p.sampler, 'euler'), scheduler: str(p.scheduler, 'simple'), cfg: num(p.cfg, 1), shiftOn: !!p.shift_on, shift: num(p.shift, 3), promptWeight: p.prompt_weight !== false,
-      loras: cardLoras(c), seed: withLegacySeed(c), models: s.video, saveSubfolder: s.saveSubfolder, stem: 'MMH3',
+      loras: cardLoras(c), seed: withLegacySeed(c), models: s.video, saveSubfolder: s.saveSubfolder, stem: 'MMH3', preview: pvCfg,
     });
-    const res = await runPrompt(g.graph, { onProgress: c.progress, signal: c.signal });
+    const res = await runPrompt(g.graph, { onProgress: c.progress, signal: c.signal, previewKey: pvCfg?.key, onPreview: c.preview });
     return [assetFromFile(outFile(res.raw, g.save), 'image', 'image')];
   },
 

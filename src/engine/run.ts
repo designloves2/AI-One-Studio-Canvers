@@ -10,7 +10,7 @@ import { loadOptions } from '../backend/options';
 import { getJson } from '../backend/http';
 import { buildMusicGraph } from '../backend/music';
 import { buildLtxGraph, ltxSize } from '../backend/ltx';
-import type { PreviewCfg } from '../backend/preview';
+import { previewFor, type PreviewCfg } from '../backend/preview';
 import { buildH3Graph, h3Size, h3Frames, pickChainFrame, copyToInput, clipLastFrame, stitchClips, ONE_TAKE_OVERLAP_FRAMES, ONE_TAKE_OVERLAP_SEC } from '../backend/h3';
 import { parseWorkflow, setField, VIDEO_EXT } from '../backend/workflow';
 import { useSettings } from '../store/settings';
@@ -229,21 +229,8 @@ function imageRunner(mode: (c: Ctx) => ImageMode): Runner {
   };
 }
 
-/** The Model Preview card wired into this video card (if any): the settings for ModelPreviewOverrideKJ, with a socket key made from the card's id. */
-async function previewOf(c: Ctx, tiny: 'taeh3' | 'taeltx2_3'): Promise<PreviewCfg | undefined> {
-  // the Model Preview card hangs off this card's Live preview output (it only holds the settings)
-  let j: Record<string, any> | undefined;
-  try {
-    const { useGraph } = await import('../store/graph');
-    const g = useGraph.getState();
-    const to = g.edges.find((e) => e.source === c.node.id && e.sourceHandle === 'preview' && g.nodes.find((n) => n.id === e.target)?.defId === 'video-preview')?.target;
-    j = g.nodes.find((n) => n.id === to)?.params;
-  } catch { /* headless: no preview */ }
-  // 'auto': the tiny decoder of the model family (without one the video latent has no colour preview)
-  const have = await loadOptions('tinyvaes');
-  const auto = have.find((x) => x.startsWith(tiny)) ?? 'none';
-  return j ? { key: `cvprev_${c.node.id}`, maxResolution: num(j.max_resolution, 1024), quality: num(j.jpeg_quality, 85), frames: num(j.preview_frames, 243), fps: num(j.preview_fps, 12), tinyVae: str(j.tiny_vae, 'auto') === 'auto' ? auto : str(j.tiny_vae, 'none'), audio: !!j.with_audio } : undefined;
-}
+/** The Model Preview card wired into this video card (if any): see previewFor. */
+const previewOf = (c: Ctx, tiny: 'taeh3' | 'taeltx2_3') => previewFor(c.node.id, tiny);
 
 /** Auto Prompt: the written prompt goes back into the Prompt card wired to this card (when there is one). */
 async function putIntoPromptCard(c: Ctx, text: string) {

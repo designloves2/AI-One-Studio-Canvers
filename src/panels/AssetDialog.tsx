@@ -1,7 +1,7 @@
 // Asset Library popups: register a new asset (upload or pick from the gallery, name, category, tags) and edit / delete an existing one.
 import { useEffect, useRef, useState } from 'react';
 import { deleteAsset, libPreview, registerAsset, safeAssetName, replaceAssetMedia, updateAsset, type LibAsset } from '../backend/assetlib';
-import { getGallery, type GalleryItem } from '../backend/studio';
+import { getGalleryScoped, type GalleryItem } from '../backend/studio';
 import { fetchBlob, viewUrl } from '../backend/comfy';
 import { assetKey, mediaKey, useIsBlurred, useSensitive } from '../backend/sensitive';
 import { useSettings } from '../store/settings';
@@ -19,13 +19,14 @@ function GalleryPick({ onPick, onClose }: { onPick(f: File): void; onClose(): vo
   const [total, setTotal] = useState(0);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
+  const [scope, setScope] = useState<'images' | 'frames'>('images');   // the picker also has the clips' last frames (closing the dialog resets it)
   useEffect(() => { void useSensitive.getState().load(); }, []);
   const load = async (offset = 0) => {
     setBusy(true);
-    try { const r = await getGallery('klein', sub, offset, 40); setItems((p) => (offset ? [...p, ...r.images] : r.images)); setTotal(r.total); setErr(''); }
+    try { const r = await getGalleryScoped('klein', sub, offset, 40, scope); setItems((p) => (offset ? [...p, ...r.images] : r.images)); setTotal(r.total); setErr(''); }
     catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
   };
-  useEffect(() => { void load(); }, [sub]);
+  useEffect(() => { setItems([]); void load(); }, [sub, scope]);
   const pick = async (it: GalleryItem) => {
     try { const blob = await fetchBlob(viewUrl({ filename: it.filename, subfolder: it.subfolder, type: 'output' })); onPick(new File([blob], it.filename, { type: blob.type || 'image/png' })); }
     catch (e) { setErr((e as Error).message); }
@@ -34,6 +35,7 @@ function GalleryPick({ onPick, onClose }: { onPick(f: File): void; onClose(): vo
     <div className="dlg-back" onMouseDown={onClose}>
       <div className="dlg gallery-pick" role="dialog" onMouseDown={(e) => e.stopPropagation()}>
         <h3>{T('Pick from gallery')} <small className="muted">{sub}</small></h3>
+        <div className="gal-tabs"><button className={scope === 'images' ? 'on' : ''} onClick={() => setScope('images')}>{T('Images')}</button><button className={scope === 'frames' ? 'on' : ''} onClick={() => setScope('frames')}>{T('Video frames')}</button></div>
         {err && <div className="error">{err}</div>}
         <div className="gp-grid">{items.map((it) => <GpTile key={it.key ?? it.filename} it={it} onPick={() => void pick(it)} />)}</div>
         {!items.length && !err && !busy && <p className="muted">{T('Nothing here yet.')}</p>}

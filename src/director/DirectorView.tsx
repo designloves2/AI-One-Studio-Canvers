@@ -4,7 +4,7 @@ import { useDirector } from '../store/director';
 import { useT } from '../i18n';
 import { askConfirm, askText, notify } from '../ui/dialog';
 import { viewUrl } from '../backend/comfy';
-import { getGallery, type GalleryItem } from '../backend/studio';
+import { getGalleryScoped, type GalleryItem } from '../backend/studio';
 import { listAssets, libThumb, type LibAsset } from '../backend/assetlib';
 import { llmOfKind, resolveLlmKind, useSettings, type LlmSettings } from '../store/settings';
 import { useGraph } from '../store/graph';
@@ -378,10 +378,11 @@ function CastPicker({ refId, onClose }: { refId: string; onClose: () => void }) 
   const [tab, setTab] = useState<'library' | 'gallery'>('library');
   useEffect(() => { void useSensitive.getState().load(); }, []);
   const [lib, setLib] = useState<LibAsset[] | null>(null); const [gal, setGal] = useState<GalleryItem[] | null>(null); const [err, setErr] = useState('');
+  const [gscope, setGscope] = useState<'images' | 'frames'>('images');   // the gallery tab also has the clips' last frames
   useEffect(() => {
     listAssets({ kind: 'image' }).then(setLib, (e) => { setLib([]); setErr(`${T('The Asset Library is not available')}: ${(e as Error).message}`); });
-    getGallery('klein', sub, 0, 100).then((r) => setGal(r.images), () => setGal([]));
   }, []);   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setGal(null); getGalleryScoped('klein', sub, 0, 100, gscope).then((r) => setGal(r.images), () => setGal([])); }, [gscope, sub]);
   const setPick = (x: DirectorProject, make: (r: DirectorReference) => ResultRef) => {
     const r = x.references.find((q) => q.ref_id === refId)!;
     r.results.forEach((z) => { z.picked = false; });
@@ -402,6 +403,7 @@ function CastPicker({ refId, onClose }: { refId: string; onClose: () => void }) 
           <div className="dx-seg"><button className={tab === 'library' ? 'on' : ''} onClick={() => setTab('library')}>{T('Asset Library')}</button><button className={tab === 'gallery' ? 'on' : ''} onClick={() => setTab('gallery')}>{T('Gallery')}</button></div>
           <button className="dir-x" onClick={onClose}>✕</button></header>
         {err && tab === 'library' && <p className="dirx-muted">{err}</p>}
+        {tab === 'gallery' && <div className="dx-seg"><button className={gscope === 'images' ? 'on' : ''} onClick={() => setGscope('images')}>{T('Images')}</button><button className={gscope === 'frames' ? 'on' : ''} onClick={() => setGscope('frames')}>{T('Video frames')}</button></div>}
         <div className="dx-picker">
           {tab === 'library' && (lib ?? []).map((a) => <button key={a.id} onClick={() => chooseLib(a)} title={a.name}><Hideable k={assetKey(a.id)}><img src={libThumb(a.id)} alt="" loading="lazy" /></Hideable><small>{a.name}</small></button>)}
           {tab === 'gallery' && (gal ?? []).map((g) => <button key={`${g.subfolder}/${g.filename}`} onClick={() => chooseGal(g)} title={g.filename}><Hideable k={mediaKey(g.filename, g.subfolder)}><img src={viewUrl({ filename: g.filename, subfolder: g.subfolder, type: 'output' })} alt="" loading="lazy" /></Hideable></button>)}

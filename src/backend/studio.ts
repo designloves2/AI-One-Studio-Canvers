@@ -43,6 +43,22 @@ export interface GalleryItem { filename: string; subfolder: string; mtime: numbe
 export const getGallery = (f: Family, subfolder: string, offset = 0, limit = 40): Promise<{ images: GalleryItem[]; total: number }> =>
   getJson(`${FAMILIES[f].prefix}/gallery?subfolder=${encodeURIComponent(subfolder)}&offset=${offset}&limit=${limit}`);
 
+/**
+ * The image gallery without / with only the clips' extracted last frames (`frames/` folders: continuation seeds, not generated images).
+ * The server's gallery route lists every PNG below the folder, so the split is made here (node v1.54: the H3 image gallery hides them, a picker has a "Video frames" tab).
+ */
+const inFrames = (it: GalleryItem) => `${it.subfolder}/`.split('/').includes('frames');
+export async function getGalleryScoped(f: Family, subfolder: string, offset = 0, limit = 40, scope: 'images' | 'frames' = 'images'): Promise<{ images: GalleryItem[]; total: number }> {
+  const want = scope === 'frames'; const out: GalleryItem[] = [];
+  let raw = 0, total = Infinity;
+  while (out.length < offset + limit + 1 && raw < total) {
+    const r = await getGallery(f, subfolder, raw, 200);
+    total = r.total; if (!r.images.length) break;
+    raw += r.images.length; out.push(...r.images.filter((i) => inFrames(i) === want));
+  }
+  return { images: out.slice(offset, offset + limit), total: raw >= total ? out.length : Math.max(out.length, offset + limit + 1) };
+}
+
 /** Videos of an output folder (newest first). VHS writes `x.mp4` next to `x-audio.mp4`; only the one with sound is kept. */
 export async function getVideoGallery(subfolder: string, offset = 0, limit = 40): Promise<{ images: GalleryItem[]; total: number }> {
   const r = await getJson<{ images: GalleryItem[]; total: number }>(`/tj_shared/output_gallery_video?subfolder=${encodeURIComponent(subfolder)}&offset=${offset}&limit=${limit}`);

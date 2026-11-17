@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { askConfirm } from '../ui/dialog';
-import { getGallery, getVideoGallery, deleteOutput, type GalleryItem } from '../backend/studio';
+import { getGalleryScoped, getVideoGallery, deleteOutput, type GalleryItem } from '../backend/studio';
 import { viewUrl, uid } from '../backend/comfy';
 import { useSettings } from '../store/settings';
 import { useGraph } from '../store/graph';
@@ -26,7 +26,7 @@ export function AssetsPanel() {
   const load = async (offset = 0) => {
     setBusy(true); setErr('');
     try {
-      const r = kind === 'video' ? await getVideoGallery(sub, offset, 40) : await getGallery('klein', sub, offset, 40);
+      const r = kind === 'video' ? await getVideoGallery(sub, offset, 40) : await getGalleryScoped('klein', sub, offset, 40);
       setItems((p) => (offset ? [...p, ...r.images] : r.images)); setTotal(r.total);
     } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
   };
@@ -106,7 +106,7 @@ function Thumb({ it, url, video, selectMode, picked, onPick, onClick, onDouble, 
   const tip = `${it.filename}${info ? ` — ${info}` : ''} — ${T('Click: enlarge · Double-click: add to canvas')}`;
   // drag a card out of the gallery onto the canvas: it becomes a Load Image / Load Video card where it is dropped
   const dragOut = (e: React.DragEvent) => { e.dataTransfer.setData('application/x-canvers-asset', JSON.stringify({ filename: it.filename, subfolder: it.subfolder, type: 'output' })); e.dataTransfer.setData('text/uri-list', url); e.dataTransfer.effectAllowed = 'copy'; };
-  const vidThumb = `/ltx25_one/thumb?filename=${encodeURIComponent(it.filename)}&subfolder=${encodeURIComponent(it.subfolder)}`;
+  const vidThumb = `/ltx25_one/thumb?filename=${encodeURIComponent(it.filename)}&subfolder=${encodeURIComponent(it.subfolder)}&t=${Math.round(it.mtime || 0)}`;
   const thumbUrl = `/tj_shared/thumb?filename=${encodeURIComponent(it.filename)}&subfolder=${encodeURIComponent(it.subfolder)}&root=output&t=${Math.round(it.mtime || 0)}`;
   return (
     <figure className={`thumb${blurred ? ' blurred' : ''}${selectMode && picked ? ' picked' : ''}`}>

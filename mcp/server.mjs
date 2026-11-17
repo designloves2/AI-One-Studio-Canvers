@@ -3123,7 +3123,7 @@ var init_registry = __esm({
             category: "Image",
             kind: "generate",
             inputs: [P.textIn(), P.imgIn("image", "Reference images (optional)", true, true), P.loraIn(), P.seedIn()],
-            outputs: [P.imgOut()],
+            outputs: [P.imgOut(), { id: "preview", label: "Live preview", type: "pipe" }],
             params: [
               sel("aspect", "Aspect ratio", ASPECTS, "1:1"),
               slider("final_mp", "Size (MP, multiples of 32)", 0.25, 4, 0.25, 1.5),
@@ -3834,7 +3834,8 @@ var init_i18n_cards = __esm({
       "The whole schedule is the Turbo step (Turbo LoRA 4, 6, 8 \u2026 steps; Turbo None = an 8-step checkpoint): LOW + HIGH = Turbo step. LOW Sigma steps run small, the HIGH Sigma steps run after the latent upscale at Final MP (HIGH 1 is recommended).": "\uC804\uCCB4 \uC2A4\uCF00\uC904\uC774 \uD130\uBCF4 \uC2A4\uD15D\uC785\uB2C8\uB2E4(\uD130\uBCF4 LoRA 4\xB76\xB78 \u2026 \uC2A4\uD15D, \uD130\uBCF4 \uC5C6\uC74C = 8\uC2A4\uD15D \uCCB4\uD06C\uD3EC\uC778\uD2B8): LOW + HIGH = \uD130\uBCF4 \uC2A4\uD15D. LOW \uC2A4\uD15D\uC740 \uC791\uAC8C, HIGH \uC2A4\uD15D\uC740 \uB798\uD134\uD2B8 \uC5C5\uC2A4\uCF00\uC77C \uB4A4 \uCD5C\uC885 MP\uC5D0\uC11C \uC2E4\uD589\uD569\uB2C8\uB2E4(HIGH 1 \uAD8C\uC7A5).",
       "Turbo step (the step count this clip was made with: 4, 6, 8 ...)": "\uD130\uBCF4 \uC2A4\uD15D (\uC774 \uD074\uB9BD\uC744 \uB9CC\uB4E4 \uB54C\uC758 \uC2A4\uD15D \uC218: 4, 6, 8 \u2026)",
       "HIGH Sigma step (1 recommended)": "HIGH \uC2DC\uADF8\uB9C8 \uC2A4\uD15D (1 \uAD8C\uC7A5)",
-      "Schedule: LOW {n} + HIGH. The clip is upscaled, then only the HIGH steps are sampled (refine). Tiled is slow, so HIGH 1 is recommended.": "\uC2A4\uCF00\uC904: LOW {n} + HIGH. \uD074\uB9BD\uC744 \uC5C5\uC2A4\uCF00\uC77C\uD55C \uB4A4 HIGH \uC2A4\uD15D\uB9CC \uC0D8\uD50C\uB9C1\uD569\uB2C8\uB2E4(\uB9AC\uD30C\uC778). Tiled\uB294 \uB290\uB824\uC11C HIGH 1\uC744 \uAD8C\uC7A5\uD569\uB2C8\uB2E4."
+      "Schedule: LOW {n} + HIGH. The clip is upscaled, then only the HIGH steps are sampled (refine). Tiled is slow, so HIGH 1 is recommended.": "\uC2A4\uCF00\uC904: LOW {n} + HIGH. \uD074\uB9BD\uC744 \uC5C5\uC2A4\uCF00\uC77C\uD55C \uB4A4 HIGH \uC2A4\uD15D\uB9CC \uC0D8\uD50C\uB9C1\uD569\uB2C8\uB2E4(\uB9AC\uD30C\uC778). Tiled\uB294 \uB290\uB824\uC11C HIGH 1\uC744 \uAD8C\uC7A5\uD569\uB2C8\uB2E4.",
+      "Video frames": "\uC601\uC0C1 \uD504\uB808\uC784"
     };
   }
 });
@@ -7898,6 +7899,22 @@ function addPreview(g, model, pv, has, audioVae) {
   g[pv.key] = { class_type: "ModelPreviewOverrideKJ", inputs };
   return [pv.key, 0];
 }
+async function previewFor(nodeId, tiny, stillOnly = false) {
+  let j;
+  try {
+    const { useGraph: useGraph2 } = await Promise.resolve().then(() => (init_graph(), graph_exports));
+    const g = useGraph2.getState();
+    const to = g.edges.find((e) => e.source === nodeId && e.sourceHandle === "preview" && g.nodes.find((n3) => n3.id === e.target)?.defId === "video-preview")?.target;
+    j = g.nodes.find((n3) => n3.id === to)?.params;
+  } catch {
+  }
+  if (!j) return void 0;
+  const have = await loadOptions("tinyvaes");
+  const auto = have.find((x) => x.startsWith(tiny)) ?? "none";
+  const n2 = (v, d) => Number.isFinite(Number(v)) && v !== "" && v != null ? Number(v) : d;
+  const tv = String(j.tiny_vae ?? "auto");
+  return { key: `cvprev_${nodeId}`, maxResolution: n2(j.max_resolution, 1024), quality: n2(j.jpeg_quality, 85), frames: stillOnly ? 1 : n2(j.preview_frames, 243), fps: n2(j.preview_fps, 12), tinyVae: tv === "auto" ? auto : tv, audio: !stillOnly && !!j.with_audio };
+}
 
 // src/backend/ltx.ts
 var FPS = 24;
@@ -8731,6 +8748,7 @@ async function buildH3ImageGraph(j) {
   for (const n2 of ["MiniMaxH3ImageConditioning", "ConditioningZeroOut"]) if (!await hasNode(n2)) throw new Error(`${n2} is not available \u2014 update ComfyUI to a version with the official MiniMax H3 Image nodes, then restart.`);
   if (ref && !await hasNode("ResizeImageMaskNode")) throw new Error("ResizeImageMaskNode is not available \u2014 update ComfyUI.");
   const size = h3Size(j.aspect, j.megapixels);
+  const previewNodeKnown = j.preview ? await hasNode("ModelPreviewOverrideKJ") : false;
   const g = {};
   g.unet = { class_type: "UNETLoader", inputs: { unet_name: m.unet, weight_dtype: "default" } };
   let model = ["unet", 0];
@@ -8745,6 +8763,7 @@ async function buildH3ImageGraph(j) {
     else g.shift = { class_type: "ModelSamplingAuraFlow", inputs: { model, shift } };
     model = ["shift", 0];
   }
+  if (j.preview) model = addPreview(g, model, j.preview, (n2) => previewNodeKnown, void 0);
   g.clip = { class_type: "CLIPLoader", inputs: { clip_name: m.clip, type: "minimax", device: "default" } };
   g.vae = { class_type: "VAELoader", inputs: { vae_name: m.vae } };
   const cond = { clip: ["clip", 0], vae: ["vae", 0], prompt: j.prompt, width: size.width, height: size.height };
@@ -9965,6 +9984,7 @@ var EXTRA_RUNNERS = {
       const style = { ...formatFor(c.def.id, c.engineId, refs.length > 0), aesthetic: NO_AESTHETIC, extra_instructions: "Dialogue: sentences wrapped in <d> </d> are spoken lines in their original language. Use the text inside <d> </d> exactly as it is - never translate, never rewrite, never remove the <d> </d> markers." };
       prompt = await runLlm({ system: "", prompt, style, where: "bottom" }) || prompt;
     }
+    const pvCfg = await previewFor(c.node.id, "taeh3", true);
     const g = await buildH3ImageGraph({
       refs,
       prompt,
@@ -9982,9 +10002,10 @@ var EXTRA_RUNNERS = {
       seed: withLegacySeed(c),
       models: s.video,
       saveSubfolder: s.saveSubfolder,
-      stem: "MMH3"
+      stem: "MMH3",
+      preview: pvCfg
     });
-    const res = await runPrompt(g.graph, { onProgress: c.progress, signal: c.signal });
+    const res = await runPrompt(g.graph, { onProgress: c.progress, signal: c.signal, previewKey: pvCfg?.key, onPreview: c.preview });
     return [assetFromFile(outFile(res.raw, g.save), "image", "image")];
   },
   // ---------------- LTX Director (timeline)
@@ -10602,19 +10623,7 @@ function imageRunner(mode) {
     return runGraph(c, built.graph);
   };
 }
-async function previewOf(c, tiny) {
-  let j;
-  try {
-    const { useGraph: useGraph2 } = await Promise.resolve().then(() => (init_graph(), graph_exports));
-    const g = useGraph2.getState();
-    const to = g.edges.find((e) => e.source === c.node.id && e.sourceHandle === "preview" && g.nodes.find((n2) => n2.id === e.target)?.defId === "video-preview")?.target;
-    j = g.nodes.find((n2) => n2.id === to)?.params;
-  } catch {
-  }
-  const have = await loadOptions("tinyvaes");
-  const auto = have.find((x) => x.startsWith(tiny)) ?? "none";
-  return j ? { key: `cvprev_${c.node.id}`, maxResolution: num2(j.max_resolution, 1024), quality: num2(j.jpeg_quality, 85), frames: num2(j.preview_frames, 243), fps: num2(j.preview_fps, 12), tinyVae: str(j.tiny_vae, "auto") === "auto" ? auto : str(j.tiny_vae, "none"), audio: !!j.with_audio } : void 0;
-}
+var previewOf = (c, tiny) => previewFor(c.node.id, tiny);
 async function putIntoPromptCard(c, text3) {
   try {
     const { useGraph: useGraph2 } = await Promise.resolve().then(() => (init_graph(), graph_exports));
@@ -11292,7 +11301,7 @@ var send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 async function handle(msg) {
   const { id, method, params } = msg;
   try {
-    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.35.1" } } });
+    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.36.0" } } });
     if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS.map(({ run: _r, ...t2 }) => t2) } });
     if (method === "tools/call") {
       const tool = TOOLS.find((t2) => t2.name === params?.name);

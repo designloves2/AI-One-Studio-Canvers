@@ -3,6 +3,7 @@
 // Text to image, or Reference to image (up to 9 references). Character Sheet does NOT use this: it keeps its own video-pipeline route (charSheet.ts).
 import { hasNode } from './post';
 import { h3ModelLists, h3Size, real, resolveH3Models, type L } from './h3';
+import { addPreview, type PreviewCfg } from './preview';
 
 export interface H3ImageJob {
   refs: string[]; prompt: string; aspect: string; megapixels: number;
@@ -14,6 +15,8 @@ export interface H3ImageJob {
   promptWeight: boolean;
   loras: { name: string; strength: number }[];
   seed: number; models: Record<string, string>; saveSubfolder: string; stem: string;
+  /** live sampling preview (node v1.54+): the Model Preview card wired to this card; one still frame */
+  preview?: PreviewCfg;
 }
 
 /** The image-only MODEL / CLIP / VAE (Settings → Video models → H3). A blank slot uses the matching file found by name, else the video model. */
@@ -39,6 +42,7 @@ export async function buildH3ImageGraph(j: H3ImageJob): Promise<{ graph: Record<
   for (const n of ['MiniMaxH3ImageConditioning', 'ConditioningZeroOut']) if (!(await hasNode(n))) throw new Error(`${n} is not available — update ComfyUI to a version with the official MiniMax H3 Image nodes, then restart.`);
   if (ref && !(await hasNode('ResizeImageMaskNode'))) throw new Error('ResizeImageMaskNode is not available — update ComfyUI.');
   const size = h3Size(j.aspect, j.megapixels);   // multiples of 32
+  const previewNodeKnown = j.preview ? await hasNode('ModelPreviewOverrideKJ') : false;
   const g: Record<string, any> = {};
   g.unet = { class_type: 'UNETLoader', inputs: { unet_name: m.unet, weight_dtype: 'default' } };
   let model: L = ['unet', 0];
@@ -52,6 +56,7 @@ export async function buildH3ImageGraph(j: H3ImageJob): Promise<{ graph: Record<
     else g.shift = { class_type: 'ModelSamplingAuraFlow', inputs: { model, shift } };   // a ComfyUI core node: no availability check
     model = ['shift', 0];
   }
+  if (j.preview) model = addPreview(g, model, j.preview, (n) => previewNodeKnown, undefined);   // ModelPreviewOverrideKJ right before the KSampler
   g.clip = { class_type: 'CLIPLoader', inputs: { clip_name: m.clip, type: 'minimax', device: 'default' } };
   g.vae = { class_type: 'VAELoader', inputs: { vae_name: m.vae } };
   const cond: Record<string, any> = { clip: ['clip', 0], vae: ['vae', 0], prompt: j.prompt, width: size.width, height: size.height };
