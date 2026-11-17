@@ -1,0 +1,29 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "AI ONE Studio Canvers",
+  "version": "2.35.0",
+  "identifier": "cloud.tjtj.canvers",
+  "build": { "frontendDist": "./shell" },
+  "app": {
+    "windows": [
+      { "label": "main", "title": "AI ONE Studio Canvers", "width": 1440, "height": 900, "minWidth": 900, "minHeight": 600, "url": "index.html", "dragDropEnabled": false }
+    ],
+    "security": { "csp": null }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
+    "resources": { "bundle/": "./" },
+    "createUpdaterArtifacts": true,
+    "windows": { "nsis": { "installMode": "currentUser", "languages": ["English", "Korean"] } }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDFCMDM0QjNDRkM2MEE5OTIKUldTU3FXRDhQRXNER3dMeVVMVG5wK2lZcU9XL256ZzRtSU92RGMxMk9LTW5GNnZEdnBsc29oSHoK",
+      "endpoints": ["https://github.com/designloves2/AI-One-Studio-Canvers/releases/latest/download/latest.json"],
+      "windows": { "installMode": "passive" }
+    }
+  }
+}
+

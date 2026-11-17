@@ -1,7 +1,9 @@
 // Production server: serves the built canvas (dist/) and forwards ComfyUI + STUDIO_ONE traffic.
 //   COMFY_URL=http://127.0.0.1:8188 PORT=8765 node serve.mjs
 import http from 'node:http';
+import https from 'node:https';
 import net from 'node:net';
+import tls from 'node:tls';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,10 +11,17 @@ import { handleDownloads } from './server-lib/downloads.mjs';
 import { handleCanvases } from './server-lib/canvases.mjs';
 import { handleDirector } from './server-lib/director.mjs';
 import { handleProjects } from './server-lib/projects.mjs';
+import { handleConnection, applySaved, saveTarget } from './server-lib/connection.mjs';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), 'dist');
 const defaultTarget = new URL(process.env.COMFY_URL ?? 'http://127.0.0.1:8188');
 let target = defaultTarget;   // changed from the Settings panel (POST /canvers/target), empty = back to COMFY_URL
+let targetHeaders = {};        // extra headers for that address (a Cloudflare Access service token)
+const secure = () => target.protocol === 'https:';
+const targetPort = () => Number(target.port || (secure() ? 443 : 80));
+const upstream = (req) => ({ ...req.headers, ...targetHeaders, host: target.host, ...(req.headers.origin ? { origin: target.origin } : {}), ...(req.headers.referer ? { referer: target.origin + '/' } : {}) });
+const connApi = { getTarget: () => target, setTarget(url, headers) { target = url ? new URL(/^https?:\/\//.test(url) ? url : `http://${url}`) : defaultTarget; targetHeaders = headers ?? {}; } };
+applySaved(connApi);
 const port = Number(process.env.PORT ?? 8765);
 
 const PROXIED = ['/prompt', '/history', '/queue', '/upload', '/view', '/object_info', '/system_stats', '/interrupt', '/free', '/ws',
@@ -28,20 +37,25 @@ const server = http.createServer(async (req, res) => {
   if (await handleCanvases(req, res)) return;
   if (await handleDirector(req, res)) return;
   if (await handleProjects(req, res)) return;
+  if (await handleConnection(req, res, connApi)) return;
   if (p === '/canvers/target') {
     const json = (code, o) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(o)); };
-    if (req.method === 'GET') return json(200, { url: target.origin });
+    if (req.method === 'GET') return json(200, { url: target.origin, token: Object.keys(targetHeaders).length > 0 });
     // only from the machine running the server: a tunnelled visitor must not be able to redirect the proxy
     if (!/^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(req.headers.host ?? '')) return json(403, { error: 'only from localhost' });
     let body = ''; for await (const c of req) body += c;
     try {
-      const u = JSON.parse(body || '{}').url?.trim();
-      target = u ? new URL(/^https?:\/\//.test(u) ? u : `http://${u}`) : defaultTarget;
+      const b = JSON.parse(body || '{}'); const u = b.url?.trim();
+      const next = u ? new URL(/^https?:\/\//.test(u) ? u : `http://${u}`) : defaultTarget;
+      // a service token stays only for the same address unless new headers come along
+      targetHeaders = b.headers && typeof b.headers === 'object' ? b.headers : next.origin === target.origin ? targetHeaders : {};
+      target = next;
+      saveTarget(u ? target.origin : '', targetHeaders, !u || target.origin === defaultTarget.origin);
       return json(200, { url: target.origin });
     } catch { return json(400, { error: 'invalid address' }); }
   }
   if (isProxied(p)) {
-    const up = http.request({ host: target.hostname, port: target.port || 80, path: req.url, method: req.method, headers: { ...req.headers, host: target.host, ...(req.headers.origin ? { origin: target.origin } : {}), ...(req.headers.referer ? { referer: target.origin + '/' } : {}) } }, (r) => {
+    const up = (secure() ? https : http).request({ host: target.hostname, port: targetPort(), path: req.url, method: req.method, headers: upstream(req) }, (r) => {
       res.writeHead(r.statusCode ?? 502, r.headers); r.pipe(res);
       r.on('error', () => res.destroy());
     });
@@ -58,11 +72,12 @@ const server = http.createServer(async (req, res) => {
 
 // WebSocket: tunnel the raw upgrade to ComfyUI
 server.on('upgrade', (req, socket, head) => {
-  const up = net.connect(Number(target.port || 80), target.hostname, () => {
-    up.write(`${req.method} ${req.url} HTTP/1.1\r\n` + Object.entries({ ...req.headers, host: target.host, ...(req.headers.origin ? { origin: target.origin } : {}), ...(req.headers.referer ? { referer: target.origin + '/' } : {}) }).map(([k, v]) => `${k}: ${v}`).join('\r\n') + '\r\n\r\n');
+  const onOpen = () => {
+    up.write(`${req.method} ${req.url} HTTP/1.1\r\n` + Object.entries(upstream(req)).map(([k, v]) => `${k}: ${v}`).join('\r\n') + '\r\n\r\n');
     if (head?.length) up.write(head);
     socket.pipe(up).pipe(socket);
-  });
+  };
+  const up = secure() ? tls.connect({ host: target.hostname, port: targetPort(), servername: target.hostname }, onOpen) : net.connect(targetPort(), target.hostname, onOpen);
   up.on('error', () => socket.destroy()); socket.on('error', () => up.destroy());
 });
 

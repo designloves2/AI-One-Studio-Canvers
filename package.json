@@ -1,6 +1,6 @@
 {
   "name": "ai-one-studio-canvers",
-  "version": "2.34.0",
+  "version": "2.35.0",
   "private": true,
   "type": "module",
   "description": "Node-canvas frontend for ComfyUI-TJ_NODE_STUDIO_ONE (backend API)",
@@ -11,6 +11,8 @@
     "start": "node serve.mjs",
     "mock": "node mock/mock-comfy.mjs",
     "build:mcp": "node mcp/build.mjs",
+    "app:dev": "npm run build && node scripts/prepare-app.mjs && tauri build --debug --no-bundle",
+    "app:build": "npm run build && node scripts/prepare-app.mjs && tauri build",
     "test:director": "node scripts/test-director.mjs && node scripts/test-director-adapter.mjs && node scripts/test-director-execution.mjs && node scripts/test-director-flow.mjs && node scripts/test-director-continuity.mjs && node scripts/test-director-assets.mjs && node scripts/test-director-music.mjs"
   },
   "dependencies": {
@@ -20,6 +22,7 @@
     "zustand": "5.0.8"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.12.5",
     "@types/react": "18.3.23",
     "@types/react-dom": "18.3.7",
     "@types/ws": "^8.18.1",
@@ -31,3 +34,4 @@
   },
   "license": "GPL-3.0-only"
 }
+

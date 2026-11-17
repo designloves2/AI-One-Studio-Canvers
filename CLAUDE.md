@@ -74,7 +74,7 @@
 - 웹 쌍둥이 `AI-ONE-STUDIO` 와 기능이 같아야 하는 것(번역 KO/EN, H3 업스케일 분할, 연속성)은 같은 명세를 받아 각자 이식한다. 한쪽을 고치면 다른 쪽도 확인 필요.
 - 터널: `canvers.tjtj.cloud` → 8765. 허용 호스트는 `vite.config.ts` / `CANVERS_ALLOWED_HOSTS`. ComfyUI 는 `--enable-cors-header` 로 켜져 있음(주소를 바꾸면 `COMFY_URL` 또는 설정에서 입력 → `/canvers/target`).
 
-## 8. 현재 진행 상황 (2026-11-13 기준, v2.34.0 — Director Mode, Split Sigma, Tiled 업스케일러, LLM 실시간 로그 포함)
+## 8. 현재 진행 상황 (2026-11-18 기준, v2.35.0 — Director Mode, Split Sigma, Tiled 업스케일러, LLM 실시간 로그 포함)
 - 최근 릴리즈: 2.23.x 프록시·갤러리·라이트박스 → 2.24 클립 이어서 생성 카드 → 2.25 노드 v1.47.0(Kimchy 업스케일, LTX 업스케일 분할)·새로고침 뒤 여러 클립 복구 → 2.26.0 H3 업스케일 분할 모드(노드 v1.48.0) → 2.27.x 번역(KO/EN, 번역 LLM, 노드 v1.49.0~1.49.2), OpenRouter 기본 모델 제거.
 - 실기 미검증으로 남은 것: 새 Latent Upscale 그래프(H3/Kimchy/LTX) 전체, 분할 모드 실렌더·복구, H3 여러 클립 복구, 번역 켠 상태의 OpenRouter/GGUF/Custom 백엔드, 설정 "번역 LLM" 화면, Face Refine 다인 체인, Anima inpaint.
 - 이식하지 않기로 한 것(관제 합의): frames→vision 프롬프트 대체, H3→LTX 프롬프트 재작성, Merge clips/Write 메뉴/Long Shot(대응 카드 없음), hires 테두리, 툴팁 텍스트 필드.
@@ -231,6 +231,11 @@
 - 데모 브라우저로 확인: `0 / 3` 에서 전체 생성 잠김 → 프롬프트 만들기·확인 → `3 / 3` → 3장 생성 → 설명을 고치면 그 카드가 다시 "이 프롬프트 확인"으로 돌아가고 생성 잠김. 캐스팅 캔버스: 데모를 잠시 끄고 열기 → 파일 생성(프롬프트 3 + 이미지 3 카드, 확인한 글) → 캐스팅 승인 → 파일 삭제·`canvas_links` 비움·열려 있던 캔버스 그래프 초기화 확인. 좁은 창(320px)에서 프롬프트 칸이 한 줄로 접히지 않게 CSS 조정.
 - **확인 못 한 것**: 실제 LLM 이 `CAST_PROMPT_RULE` 을 지켜 국적을 유지하는지(모델 품질 문제), 실제 모델로 확인한 프롬프트를 `auto_enhance:false` 로 보내는 생성, 캔버스에서 카드별 모델을 바꿔 실행 → 결과 가져오기.
 - **기존 프로젝트**: 예전 캐스팅에는 확인된 프롬프트가 없어 "프롬프트 없음"으로 보인다. 프롬프트를 만들고 확인해야 이미지를 만들 수 있다(예전 자동 강화 결과를 검토 없이 쓰지 않게 일부러 막음).
+
+### 설치형 데스크톱 앱 (Tauri, 2026-11-18, 릴리즈 2.35.0 — 릴리즈 파일은 실행용 zip + 자동 업데이트용 설치 파일)
+- `src-tauri/`(Rust 껍데기) + `scripts/prepare-app.mjs`(node.exe·serve.mjs·server-lib·dist 를 `src-tauri/bundle/` 에 모음) + `scripts/release-app.mjs`(설치 파일·`latest.json` 을 GitHub 릴리즈에 올림). 빌드 `npm run app:build`(서명 키 환경변수 필요, Windows SDK 의 `rc.exe` 가 PATH 에 있어야 함). 앱은 기존 서버를 포트 8775 로 띄워 창에 연다. 데이터는 `%APPDATA%\cloud.tjtj.canvers\`. 자동 업데이트(`tauri-plugin-updater`): 서명 키는 저장소 밖(`C:\Users\desig\.tauri\canvers.key`, `.pass`) — 잃어버리면 업데이트 불가. 릴리즈마다 `release-app.mjs` 로 `latest.json` 을 올려야 업데이트가 동작.
+- 연결 설정: `server-lib/connection.mjs`(주소 자동 인식 = ① Canvers 서버 ② ComfyUI, 로그인 벽이면 창에서 로그인/서비스 토큰), `serve.mjs` 가 이제 https/wss 중계와 추가 헤더 지원. 상세·웹 세션 전달용은 `docs/DESKTOP_APP.md`.
+- 시험됨: 서버 쪽(주소 인식, https 중계, 저장) + 창에 연결 화면 표시. 못 함: 실제 Cloudflare 로그인/토큰, 설치 파일로 설치·자동 업데이트 실동작.
 
 ## 9. 작업을 끝낼 때
 1. `npm run typecheck`(필요하면 `npm run build`) 통과 확인, 시험용 서버(8766)·임시 파일 정리.

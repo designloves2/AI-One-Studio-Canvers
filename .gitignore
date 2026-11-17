@@ -7,3 +7,7 @@ canvases
 /director/
 graphify-out
 /projects/
+
+/src-tauri/target/
+/src-tauri/bundle/
+/src-tauri/gen/

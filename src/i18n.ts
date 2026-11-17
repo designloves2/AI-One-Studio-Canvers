@@ -94,16 +94,23 @@ for (const [k, v] of Object.entries(KO_DIRECTOR)) if (!(k in KO)) KO[k] = v;
 interface LangState { lang: Lang; setLang: (l: Lang) => void }
 
 const read = (): Lang => {
-  try { return localStorage.getItem('canvers.lang') === 'en' ? 'en' : 'ko'; } catch { return 'ko'; }
+  // a language picked in Settings wins; otherwise the system language (Korean -> Korean, anything else -> English)
+  try { const v = localStorage.getItem('canvers.lang'); if (v === 'en' || v === 'ko') return v; } catch { /* ignore */ }
+  return /^ko/i.test(typeof navigator === 'undefined' ? '' : navigator.language) ? 'ko' : 'en';
 };
+
+/** the desktop app's shell (menu, update dialog) follows the language too: tell the local server (ignored where there is none) */
+const report = (lang: Lang) => { try { void fetch('/canvers/applang', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ lang }) }).catch(() => undefined); } catch { /* ignore */ } };
 
 export const useLang = create<LangState>((set) => ({
   lang: read(),
   setLang: (lang) => {
     try { localStorage.setItem('canvers.lang', lang); } catch { /* ignore */ }
+    report(lang);
     set({ lang });
   },
 }));
+report(useLang.getState().lang);
 
 /** Translate a UI string. English text is the key; unknown strings fall through unchanged. */
 export function t(key: string): string {

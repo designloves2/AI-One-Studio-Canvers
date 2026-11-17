@@ -4332,7 +4332,7 @@ var init_i18n_director = __esm({
 function t(key) {
   return useLang.getState().lang === "ko" ? KO[key] ?? key : key;
 }
-var KO, read, useLang;
+var KO, read, report, useLang;
 var init_i18n = __esm({
   "src/i18n.ts"() {
     "use strict";
@@ -4666,9 +4666,16 @@ var init_i18n = __esm({
     for (const [k, v] of Object.entries(KO_DIRECTOR)) if (!(k in KO)) KO[k] = v;
     read = () => {
       try {
-        return localStorage.getItem("canvers.lang") === "en" ? "en" : "ko";
+        const v = localStorage.getItem("canvers.lang");
+        if (v === "en" || v === "ko") return v;
       } catch {
-        return "ko";
+      }
+      return /^ko/i.test(typeof navigator === "undefined" ? "" : navigator.language) ? "ko" : "en";
+    };
+    report = (lang) => {
+      try {
+        void fetch("/canvers/applang", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ lang }) }).catch(() => void 0);
+      } catch {
       }
     };
     useLang = create((set2) => ({
@@ -4678,9 +4685,11 @@ var init_i18n = __esm({
           localStorage.setItem("canvers.lang", lang);
         } catch {
         }
+        report(lang);
         set2({ lang });
       }
     }));
+    report(useLang.getState().lang);
   }
 });
 
@@ -11283,7 +11292,7 @@ var send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 async function handle(msg) {
   const { id, method, params } = msg;
   try {
-    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.34.0" } } });
+    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.35.0" } } });
     if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS.map(({ run: _r, ...t2 }) => t2) } });
     if (method === "tools/call") {
       const tool = TOOLS.find((t2) => t2.name === params?.name);

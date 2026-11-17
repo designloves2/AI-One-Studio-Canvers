@@ -1,0 +1,27 @@
+[package]
+name = "canvers"
+version = "2.35.0"
+description = "AI ONE Studio Canvers"
+edition = "2021"
+license = "GPL-3.0-only"
+
+[lib]
+name = "canvers_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-updater = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-single-instance = "2"
+serde_json = "1"
+sys-locale = "0.3"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
