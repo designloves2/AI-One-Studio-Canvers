@@ -56,11 +56,38 @@ fn plain(p: PathBuf) -> PathBuf {
     PathBuf::from(s.strip_prefix(r"\\?\").unwrap_or(&s).to_string())
 }
 
-fn start_server(app: &tauri::AppHandle) -> Result<Option<Child>, String> {
-    if listening() {
-        return Ok(None); // a Canvers server of this app is already there
+/// A server left running by an earlier run (a crash, a forced close, an update that exited the app) keeps node.exe in the install folder open,
+/// so the installer cannot replace it and the old code would keep serving. Only one app instance runs (single-instance plugin), so any node.exe
+/// started from this folder is stale.
+fn kill_stale(res: &std::path::Path) {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        let dir = res.to_string_lossy().replace('\'', "''");
+        let script = format!(
+            "Get-CimInstance Win32_Process -Filter \"name='node.exe'\" | Where-Object {{ $_.ExecutablePath -like '{dir}\\*' }} | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force }}"
+        );
+        let _ = Command::new("powershell")
+            .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+            .creation_flags(0x0800_0000)
+            .status();
     }
+    #[cfg(not(windows))]
+    let _ = res;
+}
+
+fn start_server(app: &tauri::AppHandle) -> Result<Option<Child>, String> {
     let res = plain(app.path().resource_dir().map_err(|e| e.to_string())?);
+    kill_stale(&res);
+    for _ in 0..20 {
+        if !listening() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(150));
+    }
+    if listening() {
+        return Ok(None); // something else answers on this port: use it
+    }
     let data = plain(app.path().app_data_dir().map_err(|e| e.to_string())?);
     for d in ["canvases", "director", "projects"] {
         std::fs::create_dir_all(data.join(d)).map_err(|e| e.to_string())?;
@@ -120,6 +147,9 @@ async fn check_update(app: tauri::AppHandle) {
     .unwrap_or(false);
     if yes {
         stop_server(&app);
+        if let Ok(dir) = app.path().resource_dir() {
+            kill_stale(&plain(dir));
+        }
         if update.download_and_install(|_, _| {}, || {}).await.is_ok() {
             app.restart();
         }

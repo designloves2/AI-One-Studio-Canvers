@@ -74,7 +74,7 @@
 - 웹 쌍둥이 `AI-ONE-STUDIO` 와 기능이 같아야 하는 것(번역 KO/EN, H3 업스케일 분할, 연속성)은 같은 명세를 받아 각자 이식한다. 한쪽을 고치면 다른 쪽도 확인 필요.
 - 터널: `canvers.tjtj.cloud` → 8765. 허용 호스트는 `vite.config.ts` / `CANVERS_ALLOWED_HOSTS`. ComfyUI 는 `--enable-cors-header` 로 켜져 있음(주소를 바꾸면 `COMFY_URL` 또는 설정에서 입력 → `/canvers/target`).
 
-## 8. 현재 진행 상황 (2026-11-18 기준, v2.36.0 — Director Mode, Split Sigma, Tiled 업스케일러, LLM 실시간 로그 포함)
+## 8. 현재 진행 상황 (2026-11-18 기준, v2.36.1 — Director Mode, Split Sigma, Tiled 업스케일러, LLM 실시간 로그 포함)
 - 최근 릴리즈: 2.23.x 프록시·갤러리·라이트박스 → 2.24 클립 이어서 생성 카드 → 2.25 노드 v1.47.0(Kimchy 업스케일, LTX 업스케일 분할)·새로고침 뒤 여러 클립 복구 → 2.26.0 H3 업스케일 분할 모드(노드 v1.48.0) → 2.27.x 번역(KO/EN, 번역 LLM, 노드 v1.49.0~1.49.2), OpenRouter 기본 모델 제거.
 - 실기 미검증으로 남은 것: 새 Latent Upscale 그래프(H3/Kimchy/LTX) 전체, 분할 모드 실렌더·복구, H3 여러 클립 복구, 번역 켠 상태의 OpenRouter/GGUF/Custom 백엔드, 설정 "번역 LLM" 화면, Face Refine 다인 체인, Anima inpaint.
 - 이식하지 않기로 한 것(관제 합의): frames→vision 프롬프트 대체, H3→LTX 프롬프트 재작성, Merge clips/Write 메뉴/Long Shot(대응 카드 없음), hires 테두리, 툴팁 텍스트 필드.
@@ -238,6 +238,7 @@
 - 창은 하나만: 새 창을 요청하는 링크(target=_blank, window.open, 로그인 팝업)는 `lib.rs` 의 `on_new_window` 가 막고 지금 창에서 연다(창은 설정 파일이 아니라 `setup` 에서 만든다).
 - 연결 화면으로 돌아가기: 모든 페이지 왼쪽 아래 작은 ⇄ 링크(`lib.rs` `SWITCH_JS`, `on_page_load`) + 메뉴 Ctrl+Shift+K. 연결 화면은 로컬/원격 선택부터.
 - 노드 5dcc490 이식(2.36.0): H3 이미지 카드 `Live preview` 출력 + `backend/preview.ts previewFor`(ModelPreviewOverrideKJ 를 KSampler 앞에, 스틸 1프레임), 갤러리는 `studio.ts getGalleryScoped`(frames 폴더를 일반 이미지에서 빼고 선택 화면에 "Images / Video frames" 탭), 영상 포스터 URL 에 mtime.
+- 남은 서버 정리: 앱이 비정상 종료되면 node.exe 가 설치 폴더에 남아 업데이트 설치가 "node.exe 를 열 수 없습니다"로 멈춘다 → `lib.rs` `kill_stale` 이 시작할 때와 업데이트 설치 직전에 그 폴더의 node.exe 를 정리한다.
 - 시험됨: 서버 쪽(주소 인식, https 중계, 저장) + 창에 연결 화면 표시. 못 함: 실제 Cloudflare 로그인/토큰, 설치 파일로 설치·자동 업데이트 실동작.
 
 ## 9. 작업을 끝낼 때
