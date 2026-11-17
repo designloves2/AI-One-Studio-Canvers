@@ -1,13 +1,11 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "AI ONE Studio Canvers",
-  "version": "2.35.0",
+  "version": "2.35.1",
   "identifier": "cloud.tjtj.canvers",
   "build": { "frontendDist": "./shell" },
   "app": {
-    "windows": [
-      { "label": "main", "title": "AI ONE Studio Canvers", "width": 1440, "height": 900, "minWidth": 900, "minHeight": 600, "url": "index.html", "dragDropEnabled": false }
-    ],
+    "windows": [],
     "security": { "csp": null }
   },
   "bundle": {

@@ -8,7 +8,8 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use tauri::menu::{MenuBuilder, SubmenuBuilder};
-use tauri::{Manager, RunEvent};
+use tauri::webview::NewWindowResponse;
+use tauri::{Manager, RunEvent, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 use tauri_plugin_updater::UpdaterExt;
 
@@ -121,6 +122,21 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
+            // one window only: a link that wants a new window (target=_blank, window.open, a sign-in popup) opens in this window instead
+            let again = app.handle().clone();
+            WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
+                .title("AI ONE Studio Canvers")
+                .inner_size(1440.0, 900.0)
+                .min_inner_size(900.0, 600.0)
+                .disable_drag_drop_handler()
+                .on_new_window(move |url, _| {
+                    if let Some(w) = again.get_webview_window("main") {
+                        let target = serde_json::to_string(url.as_str()).unwrap_or_default();
+                        let _ = w.eval(&format!("window.location.href = {target}"));
+                    }
+                    NewWindowResponse::Deny
+                })
+                .build()?;
             let menu = MenuBuilder::new(app)
                 .item(
                     &SubmenuBuilder::new(app, tr(app.handle(), "연결", "Connection"))
