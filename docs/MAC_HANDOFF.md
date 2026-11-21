@@ -26,7 +26,7 @@ git tag --list 'v2.*' --sort=-creatordate | head -3
 | 열린 결정 사항 | `DESKTOP_APP_MACOS.md` 11절 7개 중 **미답변**(Apple Developer 가입, Cloudflare 로그인 방식, 맥 실기/CI, 유니버설 여부 등) |
 
 ## 3. 맥에서 처음 한 번 준비 (명세서 6-1 요약)
-1. `xcode-select --install` (Xcode 명령줄 도구; 전체 Xcode 는 불필요)
+1. **Xcode** 설치 후 `xcode-select --install`(명령줄 도구)과 `sudo xcodebuild -license accept`
 2. Rust: `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh` → `rustup target add aarch64-apple-darwin x86_64-apple-darwin`
 3. Node(LTS) → `npm ci`
 4. 확인: `rustc --version`, `node --version`, `npx tauri --version`(= `tauri-cli 2.x`)

@@ -7,7 +7,7 @@
 - **목표**: Windows에서 만든 Tauri 앱을 **같은 코드**로 맥에서도 `.app`(+ `.dmg`)로 만들고, **자동 업데이트**까지 같은 GitHub 릴리즈로 한다.
 - **핵심 결정**: 백엔드(ComfyUI + Canvers 서버)는 **Windows 서버**에 있다. 그래서 맥 앱은 **"원격 접속 전용 얇은 앱"** 으로 만든다. 창이 원격 Canvers 주소(예: `canvers.tjtj.cloud`)를 직접 열고, 맥 안에서는 서버(Node)를 띄우지 않는다.
   - 이득: Node 실행 파일을 맥용으로 따로 넣지 않아도 되고(서명·공증·아키텍처 문제 제거), 작업물(프로젝트·캔버스·디렉터)은 Windows 서버 한 곳에 저장되어 두 OS가 같은 작업을 본다.
-- **"Xcode로 감싼다"의 해석(가정)**: 새 Swift 프로젝트를 만드는 게 아니라, **지금의 Tauri 프로젝트를 맥에서 Xcode 도구(명령줄 도구)로 빌드**하는 것이다. 이유: 두 번째 앱 코드를 만들면 업데이트·연결 화면·언어·창 규칙을 전부 두 번 관리해야 한다. 순수 Swift(WKWebView) 앱을 원하면 별도 명세로 다시 받는다(11절).
+- **방식(사용자 지시)**: Windows 에서 만든 것과 **같은 Rust(Tauri) 프로젝트**를 맥에서 **Xcode 로 빌드**해 `.app` 으로 감싼다. 별도 Swift 프로젝트는 만들지 않는다(같은 코드·같은 업데이트·같은 연결 화면을 쓴다).
 - **이 PC(Windows)에서는 맥 앱을 빌드·시험할 수 없다.** 코드 수정(조건부 컴파일)은 여기서 할 수 있지만, 빌드·서명·실행 시험은 **맥 한 대 또는 GitHub Actions 맥 러너**가 필요하다(8절).
 
 ## 1. 현재 Windows 앱 구조 (재사용할 것 / 바꿀 것)
@@ -84,7 +84,7 @@ Tauri 2 는 `tauri.macos.conf.json` 이 있으면 맥 빌드에서 기본 설정
 
 ## 6. 빌드 · 서명 · 공증 · 릴리즈
 ### 6-1. 빌드 환경(맥 또는 CI)
-- macOS 13+ · Xcode **명령줄 도구**(`xcode-select --install`; 전체 Xcode 는 불필요) · Rust 설치 후 `rustup target add aarch64-apple-darwin x86_64-apple-darwin` · Node(`npm ci`)
+- macOS 13+ · **Xcode**(설치 후 `xcode-select --install` 로 명령줄 도구가 잡혀 있어야 하고, 서명·공증은 Xcode 의 `codesign`·`notarytool` 을 쓴다) · Rust 설치 후 `rustup target add aarch64-apple-darwin x86_64-apple-darwin` · Node(`npm ci`)
 - 명령(유니버설 = 애플실리콘+인텔 한 파일): `npm run build && npx tauri build --target universal-apple-darwin`
   - `npm run app:build` 는 Windows 용 `prepare-app.mjs`(node.exe 복사)를 부르므로, 맥용 스크립트 **`app:build:mac`** 를 `package.json` 에 추가한다(`prepare-app.mjs` 를 부르지 않음. 단 `tauri.conf.json`/`Cargo.toml` 버전 동기화만 하는 작은 단계는 유지).
 - 결과: `src-tauri/target/universal-apple-darwin/release/bundle/{macos,dmg}/` — `AI ONE Studio Canvers.app`, `…_universal.dmg`, `…app.tar.gz`, `…app.tar.gz.sig`
