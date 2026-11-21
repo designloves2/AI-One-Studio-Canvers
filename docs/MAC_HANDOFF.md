@@ -18,7 +18,7 @@ git tag --list 'v2.*' --sort=-creatordate | head -3
 ## 2. 현재 상태 (Windows 세션이 매번 갱신)
 | 항목 | 값 |
 |---|---|
-| 최신 커밋 (`main`) | `0303fa7` (2026-11-21) |
+| 최신 커밋 (`main`) | `f3817ec` (2026-11-21) — 이 문서만 바뀐 커밋은 그 다음에 더 생길 수 있음. **기준은 `git log` 의 마지막 코드/릴리즈 커밋 = `5e95e13`(v2.36.1)** |
 | 최신 릴리즈 태그 | `v2.36.1` — https://github.com/designloves2/AI-One-Studio-Canvers/releases/tag/v2.36.1 |
 | `package.json` 버전 | 2.36.1 (`src-tauri/tauri.conf.json`·`Cargo.toml` 은 빌드 때 이 값으로 맞춰짐) |
 | 맥 앱 코드 상태 | **미착수** — `docs/DESKTOP_APP_MACOS.md` 명세서만 있음. `src-tauri/` 는 아직 Windows 전용 코드(`node.exe`, PowerShell 사용) |
@@ -51,6 +51,12 @@ Windows 세션이 5절 기록에 변경 파일마다 아래 분류를 적는다.
 > - 맥 할 일: (없음 | git pull 후 빌드/시험 항목 번호)
 > - 주의: (맥에서 깨질 수 있는 부분, 시험 못 한 것)
 > ```
+
+### 2026-11-21 · 커밋 `f3817ec` · 태그 없음 · 분류 D
+- 요약: 이 인수인계 문서(`MAC_HANDOFF.md`)와 "커밋마다 갱신" 규칙(`CLAUDE.md`) 추가.
+- 변경 파일: `docs/MAC_HANDOFF.md`, `CLAUDE.md`
+- 맥 할 일: 1절 순서로 `git pull` 후 이 문서를 읽고 시작.
+- 주의: 코드 변경 없음. 문서만 바뀐 커밋은 이후 5절에 일일이 적지 않고, 코드·릴리즈 커밋만 적는다.
 
 ### 2026-11-21 · 커밋 `0303fa7` · 태그 없음 · 분류 D
 - 요약: 맥 앱 작업 명세서 추가(원격 전용 얇은 앱, 서명·공증·업데이트·CI, 시험 항목, 결정 사항).
