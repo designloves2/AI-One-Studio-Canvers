@@ -106,3 +106,8 @@ _(아직 없음)_
 - `src-tauri/` 를 고칠 때 **Windows 빌드가 깨지지 않게** 맥 전용은 `#[cfg(target_os = "macos")]` / `tauri.macos.conf.json` 으로만 분리한다(공통 파일을 맥 기준으로 바꾸지 말 것).
 - 시험 못 한 것은 "못 함"이라고 정확히 적는다. 빌드 성공과 실행 확인은 다른 말이다.
 - 버전 올림·태그·릴리즈는 **사용자가 시켰을 때만**(Windows 세션과 같은 규칙).
+
+### 2026-11-21 · 맥 브랜치 `mac/desktop-app` · 맥 앱 1.0.0 (태그 `mac-v1.0.0`)
+- 한 일: `macos/` 에 **Xcode 프로젝트(Swift + WKWebView)** 로 맥 앱을 만들었다(원격 전용, 연결 화면, 맥 메뉴, 한 창, 다운로드→~/Downloads, 업데이트 알림). Tauri/Rust 는 쓰지 않았다(맥에 Rust 없음). 버전은 맥 앱 독립 1.0.0, 릴리즈 태그는 `mac-vX.Y.Z`(Windows 의 `v2.x` 와 분리, `latest` 로 잡히지 않게 함 — Windows 자동 업데이트가 `latest.json` 을 읽기 때문).
+- 시험: `xcodebuild` Debug/Release 빌드 성공, 실행, `canvers.tjtj.cloud` 입력 → Cloudflare 로그인 → Canvers 화면 열림, 재실행 시 로그인 유지 확인. **못 한 것**: 다운로드·영상 재생·한글 입력·단축키·⇄ 버튼, 서명·공증(지금은 ad-hoc 서명, 첫 실행은 우클릭 → 열기).
+- Windows 세션에 요청: `DESKTOP_APP_MACOS.md` 의 "같은 Tauri 프로젝트" 방침과 달라졌다(Swift 앱). 방침 확인 필요. `src-tauri/` 는 건드리지 않았다.
