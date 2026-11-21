@@ -1,5 +1,8 @@
 # 맥(macOS) 데스크톱 앱 작업 명세서 — 원격 접속 중심
 
+> **실제 구현 (2026-11-21, 맥 앱 1.0.0 = 태그 `mac-v1.0.0`)**: 맥에 Rust 가 없어 이 명세서의 Tauri 방식 대신 **`macos/` 의 Xcode 프로젝트(Swift + WKWebView)** 로 만들었다. 범위는 같다 = **원격 전용**(주소 입력 → Canvers 서버 확인 → 창에서 열기, Cloudflare 로그인 유지, 맥 메뉴, 한 창, 다운로드 → `~/Downloads`, 업데이트 알림). 아래 3~5절의 *개념*(연결 화면 흐름, 맥 메뉴, 한 창, 시험 항목 7절, 완료 기준 9절)은 그대로 기준이 되고, **Rust/Tauri 항목**(4절 `lib.rs`, 5절 `tauri.macos.conf.json`, 6-1의 `tauri build`, 6-4·6-5의 `latest.json` 합치기·CI)은 **지금 쓰지 않는다**.
+> 달라진 점: ① 업데이트는 자동 설치가 아니라 **알림 → 내려받기**(맥 앱이 `mac-v*` 릴리즈를 확인) ② 릴리즈 태그가 Windows 의 `v2.x` 와 **분리**(`mac-vX.Y.Z`, Windows 자동 업데이트의 `latest.json` 과 섞이지 않게) ③ 버전은 맥 앱 독립(1.0.0).
+
 작성: 2026-11-21 · 대상 저장소: `AI-One-Studio-Canvers` · 기준 버전: 2.36.1 (Windows 설치형 완료)
 함께 읽을 것: `docs/DESKTOP_APP.md`(Windows 앱 만드는 법·함정), `CLAUDE.md` 8절 "설치형 데스크톱 앱"
 

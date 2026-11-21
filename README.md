@@ -16,6 +16,29 @@ LLM 4가지 방식은 [ComfyUI-TJ_NODE](https://github.com/designloves2/ComfyUI-
 
 왼쪽 **모델** 탭에서 연결·모델·필수 커스텀 노드가 갖춰졌는지 한눈에 확인할 수 있습니다.
 
+## 데스크톱 앱 (Windows · macOS)
+
+브라우저 대신 **독립 창 앱**으로 쓸 수 있습니다. 위의 `start.bat` 실행 방식도 그대로 쓸 수 있습니다. 받는 곳: [Releases](https://github.com/designloves2/AI-One-Studio-Canvers/releases)
+
+| | Windows 앱 | macOS 앱 |
+|---|---|---|
+| 릴리즈 태그 | `v2.x` (예: `v2.36.1`) | `mac-vX.Y.Z` (예: `mac-v1.0.0`) |
+| 받을 파일 | `Canvers_<버전>_windows-x64.zip` (압축을 풀고 `canvers.exe` 실행, 설치 불필요) · 설치형 `Canvers_<버전>_x64-setup.exe` | `Canvers_<버전>_macos.dmg` (열어서 응용 프로그램 폴더로 끌어 넣기) |
+| 만든 방식 | Rust([Tauri](https://tauri.app)) 껍데기 + 앱 안에 Node 서버 포함 | Xcode 프로젝트(`macos/`, Swift + WKWebView) |
+| 연결 | **이 PC(로컬)** 또는 **다른 곳(원격)** 을 처음에 고름 | **원격 전용** — Canvers 서버 주소만 입력 |
+| 자동 업데이트 | 켤 때 확인 → "지금 설치할까요?" → 자동 설치·재시작 | 켤 때 확인 → 새 버전이 있으면 내려받기 안내(받은 앱을 응용 프로그램 폴더에 덮어 넣기) |
+| 작업물 저장 | `%APPDATA%\cloud.tjtj.canvers\` (앱을 지워도 남음) | 서버(Windows PC)에 저장되므로 맥에는 따로 저장하지 않음 |
+| 언어 | 설정에서 고른 언어 → 없으면 시스템 언어(한글이면 한글, 아니면 영어) | 같음 |
+| 서명 | 코드 서명 없음(처음 실행 시 SmartScreen "추가 정보 → 실행") | 공증 전: 처음 실행은 **우클릭 → 열기** |
+
+**연결하는 법**
+- **Windows, 같은 PC에서 ComfyUI 를 켜 둔 경우**: 첫 화면에서 *이 PC (로컬)* 을 누르면 끝입니다.
+- **Windows, 다른 PC·도메인·Cloudflare 터널**: *다른 곳 (원격)* 을 눌러 주소(도메인·터널·`IP:포트`)를 넣으면 ① Canvers 서버인지 ② ComfyUI 인지 자동으로 알아봅니다. 로그인(Cloudflare Access)이 필요한 주소는 앱 창 안에서 로그인하고, 로그인 상태는 기억됩니다. 로그인 없이 쓰는 ComfyUI 는 *서비스 토큰*(Client ID/Secret)도 넣을 수 있습니다.
+- **macOS**: 앱을 켜면 서버 주소를 묻습니다(예: `canvers.tjtj.cloud`). 로그인이 필요하면 창 안에서 로그인합니다. 주소를 바꾸려면 메뉴의 **연결 설정…**(`⇧⌘K`). 파일을 내려받으면 `~/Downloads` 에 저장됩니다.
+- 두 앱 모두 창은 **하나**만 열립니다(로그인 팝업이나 새 창 링크도 지금 창에서 열림). Windows 앱에서는 화면 왼쪽 아래 작은 **⇄** 버튼이나 `Ctrl+Shift+K` 로 연결 화면에 돌아갑니다.
+
+**Windows 앱을 직접 만들려면** (개발자용): `npm run app:build` — Rust, Windows SDK(`rc.exe`), 업데이트 서명 키가 필요합니다. 만드는 법·함정은 [docs/DESKTOP_APP.md](docs/DESKTOP_APP.md), macOS 작업 명세는 [docs/DESKTOP_APP_MACOS.md](docs/DESKTOP_APP_MACOS.md), 두 PC 사이 인수인계는 [docs/MAC_HANDOFF.md](docs/MAC_HANDOFF.md).
+
 ## 사용법
 
 | 동작 | 방법 |

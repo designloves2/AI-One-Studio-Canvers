@@ -18,12 +18,12 @@ git tag --list 'v2.*' --sort=-creatordate | head -3
 ## 2. 현재 상태 (Windows 세션이 매번 갱신)
 | 항목 | 값 |
 |---|---|
-| 최신 커밋 (`main`) | `f3817ec` (2026-11-21) — 이 문서만 바뀐 커밋은 그 다음에 더 생길 수 있음. **기준은 `git log` 의 마지막 코드/릴리즈 커밋 = `5e95e13`(v2.36.1)** |
+| 최신 커밋 (`main`) | 맥 브랜치 합친 커밋(아래 5절 맨 위) — 이전 값 `f3817ec` (2026-11-21) — 이 문서만 바뀐 커밋은 그 다음에 더 생길 수 있음. **기준은 `git log` 의 마지막 코드/릴리즈 커밋 = `5e95e13`(v2.36.1)** |
 | 최신 릴리즈 태그 | `v2.36.1` — https://github.com/designloves2/AI-One-Studio-Canvers/releases/tag/v2.36.1 |
 | `package.json` 버전 | 2.36.1 (`src-tauri/tauri.conf.json`·`Cargo.toml` 은 빌드 때 이 값으로 맞춰짐) |
-| 맥 앱 코드 상태 | **미착수** — `docs/DESKTOP_APP_MACOS.md` 명세서만 있음. `src-tauri/` 는 아직 Windows 전용 코드(`node.exe`, PowerShell 사용) |
-| 릴리즈에 올라가는 것 | Windows 만(`Canvers_<ver>_windows-x64.zip`, `Canvers_<ver>_x64-setup.exe`, `latest.json`) |
-| 열린 결정 사항 | `DESKTOP_APP_MACOS.md` 11절 7개 중 **미답변**(Apple Developer 가입, Cloudflare 로그인 방식, 맥 실기/CI, 유니버설 여부 등) |
+| 맥 앱 코드 상태 | **맥 앱 1.0.0 완료·릴리즈** — `macos/`(Xcode, Swift + WKWebView, 원격 전용). 릴리즈 `mac-v1.0.0`(`Canvers_1.0.0_macos.dmg`). 서명·공증은 아직(ad-hoc, 첫 실행 우클릭 → 열기). `src-tauri/` 는 Windows 전용 그대로(맥에서 안 씀) |
+| 릴리즈에 올라가는 것 | Windows: `v2.x` 릴리즈(`Canvers_<ver>_windows-x64.zip`, `Canvers_<ver>_x64-setup.exe`, `latest.json`) · 맥: **`mac-vX.Y.Z` 릴리즈**(`Canvers_<ver>_macos.dmg`) — 서로 다른 태그, 맥 릴리즈는 `latest` 로 잡히지 않게 해서 Windows 자동 업데이트를 건드리지 않음 |
+| 열린 결정 사항 | Apple Developer 가입·공증(미정), 맥 앱 업데이트를 자동 설치로 바꿀지(지금은 알림 → 내려받기). 맥 시험 못 한 것: 다운로드·영상 재생·한글 입력·단축키 |
 
 ## 3. 맥에서 처음 한 번 준비 (명세서 6-1 요약)
 1. **Xcode** 설치 후 `xcode-select --install`(명령줄 도구)과 `sudo xcodebuild -license accept`
@@ -37,7 +37,7 @@ Windows 세션이 5절 기록에 변경 파일마다 아래 분류를 적는다.
 | 분류 | 의미 | 맥에서 할 일 |
 |---|---|---|
 | **A. 화면/서버 코드만** (`src/**`, `server-lib/**`, `serve.mjs`) | 원격 서버(Windows)에 반영되면 맥 앱은 **새 앱 빌드 없이** 바뀜(맥 앱은 원격 화면을 열기 때문) | 없음. 단 맥 웹뷰 시험 항목(명세서 7절)에 영향이 있으면 확인 |
-| **B. 데스크톱 껍데기** (`src-tauri/**`, `scripts/prepare-app.mjs`, `scripts/release-app.mjs`) | 맥 앱 코드/설정이 바뀜 | `git pull` → 맥 빌드 → 명세서 7절 시험 |
+| **B. 데스크톱 껍데기** (Windows: `src-tauri/**`, `scripts/prepare-app.mjs`, `scripts/release-app.mjs` · **맥: `macos/**`**) | 맥 앱 코드/설정이 바뀜 | `git pull` → 맥 빌드 → 명세서 7절 시험 |
 | **C. 버전 올림 / 릴리즈** | 앱 버전·`latest.json` 이 바뀜 | 맥 앱도 같은 버전으로 다시 빌드·업로드(맥 업로드는 `latest.json` 을 **합쳐서**) |
 | **D. 문서만** | 동작 변화 없음 | 읽기만 |
 > 맥 앱(1단계)은 **원격 전용**이라, 대부분의 기능 수정(A)은 Windows 서버에 반영·재시작되면 맥에서도 즉시 보인다. 맥 빌드를 다시 해야 하는 건 B·C 뿐이다.
@@ -51,6 +51,12 @@ Windows 세션이 5절 기록에 변경 파일마다 아래 분류를 적는다.
 > - 맥 할 일: (없음 | git pull 후 빌드/시험 항목 번호)
 > - 주의: (맥에서 깨질 수 있는 부분, 시험 못 한 것)
 > ```
+
+### 2026-11-21 · `main` 에 맥 브랜치 합침 · 태그 `mac-v1.0.0`(맥) · 분류 B(맥) + D
+- 요약: 맥 앱 1.0.0(`macos/`, Xcode Swift + WKWebView, 원격 전용)을 `main` 에 합침. README 에 Windows·맥 데스크톱 앱 섹션 추가, `CLAUDE.md`·명세서에 "실제 구현은 Swift" 반영.
+- 변경 파일: `macos/**`(신규), `README.md`, `docs/DESKTOP_APP_MACOS.md`, `docs/MAC_HANDOFF.md`, `CLAUDE.md`
+- 맥 할 일: `git pull --ff-only origin main` 로 `main` 기준으로 옮겨 타기(브랜치 `mac/desktop-app` 은 합쳐졌으니 이후 작업은 새 `mac/<주제>` 브랜치로). 못 한 시험(다운로드·영상·한글 입력·단축키·⇄ 버튼 대응)과 서명·공증.
+- 주의: Windows 앱(`v2.x`)은 변경 없음. 맥 앱 버전은 독립(1.0.0)이라 `package.json` 버전을 따라가지 않는다.
 
 ### 2026-11-21 · 커밋 `f3817ec` · 태그 없음 · 분류 D
 - 요약: 이 인수인계 문서(`MAC_HANDOFF.md`)와 "커밋마다 갱신" 규칙(`CLAUDE.md`) 추가.

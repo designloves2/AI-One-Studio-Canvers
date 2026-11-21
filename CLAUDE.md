@@ -241,6 +241,9 @@
 - 남은 서버 정리: 앱이 비정상 종료되면 node.exe 가 설치 폴더에 남아 업데이트 설치가 "node.exe 를 열 수 없습니다"로 멈춘다 → `lib.rs` `kill_stale` 이 시작할 때와 업데이트 설치 직전에 그 폴더의 node.exe 를 정리한다.
 - 시험됨: 서버 쪽(주소 인식, https 중계, 저장) + 창에 연결 화면 표시. 못 함: 실제 Cloudflare 로그인/토큰, 설치 파일로 설치·자동 업데이트 실동작.
 
+### 맥 앱 (macOS, 2026-11-21, 릴리즈 `mac-v1.0.0`)
+- `macos/`(Xcode 프로젝트, **Swift + WKWebView**, 원격 전용: 주소 입력 → `/canvers/target` 확인 → 창에서 열기, 연결 화면 `connect.html`, 한 창, 다운로드 → `~/Downloads`, 업데이트 = `mac-v*` 릴리즈 확인 후 내려받기 안내). 맥 앱 버전은 독립(1.0.0), 릴리즈 태그는 `mac-vX.Y.Z`(Windows `v2.x` 와 분리 — Windows 자동 업데이트의 `latest.json` 과 섞지 말 것). 서명·공증은 아직. 맥에는 Rust 가 없어 Tauri 를 쓰지 않았다(명세서 `docs/DESKTOP_APP_MACOS.md` 의 Tauri 항목은 미사용). 이 PC(Windows)에서는 맥 앱을 빌드·실행할 수 없다.
+
 ### 맥 세션과 문서로 주고받기 (2026-11-21)
 - 맥 PC 는 다른 PC 다. **커밋·릴리즈할 때마다 `docs/MAC_HANDOFF.md` 의 "2. 현재 상태"를 고치고 "5. 동기화 기록" 맨 위에 항목을 추가한 뒤 같은 커밋(또는 바로 뒤 커밋)에 넣는다.** 분류(A 화면/서버만 · B 데스크톱 껍데기 · C 버전/릴리즈 · D 문서)와 변경 파일, 맥 할 일을 적는다. 맥 세션의 보고는 같은 문서 6절. 맥 앱 명세는 `docs/DESKTOP_APP_MACOS.md`.
 
