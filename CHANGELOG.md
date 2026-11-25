@@ -2,6 +2,10 @@
 
 형식: 버전 · 날짜 / 추가 · 변경 · 수정. 버전은 `package.json`, `mcp/server.ts`와 같습니다.
 
+## 2.36.2 — 2026-11-25
+### 수정
+- 이 PC에 로컬 LLM 모델 파일(.gguf·텍스트 인코더)이 없을 때, 내부 자리표시자(NO_GGUF_FILES…) 대신 "모델을 넣거나 OpenRouter / Connect Custom 으로 바꾸세요" 안내가 나옵니다. 기본 백엔드는 이미 Connect Custom 입니다.
+
 ## 2.36.1 — 2026-11-18
 
 ### 수정

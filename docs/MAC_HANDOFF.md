@@ -52,6 +52,10 @@ Windows 세션이 5절 기록에 변경 파일마다 아래 분류를 적는다.
 > - 주의: (맥에서 깨질 수 있는 부분, 시험 못 한 것)
 > ```
 
+### 2026-11-25 · 릴리즈 v2.36.2 · 분류 A
+- 요약: 로컬 LLM 모델이 없는 PC 에서 NO_GGUF 자리표시자 대신 안내 문구 표시(`src/backend/llm.ts`). 화면/서버만 바뀜.
+- 맥 할 일: 없음(맥 앱은 원격 화면을 그대로 열므로 서버 갱신만으로 반영). 맥 앱 버전 변화 없음(1.0.0).
+
 ### 2026-11-21 · `main` 에 맥 브랜치 합침 · 태그 `mac-v1.0.0`(맥) · 분류 B(맥) + D
 - 요약: 맥 앱 1.0.0(`macos/`, Xcode Swift + WKWebView, 원격 전용)을 `main` 에 합침. README 에 Windows·맥 데스크톱 앱 섹션 추가, `CLAUDE.md`·명세서에 "실제 구현은 Swift" 반영.
 - 변경 파일: `macos/**`(신규), `README.md`, `docs/DESKTOP_APP_MACOS.md`, `docs/MAC_HANDOFF.md`, `CLAUDE.md`

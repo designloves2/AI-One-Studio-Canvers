@@ -1,6 +1,6 @@
 [package]
 name = "canvers"
-version = "2.36.1"
+version = "2.36.2"
 description = "AI ONE Studio Canvers"
 edition = "2021"
 license = "GPL-3.0-only"

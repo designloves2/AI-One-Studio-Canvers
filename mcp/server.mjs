@@ -7479,7 +7479,10 @@ async function runLlmNow(req, retried) {
     await warmUpServer();
     return runLlmNow(req, true);
   }
-  if (!res.ok) throw new Error(res.error || "LLM request failed");
+  if (!res.ok) {
+    if (/NO_GGUF_FILES|NO_TEXT_ENCODER|NO_[A-Z_]+_IN_MODELS/.test(res.error ?? "")) throw new Error("No local LLM model found in models/text_encoders. This backend needs a local model: put one there, or switch the backend to OpenRouter / Connect Custom in Settings \u2192 LLM (no local model needed).");
+    throw new Error(res.error || "LLM request failed");
+  }
   const u = res.usage;
   if (u && req.callId) {
     const n2 = (v) => typeof v === "number" && Number.isFinite(v) ? v : void 0;
@@ -11301,7 +11304,7 @@ var send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 async function handle(msg) {
   const { id, method, params } = msg;
   try {
-    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.36.1" } } });
+    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.36.2" } } });
     if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS.map(({ run: _r, ...t2 }) => t2) } });
     if (method === "tools/call") {
       const tool = TOOLS.find((t2) => t2.name === params?.name);
