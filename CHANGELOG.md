@@ -2,6 +2,11 @@
 
 형식: 버전 · 날짜 / 추가 · 변경 · 수정. 버전은 `package.json`, `mcp/server.ts`와 같습니다.
 
+## 2.37.0 — 2026-11-25
+### 추가
+- Moss Image I2I Depth · EDIT (노드 SPEC_RELAY_MOSS_I2I_DEPTH_EDIT): Image Edit 카드의 새 엔진 "Moss Image — I2I Depth"(MoGe 윤곽/깊이 + 컨트롤 LoRA)와 "Moss Image — EDIT"(소스 + 참조 3장, 엣지 LoRA, MP 크기). LoRA·MoGe 모델은 비워 두면 설치된 것에서 자동 선택. EDIT 용 프롬프트 다듬기 문구 포함.
+- Turbo Mode: 설정 → 이미지 모델에서 모델 종류별로 Turbo LoRA(+강도)를 정해 두면, 이미지 카드의 Turbo Mode 스위치를 켤 때 그 LoRA 가 LoRA 맨 앞에 자동으로 붙습니다(LoRA 슬롯 값은 그대로). 설정에 터보 LoRA 가 없으면 스위치는 비활성.
+
 ## 2.36.2 — 2026-11-25
 ### 수정
 - 이 PC에 로컬 LLM 모델 파일(.gguf·텍스트 인코더)이 없을 때, 내부 자리표시자(NO_GGUF_FILES…) 대신 "모델을 넣거나 OpenRouter / Connect Custom 으로 바꾸세요" 안내가 나옵니다. 기본 백엔드는 이미 Connect Custom 입니다.

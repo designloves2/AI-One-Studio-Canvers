@@ -183,7 +183,7 @@ function imageRunner(mode: (c: Ctx) => ImageMode): Runner {
     let { w, h } = typeof p.aspect === 'string' && (m === 't2i' || m === 'r2i' || m === 'krea2control' || m === 'identity' || m === 'animactrl')
       ? (p.size_mode === 'wh' ? sizeCustom(num(p.width, 1024), num(p.height, 1024)) : sizeFrom(String(p.aspect), num(p.megapixels, 1))) : { w: 0, h: 0 };
     // Moss I2I / inpaint work at the source's own size (multiple of 16)
-    if (family === 'moss' && (m === 'i2i' || m === 'inpaint') && imgs[0]) { const bm = await loadBitmap(imgs[0]); ({ w, h } = sizeCustom(bm.width, bm.height)); }
+    if (family === 'moss' && (m === 'i2i' || m === 'inpaint' || m === 'mossdepth') && imgs[0]) { const bm = await loadBitmap(imgs[0]); ({ w, h } = sizeCustom(bm.width, bm.height)); }
     // Moss R2I: the boxes were drawn on the card's own canvas; scale them to the size that is rendered
     let mossBoxes: MossBox[] = [];
     let mossChars = '';
@@ -195,6 +195,8 @@ function imageRunner(mode: (c: Ctx) => ImageMode): Runner {
       mossBoxes = raw.map((b) => ({ ...b, x: Math.round(b.x * sx), y: Math.round(b.y * sy), width: Math.round(b.width * sx), height: Math.round(b.height * sy) }));
       mossChars = String(card.characters ?? '');
     }
+    const tm = settings.models[family];
+    const turbo = p.turbo_mode && tm?.turboLora && tm.turboLora !== 'none' ? [{ name: tm.turboLora, strength: tm.turboStrength ?? 1 }] : [];
     const lora = (n: string, s: string) => ({ name: str(p[n], 'none'), strength: num(p[s], 1) });
 
     const job: ImageJob = {
@@ -206,7 +208,7 @@ function imageRunner(mode: (c: Ctx) => ImageMode): Runner {
       seed, denoise: num(p.denoise, 1), batch: Math.max(1, num(p.batch, 1)),
       images: inputFiles, mask: maskFile,
       pad: { left: num(p.left), top: num(p.top), right: num(p.right), bottom: num(p.bottom) },
-      loras: [lora('lora1', 'lora1_strength'), lora('lora2', 'lora2_strength'), ...cardLoras(c)],
+      loras: [...turbo, lora('lora1', 'lora1_strength'), lora('lora2', 'lora2_strength'), ...cardLoras(c)],
       models: settings.models[family], saveSubfolder: settings.saveSubfolder,
       bgModel: str(p.bg_model),
       control: { preprocessor: str(p.cn_pre, 'DepthAnythingPreprocessor'), resolution: num(p.cn_res, 1024), strength: num(p.cn_strength, 1), patch: str(p.cn_patch, 'none') },
@@ -216,7 +218,18 @@ function imageRunner(mode: (c: Ctx) => ImageMode): Runner {
       face: { detector: str(p.fr_detector, 'none'), threshold: num(p.fr_threshold, 0.5), dilation: num(p.fr_dilation, 4), context: num(p.fr_context, 1.8), size: num(p.fr_size, 1024) },
       moss: { slg: !!p.slg, boxes: mossBoxes, characters: mossChars },
     };
-    if ((m === 't2i' || m === 'edit' || m === 'i2i' || m === 'inpaint' || m === 'outpaint') && !job.prompt && m !== 'outpaint') throw new Error('Prompt is empty');
+    if (m === 'mossdepth' || m === 'mossedit') {
+      const ed = m === 'mossedit';
+      const loraOf = async (v: Parameters<typeof str>[0], re: RegExp) => { const s = str(v, 'none'); if (s !== 'none') return s; return (await loadOptions('loras:moss')).find((x) => re.test(x)) ?? 'none'; };
+      const mogeOf = async () => { const s = str(p.md_moge, 'none'); if (s !== 'none' || ed) return s; const l = (await loadOptions('moge')).filter((x) => x !== 'none'); return l.find((x) => /vitg/i.test(x)) ?? l[0] ?? 'none'; };
+      job.mossx = {
+        lora: ed ? await loraOf(p.me_lora, /moss_image_edit_lora/i) : await loraOf(p.md_lora, /color_depth_control/i),
+        loraStrength: num(ed ? p.me_lora_strength : p.md_lora_strength, 1),
+        moge: await mogeOf(), output: str(p.md_output, 'mask'), strength: num(p.md_strength, 1), start: num(p.md_start, 0), end: num(p.md_end, 0.6),
+        editFormat: str(p.me_format, 'Moss-Image-Edit'), imageStrength: num(p.me_img_strength, 1), mp: num(p.me_mp, 1),
+      };
+    }
+    if ((m === 't2i' || m === 'edit' || m === 'mossdepth' || m === 'mossedit' || m === 'i2i' || m === 'inpaint' || m === 'outpaint') && !job.prompt && m !== 'outpaint') throw new Error('Prompt is empty');
     if (p.auto_enhance && job.prompt && m !== 'outpaint' && m !== 'removebg') {
       c.progress(1, 'enhancing prompt…');
       // sentences wrapped in <d>..</d> are dialogue in its original language: they must stay exactly as they are, never translated
@@ -451,7 +464,7 @@ async function runLtxCore(c: Ctx): Promise<Asset[]> {
       first: firstFile, last: i === prompts.length - 1 ? lastFile : undefined,
       seed: seed0 + i, steps: num(p.steps, 12), cfg: num(p.cfg, 1),
       sampler: str(p.sampler, 'euler_ancestral'), scheduler: str(p.scheduler, 'linear_quadratic'), stage2Sigmas: str(p.stage2, '0.85, 0.7250, 0.4219, 0.0'),
-      loras: [lora('lora1', 'lora1_strength'), lora('lora2', 'lora2_strength'), ...cardLoras(c)], models: settings.video, saveSubfolder: settings.saveSubfolder, size, preview: pvCfg,
+      loras: [...(p.turbo_mode && str(p.turbo_lora, 'none') !== 'none' ? [lora('turbo_lora', 'turbo_strength')] : []), lora('lora1', 'lora1_strength'), lora('lora2', 'lora2_strength'), ...cardLoras(c)], models: settings.video, saveSubfolder: settings.saveSubfolder, size, preview: pvCfg,
     });
     if (prompts.length === 1) return runGraph(c, graph, pvCfg?.key);
     const base = i / prompts.length;
@@ -545,7 +558,7 @@ const RUNNERS: Record<string, Runner> = {
   'krea2-identity': imageRunner(() => 'identity'),
   'anima-control': imageRunner(() => 'animactrl'),
   'face-redraw': imageRunner(() => 'facedraw'),
-  'image-edit': imageRunner((c) => (c.engineId === 'klein-edit' || c.engineId === 'qwen-edit' || c.engineId === 'qwen21-edit' || !c.engineId ? 'edit' : 'i2i')),
+  'image-edit': imageRunner((c) => (c.engineId === 'moss-depth' ? 'mossdepth' : c.engineId === 'moss-edit' ? 'mossedit' : c.engineId === 'klein-edit' || c.engineId === 'qwen-edit' || c.engineId === 'qwen21-edit' || !c.engineId ? 'edit' : 'i2i')),
   inpaint: imageRunner(() => 'inpaint'),
   outpaint: imageRunner(() => 'outpaint'),
   'face-swap': imageRunner(() => 'faceswap'),

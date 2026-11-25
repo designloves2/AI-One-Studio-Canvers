@@ -2,7 +2,7 @@
 // Klein graphs start from the templates STUDIO_ONE serves; Z-Image graphs are assembled from core nodes.
 import { getWorkflow, pickModels, type Family } from './studio';
 
-export type ImageMode = 't2i' | 'i2i' | 'edit' | 'inpaint' | 'outpaint' | 'faceswap' | 'removebg' | 'controlnet' | 'facedraw' | 'krea2control' | 'identity' | 'animactrl' | 'r2i';
+export type ImageMode = 't2i' | 'i2i' | 'edit' | 'inpaint' | 'outpaint' | 'faceswap' | 'removebg' | 'controlnet' | 'facedraw' | 'krea2control' | 'identity' | 'animactrl' | 'r2i' | 'mossdepth' | 'mossedit';
 
 export interface Lora { name: string; strength: number }
 
@@ -41,6 +41,8 @@ export interface ImageJob {
   face?: { detector: string; threshold: number; dilation: number; context: number; size: number };
   /** Moss Image: skip-layer guidance, and the drawn boxes (pixels of width x height) for R2I */
   moss?: { slg: boolean; boxes: MossBox[]; characters: string };
+  /** Moss Image I2I Depth / EDIT: control or edit LoRA and their settings */
+  mossx?: { lora: string; loraStrength: number; moge: string; output: string; strength: number; start: number; end: number; editFormat: string; imageStrength: number; mp: number };
 }
 
 export interface MossBox { x: number; y: number; width: number; height: number; metadata: { type: 'obj' | 'text'; text: string; desc: string; palette: string[] } }
@@ -526,8 +528,63 @@ function buildSdxl(job: ImageJob, m: { model: string }): Built {
 // Same graphs as the Moss Image ONE STUDIO page (web/moss/graph_builder_moss.js). Width and height are multiples of 16.
 const snap16 = (v: number) => Math.max(64, Math.round(v / 16) * 16);
 
+function buildMossX(job: ImageJob, m: { model: string; textEncoder: string; vae: string }): Built {
+  const x = job.mossx!;
+  const edit = job.mode === 'mossedit';
+  if (!m.textEncoder) throw new Error('No Moss text encoder (qwen3.5) found. Pick one in Settings → Image models.');
+  if (!m.vae) throw new Error('No Moss VAE (flux2-vae) found. Pick one in Settings → Image models.');
+  if (!job.images[0]) throw new Error(edit ? 'No source image connected for EDIT.' : 'No source image connected for I2I Depth.');
+  if (!x.lora || x.lora === 'none') throw new Error(edit ? 'Edit LoRA is not set: pick moss_image_edit_lora_rank_64_bf16 on this card.' : 'Depth control LoRA is not set: pick moss_image_color_depth_control on this card.');
+  if (!edit && (!x.moge || x.moge === 'none')) throw new Error('No MoGe model selected: pick one (models/geometry_estimation) on this card.');
+  const g: G = {};
+  g['MS:unet'] = unet(m.model);
+  g['MS:clip'] = { class_type: 'CLIPLoader', inputs: { clip_name: m.textEncoder, type: 'moss_image', device: 'default' } };
+  g['MS:vae'] = { class_type: 'VAELoader', inputs: { vae_name: m.vae } };
+  g['MS:first0'] = { class_type: 'LoraLoaderModelOnly', inputs: { model: ['MS:unet', 0], lora_name: x.lora, strength_model: x.loraStrength } };
+  const model = loraChain(g, ['MS:first0', 0], job.loras, 'MS:');
+  const neg = job.negative.trim();
+  if (!edit) {
+    g['MS:tsr'] = { class_type: 'TemporalScoreRescaling', inputs: { model, tsr_k: 0.95, tsr_sigma: 1 } };
+    g['MS:shift'] = { class_type: 'ModelSamplingAuraFlow', inputs: { model: ['MS:tsr', 0], shift: 5, sampling: 'flow' } };
+    g['MS:slgd'] = { class_type: 'SkipLayerGuidanceDiTSimple', inputs: { model: ['MS:shift', 0], double_layers: '', single_layers: '24', start_percent: 0, end_percent: 1 } };
+  } else {
+    g['MS:slgd'] = { class_type: 'SkipLayerGuidanceDiTSimple', inputs: { model, double_layers: '', single_layers: '22', start_percent: 0, end_percent: 1 } };
+  }
+  let positive: [string, number], negative: [string, number], latent: [string, number];
+  if (!edit) {
+    const w = snap16(job.width || 1024), h = snap16(job.height || 1024);
+    g['MS:negative'] = { class_type: 'CLIPTextEncode', inputs: { clip: ['MS:clip', 0], text: neg || 'nsfw, worst quality, bad anatomy, watermark, jpeg artifact' } };
+    g['MS:src'] = { class_type: 'LoadImage', inputs: { image: job.images[0] } };
+    g['MS:fit'] = { class_type: 'ImageScale', inputs: { image: ['MS:src', 0], upscale_method: 'lanczos', width: w, height: h, crop: 'center' } };
+    g['MS:mogeLoad'] = { class_type: 'LoadMoGeModel', inputs: { model_name: x.moge } };
+    g['MS:mogeInfer'] = { class_type: 'MoGeInference', inputs: { moge_model: ['MS:mogeLoad', 0], image: ['MS:fit', 0], resolution_level: 9, fov_x_degrees: 0, batch_size: 4, force_projection: true, apply_mask: true, refine_steps: 3 } };
+    g['MS:mogeRender'] = { class_type: 'MoGeRender', inputs: { moge_geometry: ['MS:mogeInfer', 0], output: x.output === 'depth' ? 'depth' : 'mask' } };
+    g['MS:positive'] = { class_type: 'CLIPTextEncode', inputs: { clip: ['MS:clip', 0], text: job.prompt } };
+    g['MS:control'] = { class_type: 'MOSSImageControl', inputs: { positive: ['MS:positive', 0], negative: ['MS:negative', 0], vae: ['MS:vae', 0], strength: x.strength, start_percent: x.start, end_percent: x.end, depth_map: ['MS:mogeRender', 0] } };
+    g['MS:latent'] = { class_type: 'EmptyFlux2LatentImage', inputs: { width: w, height: h, batch_size: job.batch } };
+    positive = ['MS:control', 0]; negative = ['MS:control', 1]; latent = ['MS:latent', 0];
+  } else {
+    const imgs: G = {};
+    job.images.slice(0, 4).forEach((f, i) => {
+      g[`MS:ref${i}Load`] = { class_type: 'LoadImage', inputs: { image: f } };
+      g[`MS:ref${i}`] = { class_type: 'ImageScaleToTotalPixels', inputs: { image: [`MS:ref${i}Load`, 0], upscale_method: 'lanczos', megapixels: x.mp, resolution_steps: 16 } };
+      imgs[`images.image_${i}`] = [`MS:ref${i}`, 0];
+    });
+    const enc = (text: string) => ({ class_type: 'TextEncodeMOSSImageEdit', inputs: { clip: ['MS:clip', 0], prompt: text, edit_format: x.editFormat, image_strength: x.imageStrength, vae: ['MS:vae', 0], ...imgs } });
+    g['MS:positive'] = enc(job.prompt); g['MS:negative'] = enc(neg);
+    g['MS:size'] = { class_type: 'GetImageSize', inputs: { image: ['MS:ref0', 0] } };
+    g['MS:latent'] = { class_type: 'EmptyFlux2LatentImage', inputs: { width: ['MS:size', 0], height: ['MS:size', 1], batch_size: job.batch } };
+    positive = ['MS:positive', 0]; negative = ['MS:negative', 0]; latent = ['MS:latent', 0];
+  }
+  g['MS:sampler'] = { class_type: 'KSampler', inputs: { model: ['MS:slgd', 0], positive, negative, latent_image: latent, seed: job.seed, steps: job.steps, cfg: job.cfg, sampler_name: job.sampler, scheduler: job.scheduler, denoise: 1 } };
+  g['MS:decode'] = { class_type: 'VAEDecode', inputs: { samples: ['MS:sampler', 0], vae: ['MS:vae', 0] } };
+  g['MS:save'] = saveNode(job, ['MS:decode', 0], 'Moss');
+  return { graph: g, hint: edit ? 'Moss EDIT' : 'Moss I2I Depth' };
+}
+
 function buildMoss(job: ImageJob, m: { model: string; textEncoder: string; vae: string }): Built {
   const mode = job.mode;
+  if ((mode === 'mossdepth' || mode === 'mossedit') && job.mossx) return buildMossX(job, m);
   if (mode !== 't2i' && mode !== 'i2i' && mode !== 'inpaint' && mode !== 'r2i') throw new Error(`Moss Image has no "${mode}" mode`);
   if (!m.textEncoder) throw new Error('No Moss text encoder (qwen3.5) found. Pick one in Settings → Image models.');
   if (!m.vae) throw new Error('No Moss VAE (flux2-vae) found. Pick one in Settings → Image models.');

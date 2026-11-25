@@ -38,7 +38,7 @@ export const DEFAULT_LLM: LlmSettings = {
 /** the LLM settings keys the user changed since the last save: only those are saved to the server (an old copy must not overwrite what another page saved) */
 export const llmDirty = { main: new Set<string>(), vision: new Set<string>(), same: false };
 
-export interface ModelChoice { model: string; textEncoder: string; vae: string }
+export interface ModelChoice { model: string; textEncoder: string; vae: string; /** Turbo LoRA for the card's Turbo Mode switch */ turboLora?: string; turboStrength?: number }
 
 export interface Settings {
   /** '' = same origin (dev/prod proxy). Otherwise e.g. http://127.0.0.1:8188 (needs --enable-cors-header) */

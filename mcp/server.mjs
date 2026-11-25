@@ -2416,7 +2416,7 @@ function compatible(a, b) {
   const imageLike = (t2) => t2 === "image" || t2 === "mask";
   return imageLike(a) && imageLike(b);
 }
-var sel, dyn, slider, num, text, toggle, ASPECTS, aspect, seed, megapixels, sampler, loras, autoEnhance, negative, sizeParams, krea2, anima, qwen, qwen21, moss, sdxl, h3Params, klein, zimage, P, edit, REGISTRY, byId;
+var sel, dyn, slider, num, text, toggle, ASPECTS, aspect, seed, megapixels, sampler, loras, autoEnhance, negative, sizeParams, krea2, anima, qwen, qwen21, moss, tune, sdxl, h3Params, klein, zimage, P, edit, REGISTRY, byId;
 var init_registry = __esm({
   "src/registry/index.ts"() {
     "use strict";
@@ -2440,7 +2440,8 @@ var init_registry = __esm({
       dyn("lora1", "LoRA 1", `loras:${fam}`, "none", { advanced: true }),
       slider("lora1_strength", "LoRA 1 strength", 0, 2, 0.05, 1, { advanced: true, when: (p) => p.lora1 !== "none" }),
       dyn("lora2", "LoRA 2", `loras:${fam}`, "none", { advanced: true }),
-      slider("lora2_strength", "LoRA 2 strength", 0, 2, 0.05, 1, { advanced: true, when: (p) => p.lora2 !== "none" })
+      slider("lora2_strength", "LoRA 2 strength", 0, 2, 0.05, 1, { advanced: true, when: (p) => p.lora2 !== "none" }),
+      toggle("turbo_mode", "Turbo Mode", false, { note: "uses the Turbo LoRA chosen in Settings \u2192 Image models", turboFor: fam })
     ];
     autoEnhance = toggle("auto_enhance", "Auto enhance prompt", false, { note: "before generating" });
     negative = text("negative", "Negative prompt", "", true, { advanced: true });
@@ -2481,6 +2482,7 @@ var init_registry = __esm({
       family: "moss",
       params: [...sizeParams(size), ...extra, autoEnhance, ...sampler(25, 2.5, "er_sde"), { ...negative, default: "nsfw, worst quality, bad anatomy, watermark, jpeg artifact" }, toggle("slg", "Skip layer guidance", false, { note: "layer 22", advanced: true }), ...loras("moss"), num("batch", "Batch", 1, { advanced: true }, 1, 4, 1), seed]
     });
+    tune = (e, d, drop = []) => ({ ...e, params: (e.params ?? []).filter((p) => !drop.includes(p.id)).map((p) => p.id in d ? { ...p, default: d[p.id] } : p) });
     sdxl = (id, label, extra = [], size = false) => ({
       id,
       label,
@@ -2625,7 +2627,23 @@ var init_registry = __esm({
           krea2("krea2-i2i", "Krea 2 \u2014 img2img (local)", [slider("denoise", "Denoise", 0.05, 1, 0.05, 0.75)]),
           anima("anima-i2i", "Anima \u2014 img2img (local)", [slider("denoise", "Denoise", 0.05, 1, 0.05, 0.75)]),
           sdxl("sdxl-i2i", "SDXL \u2014 img2img (local)", [slider("denoise", "Denoise", 0.05, 1, 0.05, 0.6)]),
-          moss("moss-i2i", "Moss Image \u2014 I2I (local)", [slider("denoise", "Denoise", 0.05, 1, 0.05, 0.6)])
+          moss("moss-i2i", "Moss Image \u2014 I2I (local)", [slider("denoise", "Denoise", 0.05, 1, 0.05, 0.6)]),
+          tune(moss("moss-depth", "Moss Image \u2014 I2I Depth (local, MoGe + control LoRA)", [
+            dyn("md_lora", "Control LoRA (moss_image_color_depth_control)", "loras:moss", "none"),
+            slider("md_lora_strength", "Control LoRA strength", 0, 2, 0.05, 1),
+            dyn("md_moge", "MoGe model (geometry)", "moge", "none"),
+            sel("md_output", "Geometry used as control", ["mask", "depth"], "mask", { note: "mask = silhouette (pose only) \xB7 depth = also face profile, shoulders, background" }),
+            slider("md_strength", "Control strength", 0, 2, 0.05, 1),
+            slider("md_start", "Control start", 0, 1, 0.05, 0),
+            slider("md_end", "Control end", 0, 1, 0.05, 0.6)
+          ]), { cfg: 3 }, ["slg"]),
+          tune(moss("moss-edit", "Moss Image \u2014 EDIT (local, up to 3 more references)", [
+            dyn("me_lora", "Edit LoRA (moss_image_edit_lora)", "loras:moss", "none"),
+            slider("me_lora_strength", "Edit LoRA strength", 0, 2, 0.05, 1),
+            dyn("me_format", "Edit format (must match the LoRA)", "editformats", "Moss-Image-Edit"),
+            slider("me_img_strength", "Image strength", 0, 2, 0.05, 1),
+            slider("me_mp", "Size (MP)", 0.25, 4, 0.25, 1)
+          ]), { steps: 30, cfg: 4, sampler: "euler", scheduler: "normal" }, ["slg", "denoise"])
         ],
         description: "Edit or restyle images. The first image sets the output size."
       },
@@ -7109,8 +7127,67 @@ function buildSdxl(job, m) {
   return { graph: g, hint: `SDXL ${job.mode.toUpperCase()}` };
 }
 var snap16 = (v) => Math.max(64, Math.round(v / 16) * 16);
+function buildMossX(job, m) {
+  const x = job.mossx;
+  const edit2 = job.mode === "mossedit";
+  if (!m.textEncoder) throw new Error("No Moss text encoder (qwen3.5) found. Pick one in Settings \u2192 Image models.");
+  if (!m.vae) throw new Error("No Moss VAE (flux2-vae) found. Pick one in Settings \u2192 Image models.");
+  if (!job.images[0]) throw new Error(edit2 ? "No source image connected for EDIT." : "No source image connected for I2I Depth.");
+  if (!x.lora || x.lora === "none") throw new Error(edit2 ? "Edit LoRA is not set: pick moss_image_edit_lora_rank_64_bf16 on this card." : "Depth control LoRA is not set: pick moss_image_color_depth_control on this card.");
+  if (!edit2 && (!x.moge || x.moge === "none")) throw new Error("No MoGe model selected: pick one (models/geometry_estimation) on this card.");
+  const g = {};
+  g["MS:unet"] = unet(m.model);
+  g["MS:clip"] = { class_type: "CLIPLoader", inputs: { clip_name: m.textEncoder, type: "moss_image", device: "default" } };
+  g["MS:vae"] = { class_type: "VAELoader", inputs: { vae_name: m.vae } };
+  g["MS:first0"] = { class_type: "LoraLoaderModelOnly", inputs: { model: ["MS:unet", 0], lora_name: x.lora, strength_model: x.loraStrength } };
+  const model = loraChain(g, ["MS:first0", 0], job.loras, "MS:");
+  const neg = job.negative.trim();
+  if (!edit2) {
+    g["MS:tsr"] = { class_type: "TemporalScoreRescaling", inputs: { model, tsr_k: 0.95, tsr_sigma: 1 } };
+    g["MS:shift"] = { class_type: "ModelSamplingAuraFlow", inputs: { model: ["MS:tsr", 0], shift: 5, sampling: "flow" } };
+    g["MS:slgd"] = { class_type: "SkipLayerGuidanceDiTSimple", inputs: { model: ["MS:shift", 0], double_layers: "", single_layers: "24", start_percent: 0, end_percent: 1 } };
+  } else {
+    g["MS:slgd"] = { class_type: "SkipLayerGuidanceDiTSimple", inputs: { model, double_layers: "", single_layers: "22", start_percent: 0, end_percent: 1 } };
+  }
+  let positive, negative2, latent;
+  if (!edit2) {
+    const w = snap16(job.width || 1024), h = snap16(job.height || 1024);
+    g["MS:negative"] = { class_type: "CLIPTextEncode", inputs: { clip: ["MS:clip", 0], text: neg || "nsfw, worst quality, bad anatomy, watermark, jpeg artifact" } };
+    g["MS:src"] = { class_type: "LoadImage", inputs: { image: job.images[0] } };
+    g["MS:fit"] = { class_type: "ImageScale", inputs: { image: ["MS:src", 0], upscale_method: "lanczos", width: w, height: h, crop: "center" } };
+    g["MS:mogeLoad"] = { class_type: "LoadMoGeModel", inputs: { model_name: x.moge } };
+    g["MS:mogeInfer"] = { class_type: "MoGeInference", inputs: { moge_model: ["MS:mogeLoad", 0], image: ["MS:fit", 0], resolution_level: 9, fov_x_degrees: 0, batch_size: 4, force_projection: true, apply_mask: true, refine_steps: 3 } };
+    g["MS:mogeRender"] = { class_type: "MoGeRender", inputs: { moge_geometry: ["MS:mogeInfer", 0], output: x.output === "depth" ? "depth" : "mask" } };
+    g["MS:positive"] = { class_type: "CLIPTextEncode", inputs: { clip: ["MS:clip", 0], text: job.prompt } };
+    g["MS:control"] = { class_type: "MOSSImageControl", inputs: { positive: ["MS:positive", 0], negative: ["MS:negative", 0], vae: ["MS:vae", 0], strength: x.strength, start_percent: x.start, end_percent: x.end, depth_map: ["MS:mogeRender", 0] } };
+    g["MS:latent"] = { class_type: "EmptyFlux2LatentImage", inputs: { width: w, height: h, batch_size: job.batch } };
+    positive = ["MS:control", 0];
+    negative2 = ["MS:control", 1];
+    latent = ["MS:latent", 0];
+  } else {
+    const imgs = {};
+    job.images.slice(0, 4).forEach((f, i) => {
+      g[`MS:ref${i}Load`] = { class_type: "LoadImage", inputs: { image: f } };
+      g[`MS:ref${i}`] = { class_type: "ImageScaleToTotalPixels", inputs: { image: [`MS:ref${i}Load`, 0], upscale_method: "lanczos", megapixels: x.mp, resolution_steps: 16 } };
+      imgs[`images.image_${i}`] = [`MS:ref${i}`, 0];
+    });
+    const enc = (text3) => ({ class_type: "TextEncodeMOSSImageEdit", inputs: { clip: ["MS:clip", 0], prompt: text3, edit_format: x.editFormat, image_strength: x.imageStrength, vae: ["MS:vae", 0], ...imgs } });
+    g["MS:positive"] = enc(job.prompt);
+    g["MS:negative"] = enc(neg);
+    g["MS:size"] = { class_type: "GetImageSize", inputs: { image: ["MS:ref0", 0] } };
+    g["MS:latent"] = { class_type: "EmptyFlux2LatentImage", inputs: { width: ["MS:size", 0], height: ["MS:size", 1], batch_size: job.batch } };
+    positive = ["MS:positive", 0];
+    negative2 = ["MS:negative", 0];
+    latent = ["MS:latent", 0];
+  }
+  g["MS:sampler"] = { class_type: "KSampler", inputs: { model: ["MS:slgd", 0], positive, negative: negative2, latent_image: latent, seed: job.seed, steps: job.steps, cfg: job.cfg, sampler_name: job.sampler, scheduler: job.scheduler, denoise: 1 } };
+  g["MS:decode"] = { class_type: "VAEDecode", inputs: { samples: ["MS:sampler", 0], vae: ["MS:vae", 0] } };
+  g["MS:save"] = saveNode(job, ["MS:decode", 0], "Moss");
+  return { graph: g, hint: edit2 ? "Moss EDIT" : "Moss I2I Depth" };
+}
 function buildMoss(job, m) {
   const mode = job.mode;
+  if ((mode === "mossdepth" || mode === "mossedit") && job.mossx) return buildMossX(job, m);
   if (mode !== "t2i" && mode !== "i2i" && mode !== "inpaint" && mode !== "r2i") throw new Error(`Moss Image has no "${mode}" mode`);
   if (!m.textEncoder) throw new Error("No Moss text encoder (qwen3.5) found. Pick one in Settings \u2192 Image models.");
   if (!m.vae) throw new Error("No Moss VAE (flux2-vae) found. Pick one in Settings \u2192 Image models.");
@@ -7611,7 +7688,8 @@ Bounding boxes:
 - A box marks a placement, not a border, panel, divider or sticker to draw. Overlap and natural occlusion are allowed.
 - With no boxes, write a normal caption and never invent coordinates.
 `;
-var mossSystemPrompt = (mode) => mode === "r2i" ? MOSS_SYSTEM_PROMPT_R2I : MOSS_SYSTEM_PROMPT_T2I;
+var MOSS_SYSTEM_PROMPT_EDIT = `You rewrite a user's image-edit wish into one short instruction for the MOSS-Image Edit model. Rules: - Output ONLY the instruction, in English, no preamble, no quotes, no markdown. - Form: "Change only the <what> to <how>. Keep the character, face, hair, pose, background and composition unchanged." Name the thing that changes precisely (colour, material, garment, object) and what it becomes; name what must stay as it is. - If several references are mentioned, say what each one is for (e.g. "Use the jacket from the second image."). - Do not describe the whole picture, do not add new people, objects or accessories, do not change the style unless asked. - Keep any text that must appear in the image exactly as written.`;
+var mossSystemPrompt = (mode) => mode === "r2i" ? MOSS_SYSTEM_PROMPT_R2I : mode === "edit" ? MOSS_SYSTEM_PROMPT_EDIT : MOSS_SYSTEM_PROMPT_T2I;
 
 // src/backend/promptStyle.ts
 var AUTO = "auto";
@@ -7644,7 +7722,7 @@ function formatFor(defId, engineId, hasRefs) {
   const eng = def ? engineFor(def, engineId) : void 0;
   const video = def?.category === "Video" || defId === "h3-image" && false;
   const fmt = defId === "h3-image" && (hasRefs ? "MiniMax H3 Image (R2I)" : "MiniMax H3 Image (T2I)") || engineId && FORMAT_BY_ENGINE[engineId] || FORMAT_BY_DEF[defId] || eng?.family && FORMAT_BY_FAMILY[eng.family] || eng && FORMAT_BY_ENGINE[eng.id] || "Universal Natural Language";
-  const moss2 = eng?.family === "moss" ? { system_override: mossSystemPrompt(eng.id === "moss-r2i" ? "r2i" : "t2i") } : {};
+  const moss2 = eng?.family === "moss" ? { system_override: mossSystemPrompt(eng.id === "moss-r2i" ? "r2i" : eng.id === "moss-edit" ? "edit" : "t2i") } : {};
   return { model_format: fmt, purpose: video ? "Video" : defId === "image-edit" ? "Edit (Inpainting/I2V)" : "Image", ...moss2 };
 }
 function downstreamTarget(nodeId) {
@@ -7730,6 +7808,17 @@ async function load2(source) {
   if (source === "modelpatches") {
     const i = await objectInfo("ModelPatchLoader");
     return ["none", ...i?.ModelPatchLoader?.input?.required?.name?.[0] ?? []];
+  }
+  if (source === "moge") {
+    const i = await objectInfo("LoadMoGeModel");
+    const o = i?.LoadMoGeModel?.input?.required?.model_name;
+    return ["none", ...(Array.isArray(o?.[0]) ? o[0] : o?.[1]?.options) ?? []];
+  }
+  if (source === "editformats") {
+    const i = await objectInfo("TextEncodeMOSSImageEdit");
+    const o = i?.TextEncodeMOSSImageEdit?.input?.required?.edit_format;
+    const l = (Array.isArray(o?.[0]) ? o[0] : o?.[1]?.options) ?? [];
+    return l.length ? l : ["Moss-Image-Edit", "ai-toolkit", "ai-toolkit (kv_cache off)"];
   }
   if (source === "bboxdetectors") {
     const i = await objectInfo("UltralyticsDetectorProvider");
@@ -10561,7 +10650,7 @@ function imageRunner(mode) {
     const maskA = c.inputs("mask")[0];
     const maskFile = maskA ? await ensureInput(maskA) : void 0;
     let { w, h } = typeof p.aspect === "string" && (m === "t2i" || m === "r2i" || m === "krea2control" || m === "identity" || m === "animactrl") ? p.size_mode === "wh" ? sizeCustom(num2(p.width, 1024), num2(p.height, 1024)) : sizeFrom(String(p.aspect), num2(p.megapixels, 1)) : { w: 0, h: 0 };
-    if (family === "moss" && (m === "i2i" || m === "inpaint") && imgs[0]) {
+    if (family === "moss" && (m === "i2i" || m === "inpaint" || m === "mossdepth") && imgs[0]) {
       const bm = await loadBitmap(imgs[0]);
       ({ w, h } = sizeCustom(bm.width, bm.height));
     }
@@ -10586,6 +10675,8 @@ function imageRunner(mode) {
       mossBoxes = raw.map((b) => ({ ...b, x: Math.round(b.x * sx), y: Math.round(b.y * sy), width: Math.round(b.width * sx), height: Math.round(b.height * sy) }));
       mossChars = String(card.characters ?? "");
     }
+    const tm = settings.models[family];
+    const turbo = p.turbo_mode && tm?.turboLora && tm.turboLora !== "none" ? [{ name: tm.turboLora, strength: tm.turboStrength ?? 1 }] : [];
     const lora = (n2, s) => ({ name: str(p[n2], "none"), strength: num2(p[s], 1) });
     const job = {
       family,
@@ -10604,7 +10695,7 @@ function imageRunner(mode) {
       images: inputFiles,
       mask: maskFile,
       pad: { left: num2(p.left), top: num2(p.top), right: num2(p.right), bottom: num2(p.bottom) },
-      loras: [lora("lora1", "lora1_strength"), lora("lora2", "lora2_strength"), ...cardLoras(c)],
+      loras: [...turbo, lora("lora1", "lora1_strength"), lora("lora2", "lora2_strength"), ...cardLoras(c)],
       models: settings.models[family],
       saveSubfolder: settings.saveSubfolder,
       bgModel: str(p.bg_model),
@@ -10615,7 +10706,33 @@ function imageRunner(mode) {
       face: { detector: str(p.fr_detector, "none"), threshold: num2(p.fr_threshold, 0.5), dilation: num2(p.fr_dilation, 4), context: num2(p.fr_context, 1.8), size: num2(p.fr_size, 1024) },
       moss: { slg: !!p.slg, boxes: mossBoxes, characters: mossChars }
     };
-    if ((m === "t2i" || m === "edit" || m === "i2i" || m === "inpaint" || m === "outpaint") && !job.prompt && m !== "outpaint") throw new Error("Prompt is empty");
+    if (m === "mossdepth" || m === "mossedit") {
+      const ed = m === "mossedit";
+      const loraOf = async (v, re) => {
+        const s = str(v, "none");
+        if (s !== "none") return s;
+        return (await loadOptions("loras:moss")).find((x) => re.test(x)) ?? "none";
+      };
+      const mogeOf = async () => {
+        const s = str(p.md_moge, "none");
+        if (s !== "none" || ed) return s;
+        const l = (await loadOptions("moge")).filter((x) => x !== "none");
+        return l.find((x) => /vitg/i.test(x)) ?? l[0] ?? "none";
+      };
+      job.mossx = {
+        lora: ed ? await loraOf(p.me_lora, /moss_image_edit_lora/i) : await loraOf(p.md_lora, /color_depth_control/i),
+        loraStrength: num2(ed ? p.me_lora_strength : p.md_lora_strength, 1),
+        moge: await mogeOf(),
+        output: str(p.md_output, "mask"),
+        strength: num2(p.md_strength, 1),
+        start: num2(p.md_start, 0),
+        end: num2(p.md_end, 0.6),
+        editFormat: str(p.me_format, "Moss-Image-Edit"),
+        imageStrength: num2(p.me_img_strength, 1),
+        mp: num2(p.me_mp, 1)
+      };
+    }
+    if ((m === "t2i" || m === "edit" || m === "mossdepth" || m === "mossedit" || m === "i2i" || m === "inpaint" || m === "outpaint") && !job.prompt && m !== "outpaint") throw new Error("Prompt is empty");
     if (p.auto_enhance && job.prompt && m !== "outpaint" && m !== "removebg") {
       c.progress(1, "enhancing prompt\u2026");
       const style = { ...formatFor(c.def.id, c.engineId), aesthetic: NO_AESTHETIC, extra_instructions: "Dialogue: sentences wrapped in <d> </d> are spoken lines in their original language (a Korean line stays Korean, a Japanese line stays Japanese). Use the text inside <d> </d> exactly as it is - never translate, never rewrite, never remove the <d> </d> markers." };
@@ -10929,7 +11046,7 @@ async function runLtxCore(c) {
       sampler: str(p.sampler, "euler_ancestral"),
       scheduler: str(p.scheduler, "linear_quadratic"),
       stage2Sigmas: str(p.stage2, "0.85, 0.7250, 0.4219, 0.0"),
-      loras: [lora("lora1", "lora1_strength"), lora("lora2", "lora2_strength"), ...cardLoras(c)],
+      loras: [...p.turbo_mode && str(p.turbo_lora, "none") !== "none" ? [lora("turbo_lora", "turbo_strength")] : [], lora("lora1", "lora1_strength"), lora("lora2", "lora2_strength"), ...cardLoras(c)],
       models: settings.video,
       saveSubfolder: settings.saveSubfolder,
       size,
@@ -11025,7 +11142,7 @@ var RUNNERS = {
   "krea2-identity": imageRunner(() => "identity"),
   "anima-control": imageRunner(() => "animactrl"),
   "face-redraw": imageRunner(() => "facedraw"),
-  "image-edit": imageRunner((c) => c.engineId === "klein-edit" || c.engineId === "qwen-edit" || c.engineId === "qwen21-edit" || !c.engineId ? "edit" : "i2i"),
+  "image-edit": imageRunner((c) => c.engineId === "moss-depth" ? "mossdepth" : c.engineId === "moss-edit" ? "mossedit" : c.engineId === "klein-edit" || c.engineId === "qwen-edit" || c.engineId === "qwen21-edit" || !c.engineId ? "edit" : "i2i"),
   inpaint: imageRunner(() => "inpaint"),
   outpaint: imageRunner(() => "outpaint"),
   "face-swap": imageRunner(() => "faceswap"),
@@ -11304,7 +11421,7 @@ var send = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 async function handle(msg) {
   const { id, method, params } = msg;
   try {
-    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.36.2" } } });
+    if (method === "initialize") return send({ jsonrpc: "2.0", id, result: { protocolVersion: params?.protocolVersion ?? "2024-11-05", capabilities: { tools: {} }, serverInfo: { name: "ai-one-studio-canvers", version: "2.37.0" } } });
     if (method === "tools/list") return send({ jsonrpc: "2.0", id, result: { tools: TOOLS.map(({ run: _r, ...t2 }) => t2) } });
     if (method === "tools/call") {
       const tool = TOOLS.find((t2) => t2.name === params?.name);

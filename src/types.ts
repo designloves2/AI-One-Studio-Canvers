@@ -36,6 +36,8 @@ export interface ParamDef {
   info?: { text: string; calc: (v: Primitive) => number };
   /** only show when predicate on the node's params is true */
   when?: (p: Record<string, Primitive>) => boolean;
+  /** a switch that only works while Settings → Image models has a Turbo LoRA for this family (otherwise it is greyed out) */
+  turboFor?: string;
 }
 
 /** A selectable engine behind a generate/llm node (local ComfyUI model family, LLM, ...). */

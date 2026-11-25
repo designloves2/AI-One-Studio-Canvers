@@ -121,6 +121,12 @@ function ImageModels() {
           return [f, FAMILIES[f].label, <>
             <Row label={f === 'sdxl' ? 'Checkpoint' : 'Diffusion model'}><Select value={cur.model} onChange={(v) => setModel(f, { model: v })} options={(f === 'sdxl' ? l?.checkpoints : l?.diffusion_models) ?? []} blank={`(auto${auto[f] ? ': ' + auto[f] : ''})`} /></Row>
             {f !== 'sdxl' && <Row label={T('Text encoder')}><Select value={cur.textEncoder} onChange={(v) => setModel(f, { textEncoder: v })} options={l?.text_encoders ?? []} blank="(auto)" /></Row>}
+            <Row label="Turbo LoRA" hint={T('Used by the Turbo Mode switch on the image cards: while it is on, this LoRA is added in front of the own LoRAs of the card.')}>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <Select value={cur.turboLora ?? ''} onChange={(v) => setModel(f, { turboLora: v })} options={l?.loras ?? []} blank="(none)" />
+                <input type="number" step={0.05} min={0} max={2} style={{ width: 64 }} value={cur.turboStrength ?? 1} onChange={(e) => setModel(f, { turboStrength: Number(e.target.value) || 1 })} />
+              </div>
+            </Row>
             {f !== 'sdxl' && <Row label="VAE"><Select value={cur.vae} onChange={(v) => setModel(f, { vae: v })} options={l?.vaes ?? []} blank="(auto)" /></Row>}
           </>];
         }),

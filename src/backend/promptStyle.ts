@@ -32,7 +32,7 @@ export function formatFor(defId: string, engineId?: string, hasRefs?: boolean): 
   const video = def?.category === 'Video' || defId === 'h3-image' && false;
   // the H3 Image Generator writes for the mode it runs in: Reference to Image when reference images are connected, else Text to Image
   const fmt = (defId === 'h3-image' && (hasRefs ? 'MiniMax H3 Image (R2I)' : 'MiniMax H3 Image (T2I)')) || (engineId && FORMAT_BY_ENGINE[engineId]) || FORMAT_BY_DEF[defId] || (eng?.family && FORMAT_BY_FAMILY[eng.family]) || (eng && FORMAT_BY_ENGINE[eng.id]) || 'Universal Natural Language';
-  const moss = eng?.family === 'moss' ? { system_override: mossSystemPrompt(eng.id === 'moss-r2i' ? 'r2i' : 't2i') } : {};
+  const moss = eng?.family === 'moss' ? { system_override: mossSystemPrompt(eng.id === 'moss-r2i' ? 'r2i' : eng.id === 'moss-edit' ? 'edit' : 't2i') } : {};
   return { model_format: fmt, purpose: video ? 'Video' : (defId === 'image-edit' ? 'Edit (Inpainting/I2V)' : 'Image'), ...moss };
 }
 

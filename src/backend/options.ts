@@ -36,6 +36,8 @@ async function load(source: string): Promise<string[]> {
   if (source === 'promptformats') { const c = await styleCatalog(); return ['auto', ...c.formats]; }
   if (source === 'promptaesthetics') { return (await styleCatalog()).aesthetics; }
   if (source === 'modelpatches') { const i = await objectInfo('ModelPatchLoader'); return ['none', ...(i?.ModelPatchLoader?.input?.required?.name?.[0] ?? [])]; }
+  if (source === 'moge') { const i = await objectInfo('LoadMoGeModel'); const o = i?.LoadMoGeModel?.input?.required?.model_name; return ['none', ...((Array.isArray(o?.[0]) ? o[0] : o?.[1]?.options) ?? [])]; }
+  if (source === 'editformats') { const i = await objectInfo('TextEncodeMOSSImageEdit'); const o = i?.TextEncodeMOSSImageEdit?.input?.required?.edit_format; const l = (Array.isArray(o?.[0]) ? o[0] : o?.[1]?.options) ?? []; return l.length ? l : ['Moss-Image-Edit', 'ai-toolkit', 'ai-toolkit (kv_cache off)']; }
   if (source === 'bboxdetectors') { const i = await objectInfo('UltralyticsDetectorProvider'); return ['none', ...(i?.UltralyticsDetectorProvider?.input?.required?.model_name?.[0] ?? [])]; }
   if (source === 'facedetectors') {
     const l = await getJson<{ face_detectors?: string[] }>('/minimax_h3_one/models');

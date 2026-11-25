@@ -3,6 +3,7 @@ import { fieldFill, fieldStale } from '../backend/bilingual';
 import { koParams, protectWords, translateLlm, useTranslating, whileTranslating } from '../backend/translate';
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type TextareaHTMLAttributes } from 'react';
 import type { ParamDef, Primitive } from '../types';
+import { useSettings } from '../store/settings';
 import { useOptions } from '../backend/options';
 import { t } from '../i18n';
 
@@ -145,6 +146,13 @@ function TextInput({ value, onChange }: { value: string; onChange(v: string): vo
   return <input className="nodrag" type="text" value={ime.value} onChange={ime.onChange} onCompositionStart={ime.onCompositionStart} onCompositionEnd={ime.onCompositionEnd} onKeyDown={(e) => e.stopPropagation()} />;
 }
 
+function TurboSwitch({ def, value, onChange }: { def: ParamDef; value: Primitive; onChange(v: boolean): void }) {
+  const lora = useSettings((s) => s.models[def.turboFor ?? '']?.turboLora);
+  const usable = !!lora && lora !== 'none';
+  const on = !!value && usable;
+  return <div className="switch-row" title={usable ? `Turbo LoRA: ${lora}` : 'Pick a Turbo LoRA in Settings → Image models to enable this switch.'}><button type="button" disabled={!usable} style={usable ? undefined : { opacity: 0.45, cursor: 'not-allowed' }} className={`switch nodrag ${on ? 'on' : ''}`} onClick={() => onChange(!value)} aria-pressed={on}><i /></button><span className="switch-note">{usable ? t(def.note ?? '') : 'no Turbo LoRA'}</span></div>;
+}
+
 export function ParamControl({ def, value, onChange, bil }: Props) {
   const c = def.control;
   const [draft, setDraft] = useState<string | null>(null);
@@ -167,6 +175,7 @@ export function ParamControl({ def, value, onChange, bil }: Props) {
       );
     case 'select': return <SelectControl def={def} value={value} onChange={onChange} />;
     case 'toggle':
+      if (def.turboFor) return <TurboSwitch def={def} value={value} onChange={onChange} />;
       return <div className="switch-row"><button type="button" className={`switch nodrag ${value ? 'on' : ''}`} onClick={() => onChange(!value)} aria-pressed={!!value}><i /></button>{def.note && <span className="switch-note">{t(def.note)}</span>}</div>;
     case 'seed': {
       const n = Number(value);

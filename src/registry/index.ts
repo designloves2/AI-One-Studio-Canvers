@@ -32,6 +32,7 @@ const loras = (fam: string): ParamDef[] => [
   slider('lora1_strength', 'LoRA 1 strength', 0, 2, 0.05, 1, { advanced: true, when: (p) => p.lora1 !== 'none' }),
   dyn('lora2', 'LoRA 2', `loras:${fam}`, 'none', { advanced: true }),
   slider('lora2_strength', 'LoRA 2 strength', 0, 2, 0.05, 1, { advanced: true, when: (p) => p.lora2 !== 'none' }),
+  toggle('turbo_mode', 'Turbo Mode', false, { note: 'uses the Turbo LoRA chosen in Settings → Image models', turboFor: fam }),
 ];
 
 /** run the prompt through Prompt Enhance (the model's own phrasing) right before generating */
@@ -65,6 +66,8 @@ const moss = (id: string, label: string, extra: ParamDef[] = [], size = false): 
   id, label, family: 'moss',
   params: [...sizeParams(size), ...extra, autoEnhance, ...sampler(25, 2.5, 'er_sde'), { ...negative, default: 'nsfw, worst quality, bad anatomy, watermark, jpeg artifact' }, toggle('slg', 'Skip layer guidance', false, { note: 'layer 22', advanced: true }), ...loras('moss'), num('batch', 'Batch', 1, { advanced: true }, 1, 4, 1), seed],
 });
+/** same engine with other defaults (id -> default) */
+const tune = (e: EngineDef, d: Record<string, unknown>, drop: string[] = []): EngineDef => ({ ...e, params: (e.params ?? []).filter((p) => !drop.includes(p.id)).map((p) => (p.id in d ? { ...p, default: d[p.id] } : p)) as ParamDef[] });
 const sdxl = (id: string, label: string, extra: ParamDef[] = [], size = false): EngineDef => ({
   id, label, family: 'sdxl',
   params: [...sizeParams(size), ...extra, autoEnhance, ...sampler(20, 7, 'euler_ancestral', 'karras'), { ...negative, default: 'low quality, blurry, deformed, watermark' }, ...loras('sdxl'), num('batch', 'Batch', 1, { advanced: true }, 1, 4, 1), seed],
@@ -155,6 +158,16 @@ export const REGISTRY: NodeDef[] = [
       anima('anima-i2i', 'Anima — img2img (local)', [slider('denoise', 'Denoise', 0.05, 1, 0.05, 0.75)]),
       sdxl('sdxl-i2i', 'SDXL — img2img (local)', [slider('denoise', 'Denoise', 0.05, 1, 0.05, 0.6)]),
       moss('moss-i2i', 'Moss Image — I2I (local)', [slider('denoise', 'Denoise', 0.05, 1, 0.05, 0.6)]),
+      tune(moss('moss-depth', 'Moss Image — I2I Depth (local, MoGe + control LoRA)', [
+        dyn('md_lora', 'Control LoRA (moss_image_color_depth_control)', 'loras:moss', 'none'), slider('md_lora_strength', 'Control LoRA strength', 0, 2, 0.05, 1),
+        dyn('md_moge', 'MoGe model (geometry)', 'moge', 'none'), sel('md_output', 'Geometry used as control', ['mask', 'depth'], 'mask', { note: 'mask = silhouette (pose only) · depth = also face profile, shoulders, background' }),
+        slider('md_strength', 'Control strength', 0, 2, 0.05, 1), slider('md_start', 'Control start', 0, 1, 0.05, 0), slider('md_end', 'Control end', 0, 1, 0.05, 0.6),
+      ]), { cfg: 3 }, ['slg']),
+      tune(moss('moss-edit', 'Moss Image — EDIT (local, up to 3 more references)', [
+        dyn('me_lora', 'Edit LoRA (moss_image_edit_lora)', 'loras:moss', 'none'), slider('me_lora_strength', 'Edit LoRA strength', 0, 2, 0.05, 1),
+        dyn('me_format', 'Edit format (must match the LoRA)', 'editformats', 'Moss-Image-Edit'), slider('me_img_strength', 'Image strength', 0, 2, 0.05, 1),
+        slider('me_mp', 'Size (MP)', 0.25, 4, 0.25, 1),
+      ]), { steps: 30, cfg: 4, sampler: 'euler', scheduler: 'normal' }, ['slg', 'denoise']),
     ], description: 'Edit or restyle images. The first image sets the output size.' },
   { id: 'controlnet', title: 'ControlNet Generate (Z-Image)', category: 'Image', kind: 'generate',
     inputs: [P.textIn(), P.imgIn('image', 'Control image'), P.loraIn(), P.seedIn()], outputs: [P.imgOut()], params: [],
