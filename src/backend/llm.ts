@@ -255,7 +255,11 @@ async function runLlmNow(req: LlmRequest, retried: boolean): Promise<string> {
     });
   }
   if (!res.ok && !retried && /last_prompt_id/.test(res.error ?? '')) { await warmUpServer(); return runLlmNow(req, true); }
-  if (!res.ok) throw new Error(res.error || 'LLM request failed');
+  if (!res.ok) {
+    // placeholder from a PC with no local model files: show a plain hint instead of the internal name
+    if (/NO_GGUF_FILES|NO_TEXT_ENCODER|NO_[A-Z_]+_IN_MODELS/.test(res.error ?? '')) throw new Error('No local LLM model found in models/text_encoders. This backend needs a local model: put one there, or switch the backend to OpenRouter / Connect Custom in Settings → LLM (no local model needed).');
+    throw new Error(res.error || 'LLM request failed');
+  }
   const u = (res as { usage?: Record<string, unknown> }).usage;
   if (u && req.callId) {
     const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
